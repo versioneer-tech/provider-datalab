@@ -1,0 +1,21 @@
+site_name: provider-datalab
+site_url: https://versioneer-tech.github.io/provider-datalab/
+nav:
+  - Home: index.md
+  - How-to guides:
+    - datalab-educates: how-to-guides/datalab-educates.md
+    - datalab-jupyter: how-to-guides/datalab-jupyter.md
+  - Reference guides:
+    - API: reference-guides/api.md
+plugins:
+  - search
+  - mike
+markdown_extensions:
+  - admonition
+theme:
+  name: material
+  features:
+  - content.code.copy
+extra:
+  version:
+    provider: mike

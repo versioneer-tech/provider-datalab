@@ -1,0 +1,573 @@
+---
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: l001
+  namespace: datalab
+  uid: abc
+spec:
+  files:
+  - image:
+      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.0
+    includePaths:
+    - /content/**
+    - /data/**
+    - /README.md
+    path: .
+  owner: u001
+status:
+  conditions:
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    message: 'Unready resources: keycloak-client-l001, keycloak-group-l001, keycloak-mapper-l001,
+      and 6 more'
+    reason: Creating
+    status: "False"
+    type: Ready
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-client-l001
+  labels:
+    crossplane.io/claim-name: l001
+    crossplane.io/composite: l001
+  name: l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    accessType: PUBLIC
+    adminUrl: https://l001.lab.acme.com
+    clientId: l001
+    directAccessGrantsEnabled: false
+    implicitFlowEnabled: true
+    name: l001
+    oauth2DeviceAuthorizationGrantEnabled: true
+    realmId: acme
+    rootUrl: https://l001.lab.acme.com
+    serviceAccountsEnabled: false
+    standardFlowEnabled: true
+    validRedirectUris:
+    - https://l001.lab.acme.com/*
+    - http://localhost:*
+    webOrigins:
+    - https://l001.lab.acme.com/*
+    - http://localhost:*
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Group
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-group-l001
+  labels:
+    crossplane.io/composite: l001
+  name: l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    name: l001
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
+kind: GroupMembershipProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-mapper-l001
+  labels:
+    crossplane.io/composite: l001
+  name: l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    addToAccessToken: false
+    addToIdToken: true
+    addToUserinfo: false
+    claimName: groups
+    clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: l001
+    fullPath: false
+    name: group-membership-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Memberships
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-memberships-l001
+  labels:
+    crossplane.io/composite: l001
+  name: l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    groupIdRef:
+      name: l001
+      policy:
+        resolution: Required
+    members:
+    - u001
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-role-l001
+  labels:
+    crossplane.io/composite: l001
+  name: l001-ws-access
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    clientIdRef:
+      name: l001
+      policy:
+        resolution: Required
+    name: ws_access
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Roles
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-roles-l001
+  labels:
+    crossplane.io/composite: l001
+  name: l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    groupIdRef:
+      name: l001
+      policy:
+        resolution: Required
+    realmId: acme
+    roleIdsRefs:
+    - name: l001-ws-access
+      policy:
+        resolution: Required
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: workshop-l001
+  labels:
+    crossplane.io/composite: l001
+  name: workshop-l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: Workshop
+      metadata:
+        name: default-workshop
+      spec:
+        description: A default DataLab environment.
+        environment:
+          objects:
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-dns
+            spec:
+              egress:
+              - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+                  podSelector: {}
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-session-to-data
+            spec:
+              ingress:
+              - from:
+                - namespaceSelector:
+                    matchLabels:
+                      training.educates.dev/component: session
+                      training.educates.dev/environment.name: l001
+                ports:
+                - port: 8080
+                  protocol: TCP
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: data
+                  app.kubernetes.io/name: data
+              policyTypes:
+              - Ingress
+          - apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: s3-credentials-rclone
+            spec:
+              accessModes:
+              - ReadOnlyMany
+              resources:
+                requests:
+                  storage: 1Mi
+              storageClassName: csi-rclone
+          - apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              labels:
+                app.kubernetes.io/instance: data
+                app.kubernetes.io/name: data
+              name: data
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app.kubernetes.io/instance: data
+                  app.kubernetes.io/name: data
+              template:
+                metadata:
+                  labels:
+                    app.kubernetes.io/instance: data
+                    app.kubernetes.io/name: data
+                spec:
+                  containers:
+                  - env:
+                    - name: FB_AUTH_MAPPER
+                      value: writer-share
+                    - name: WORKSPACE
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    - name: FB_ROOT
+                      value: /data
+                    - name: FB_BRANDING_NAME
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    - name: FB_AUTH_HEADER
+                      value: Accept
+                    - name: AWS_ACCESS_KEY_ID
+                      valueFrom:
+                        secretKeyRef:
+                          key: AWS_ACCESS_KEY_ID
+                          name: s3-credentials
+                    - name: AWS_SECRET_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          key: AWS_SECRET_ACCESS_KEY
+                          name: s3-credentials
+                    - name: AWS_REGION
+                      valueFrom:
+                        secretKeyRef:
+                          key: AWS_REGION
+                          name: s3-credentials
+                    - name: AWS_ENDPOINT_URL
+                      valueFrom:
+                        secretKeyRef:
+                          key: AWS_ENDPOINT_URL
+                          name: s3-credentials
+                    - name: AWS_S3_FORCE_PATH_STYLE
+                      value: "true"
+                    image: ghcr.io/versioneer-tech/package-r:v2025.7.1
+                    imagePullPolicy: Always
+                    name: data
+                    ports:
+                    - containerPort: 8080
+                      name: http
+                    resources:
+                      limits:
+                        cpu: "1"
+                        memory: 512Mi
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                    volumeMounts:
+                    - mountPath: /data
+                      name: data
+                  serviceAccountName: $(service_account)
+                  volumes:
+                  - name: data
+                    persistentVolumeClaim:
+                      claimName: s3-credentials-rclone
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: data
+            spec:
+              ports:
+              - name: http
+                port: 8080
+                protocol: TCP
+                targetPort: http
+              selector:
+                app.kubernetes.io/instance: data
+                app.kubernetes.io/name: data
+              type: ClusterIP
+          secrets:
+          - name: s3-credentials
+            namespace: datalab
+          - name: s3-credentials-rclone
+            namespace: datalab
+        session:
+          applications:
+            console:
+              enabled: false
+            editor:
+              enabled: true
+            slides:
+              enabled: false
+            terminal:
+              enabled: true
+            vcluster:
+              enabled: false
+            workshop:
+              enabled: true
+          dashboards:
+          - name: Data
+            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+          envFrom:
+          - secretRef:
+              name: s3-credentials
+          ingresses:
+          - host: data.$(workshop_namespace).svc.$(cluster_domain)
+            name: data
+            port: 8080
+            protocol: http
+          namespaces:
+            budget: medium
+            security:
+              policy: baseline
+          objects:
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-dns
+            spec:
+              egress:
+              - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+                  podSelector: {}
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-to-environment-data
+            spec:
+              egress:
+              - ports:
+                - port: 8080
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: l001
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: data
+                      app.kubernetes.io/name: data
+              podSelector: {}
+              policyTypes:
+              - Egress
+          resources:
+            storage: 1Gi
+        title: Default DataLab
+        version: "8.3"
+        workshop:
+          files:
+          - image:
+              url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.0
+            includePaths:
+            - /content/**
+            - /data/**
+            - /README.md
+            path: .
+          packages:
+          - files:
+            - image:
+                url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
+            name: awscli
+          - files:
+            - image:
+                url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
+            name: rclone
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: workshopenvironment-l001
+  labels:
+    crossplane.io/composite: l001
+  name: workshopenvironment-l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopEnvironment
+      metadata:
+        name: l001
+      spec:
+        analytics:
+          amplitude:
+            trackingId: ""
+        cookies: {}
+        environment:
+          objects: []
+          secrets: []
+        request:
+          enabled: false
+        session:
+          ingress:
+            class: nginx
+            domain: lab.acme.com
+            secret: wildcard-tls
+        theme:
+          name: default-website-theme
+        workshop:
+          name: default-workshop
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: workshopsession-l001
+  labels:
+    crossplane.io/composite: l001
+  name: workshopsession-l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopSession
+      metadata:
+        name: l001-s001
+      spec:
+        environment:
+          name: l001
+        session:
+          env:
+          - name: SESSION_NAME
+            value: l001-s001
+          - name: FRAME_ANCESTORS
+            value: ""
+          id: s001
+          ingress:
+            domain: lab.acme.com
+            secret: wildcard-tls
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: false

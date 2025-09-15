@@ -1,0 +1,27 @@
+apiVersion: keycloak.m.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: provider-keycloak
+  namespace: datalab
+spec:
+  credentialsSecretRef:
+    name: keycloak-secret # ensure this exists with proper permissions
+    key: credentials
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: provider-kubernetes
+  namespace: datalab
+spec:
+  credentials:
+    source: InjectedIdentity
+---
+apiVersion: helm.m.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: provider-helm
+  namespace: datalab
+spec:
+  credentials:
+    source: InjectedIdentity

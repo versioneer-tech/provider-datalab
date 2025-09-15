@@ -1,0 +1,16 @@
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab
+data:
+  iam:
+    realm: acme
+  ingress:
+    class: nginx
+    domain: lab.acme.com
+    secret: wildcard-tls
+  session:
+    suffix: s001
+  storage:
+    secretName: s3-credentials
+    secretNamespace: datalab

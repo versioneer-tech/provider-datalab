@@ -1,0 +1,15 @@
+apiVersion: meta.pkg.crossplane.io/v1alpha1
+kind: Configuration
+metadata:
+  name: datalab-educates
+  annotations:
+    meta.crossplane.io/maintainer: "Versioneer <info@versioneer.at>"
+    meta.crossplane.io/source: "github.com/versioneer-tech/provider-datalab"
+    meta.crossplane.io/license: "Apache-2.0"
+    meta.crossplane.io/description: "Crossplane configuration to provision a datalab."
+    meta.crossplane.io/readme: "github.com/versioneer-tech/provider-datalab/blob/main/README.md"
+spec:
+  # Intentionally no 'dependsOn' since GitOps based management of providers/functions is recommended
+  skipDependencyResolution: true
+  crossplane:
+    version: ">=v2.0.2-0"

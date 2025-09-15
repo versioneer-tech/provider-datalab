@@ -1,0 +1,186 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: datalabs.pkg.internal
+spec:
+  group: pkg.internal
+  names:
+    kind: Datalab
+    plural: datalabs
+  scope: Namespaced
+  versions:
+    - name: v1beta1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: A Datalab is a tenant-facing, namespaced composite resource. It defines ownership, membership, and optional file bundles to materialize in the environment.
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              description: Desired configuration of the datalab.
+              required:
+                - owner
+              properties:
+                owner:
+                  type: string
+                  description: Username of the primary owner of the datalab.
+                members:
+                  type: array
+                  description: Additional usernames associated with this datalab.
+                  items:
+                    type: string
+                  default: []
+                files:
+                  type: array
+                  description: File bundles to fetch from remote sources and copy into the environment. Supports image, git, and http sources, path filtering, and optional credentials.
+                  items:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                        description: Destination directory for extracted files.
+                        default: "."
+                      includePaths:
+                        type: array
+                        description: Glob patterns to include from the source.
+                        items:
+                          type: string
+                      excludePaths:
+                        type: array
+                        description: Glob patterns to exclude from the source.
+                        items:
+                          type: string
+                      newRootPath:
+                        type: string
+                        description: Subdirectory within the source to treat as the root.
+                      image:
+                        type: object
+                        description: Container image source configuration.
+                        properties:
+                          url:
+                            type: string
+                            description: OCI image reference (e.g., ghcr.io/org/repo:tag or @sha256:...).
+                          secretRef:
+                            type: object
+                            description: Optional credentials for the image registry.
+                            properties:
+                              name:
+                                type: string
+                                description: Name of a Secret containing registry credentials.
+                              namespace:
+                                type: string
+                                description: Namespace of the Secret.
+                          dangerousSkipTLSVerify:
+                            type: boolean
+                            description: Skip TLS verification when pulling from the registry.
+                          tagSelection:
+                            type: object
+                            description: Optional semantic-version tag selection policy.
+                            properties:
+                              semver:
+                                type: object
+                                properties:
+                                  constraints:
+                                    type: string
+                                    description: Semver constraint string (e.g., ">1.2.0").
+                                  prereleases:
+                                    type: object
+                                    properties:
+                                      identifiers:
+                                        type: array
+                                        items:
+                                          type: string
+                      git:
+                        type: object
+                        description: Git repository source configuration.
+                        properties:
+                          url:
+                            type: string
+                            description: Git repository URL (HTTPS or SSH).
+                          ref:
+                            type: string
+                            description: Branch, tag, or commit to fetch (e.g., origin/main).
+                          refSelection:
+                            type: object
+                            description: Resolve an explicit ref by semver selection.
+                            properties:
+                              semver:
+                                type: object
+                                properties:
+                                  constraints:
+                                    type: string
+                                  prereleases:
+                                    type: object
+                                    properties:
+                                      identifiers:
+                                        type: array
+                                        items:
+                                          type: string
+                          lfsSkipSmudge:
+                            type: boolean
+                            description: If true, do not fetch Git LFS objects.
+                          verification:
+                            type: object
+                            description: GPG signature verification options.
+                            properties:
+                              publicKeysSecretRef:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                    description: Secret containing GPG public keys.
+                                  namespace:
+                                    type: string
+                                    description: Namespace of the Secret.
+                          secretRef:
+                            type: object
+                            description: Optional credentials for the Git server.
+                            properties:
+                              name:
+                                type: string
+                                description: Name of a Secret with auth (ssh-privatekey/knownhosts or username/password).
+                              namespace:
+                                type: string
+                                description: Namespace of the Secret.
+                      http:
+                        type: object
+                        description: HTTP source configuration for downloading an asset or archive.
+                        properties:
+                          url:
+                            type: string
+                            description: HTTP(S) URL to file or archive; archives are unpacked automatically.
+                          sha256:
+                            type: string
+                            description: Optional checksum for verification of the downloaded asset.
+                          secretRef:
+                            type: object
+                            description: Optional basic-auth credentials for the HTTP server.
+                            properties:
+                              name:
+                                type: string
+                                description: Secret containing username/password.
+                              namespace:
+                                type: string
+                                description: Namespace of the Secret.
+                    oneOf:
+                      - required: [image]
+                        properties:
+                          image:
+                            required: [url]
+                      - required: [git]
+                        properties:
+                          git:
+                            required: [url, ref]
+                      - required: [http]
+                        properties:
+                          http:
+                            required: [url]
+                  default: []
+            status:
+              type: object
+              description: Current observed state of the datalab.
+              properties: {}

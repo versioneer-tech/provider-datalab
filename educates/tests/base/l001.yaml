@@ -1,0 +1,16 @@
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: l001
+  namespace: datalab
+  uid: abc # for testing
+spec:
+  owner: u001
+  files:
+  - image:
+      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.0
+    includePaths:
+    - /content/**
+    - /data/**
+    - /README.md
+    path: .
