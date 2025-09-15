@@ -309,7 +309,7 @@ spec:
                   "workshop": {
                     "files": [
                       {
-                        "image": { "url": "ghcr.io/versioneer-tech/datalab-example:0.1-rc.0" },
+                        "image": { "url": "ghcr.io/versioneer-tech/datalab-example:0.1-rc.1" },
                         "includePaths": ["/content/**", "/data/**", "/README.md"],
                         "path": "."
                       }

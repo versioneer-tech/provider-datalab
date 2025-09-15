@@ -8,7 +8,7 @@ spec:
   owner: u001
   files:
   - image:
-      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.0
+      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
     includePaths:
     - /content/**
     - /data/**
