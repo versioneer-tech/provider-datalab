@@ -20,9 +20,8 @@ theme:
     - content.code.copy
     - search.suggest
     - toc.follow
-  custom_dir: imgs
-  logo: logo.png
-  favicon: favicon.ico
+  logo: imgs/logo.png
+  favicon: imgs/favicon.ico
   palette:
     - scheme: default
       primary: white
