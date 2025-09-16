@@ -457,10 +457,11 @@ spec:
         version: "8.3"
         workshop:
           files:
-          - image:
-              url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
+          - git:
+              ref: origin/main
+              url: https://github.com/versioneer-tech/datalab-example
             includePaths:
-            - /content/**
+            - /workshop/**
             - /data/**
             - /README.md
             path: .

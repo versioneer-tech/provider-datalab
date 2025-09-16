@@ -49,8 +49,6 @@ data:
     class: nginx
     domain: datalab.demo
     secret: wildcard-tls
-  session:
-    suffix: s001
   storage:
     secretRef: s3-credentials
 ```
@@ -61,7 +59,6 @@ data:
 - `ingress.class`: ingress class name.
 - `ingress.domain`: base domain for hostnames.
 - `ingress.secret`: TLS Secret used by routes.
-- `session.suffix`: optional suffix to distinguish generated names.
 - `storage.secretRef`: Secret name holding S3‑compatible credentials.
 
 ## 5) Storage credentials

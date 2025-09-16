@@ -1,5 +1,6 @@
 site_name: provider-datalab
 site_url: https://versioneer-tech.github.io/provider-datalab/
+copyright: "Copyright &copy; 2025, Versioneer"
 nav:
   - Home: index.md
   - How-to guides:
@@ -14,8 +15,17 @@ markdown_extensions:
   - admonition
 theme:
   name: material
+  language: en
   features:
-  - content.code.copy
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+  custom_dir: imgs
+  logo: logo.png
+  favicon: favicon.ico
+  palette:
+    - scheme: default
+      primary: white
 extra:
   version:
     provider: mike

@@ -45,8 +45,6 @@ data:
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
-  session:
-    suffix: s001
   storage:
     secretName: s3-credentials
     secretNamespace: datalab
@@ -58,7 +56,6 @@ data:
 - `ingress.class` – IngressClass for routes rendered by the runtime.
 - `ingress.domain` – Base DNS domain for generated hostnames.
 - `ingress.secret` – TLS secret (certificate) for HTTPS.
-- `session.suffix` – Optional suffix to disambiguate session names (e.g., *s001*).
 - `storage.secretName` – **Name** of the Secret containing S3‑compatible credentials.
 - `storage.secretNamespace` – **Namespace** where that Secret lives.
 
