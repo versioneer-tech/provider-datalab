@@ -49,6 +49,8 @@ spec:
           serviceAccountName: provider-kubernetes
           containers:
           - name: package-runtime
+            # args:
+            # - --debug
             resources:
               requests:
                 cpu: 100m

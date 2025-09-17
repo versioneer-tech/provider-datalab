@@ -39,7 +39,7 @@ jobs:
           crossplane xpkg build \
             --package-root=educates \
             --ignore 'dependencies/*' \
-            --ignore 'tests/base/*,tests/expected/*,tests/observed/*,tests/results/*,tests/*' \
+            --ignore 'tests/expected/*,tests/observed/*,tests/results/*,tests/*' \
             --package-file educates/datalab-educates.xpkg \
             --verbose
 

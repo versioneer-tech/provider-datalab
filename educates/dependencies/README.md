@@ -32,21 +32,9 @@ Identity is managed via **Keycloak** using `provider-keycloak`. You must supply:
 - The **realm name** via `EnvironmentConfig.data.iam.realm`.  
   The provider itself needs sufficient permissions in Keycloak to manage clients, groups, mappers, roles, and memberships in that realm.
 
-## Application order
-
-**Order matters**. Create resources in this sequence so that later objects can reference earlier ones:
-
-1. **RBAC for providers** (if any additional ClusterRoles/Bindings are required)  
-2. **DeploymentRuntimeConfigs** (tune provider pod resources/replicas)  
-3. **Providers** (install the controllers)  
-4. **ProviderConfigs** (wire credentials/identities)  
-5. **ManagedResourceActivationPolicies (MRAPs)** (opt-in the managed kinds each provider may reconcile)  
-6. **Functions**
-20. **EnvironmentConfig** (cluster-specific values such as `iam.realm`, `ingress`, `storage`)  
-21. **Composition / XRD** and then your **Datalab** resources
-
 ## Best practices
 
+- **Order matters**. Create dependencies in sequence so that later objects can reference earlier ones and no unnecessary XRDs are activated.
 - **Pin versions** of Providers/Functions by exact tag or digest and update them via PRs.
 - **Manage secrets** securely (e.g., Sealed Secrets, External Secrets). Do not inline credentials in Git.
 - **Health gates**: wait for `ProviderRevision` and `FunctionRevision` readiness before applying `ProviderConfig` / MRAP / XR.
