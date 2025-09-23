@@ -10,4 +10,9 @@ data:
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
+    endpoint: https://s3.acme.com
+    force_path_style: "true"
+    provider: Other
+    region: acme
     secretNamespace: datalab
+    type: s3

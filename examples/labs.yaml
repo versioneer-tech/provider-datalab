@@ -54,6 +54,21 @@ spec:
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
+  name: ws-alice
+spec:
+  owner: alice
+---
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: ws-bob
+spec:
+  owner: bob
+  files: []
+---
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
   name: ws-eric
 spec:
   owner: eric

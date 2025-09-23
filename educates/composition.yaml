@@ -61,7 +61,7 @@ spec:
                   meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "default"
               )
 
-              key = f"observe-storage-secret-{name}"
+              key = f"secret-observer-{name}"
               rsp.desired.resources[key].resource.update({
                   "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                   "kind": "Object",
@@ -134,7 +134,7 @@ spec:
               storage_env = env.get("storage") or {}
               ns = storage_env.get("secretNamespace") or ns_from_xr
 
-              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{name}")
+              obs = (getattr(req.observed, "resources", {}) or {}).get(f"secret-observer-{name}")
               data_b64 = _extract_data(obs)
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY"])
@@ -334,6 +334,8 @@ spec:
               name = meta.get("name") or (spec.get("claimRef", {}) or {}).get("name") or "<name-missing>"
               ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "default"
 
+              files = spec.get("files", []) or []
+
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               ingress_env = env.get("ingress") or {}
@@ -418,7 +420,7 @@ spec:
                               "slides": {"enabled": False},
                               "terminal": {"enabled": True},
                               "vcluster": {"enabled": False},
-                              "workshop": {"enabled": True}
+                              "workshop": {"enabled": bool(files or [])}
                           },
                           "dashboards": [{"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}],
                           "ingresses": [{"name": "data", "protocol": "http", "host": "data.$(workshop_namespace).svc.$(cluster_domain)", "port": 8080}],
@@ -428,11 +430,7 @@ spec:
                           "objects": [allow_dns_session, allow_to_environment_data]
                       },
                       "workshop": {
-                          "files": [{
-                              "git": {"url": "https://github.com/versioneer-tech/datalab-example", "ref": "origin/main"},
-                              "includePaths": ["/workshop/**", "/data/**", "/README.md"],
-                              "path": "."
-                          }],
+                          "files": files or [],
                           "packages": [
                               {"name": "awscli", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0"}}]},
                               {"name": "rclone", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0"}}]}
