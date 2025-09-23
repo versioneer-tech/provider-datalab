@@ -1,0 +1,67 @@
+
+
+apiVersion: user.keycloak.m.crossplane.io/v1alpha1
+kind: User
+metadata:
+  name: alice
+  namespace: workspace
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    username: alice
+    realmId: kalpha
+    email: alice@example
+    emailVerified: true
+    firstName: Alice
+    lastName: A
+---
+apiVersion: user.keycloak.m.crossplane.io/v1alpha1
+kind: User
+metadata:
+  name: bob
+  namespace: workspace
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    username: bob
+    realmId: kalpha
+    email: bob@example
+    emailVerified: true
+    firstName: Bob
+    lastName: B
+---
+apiVersion: user.keycloak.m.crossplane.io/v1alpha1
+kind: User
+metadata:
+  name: eric
+  namespace: workspace
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    username: eric
+    realmId: kalpha
+    email: eric@example
+    emailVerified: true
+    firstName: Eric
+    lastName: E
+---
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: ws-eric
+spec:
+  owner: eric
+  files:
+  - image:
+      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
+    includePaths:
+    - /content/**
+    - /data/**
+    - /README.md
+    path: .

@@ -52,7 +52,7 @@ spec:
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
               name = meta.get("name") or (spec.get("claimRef", {}) or {}).get("name") or "<name-missing>"
-              ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "<namespace-missing>"
+              ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "default"
 
               ctx = _to_dict(req.context)
               env = (ctx.get("apiextensions.crossplane.io/environment", {}) or {})
@@ -190,7 +190,7 @@ spec:
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
               name = meta.get("name") or (spec.get("claimRef", {}) or {}).get("name") or "<name-missing>"
-              ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "<namespace-missing>"
+              ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "default"
 
               ctx = _to_dict(req.context)
               env = (ctx.get("apiextensions.crossplane.io/environment", {}) or {})
@@ -203,9 +203,9 @@ spec:
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
               session_suffix = "s001"
 
-              storage_secret_name    = storage_env.get("secretName", "<storage-secretname-missing>")
-              storage_secret_ns      = storage_env.get("secretNamespace", "<storage-secretnamespace-missing>")
-              storage_secret_rclone  = f"{storage_secret_name}-rclone"
+              storage_secret_name         = name
+              storage_secret_name_rclone  = f"{storage_secret_name}-rclone"
+              storage_secret_ns           = storage_env.get("secretNamespace", "<storage-secretnamespace-missing>")
 
               allow_dns_env = {
                 "apiVersion": "networking.k8s.io/v1",
@@ -338,7 +338,7 @@ spec:
                   "environment": {
                     "secrets": [
                       { "name": storage_secret_name,   "namespace": storage_secret_ns },
-                      { "name": storage_secret_rclone, "namespace": storage_secret_ns }
+                      { "name": storage_secret_name_rclone, "namespace": storage_secret_ns }
                     ],
                     "objects": [
                       allow_dns_env,
@@ -346,7 +346,7 @@ spec:
                       {
                         "apiVersion": "v1",
                         "kind": "PersistentVolumeClaim",
-                        "metadata": { "name": storage_secret_rclone },
+                        "metadata": { "name": storage_secret_name_rclone },
                         "spec": {
                           "accessModes": ["ReadOnlyMany"],
                           "resources": { "requests": { "storage": "1Mi" } },
@@ -392,7 +392,7 @@ spec:
                                   "volumeMounts": [ { "name": "data", "mountPath": "/data" } ]
                                 }
                               ],
-                              "volumes": [ { "name": "data", "persistentVolumeClaim": { "claimName": storage_secret_rclone } } ]
+                              "volumes": [ { "name": "data", "persistentVolumeClaim": { "claimName": storage_secret_name_rclone } } ]
                             }
                           }
                         }

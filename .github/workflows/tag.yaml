@@ -29,7 +29,7 @@ jobs:
           curl -sL "https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh" | XP_VERSION=v2.0.2 sh
           sudo mv crossplane /usr/local/bin
 
-      - name: Build and publish Configuration Package
+      - name: Build and publish datalab-educates Configuration Package
         run: |
           ORG="${GITHUB_REPOSITORY_OWNER,,}"
           REPO="${GITHUB_REPOSITORY#*/}"; REPO="${REPO,,}"
@@ -39,7 +39,7 @@ jobs:
           crossplane xpkg build \
             --package-root=educates \
             --ignore 'dependencies/*' \
-            --ignore 'tests/expected/*,tests/observed/*,tests/results/*,tests/*' \
+            --ignore 'tests/expected/*,tests/observed/*,tests/*' \
             --package-file educates/datalab-educates.xpkg \
             --verbose
 

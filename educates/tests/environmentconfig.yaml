@@ -10,5 +10,4 @@ data:
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
-    secretName: s3-credentials
     secretNamespace: datalab
