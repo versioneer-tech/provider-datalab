@@ -6,20 +6,12 @@ metadata:
   namespace: datalab
   uid: abc
 spec:
-  files:
-  - image:
-      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
-    includePaths:
-    - /content/**
-    - /data/**
-    - /README.md
-    path: .
   owner: u001
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-l001, keycloak-group-l001, keycloak-mapper-l001,
-      and 6 more'
+      and 7 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -212,6 +204,37 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: secret-observer-l001
+  labels:
+    crossplane.io/composite: l001
+  name: secret-observer-l001
+  namespace: datalab
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: l001
+    uid: abc
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: l001
+        namespace: datalab
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: workshop-l001
   labels:
     crossplane.io/composite: l001
@@ -277,7 +300,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: s3-credentials-rclone
+              name: l001-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -324,24 +347,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: s3-credentials
+                          name: l001-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: s3-credentials
+                          name: l001-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: s3-credentials
+                          name: l001-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: s3-credentials
+                          name: l001-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
-                      value: "true"
+                      valueFrom:
+                        secretKeyRef:
+                          key: AWS_S3_FORCE_PATH_STYLE
+                          name: l001-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -362,7 +388,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: s3-credentials-rclone
+                      claimName: l001-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -378,9 +404,7 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: s3-credentials
-            namespace: datalab
-          - name: s3-credentials-rclone
+          - name: l001-datalab
             namespace: datalab
         session:
           applications:
@@ -395,13 +419,13 @@ spec:
             vcluster:
               enabled: false
             workshop:
-              enabled: true
+              enabled: false
           dashboards:
           - name: Data
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: s3-credentials
+              name: l001-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
@@ -456,15 +480,7 @@ spec:
         title: Default DataLab
         version: "8.3"
         workshop:
-          files:
-          - git:
-              ref: origin/main
-              url: https://github.com/versioneer-tech/datalab-example
-            includePaths:
-            - /workshop/**
-            - /data/**
-            - /README.md
-            path: .
+          files: []
           packages:
           - files:
             - image:
@@ -479,7 +495,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -528,7 +544,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -571,4 +587,4 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true

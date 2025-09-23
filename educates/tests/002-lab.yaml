@@ -2,15 +2,23 @@
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
-  name: l001
+  name: l002
   namespace: datalab
   uid: abc
 spec:
-  owner: u001
+  files:
+  - image:
+      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
+    includePaths:
+    - /content/**
+    - /data/**
+    - /README.md
+    path: .
+  owner: u002
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-l001, keycloak-group-l001, keycloak-mapper-l001,
+    message: 'Unready resources: keycloak-client-l002, keycloak-group-l002, keycloak-mapper-l002,
       and 7 more'
     reason: Creating
     status: "False"
@@ -20,37 +28,37 @@ apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-client-l001
+    crossplane.io/composition-resource-name: keycloak-client-l002
   labels:
-    crossplane.io/claim-name: l001
-    crossplane.io/composite: l001
-  name: l001
+    crossplane.io/claim-name: l002
+    crossplane.io/composite: l002
+  name: l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
     accessType: PUBLIC
-    adminUrl: https://l001.lab.acme.com
-    clientId: l001
+    adminUrl: https://l002.lab.acme.com
+    clientId: l002
     directAccessGrantsEnabled: false
     implicitFlowEnabled: true
-    name: l001
+    name: l002
     oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
-    rootUrl: https://l001.lab.acme.com
+    rootUrl: https://l002.lab.acme.com
     serviceAccountsEnabled: false
     standardFlowEnabled: true
     validRedirectUris:
-    - https://l001.lab.acme.com/*
+    - https://l002.lab.acme.com/*
     - http://localhost:*
     webOrigins:
-    - https://l001.lab.acme.com/*
+    - https://l002.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
@@ -60,21 +68,21 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-group-l001
+    crossplane.io/composition-resource-name: keycloak-group-l002
   labels:
-    crossplane.io/composite: l001
-  name: l001
+    crossplane.io/composite: l002
+  name: l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
-    name: l001
+    name: l002
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -84,17 +92,17 @@ apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
 kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-mapper-l001
+    crossplane.io/composition-resource-name: keycloak-mapper-l002
   labels:
-    crossplane.io/composite: l001
-  name: l001
+    crossplane.io/composite: l002
+  name: l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
@@ -104,7 +112,7 @@ spec:
     claimName: groups
     clientIdSelector:
       matchLabels:
-        crossplane.io/claim-name: l001
+        crossplane.io/claim-name: l002
     fullPath: false
     name: group-membership-mapper
     realmId: acme
@@ -116,26 +124,26 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-l001
+    crossplane.io/composition-resource-name: keycloak-memberships-l002
   labels:
-    crossplane.io/composite: l001
-  name: l001
+    crossplane.io/composite: l002
+  name: l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
     groupIdRef:
-      name: l001
+      name: l002
       policy:
         resolution: Required
     members:
-    - u001
+    - u002
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -145,22 +153,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-l001
+    crossplane.io/composition-resource-name: keycloak-role-l002
   labels:
-    crossplane.io/composite: l001
-  name: l001-ws-access
+    crossplane.io/composite: l002
+  name: l002-ws-access
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
     clientIdRef:
-      name: l001
+      name: l002
       policy:
         resolution: Required
     name: ws_access
@@ -173,27 +181,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-l001
+    crossplane.io/composition-resource-name: keycloak-roles-l002
   labels:
-    crossplane.io/composite: l001
-  name: l001
+    crossplane.io/composite: l002
+  name: l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
     groupIdRef:
-      name: l001
+      name: l002
       policy:
         resolution: Required
     realmId: acme
     roleIdsRefs:
-    - name: l001-ws-access
+    - name: l002-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -204,17 +212,17 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: secret-observer-l001
+    crossplane.io/composition-resource-name: secret-observer-l002
   labels:
-    crossplane.io/composite: l001
-  name: secret-observer-l001
+    crossplane.io/composite: l002
+  name: secret-observer-l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
@@ -222,7 +230,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: l001
+        name: l002
         namespace: datalab
   managementPolicies:
   - Observe
@@ -235,17 +243,17 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshop-l001
+    crossplane.io/composition-resource-name: workshop-l002
   labels:
-    crossplane.io/composite: l001
-  name: workshop-l001
+    crossplane.io/composite: l002
+  name: workshop-l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
@@ -287,7 +295,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       training.educates.dev/component: session
-                      training.educates.dev/environment.name: l001
+                      training.educates.dev/environment.name: l002
                 ports:
                 - port: 8080
                   protocol: TCP
@@ -300,7 +308,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: l001-datalab
+              name: l002-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -347,27 +355,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: l001-datalab
+                          name: l002-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: l001-datalab
+                          name: l002-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: l001-datalab
+                          name: l002-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: l001-datalab
+                          name: l002-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: l001-datalab
+                          name: l002-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -388,7 +396,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: l001-datalab
+                      claimName: l002-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -404,7 +412,7 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: l001-datalab
+          - name: l002-datalab
             namespace: datalab
         session:
           applications:
@@ -419,13 +427,13 @@ spec:
             vcluster:
               enabled: false
             workshop:
-              enabled: false
+              enabled: true
           dashboards:
           - name: Data
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: l001-datalab
+              name: l002-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
@@ -467,7 +475,7 @@ spec:
                 to:
                 - namespaceSelector:
                     matchLabels:
-                      kubernetes.io/metadata.name: l001
+                      kubernetes.io/metadata.name: l002
                   podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: data
@@ -480,7 +488,14 @@ spec:
         title: Default DataLab
         version: "8.3"
         workshop:
-          files: []
+          files:
+          - image:
+              url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
+            includePaths:
+            - /content/**
+            - /data/**
+            - /README.md
+            path: .
           packages:
           - files:
             - image:
@@ -501,17 +516,17 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-l001
+    crossplane.io/composition-resource-name: workshopenvironment-l002
   labels:
-    crossplane.io/composite: l001
-  name: workshopenvironment-l001
+    crossplane.io/composite: l002
+  name: workshopenvironment-l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
@@ -519,7 +534,7 @@ spec:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopEnvironment
       metadata:
-        name: l001
+        name: l002
       spec:
         analytics:
           amplitude:
@@ -550,17 +565,17 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopsession-l001
+    crossplane.io/composition-resource-name: workshopsession-l002
   labels:
-    crossplane.io/composite: l001
-  name: workshopsession-l001
+    crossplane.io/composite: l002
+  name: workshopsession-l002
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l001
+    name: l002
     uid: abc
 spec:
   forProvider:
@@ -568,14 +583,14 @@ spec:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopSession
       metadata:
-        name: l001-s001
+        name: l002-s001
       spec:
         environment:
-          name: l001
+          name: l002
         session:
           env:
           - name: SESSION_NAME
-            value: l001-s001
+            value: l002-s001
           - name: FRAME_ANCESTORS
             value: ""
           id: s001
