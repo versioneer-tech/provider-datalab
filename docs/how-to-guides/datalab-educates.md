@@ -105,6 +105,9 @@ Check that packages, providers, CRDs, and your XRD are healthy:
 kubectl get providers.pkg.crossplane.io
 kubectl get providerrevisions.pkg.crossplane.io
 
+kubectl get configurations.pkg.crossplane.io
+kubectl get configurationrevisions.pkg.crossplane.io
+
 kubectl api-resources --api-group=kubernetes.crossplane.io
 kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
