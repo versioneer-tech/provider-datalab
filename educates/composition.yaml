@@ -33,7 +33,6 @@ spec:
             - type: Reference
               ref:
                 name: datalab
-
     - step: observe-storage-secret
       functionRef:
         name: crossplane-contrib-function-python
@@ -68,7 +67,7 @@ spec:
                   "metadata": {
                       "name": key,
                       "namespace": ns,
-                      "annotations": {"crossplane.io/composition-resource-name": key},
+                      "annotations": {"crossplane.io/composition-resource-name": key}
                   },
                   "spec": {
                       "managementPolicies": ["Observe"],
@@ -76,14 +75,13 @@ spec:
                           "manifest": {
                               "apiVersion": "v1",
                               "kind": "Secret",
-                              "metadata": {"name": name, "namespace": ns},
+                              "metadata": {"name": name, "namespace": ns}
                           }
                       },
                       "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                       "watch": True
-                  },
+                  }
               })
-
     - step: write-secret-datalab
       functionRef:
         name: crossplane-contrib-function-python
@@ -146,7 +144,7 @@ spec:
               force_path_style = str(storage_env.get("force_path_style", "true")).lower()
 
               if not access_key or not secret_key:
-                  return  # nothing to emit if we cannot build the secret
+                  return
 
               config_data = (
                   f"[{access_key}]\n"
@@ -173,14 +171,13 @@ spec:
                       "AWS_SECRET_ACCESS_KEY": secret_key,
                       "AWS_REGION": region,
                       "AWS_ENDPOINT_URL": endpoint,
-                      "AWS_S3_FORCE_PATH_STYLE": force_path_style,
-                  },
+                      "AWS_S3_FORCE_PATH_STYLE": force_path_style
+                  }
               }
 
               key = f"secret-{name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)
-              rsp.desired.resources[key].ready = True  # we don't need to Observe this native Secret
-
+              rsp.desired.resources[key].ready = True
     - step: keycloak
       functionRef:
         name: crossplane-contrib-function-python
@@ -224,8 +221,8 @@ spec:
                   "kind": "Group",
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
-                      "forProvider": {"name": name, "realmId": realm},
-                  },
+                      "forProvider": {"name": name, "realmId": realm}
+                  }
               })
 
               put("keycloak-mapper", {
@@ -241,9 +238,9 @@ spec:
                           "addToUserinfo": False,
                           "fullPath": False,
                           "name": "group-membership-mapper",
-                          "realmId": realm,
-                      },
-                  },
+                          "realmId": realm
+                      }
+                  }
               })
 
               put("keycloak-client", {
@@ -265,9 +262,9 @@ spec:
                           "oauth2DeviceAuthorizationGrantEnabled": True,
                           "webOrigins": [f"{url}/*", "http://localhost:*"],
                           "validRedirectUris": [f"{url}/*", "http://localhost:*"],
-                          "realmId": realm,
-                      },
-                  },
+                          "realmId": realm
+                      }
+                  }
               })
 
               put("keycloak-role", {
@@ -278,9 +275,9 @@ spec:
                       "forProvider": {
                           "name": "ws_access",
                           "clientIdRef": {"name": name, "policy": {"resolution": "Required"}},
-                          "realmId": realm,
-                      },
-                  },
+                          "realmId": realm
+                      }
+                  }
               })
 
               put("keycloak-roles", {
@@ -291,15 +288,12 @@ spec:
                       "forProvider": {
                           "realmId": realm,
                           "groupIdRef": {"name": name, "policy": {"resolution": "Required"}},
-                          "roleIdsRefs": [{"name": f"{name}-ws-access", "policy": {"resolution": "Required"}}],
-                      },
-                  },
+                          "roleIdsRefs": [{"name": f"{name}-ws-access", "policy": {"resolution": "Required"}}]
+                      }
+                  }
               })
 
-              owner = spec.get("owner")
-              members = list(spec.get("members", []) or [])
-              if owner and owner not in members:
-                  members.insert(0, owner)
+              users = list(spec.get("users", []) or [])
 
               put("keycloak-memberships", {
                   "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
@@ -309,11 +303,10 @@ spec:
                       "forProvider": {
                           "groupIdRef": {"name": name, "policy": {"resolution": "Required"}},
                           "realmId": realm,
-                          "members": members,
-                      },
-                  },
+                          "members": users
+                      }
+                  }
               })
-
     - step: educates
       functionRef:
         name: crossplane-contrib-function-python
@@ -335,13 +328,14 @@ spec:
               ns = meta.get("namespace") or (spec.get("claimRef", {}) or {}).get("namespace") or "default"
 
               files = spec.get("files", []) or []
+              sessions = list(spec.get("sessions", []) or []) or []
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
 
-              ingress_class  = ingress_env.get("class", "")
+              ingress_class = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "<ingress-domain-missing>")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
 
@@ -361,8 +355,8 @@ spec:
                               "podSelector": {}
                           }],
                           "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]
-                      }],
-                  },
+                      }]
+                  }
               }
 
               allow_dns_session = allow_dns_env.copy()
@@ -384,8 +378,8 @@ spec:
                               }
                           }],
                           "ports": [{"protocol": "TCP", "port": 8080}]
-                      }],
-                  },
+                      }]
+                  }
               }
 
               allow_to_environment_data = {
@@ -401,14 +395,14 @@ spec:
                               "podSelector": {"matchLabels": {"app.kubernetes.io/name": "data", "app.kubernetes.io/instance": "data"}}
                           }],
                           "ports": [{"protocol": "TCP", "port": 8080}]
-                      }],
-                  },
+                      }]
+                  }
               }
 
               workshop = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "Workshop",
-                  "metadata": {"name": "default-workshop"},
+                  "metadata": {"name": name},
                   "spec": {
                       "title": "Default DataLab",
                       "description": "A default DataLab environment.",
@@ -505,7 +499,7 @@ spec:
                   }
               }
 
-              envres = {
+              environment = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "WorkshopEnvironment",
                   "metadata": {"name": name},
@@ -516,50 +510,51 @@ spec:
                       "request": {"enabled": False},
                       "session": {"ingress": {"class": ingress_class, "domain": ingress_domain, "secret": ingress_secret}},
                       "theme": {"name": "default-website-theme"},
-                      "workshop": {"name": "default-workshop"}
+                      "workshop": {"name": name}
                   }
               }
 
-              session = {
-                  "apiVersion": "training.educates.dev/v1beta1",
-                  "kind": "WorkshopSession",
-                  "metadata": {"name": f"{name}-s001"},
-                  "spec": {
-                      "environment": {"name": name},
-                      "session": {
-                          "id": "s001",
-                          "ingress": {"domain": ingress_domain, "secret": ingress_secret},
-                          "env": [
-                              {"name": "SESSION_NAME", "value": f"{name}-s001"},
-                              {"name": "FRAME_ANCESTORS", "value": ""}
-                          ]
-                      }
-                  }
-              }
-
-              def emit(kind, manifest):
-                  key = f"{kind.lower()}{'-' + name if name else ''}"
+              def emit(kind, manifest, key_suffix=""):
+                  suffix = f"-{name}{('-' + key_suffix) if key_suffix else ''}"
+                  key = f"{kind.lower()}{suffix}"
                   body = {
                       "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                       "kind": "Object",
                       "metadata": {
                           "name": key,
                           "namespace": ns,
-                          "annotations": {"crossplane.io/composition-resource-name": key},
+                          "annotations": {"crossplane.io/composition-resource-name": key}
                       },
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": manifest},
                           "readiness": {"policy": "SuccessfulCreate"},
-                          "watch": True
-                      },
+                          "watch": False
+                      }
                   }
                   rsp.desired.resources[key].resource.update(body)
 
               emit("Workshop", workshop)
-              emit("WorkshopEnvironment", envres)
-              emit("WorkshopSession", session)
+              emit("WorkshopEnvironment", environment)
 
+              for sid in sessions:
+                  session_manifest = {
+                      "apiVersion": "training.educates.dev/v1beta1",
+                      "kind": "WorkshopSession",
+                      "metadata": {"name": f"{name}-{sid}"},
+                      "spec": {
+                          "environment": {"name": name},
+                          "session": {
+                              "id": str(sid),
+                              "ingress": {"domain": ingress_domain, "secret": ingress_secret},
+                              "env": [
+                                  {"name": "SESSION_NAME", "value": f"{name}-{sid}"},
+                                  {"name": "FRAME_ANCESTORS", "value": ""}
+                              ]
+                          }
+                      }
+                  }
+                  emit("WorkshopSession", session_manifest, key_suffix=sid)
     - step: detect-status
       functionRef:
         name: crossplane-contrib-function-auto-ready

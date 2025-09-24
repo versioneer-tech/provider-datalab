@@ -1,4 +1,4 @@
-apiVersion: apiextensions.crossplane.io/v1
+apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: datalabs.pkg.internal
@@ -23,14 +23,17 @@ spec:
               type: object
               description: Desired configuration of the datalab.
               required:
-                - owner
+                - users
               properties:
-                owner:
-                  type: string
-                  description: Username of the primary owner of the datalab.
-                members:
+                users:
                   type: array
-                  description: Additional usernames associated with this datalab.
+                  description: Users associated with this datalab.
+                  items:
+                    type: string
+                  default: []
+                sessions:
+                  type: array
+                  description: Sessions to be started for this datalab.
                   items:
                     type: string
                   default: []

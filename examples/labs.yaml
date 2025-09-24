@@ -56,14 +56,18 @@ kind: Datalab
 metadata:
   name: ws-alice
 spec:
-  owner: alice
+  users:
+  - alice
 ---
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
   name: ws-bob
 spec:
-  owner: bob
+  users:
+  - bob
+  sessions:
+  - default
   files: []
 ---
 apiVersion: pkg.internal/v1beta1
@@ -71,12 +75,16 @@ kind: Datalab
 metadata:
   name: ws-eric
 spec:
-  owner: eric
+  users:
+  - eric
+  sessions:
+  - default
   files:
-  - image:
-      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
+  - git:
+      url: https://github.com/versioneer-tech/datalab-example
+      ref: origin/main
     includePaths:
-    - /content/**
+    - /workshop/**
     - /data/**
     - /README.md
     path: .
