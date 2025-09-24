@@ -1,9 +1,13 @@
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
-  name: l001
+  name: l003
   namespace: datalab
   uid: abc # for testing
 spec:
-  users: 
-  - u001
+  users:
+  - u003a
+  - u003b
+  sessions:
+  - default
+  vcluster: "true"

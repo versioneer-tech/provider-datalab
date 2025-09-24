@@ -37,6 +37,10 @@ spec:
                   items:
                     type: string
                   default: []
+                vcluster:
+                  type: boolean
+                  description: Whether to provision an isolated vcluster for each datalab session.
+                  default: false
                 files:
                   type: array
                   description: File bundles to fetch from remote sources and copy into the environment. Supports image, git, and http sources, path filtering, and optional credentials.

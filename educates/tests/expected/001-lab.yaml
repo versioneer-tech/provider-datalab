@@ -6,12 +6,13 @@ metadata:
   namespace: datalab
   uid: abc
 spec:
-  owner: u001
+  users:
+  - u001
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-l001, keycloak-group-l001, keycloak-mapper-l001,
-      and 7 more'
+      and 6 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -253,7 +254,7 @@ spec:
       apiVersion: training.educates.dev/v1beta1
       kind: Workshop
       metadata:
-        name: default-workshop
+        name: l001
       spec:
         description: A default DataLab environment.
         environment:
@@ -478,7 +479,7 @@ spec:
           resources:
             storage: 1Gi
         title: Default DataLab
-        version: "8.3"
+        version: "1.0"
         workshop:
           files: []
           packages:
@@ -495,7 +496,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
+  watch: false
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -538,53 +539,10 @@ spec:
         theme:
           name: default-website-theme
         workshop:
-          name: default-workshop
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-l001
-  labels:
-    crossplane.io/composite: l001
-  name: workshopsession-l001
-  namespace: datalab
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: l001
-    uid: abc
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopSession
-      metadata:
-        name: l001-s001
-      spec:
-        environment:
           name: l001
-        session:
-          env:
-          - name: SESSION_NAME
-            value: l001-s001
-          - name: FRAME_ANCESTORS
-            value: ""
-          id: s001
-          ingress:
-            domain: lab.acme.com
-            secret: wildcard-tls
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
+  watch: false

@@ -1,17 +1,17 @@
-# Datalab — How‑To Guide (Crossplane v2)
+# An Educates based Datalab variant — How‑To Guide
 
-This guide shows how to install the **Datalab** Crossplane package, wire cluster‑specific settings, and provision your first data lab. The approach is **platform‑engineering first**: a single CRD abstracts the details of identity, ingress, storage, and content bootstrapping, while you remain free to choose the runtime stack.
+This guide explains how to install the **Datalab** Crossplane package for the Educates runtime, provide cluster‑specific settings, and provision your first lab. The approach is **platform‑engineering first**: a single CRD abstracts identity, ingress, storage, and content bootstrapping while you choose the runtime stack.
 
 ## 1) Prerequisites
 
-- Kubernetes cluster with `kubectl` access.
-- Crossplane **v2.0.2** or newer installed and healthy.
-- A GitOps mechanism (optional but recommended) to manage Providers/Functions.
-- DNS/TLS and an ingress controller in your cluster (any implementation).
+- Kubernetes cluster with `kubectl` access
+- Crossplane **v2.0.2** or newer, installed and healthy
+- A GitOps mechanism (optional but recommended) to manage Providers/Functions
+- DNS/TLS and an ingress controller in your cluster (any implementation)
 
 ## 2) Install the Datalab configuration package
 
-Install the package and **disable dependency resolution** (you will manage Providers/Functions yourself):
+Install the configuration package. Providers and functions are managed separately:
 
 ```yaml
 apiVersion: pkg.crossplane.io/v1
@@ -19,29 +19,30 @@ kind: Configuration
 metadata:
   name: datalab
 spec:
-  package: ghcr.io/versioneer-tech/provider-datalab/educates:<!version!>
+  package: ghcr.io/versioneer-tech/provider-datalab/educates:latest
   skipDependencyResolution: true
 ```
 
 Apply:
+
 ```bash
 kubectl apply -f configuration-install.yaml
 kubectl get configurationrevisions.pkg.crossplane.io
 ```
 
-## 3) Install Dependencies (runtime setup)
+## 3) Runtime dependencies
 
-See `educates/dependencies/README.md`.
+This Datalab targets the **Educates** runtime. See `educates/dependencies/README.md` for instructions to install Educates and the Crossplane v2 dependencies.
 
 ## 4) Environment configuration
 
-Use a namespaced `EnvironmentConfig` to pass cluster‑specific settings to the composition:
+Provide cluster‑specific settings through an `EnvironmentConfig`. The composition consumes this to render ingress, identity, and storage correctly:
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: config
+  name: datalab
 data:
   iam:
     realm: demo
@@ -50,110 +51,105 @@ data:
     domain: datalab.demo
     secret: wildcard-tls
   storage:
-    secretRef: s3-credentials
+    endpoint: https://s3.demo
+    provider: Other
+    region: demo
+    force_path_style: "true"
+    secretNamespace: datalab
+    type: s3
 ```
-
-**Field semantics**
-
-- `iam.realm`: group/namespace for identities.
-- `ingress.class`: ingress class name.
-- `ingress.domain`: base domain for hostnames.
-- `ingress.secret`: TLS Secret used by routes.
-- `storage.secretRef`: Secret name holding S3‑compatible credentials.
 
 ## 5) Storage credentials
 
-Create the Secret (example):
+The `storage` section in the `EnvironmentConfig` references a Kubernetes Secret — **named identically to the Datalab** — which must already exist in the cluster.  
+This Secret must reside in the namespace specified by `storage.secretNamespace` and include at least:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The credentials must provide access to the endpoint/region defined in the environment config. You can create the secret manually, for example:
 
 ```bash
-kubectl -n <NAMESPACE> create secret generic s3-credentials   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID>   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>   --from-literal=AWS_REGION=<REGION>   --from-literal=AWS_ENDPOINT_URL=<https://s3.example.com>   --from-literal=AWS_S3_FORCE_PATH_STYLE=true
+kubectl -n datalab create secret generic demo   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID>   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
 ```
-
-Override the name via `EnvironmentConfig.data.storage.secretRef`, or create it as `workspace` to use the default.
 
 ## 6) Create a Datalab
 
-**Minimal**
+The minimal example creates a user‑scoped lab with one session. Sessions are required to start a runtime; if omitted, no runtime is started by default (you may patch sessions later). If `spec.files` is empty or omitted, **no workshop tab** is rendered in the Educates UI.
+
 ```yaml
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
   name: demo
-  namespace: demo
+  namespace: datalab
 spec:
-  owner: alice
+  users:
+  - alice
+  sessions:
+  - default
+  vcluster: true
+  files: []
 ```
 
-**With members and file bundles**
-```yaml
-apiVersion: pkg.internal/v1beta1
-kind: Datalab
-metadata:
-  name: demo
-  namespace: demo
-spec:
-  owner: alice
-  members: [bob, carol]
+For more scenarios, see [`examples/labs.yaml`](examples/labs.yaml), which demonstrates:
+- labs with multiple users
+- enabling/disabling `spec.vcluster`
+- attaching workshop files from Git, OCI images, or HTTP sources
 
-  files:
-  - image:
-      url: ghcr.io/acme/lab-assets:2025.09
-    includePaths:
-      - /data/**
-      - /README.md
-    path: .
-```
+## 7) Validate installation
 
-**Source options (recap)**
-
-- `image`: `url` (required), optional `secretRef`, `dangerousSkipTLSVerify`, `tagSelection.semver`
-
-```yaml
-- image:
-    url: ghcr.io/acme/lab-assets:2025.09
-  includePaths:
-    - /data/**
-    - /README.md
-  path: .
-```
-
-- `git`: `url` + `ref` (required), optional `refSelection.semver`, `lfsSkipSmudge`, `verification.publicKeysSecretRef`, `secretRef`
-
-```yaml
-- git:
-    url: https://github.com/acme/lab-assets
-    ref: origin/main
-  newRootPath: /data
-  includePaths: ["/**"]
-```
-
-- `http`: `url` (required), optional `sha256`, `secretRef`
-
-```yaml
-- http:
-    url: https://downloads.example.com/data.tar.gz
-  includePaths: ["/**"]
-  path: ./data
-```
-
-## 7) Validation & smoke tests
+Check that packages, providers, CRDs, and your XRD are healthy:
 
 ```bash
-# Package and revision health
+# Package and revisions
 kubectl get configurations.pkg.crossplane.io
 kubectl get configurationrevisions.pkg.crossplane.io
 
-# Providers and CRDs
+# Providers
 kubectl get providers.pkg.crossplane.io
 kubectl get providerrevisions.pkg.crossplane.io
+
+# API groups
 kubectl api-resources --api-group=kubernetes.crossplane.io
 kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
 
-# MRDs
+# Managed Resource Definitions
 kubectl get managedresourcedefinitions | grep -E 'helm|kubernetes|keycloak'
 
-# Your XRD / XR
+# Your XRD and instances
 kubectl get xrd
 kubectl get datalabs.pkg.internal
 ```
+
+## 8) Architecture (at a glance)
+
+```mermaid
+flowchart TD
+  A[Datalab (XR)\napi: pkg.internal/v1beta1] -->|spec + metadata| B[Composition (Crossplane v2\nFunction Pipeline)]
+  C[EnvironmentConfig\nname: datalab] -->|context\nprepare-environment| B
+  D[K8s Secret\nname: <datalab-name>\nns: storage.secretNamespace] -->|credentials| B
+
+  subgraph Runtime Resources
+    E[Workshop]
+    F[WorkshopEnvironment]
+    G[WorkshopSession(s)\nfrom spec.sessions[]]
+    H[(Optional) vcluster\nfrom spec.vcluster]
+  end
+
+  B --> E
+  B --> F
+  B --> G
+  B --> H
+
+  I[Files (Git/OCI/HTTP)\nfrom spec.files[]] -->|enable workshop tab| E
+
+  style H stroke-dasharray: 5 5
+  style I stroke-dasharray: 5 5
+```
+
+**Key:**  
+- Sessions present → runtime is started; none → no runtime until patched  
+- Files present → workshop tab enabled; none → no workshop tab  
+- `spec.vcluster: true` → vcluster provisioned; `false` → namespace‑scoped runtime

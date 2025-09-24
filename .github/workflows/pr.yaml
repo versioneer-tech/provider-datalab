@@ -121,8 +121,7 @@ jobs:
           shopt -s nullglob
           uptest e2e \
             --setup-script educates/tests/e2e.bash \
-            examples/buckets*.yaml \
-            tests/00*-labs.yaml
+            tests/00*-lab.yaml
 
       - name: Delete Configuration Package version (cleanup)
         env:

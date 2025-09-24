@@ -5,12 +5,6 @@ metadata:
   namespace: datalab
   uid: abc # for testing
 spec:
-  owner: u002
-  files:
-  - image:
-      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
-    includePaths:
-    - /content/**
-    - /data/**
-    - /README.md
-    path: .
+  users:
+  - u002a
+  - u002b

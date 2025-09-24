@@ -6,20 +6,15 @@ metadata:
   namespace: datalab
   uid: abc
 spec:
-  files:
-  - image:
-      url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
-    includePaths:
-    - /content/**
-    - /data/**
-    - /README.md
-    path: .
-  owner: u002
+  users:
+  - u002a
+  - u002b
+  vcluster: "true"
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-l002, keycloak-group-l002, keycloak-mapper-l002,
-      and 7 more'
+      and 6 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -143,7 +138,8 @@ spec:
       policy:
         resolution: Required
     members:
-    - u002
+    - u002a
+    - u002b
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -261,7 +257,7 @@ spec:
       apiVersion: training.educates.dev/v1beta1
       kind: Workshop
       metadata:
-        name: default-workshop
+        name: l002
       spec:
         description: A default DataLab environment.
         environment:
@@ -425,9 +421,9 @@ spec:
             terminal:
               enabled: true
             vcluster:
-              enabled: false
-            workshop:
               enabled: true
+            workshop:
+              enabled: false
           dashboards:
           - name: Data
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
@@ -486,16 +482,9 @@ spec:
           resources:
             storage: 1Gi
         title: Default DataLab
-        version: "8.3"
+        version: "1.0"
         workshop:
-          files:
-          - image:
-              url: ghcr.io/versioneer-tech/datalab-example:0.1-rc.1
-            includePaths:
-            - /content/**
-            - /data/**
-            - /README.md
-            path: .
+          files: []
           packages:
           - files:
             - image:
@@ -510,7 +499,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
+  watch: false
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -553,53 +542,10 @@ spec:
         theme:
           name: default-website-theme
         workshop:
-          name: default-workshop
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-l002
-  labels:
-    crossplane.io/composite: l002
-  name: workshopsession-l002
-  namespace: datalab
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: l002
-    uid: abc
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopSession
-      metadata:
-        name: l002-s001
-      spec:
-        environment:
           name: l002
-        session:
-          env:
-          - name: SESSION_NAME
-            value: l002-s001
-          - name: FRAME_ANCESTORS
-            value: ""
-          id: s001
-          ingress:
-            domain: lab.acme.com
-            secret: wildcard-tls
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
+  watch: false

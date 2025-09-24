@@ -329,6 +329,7 @@ spec:
 
               files = spec.get("files", []) or []
               sessions = list(spec.get("sessions", []) or []) or []
+              vcluster = bool(spec.get("vcluster", False))
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
@@ -406,14 +407,14 @@ spec:
                   "spec": {
                       "title": "Default DataLab",
                       "description": "A default DataLab environment.",
-                      "version": "8.3",
+                      "version": "1.0",
                       "session": {
                           "applications": {
                               "console": {"enabled": False},
                               "editor": {"enabled": True},
                               "slides": {"enabled": False},
                               "terminal": {"enabled": True},
-                              "vcluster": {"enabled": False},
+                              "vcluster": {"enabled": vcluster},
                               "workshop": {"enabled": bool(files or [])}
                           },
                           "dashboards": [{"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}],

@@ -16,7 +16,7 @@ This Composition expects the following Crossplane components to be installed (ve
 - Providers  
   - `provider-kubernetes` (>= `xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v1.0.0`)  
   - `provider-helm` (>= `xpkg.upbound.io/crossplane-contrib/provider-helm:v1.0.0`)  
-  - `provider-keycloak` (>= `ghcr.io/crossplane-contrib/provider-keycloak:v2.7.0`)  
+  - `provider-keycloak` (>= `ghcr.io/crossplane-contrib/provider-keycloak:v2.7.2`)  
 
 - Functions  
   - `crossplane-contrib-function-python`  

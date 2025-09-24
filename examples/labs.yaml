@@ -1,56 +1,12 @@
-
-
-apiVersion: user.keycloak.m.crossplane.io/v1alpha1
-kind: User
-metadata:
-  name: alice
-  namespace: workspace
-spec:
-  providerConfigRef:
-    name: provider-keycloak
-    kind: ProviderConfig
-  forProvider:
-    username: alice
-    realmId: kalpha
-    email: alice@example
-    emailVerified: true
-    firstName: Alice
-    lastName: A
----
-apiVersion: user.keycloak.m.crossplane.io/v1alpha1
-kind: User
-metadata:
-  name: bob
-  namespace: workspace
-spec:
-  providerConfigRef:
-    name: provider-keycloak
-    kind: ProviderConfig
-  forProvider:
-    username: bob
-    realmId: kalpha
-    email: bob@example
-    emailVerified: true
-    firstName: Bob
-    lastName: B
----
-apiVersion: user.keycloak.m.crossplane.io/v1alpha1
-kind: User
-metadata:
-  name: eric
-  namespace: workspace
-spec:
-  providerConfigRef:
-    name: provider-keycloak
-    kind: ProviderConfig
-  forProvider:
-    username: eric
-    realmId: kalpha
-    email: eric@example
-    emailVerified: true
-    firstName: Eric
-    lastName: E
----
+# Example 1: Minimal Datalab
+# --------------------------
+# Datalab "ws-alice"
+# - Users: ["alice"]
+# - Sessions: none → no runtime will be started automatically.
+#   (An operator may patch `spec.sessions` later to add sessions.)
+# - vcluster: omitted → default is false, so no virtual cluster.
+# - Files: omitted → no workshop files will be injected.
+#   This means the workshop **tab is disabled** in the Educates UI.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -59,6 +15,14 @@ spec:
   users:
   - alice
 ---
+# Example 2: Datalab with vcluster
+# --------------------------------
+# Datalab "ws-bob"
+# - Users: ["bob"]
+# - Sessions: ["default"] → one WorkshopSession named "default" will be created and started.
+# - vcluster: true → a virtual cluster will be provisioned for this datalab.
+# - Files: [] → explicit empty list, so no workshop files.
+#   Again, the workshop **tab is disabled** in the Educates UI.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -68,8 +32,17 @@ spec:
   - bob
   sessions:
   - default
+  vcluster: true
   files: []
 ---
+# Example 3: Datalab with Git-based files
+# ---------------------------------------
+# Datalab "ws-eric"
+# - Users: ["eric"]
+# - Sessions: ["default"] → one WorkshopSession named "default" will be created and started.
+# - vcluster: false → no virtual cluster will be provisioned.
+# - Files: one Git source → workshop and data files are mounted into the environment.
+#   This enables the workshop **tab** in the Educates UI, showing the imported content.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -79,6 +52,7 @@ spec:
   - eric
   sessions:
   - default
+  vcluster: false
   files:
   - git:
       url: https://github.com/versioneer-tech/datalab-example

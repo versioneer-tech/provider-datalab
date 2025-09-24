@@ -1,22 +1,17 @@
 # Datalab Provider
 
-This package provides the **Datalab** Composite Resource Definition (XRD) and ready‑to‑use Crossplane v2 Compositions to provision a datalab for multiple runtimes. A Datalab models:
-- **Ownership** (`spec.owner`)
-- **Membership** (`spec.members[]`)
-- **File bundles** (`spec.files[]`) fetched from remote sources and copied into the runtime environment
+This package provides the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 Compositions to provision multi-user, multi-runtime data labs.
 
-## Runtimes
+✨ For a full introduction, see the [documentation](https://provider-datalab.versioneer.at/).
 
-Datalab supports multiple runtimes so teams can choose what fits best:
+## API Reference
 
-- **Educates** (from [educates.dev](https://educates.dev)) — VS Code Server–based, multi-tenant workspaces that run either in a Kubernetes namespace or inside a vcluster (vcluster optional).
-- **Jupyter** — notebook-centric environments running in a Kubernetes namespace *(coming soon)*.
-
-For full documentation, see the project’s [Read the Docs](https://provider-datalab.versioneer.at/) page.
+The published XRD with all fields is documented here:  
+👉 [API Reference Guide](https://provider-datalab.versioneer.at/latest/reference-guides/api/)
 
 ## Install the Configuration Package
 
-Install the package while managing providers and functions separately (e.g., via your GitOps process).
+Install the configuration package into your cluster. Providers and functions should typically be managed by your GitOps process.
 
 ```yaml
 apiVersion: pkg.crossplane.io/v1
@@ -24,14 +19,13 @@ kind: Configuration
 metadata:
   name: datalab
 spec:
-  package: ghcr.io/versioneer-tech/provider-datalab/educates:<!version!>
+  package: ghcr.io/versioneer-tech/provider-datalab/educates:latest
   skipDependencyResolution: true
 ```
-> Replace `<!version!>` with the desired release tag.
 
-## Environment configuration (latest)
+## Environment Configuration
 
-Supply cluster‑specific settings with an **EnvironmentConfig** (cluster‑scoped). The Datalab Composition reads this via the `prepare-environment` step.
+Cluster-specific settings are supplied via an `EnvironmentConfig`. The Datalab composition consumes this in its `prepare-environment` step.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -46,38 +40,15 @@ data:
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
-    secretName: s3-credentials
+    endpoint: https://s3.acme.com
+    force_path_style: "true"
+    provider: Other
+    region: acme
     secretNamespace: datalab
+    type: s3
 ```
 
-### Field semantics
-
-- `iam.realm` – Identity realm used by Keycloak resources for this Datalab.
-- `ingress.class` – IngressClass for routes rendered by the runtime.
-- `ingress.domain` – Base DNS domain for generated hostnames.
-- `ingress.secret` – TLS secret (certificate) for HTTPS.
-- `storage.secretName` – **Name** of the Secret containing S3‑compatible credentials.
-- `storage.secretNamespace` – **Namespace** where that Secret lives.
-
-## Wiring storage credentials
-
-Workloads read storage credentials from a Kubernetes Secret. The default mapping expects these keys:
-
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
-- `AWS_ENDPOINT_URL`
-- (usually) `AWS_S3_FORCE_PATH_STYLE` set to `"true"` for path‑style endpoints
-
-Create the Secret named **`s3-credentials`** in the target (e.g. **`datalab`**) namespace:
-
-```bash
-kubectl -n datalab create secret generic s3-credentials   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID>   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>   --from-literal=AWS_REGION=<REGION>   --from-literal=AWS_ENDPOINT_URL=<https://s3.example.com>   --from-literal=AWS_S3_FORCE_PATH_STYLE=true
-```
-
-Ensure your `EnvironmentConfig.data.storage` points at this Secret via `secretName` and `secretNamespace` as shown above.
-
-## Datalab spec
+## Datalab Spec
 
 ### Minimal example
 
@@ -88,52 +59,36 @@ metadata:
   name: acme
   namespace: datalab
 spec:
-  owner: alice
+  users:
+  - alice
+  sessions:
+  - default
 ```
 
-### With members and file bundles
+### More examples
 
-```yaml
-apiVersion: pkg.internal/v1beta1
-kind: Datalab
-metadata:
-  name: acme
-  namespace: datalab
-spec:
-  owner: alice
-  members: [bob, eric]
+See [`examples/labs.yaml`](examples/labs.yaml) for complete scenarios, including:
+- Datalabs without sessions (no runtime started by default).
+- Datalabs with sessions and optional vcluster isolation.
+- Datalabs with workshop files fetched from Git, OCI images, or HTTP archives.
 
-  files:
-  - image:
-      url: ghcr.io/acme/lab-assets:2025.09
-    includePaths:
-    - /data/**
-    - /README.md
-    path: .
+## Storage Credentials
 
-  - git:
-      url: https://github.com/acme/lab-assets
-      ref: origin/main
-    newRootPath: /data
-    includePaths: ["/**"]
+The `storage` section in the `EnvironmentConfig` references a Kubernetes Secret — named identically to the Datalab — which must already exist in the cluster.  
+This Secret must reside in the namespace specified by `storage.secretNamespace` and include at least the following keys:
 
-  - http:
-    url: https://downloads.acme.example.com/data.tar.gz
-    includePaths: ["/**"]
-    path: ./data
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The values must provide access to the storage endpoint listed in `EnvironmentConfig.data.storage` (e.g. `endpoint`, `region`, `provider`).
+
+You can create this secret manually, for example:
+
+```bash
+kubectl -n datalab create secret generic <DATALAB>   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID>   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
 ```
-
-**`spec.files[]` sources**
-
-- **`image`**: pull files from an OCI image  
-  Options: `url` (required), `secretRef`, `dangerousSkipTLSVerify`, `tagSelection.semver`
-- **`git`**: clone content from a Git repository  
-  Options: `url`, `ref` (required), `refSelection.semver`, `lfsSkipSmudge`, `verification.publicKeysSecretRef`, `secretRef`
-- **`http`**: download file/archive over HTTP(S)  
-  Options: `url` (required), `sha256`, `secretRef`
-
-Common filters/destination: `includePaths`, `excludePaths`, `newRootPath`, `path`.
 
 ## License
 
-Apache 2.0 (Apache License Version 2.0, January 2004) from https://www.apache.org/licenses/LICENSE-2.0
+Apache 2.0 (Apache License Version 2.0, January 2004)  
+<https://www.apache.org/licenses/LICENSE-2.0>

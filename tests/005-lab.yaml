@@ -1,0 +1,20 @@
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: l005
+  namespace: datalab
+  uid: abc # for testing
+spec:
+  users: 
+  - u005
+  sessions: 
+  - default
+  files:
+  - git:
+      url: https://github.com/versioneer-tech/datalab-example
+      ref: origin/main
+    includePaths:
+    - /content/**
+    - /data/**
+    - /README.md
+    path: .
