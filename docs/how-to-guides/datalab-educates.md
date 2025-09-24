@@ -32,7 +32,7 @@ kubectl get configurationrevisions.pkg.crossplane.io
 
 ## 3) Runtime dependencies
 
-This Datalab targets the **Educates** runtime. See `educates/dependencies/README.md` for instructions to install Educates and the Crossplane v2 dependencies.
+This Datalab targets the **Educates** runtime. See this [README](https://github.com/versioneer-tech/provider-datalab/tree/main/educates/dependencies) for instructions to install Educates and the Crossplane v2 dependencies.
 
 ## 4) Environment configuration
 
@@ -92,7 +92,7 @@ spec:
   files: []
 ```
 
-For more scenarios, see [`examples/labs.yaml`](examples/labs.yaml), which demonstrates:
+For more scenarios, see these[`example manifests`](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/labs.yaml), which demonstrates:
 - labs with multiple users
 - enabling/disabling `spec.vcluster`
 - attaching workshop files from Git, OCI images, or HTTP sources
@@ -102,52 +102,17 @@ For more scenarios, see [`examples/labs.yaml`](examples/labs.yaml), which demons
 Check that packages, providers, CRDs, and your XRD are healthy:
 
 ```bash
-# Package and revisions
-kubectl get configurations.pkg.crossplane.io
-kubectl get configurationrevisions.pkg.crossplane.io
-
-# Providers
 kubectl get providers.pkg.crossplane.io
 kubectl get providerrevisions.pkg.crossplane.io
 
-# API groups
 kubectl api-resources --api-group=kubernetes.crossplane.io
 kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
 
-# Managed Resource Definitions
 kubectl get managedresourcedefinitions | grep -E 'helm|kubernetes|keycloak'
 
-# Your XRD and instances
 kubectl get xrd
-kubectl get datalabs.pkg.internal
-```
-
-## 8) Architecture (at a glance)
-
-```mermaid
-flowchart TD
-  A[Datalab (XR)\napi: pkg.internal/v1beta1] -->|spec + metadata| B[Composition (Crossplane v2\nFunction Pipeline)]
-  C[EnvironmentConfig\nname: datalab] -->|context\nprepare-environment| B
-  D[K8s Secret\nname: <datalab-name>\nns: storage.secretNamespace] -->|credentials| B
-
-  subgraph Runtime Resources
-    E[Workshop]
-    F[WorkshopEnvironment]
-    G[WorkshopSession(s)\nfrom spec.sessions[]]
-    H[(Optional) vcluster\nfrom spec.vcluster]
-  end
-
-  B --> E
-  B --> F
-  B --> G
-  B --> H
-
-  I[Files (Git/OCI/HTTP)\nfrom spec.files[]] -->|enable workshop tab| E
-
-  style H stroke-dasharray: 5 5
-  style I stroke-dasharray: 5 5
-```
+kubectl get datalabs.pkg.internal -A
 
 **Key:**  
 - Sessions present → runtime is started; none → no runtime until patched  

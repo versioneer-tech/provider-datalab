@@ -41,6 +41,7 @@ The `spec.files` array is optional. When empty or omitted, **no workshop tab** i
 Providing at least one file source enables the workshop tab and mounts content into the environment.
 
 Supported sources:
+
 - **OCI image** (`spec.files[].image`)  
 - **Git repository** (`spec.files[].git`)  
 - **HTTP(S) download** (`spec.files[].http`)  
