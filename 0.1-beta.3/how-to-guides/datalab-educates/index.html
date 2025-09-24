@@ -1,0 +1,812 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.1-beta.3/how-to-guides/datalab-educates/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../datalab-jupyter/">
+      
+      
+      <link rel="icon" href="../../imgs/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.20">
+    
+    
+      
+        <title>datalab-educates - provider-datalab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.e53b48f4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#an-educates-based-datalab-variant-howto-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="provider-datalab" class="md-header__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            provider-datalab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              datalab-educates
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="provider-datalab" class="md-nav__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    provider-datalab
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    How-to guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            How-to guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    datalab-educates
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    datalab-educates
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      1) Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-install-the-datalab-configuration-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      2) Install the Datalab configuration package
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-runtime-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      3) Runtime dependencies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-environment-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      4) Environment configuration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-storage-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      5) Storage credentials
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-create-a-datalab" class="md-nav__link">
+    <span class="md-ellipsis">
+      6) Create a Datalab
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-validate-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      7) Validate installation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-architecture-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      8) Architecture (at a glance)
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../datalab-jupyter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    datalab-jupyter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference-guides/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      1) Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-install-the-datalab-configuration-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      2) Install the Datalab configuration package
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-runtime-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      3) Runtime dependencies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-environment-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      4) Environment configuration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-storage-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      5) Storage credentials
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-create-a-datalab" class="md-nav__link">
+    <span class="md-ellipsis">
+      6) Create a Datalab
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-validate-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      7) Validate installation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-architecture-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      8) Architecture (at a glance)
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="an-educates-based-datalab-variant-howto-guide">An Educates based Datalab variant — How‑To Guide</h1>
+<p>This guide explains how to install the <strong>Datalab</strong> Crossplane package for the Educates runtime, provide cluster‑specific settings, and provision your first lab. The approach is <strong>platform‑engineering first</strong>: a single CRD abstracts identity, ingress, storage, and content bootstrapping while you choose the runtime stack.</p>
+<h2 id="1-prerequisites">1) Prerequisites</h2>
+<ul>
+<li>Kubernetes cluster with <code>kubectl</code> access</li>
+<li>Crossplane <strong>v2.0.2</strong> or newer, installed and healthy</li>
+<li>A GitOps mechanism (optional but recommended) to manage Providers/Functions</li>
+<li>DNS/TLS and an ingress controller in your cluster (any implementation)</li>
+</ul>
+<h2 id="2-install-the-datalab-configuration-package">2) Install the Datalab configuration package</h2>
+<p>Install the configuration package. Providers and functions are managed separately:</p>
+<pre><code class="language-yaml">apiVersion: pkg.crossplane.io/v1
+kind: Configuration
+metadata:
+  name: datalab
+spec:
+  package: ghcr.io/versioneer-tech/provider-datalab/educates:latest
+  skipDependencyResolution: true
+</code></pre>
+<p>Apply:</p>
+<pre><code class="language-bash">kubectl apply -f configuration-install.yaml
+kubectl get configurationrevisions.pkg.crossplane.io
+</code></pre>
+<h2 id="3-runtime-dependencies">3) Runtime dependencies</h2>
+<p>This Datalab targets the <strong>Educates</strong> runtime. See <code>educates/dependencies/README.md</code> for instructions to install Educates and the Crossplane v2 dependencies.</p>
+<h2 id="4-environment-configuration">4) Environment configuration</h2>
+<p>Provide cluster‑specific settings through an <code>EnvironmentConfig</code>. The composition consumes this to render ingress, identity, and storage correctly:</p>
+<pre><code class="language-yaml">apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab
+data:
+  iam:
+    realm: demo
+  ingress:
+    class: nginx
+    domain: datalab.demo
+    secret: wildcard-tls
+  storage:
+    endpoint: https://s3.demo
+    provider: Other
+    region: demo
+    force_path_style: &quot;true&quot;
+    secretNamespace: datalab
+    type: s3
+</code></pre>
+<h2 id="5-storage-credentials">5) Storage credentials</h2>
+<p>The <code>storage</code> section in the <code>EnvironmentConfig</code> references a Kubernetes Secret — <strong>named identically to the Datalab</strong> — which must already exist in the cluster.<br />
+This Secret must reside in the namespace specified by <code>storage.secretNamespace</code> and include at least:</p>
+<ul>
+<li><code>AWS_ACCESS_KEY_ID</code></li>
+<li><code>AWS_SECRET_ACCESS_KEY</code></li>
+</ul>
+<p>The credentials must provide access to the endpoint/region defined in the environment config. You can create the secret manually, for example:</p>
+<pre><code class="language-bash">kubectl -n datalab create secret generic demo   --from-literal=AWS_ACCESS_KEY_ID=&lt;KEY_ID&gt;   --from-literal=AWS_SECRET_ACCESS_KEY=&lt;SECRET&gt;
+</code></pre>
+<h2 id="6-create-a-datalab">6) Create a Datalab</h2>
+<p>The minimal example creates a user‑scoped lab with one session. Sessions are required to start a runtime; if omitted, no runtime is started by default (you may patch sessions later). If <code>spec.files</code> is empty or omitted, <strong>no workshop tab</strong> is rendered in the Educates UI.</p>
+<pre><code class="language-yaml">apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: demo
+  namespace: datalab
+spec:
+  users:
+  - alice
+  sessions:
+  - default
+  vcluster: true
+  files: []
+</code></pre>
+<p>For more scenarios, see <a href="examples/labs.yaml"><code>examples/labs.yaml</code></a>, which demonstrates:
+- labs with multiple users
+- enabling/disabling <code>spec.vcluster</code>
+- attaching workshop files from Git, OCI images, or HTTP sources</p>
+<h2 id="7-validate-installation">7) Validate installation</h2>
+<p>Check that packages, providers, CRDs, and your XRD are healthy:</p>
+<pre><code class="language-bash"># Package and revisions
+kubectl get configurations.pkg.crossplane.io
+kubectl get configurationrevisions.pkg.crossplane.io
+
+# Providers
+kubectl get providers.pkg.crossplane.io
+kubectl get providerrevisions.pkg.crossplane.io
+
+# API groups
+kubectl api-resources --api-group=kubernetes.crossplane.io
+kubectl api-resources --api-group=helm.crossplane.io
+kubectl api-resources --api-group=keycloak.crossplane.io
+
+# Managed Resource Definitions
+kubectl get managedresourcedefinitions | grep -E 'helm|kubernetes|keycloak'
+
+# Your XRD and instances
+kubectl get xrd
+kubectl get datalabs.pkg.internal
+</code></pre>
+<h2 id="8-architecture-at-a-glance">8) Architecture (at a glance)</h2>
+<pre><code class="language-mermaid">flowchart TD
+  A[Datalab (XR)\napi: pkg.internal/v1beta1] --&gt;|spec + metadata| B[Composition (Crossplane v2\nFunction Pipeline)]
+  C[EnvironmentConfig\nname: datalab] --&gt;|context\nprepare-environment| B
+  D[K8s Secret\nname: &lt;datalab-name&gt;\nns: storage.secretNamespace] --&gt;|credentials| B
+
+  subgraph Runtime Resources
+    E[Workshop]
+    F[WorkshopEnvironment]
+    G[WorkshopSession(s)\nfrom spec.sessions[]]
+    H[(Optional) vcluster\nfrom spec.vcluster]
+  end
+
+  B --&gt; E
+  B --&gt; F
+  B --&gt; G
+  B --&gt; H
+
+  I[Files (Git/OCI/HTTP)\nfrom spec.files[]] --&gt;|enable workshop tab| E
+
+  style H stroke-dasharray: 5 5
+  style I stroke-dasharray: 5 5
+</code></pre>
+<p><strong>Key:</strong><br />
+- Sessions present → runtime is started; none → no runtime until patched<br />
+- Files present → workshop tab enabled; none → no workshop tab<br />
+- <code>spec.vcluster: true</code> → vcluster provisioned; <code>false</code> → namespace‑scoped runtime</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025, Versioneer
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
