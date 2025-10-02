@@ -1,0 +1,10 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  #- 001-lab.yaml
+  - 002-lab.yaml
+  - 003-lab.yaml
+  - 004-lab.yaml

@@ -1,21 +1,12 @@
 # Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: provider-datalab
+  name: datalab-educates
+  labels:
+    provider: educates
 spec:
   compositeTypeRef:
     apiVersion: pkg.internal/v1beta1
@@ -51,7 +42,7 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name") or "<name-missing>"
+              secret_name = spec.get("secretName") or meta.get("name")
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
@@ -59,7 +50,7 @@ spec:
 
               ns = storage_env.get("secretNamespace") or meta.get("namespace") or "default"
 
-              key = f"secret-observer-{name}"
+              key = f"observe-secret-{secret_name}"
               rsp.desired.resources[key].resource.update({
                   "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                   "kind": "Object",
@@ -74,7 +65,7 @@ spec:
                           "manifest": {
                               "apiVersion": "v1",
                               "kind": "Secret",
-                              "metadata": {"name": name, "namespace": ns},
+                              "metadata": {"name": secret_name, "namespace": ns},
                           }
                       },
                       "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
@@ -124,7 +115,7 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name") or "<name-missing>"
+              secret_name = spec.get("secretName") or meta.get("name")
 
               ctx = _to_dict(req.context)
               ns_from_xr = meta.get("namespace") or "default"
@@ -132,11 +123,11 @@ spec:
               storage_env = env.get("storage") or {}
               ns = storage_env.get("secretNamespace") or ns_from_xr
 
-              obs = (getattr(req.observed, "resources", {}) or {}).get(f"secret-observer-{name}")
+              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-secret-{secret_name}")
               data_b64 = _extract_data(obs)
 
-              access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY"])
-              secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY"])
+              access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
+              secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
               endpoint   = _b64get_any(data_b64, ["AWS_ENDPOINT_URL"]) or storage_env.get("endpoint", "")
               region     = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
               rtype      = storage_env.get("type", "")
@@ -147,17 +138,17 @@ spec:
                   return
 
               config_data = (
-                  f"[{access_key}]\n"
-                  f"type = {rtype}\n"
-                  f"provider = {provider}\n"
-                  f"endpoint = {endpoint}\n"
-                  f"region = {region}\n"
-                  f"access_key_id = {access_key}\n"
-                  f"secret_access_key = {secret_key}\n"
-                  f"force_path_style = {force_path_style}\n"
+                  f"[{access_key}]\\n"
+                  f"type = {rtype}\\n"
+                  f"provider = {provider}\\n"
+                  f"endpoint = {endpoint}\\n"
+                  f"region = {region}\\n"
+                  f"access_key_id = {access_key}\\n"
+                  f"secret_access_key = {secret_key}\\n"
+                  f"force_path_style = {force_path_style}\\n"
               )
 
-              out_name = f"{name}-datalab"
+              out_name = f"{secret_name}-datalab"
               manifest = {
                   "apiVersion": "v1",
                   "kind": "Secret",
@@ -175,7 +166,7 @@ spec:
                   },
               }
 
-              key = f"secret-{name}-datalab"
+              key = f"secret-{secret_name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)
               rsp.desired.resources[key].ready = True
 
@@ -196,15 +187,15 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name") or "<name-missing>"
+              name = meta.get("name")
               ns = meta.get("namespace") or "default"
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               iam_env = env.get("iam") or {}
               ingress_env = env.get("ingress") or {}
-              realm = iam_env.get("realm", "<iam-realm-missing>")
-              domain = ingress_env.get("domain", "<ingress-domain-missing>")
+              realm = iam_env.get("realm", "default")
+              domain = ingress_env.get("domain", "default")
               url = f"https://{name}.{domain}"
 
               def put(key_base, body_base):
@@ -326,7 +317,7 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name") or "<name-missing>"
+              name = meta.get("name")
               ns = meta.get("namespace") or "default"
 
               files = spec.get("files", []) or []
@@ -343,68 +334,45 @@ spec:
               storage_env = env.get("storage") or {}
 
               ingress_class  = ingress_env.get("class", "")
-              ingress_domain = ingress_env.get("domain", "<ingress-domain-missing>")
+              ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
 
-              storage_secret_name = f"{name}-datalab"
-              storage_secret_ns = storage_env.get("secretNamespace", "<storage-secret-namespace-missing>")
+              secret_name = spec.get("secretName") or meta.get("name")
+              storage_secret_name = f"{secret_name}-datalab"
+              storage_secret_ns = storage_env.get("secretNamespace", "default")
 
-              allow_dns_env = {
+              allow_web_egress = {
                   "apiVersion": "networking.k8s.io/v1",
                   "kind": "NetworkPolicy",
-                  "metadata": {"name": "allow-dns"},
+                  "metadata": {"name": "allow-web-egress"},
                   "spec": {
-                      "podSelector": {},
+                      "podSelector": {},                 # apply to all pods in the environment namespace
                       "policyTypes": ["Egress"],
-                      "egress": [{
-                          "to": [{
-                              "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
-                              "podSelector": {}
-                          }],
-                          "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]
-                      }],
-                  },
-              }
-
-              allow_dns_session = allow_dns_env.copy()
-
-              allow_session_to_data = {
-                  "apiVersion": "networking.k8s.io/v1",
-                  "kind": "NetworkPolicy",
-                  "metadata": {"name": "allow-session-to-data"},
-                  "spec": {
-                      "podSelector": {"matchLabels": {"app.kubernetes.io/name": "data", "app.kubernetes.io/instance": "data"}},
-                      "policyTypes": ["Ingress"],
-                      "ingress": [{
-                          "from": [{
-                              "namespaceSelector": {
-                                  "matchLabels": {
-                                      "training.educates.dev/component": "session",
-                                      "training.educates.dev/environment.name": name
-                                  }
+                      "egress": [
+                          {
+                            "to": [
+                              {
+                                "ipBlock": {
+                                  "cidr": "0.0.0.0/0",
+                                  "except": [
+                                    "169.254.42.42/32"   # Scaleway metadata IPv4
+                                  ]
+                                }
+                              },
+                              {
+                                "ipBlock": {
+                                  "cidr": "::/0",
+                                  "except": [
+                                    "fd00:42::42/128"    # Scaleway metadata IPv6
+                                  ]
+                                }
                               }
-                          }],
-                          "ports": [{"protocol": "TCP", "port": 8080}]
-                      }],
+                            ]
+                          }
+                      ],
                   },
               }
-
-              allow_to_environment_data = {
-                  "apiVersion": "networking.k8s.io/v1",
-                  "kind": "NetworkPolicy",
-                  "metadata": {"name": "allow-to-environment-data"},
-                  "spec": {
-                      "podSelector": {},
-                      "policyTypes": ["Egress"],
-                      "egress": [{
-                          "to": [{
-                              "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": name}},
-                              "podSelector": {"matchLabels": {"app.kubernetes.io/name": "data", "app.kubernetes.io/instance": "data"}}
-                          }],
-                          "ports": [{"protocol": "TCP", "port": 8080}]
-                      }],
-                  },
-              }
+              # Note: default educates network policy already blocks 169.254.169.254/32 and fd00:ec2::254/128 (AWS/OTC/OVHcloud metadata)
 
               workshop = {
                   "apiVersion": "training.educates.dev/v1beta1",
@@ -428,7 +396,7 @@ spec:
                           "resources": {"storage": "1Gi"},
                           "namespaces": {"budget": "medium", "security": {"policy": "baseline"}},
                           "envFrom": [{"secretRef": {"name": storage_secret_name}}],
-                          "objects": [allow_dns_session, allow_to_environment_data]
+                          "objects": []
                       },
                       "workshop": {
                           "files": files or [],
@@ -440,8 +408,7 @@ spec:
                       "environment": {
                           "secrets": [{"name": storage_secret_name, "namespace": storage_secret_ns}],
                           "objects": [
-                              allow_dns_env,
-                              allow_session_to_data,
+                              allow_web_egress,
                               {
                                   "apiVersion": "v1",
                                   "kind": "PersistentVolumeClaim",

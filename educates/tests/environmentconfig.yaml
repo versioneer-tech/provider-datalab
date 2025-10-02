@@ -1,3 +1,6 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
@@ -10,7 +13,7 @@ data:
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
-    endpoint: https://s3.acme.com
+    endpoint: https://s3.acme
     force_path_style: "true"
     provider: Other
     region: acme

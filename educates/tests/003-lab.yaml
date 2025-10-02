@@ -1,21 +1,22 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
 ---
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
-  name: l003
-  namespace: datalab
-  uid: abc
+  name: s-jane
 spec:
+  secretName: jane
   sessions:
   - default
   users:
-  - u003a
-  - u003b
-  vcluster: "true"
+  - jane
+  vcluster: true
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-l003, keycloak-group-l003, keycloak-mapper-l003,
+    message: 'Unready resources: keycloak-client-s-jane, keycloak-group-s-jane, keycloak-mapper-s-jane,
       and 7 more'
     reason: Creating
     status: "False"
@@ -25,37 +26,37 @@ apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-client-l003
+    crossplane.io/composition-resource-name: keycloak-client-s-jane
   labels:
-    crossplane.io/claim-name: l003
-    crossplane.io/composite: l003
-  name: l003
-  namespace: datalab
+    crossplane.io/claim-name: s-jane
+    crossplane.io/composite: s-jane
+  name: s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     accessType: PUBLIC
-    adminUrl: https://l003.lab.acme.com
-    clientId: l003
+    adminUrl: https://s-jane.lab.acme.com
+    clientId: s-jane
     directAccessGrantsEnabled: false
     implicitFlowEnabled: true
-    name: l003
+    name: s-jane
     oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
-    rootUrl: https://l003.lab.acme.com
+    rootUrl: https://s-jane.lab.acme.com
     serviceAccountsEnabled: false
     standardFlowEnabled: true
     validRedirectUris:
-    - https://l003.lab.acme.com/*
+    - https://s-jane.lab.acme.com/*
     - http://localhost:*
     webOrigins:
-    - https://l003.lab.acme.com/*
+    - https://s-jane.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
@@ -65,21 +66,21 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-group-l003
+    crossplane.io/composition-resource-name: keycloak-group-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
-    name: l003
+    name: s-jane
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -89,18 +90,18 @@ apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
 kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-mapper-l003
+    crossplane.io/composition-resource-name: keycloak-mapper-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     addToAccessToken: false
@@ -109,7 +110,7 @@ spec:
     claimName: groups
     clientIdSelector:
       matchLabels:
-        crossplane.io/claim-name: l003
+        crossplane.io/claim-name: s-jane
     fullPath: false
     name: group-membership-mapper
     realmId: acme
@@ -121,27 +122,26 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-l003
+    crossplane.io/composition-resource-name: keycloak-memberships-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     groupIdRef:
-      name: l003
+      name: s-jane
       policy:
         resolution: Required
     members:
-    - u003a
-    - u003b
+    - jane
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -151,22 +151,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-l003
+    crossplane.io/composition-resource-name: keycloak-role-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: l003-ws-access
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: s-jane-ws-access
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     clientIdRef:
-      name: l003
+      name: s-jane
       policy:
         resolution: Required
     name: ws_access
@@ -179,27 +179,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-l003
+    crossplane.io/composition-resource-name: keycloak-roles-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     groupIdRef:
-      name: l003
+      name: s-jane
       policy:
         resolution: Required
     realmId: acme
     roleIdsRefs:
-    - name: l003-ws-access
+    - name: s-jane-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -210,56 +210,56 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: secret-observer-l003
+    crossplane.io/composition-resource-name: observe-secret-jane
   labels:
-    crossplane.io/composite: l003
-  name: secret-observer-l003
+    crossplane.io/composite: s-jane
+  name: observe-secret-jane
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: l003
+        name: jane
         namespace: datalab
   managementPolicies:
   - Observe
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: true
+  watch: false
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshop-l003
+    crossplane.io/composition-resource-name: workshop-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: workshop-l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: workshop-s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: Workshop
       metadata:
-        name: l003
+        name: s-jane
       spec:
         description: A default DataLab environment.
         environment:
@@ -267,46 +267,25 @@ spec:
           - apiVersion: networking.k8s.io/v1
             kind: NetworkPolicy
             metadata:
-              name: allow-dns
+              name: allow-web-egress
             spec:
               egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-                  podSelector: {}
+              - to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                    - 169.254.42.42/32
+                - ipBlock:
+                    cidr: ::/0
+                    except:
+                    - fd00:42::42/128
               podSelector: {}
               policyTypes:
               - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-session-to-data
-            spec:
-              ingress:
-              - from:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/component: session
-                      training.educates.dev/environment.name: l003
-                ports:
-                - port: 8080
-                  protocol: TCP
-              podSelector:
-                matchLabels:
-                  app.kubernetes.io/instance: data
-                  app.kubernetes.io/name: data
-              policyTypes:
-              - Ingress
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: l003-datalab
+              name: jane-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -353,27 +332,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: l003-datalab
+                          name: jane-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: l003-datalab
+                          name: jane-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: l003-datalab
+                          name: jane-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: l003-datalab
+                          name: jane-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: l003-datalab
+                          name: jane-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -394,7 +373,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: l003-datalab
+                      claimName: jane-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -410,7 +389,7 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: l003-datalab
+          - name: jane-datalab
             namespace: datalab
         session:
           applications:
@@ -431,7 +410,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: l003-datalab
+              name: jane-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
@@ -441,46 +420,7 @@ spec:
             budget: medium
             security:
               policy: baseline
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-                  podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-to-environment-data
-            spec:
-              egress:
-              - ports:
-                - port: 8080
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: l003
-                  podSelector:
-                    matchLabels:
-                      app.kubernetes.io/instance: data
-                      app.kubernetes.io/name: data
-              podSelector: {}
-              policyTypes:
-              - Egress
+          objects: []
           resources:
             storage: 1Gi
         title: Default DataLab
@@ -507,25 +447,25 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-l003
+    crossplane.io/composition-resource-name: workshopenvironment-s-jane
   labels:
-    crossplane.io/composite: l003
-  name: workshopenvironment-l003
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: workshopenvironment-s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopEnvironment
       metadata:
-        name: l003
+        name: s-jane
       spec:
         analytics:
           amplitude:
@@ -544,7 +484,7 @@ spec:
         theme:
           name: default-website-theme
         workshop:
-          name: l003
+          name: s-jane
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -556,32 +496,32 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopsession-l003-default
+    crossplane.io/composition-resource-name: workshopsession-s-jane-default
   labels:
-    crossplane.io/composite: l003
-  name: workshopsession-l003-default
-  namespace: datalab
+    crossplane.io/composite: s-jane
+  name: workshopsession-s-jane-default
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l003
-    uid: abc
+    name: s-jane
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopSession
       metadata:
-        name: l003-default
+        name: s-jane-default
       spec:
         environment:
-          name: l003
+          name: s-jane
         session:
           env:
           - name: SESSION_NAME
-            value: l003-default
+            value: s-jane-default
           - name: FRAME_ANCESTORS
             value: ""
           id: default

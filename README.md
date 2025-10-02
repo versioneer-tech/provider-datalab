@@ -67,7 +67,7 @@ spec:
 
 ### More examples
 
-See [`examples/labs.yaml`](examples/labs.yaml) for complete scenarios, including:
+See the [`examples`](examples/labs.yaml) for complete scenarios, including:
 - Datalabs without sessions (no runtime started by default).
 - Datalabs with sessions and optional vcluster isolation.
 - Datalabs with workshop files fetched from Git, OCI images, or HTTP archives.

@@ -1,0 +1,20 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Example 1: Minimal Datalab
+# --------------------------
+# Datalab "ws-alice"
+# - Users: ["alice"]
+# - Sessions: none → no runtime will be started automatically.
+#   (An operator may patch `spec.sessions` later to add sessions.)
+# - vcluster: omitted → default is false, so no virtual cluster.
+# - Files: omitted → no workshop files will be injected.
+#   This means the workshop **tab is disabled** in the Educates UI.
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: s-joe
+spec:
+  users:
+  - joe
+  secretName: joe

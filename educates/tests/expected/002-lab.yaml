@@ -1,20 +1,25 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
 ---
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
-  name: l002
-  namespace: datalab
-  uid: abc
+  name: s-jeff
 spec:
+  files: []
+  secretName: jeff
+  sessions:
+  - default
   users:
-  - u002a
-  - u002b
-  vcluster: "true"
+  - jeff
+  - jim
+  vcluster: false
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-l002, keycloak-group-l002, keycloak-mapper-l002,
-      and 6 more'
+    message: 'Unready resources: keycloak-client-s-jeff, keycloak-group-s-jeff, keycloak-mapper-s-jeff,
+      and 7 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -23,37 +28,37 @@ apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-client-l002
+    crossplane.io/composition-resource-name: keycloak-client-s-jeff
   labels:
-    crossplane.io/claim-name: l002
-    crossplane.io/composite: l002
-  name: l002
-  namespace: datalab
+    crossplane.io/claim-name: s-jeff
+    crossplane.io/composite: s-jeff
+  name: s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     accessType: PUBLIC
-    adminUrl: https://l002.lab.acme.com
-    clientId: l002
+    adminUrl: https://s-jeff.lab.acme.com
+    clientId: s-jeff
     directAccessGrantsEnabled: false
     implicitFlowEnabled: true
-    name: l002
+    name: s-jeff
     oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
-    rootUrl: https://l002.lab.acme.com
+    rootUrl: https://s-jeff.lab.acme.com
     serviceAccountsEnabled: false
     standardFlowEnabled: true
     validRedirectUris:
-    - https://l002.lab.acme.com/*
+    - https://s-jeff.lab.acme.com/*
     - http://localhost:*
     webOrigins:
-    - https://l002.lab.acme.com/*
+    - https://s-jeff.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
@@ -63,21 +68,21 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-group-l002
+    crossplane.io/composition-resource-name: keycloak-group-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
-    name: l002
+    name: s-jeff
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -87,18 +92,18 @@ apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
 kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-mapper-l002
+    crossplane.io/composition-resource-name: keycloak-mapper-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     addToAccessToken: false
@@ -107,7 +112,7 @@ spec:
     claimName: groups
     clientIdSelector:
       matchLabels:
-        crossplane.io/claim-name: l002
+        crossplane.io/claim-name: s-jeff
     fullPath: false
     name: group-membership-mapper
     realmId: acme
@@ -119,27 +124,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-l002
+    crossplane.io/composition-resource-name: keycloak-memberships-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     groupIdRef:
-      name: l002
+      name: s-jeff
       policy:
         resolution: Required
     members:
-    - u002a
-    - u002b
+    - jeff
+    - jim
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -149,22 +154,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-l002
+    crossplane.io/composition-resource-name: keycloak-role-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: l002-ws-access
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: s-jeff-ws-access
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     clientIdRef:
-      name: l002
+      name: s-jeff
       policy:
         resolution: Required
     name: ws_access
@@ -177,27 +182,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-l002
+    crossplane.io/composition-resource-name: keycloak-roles-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     groupIdRef:
-      name: l002
+      name: s-jeff
       policy:
         resolution: Required
     realmId: acme
     roleIdsRefs:
-    - name: l002-ws-access
+    - name: s-jeff-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -208,56 +213,56 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: secret-observer-l002
+    crossplane.io/composition-resource-name: observe-secret-jeff
   labels:
-    crossplane.io/composite: l002
-  name: secret-observer-l002
+    crossplane.io/composite: s-jeff
+  name: observe-secret-jeff
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: l002
+        name: jeff
         namespace: datalab
   managementPolicies:
   - Observe
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: true
+  watch: false
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshop-l002
+    crossplane.io/composition-resource-name: workshop-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: workshop-l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: workshop-s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: Workshop
       metadata:
-        name: l002
+        name: s-jeff
       spec:
         description: A default DataLab environment.
         environment:
@@ -265,46 +270,25 @@ spec:
           - apiVersion: networking.k8s.io/v1
             kind: NetworkPolicy
             metadata:
-              name: allow-dns
+              name: allow-web-egress
             spec:
               egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-                  podSelector: {}
+              - to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                    - 169.254.42.42/32
+                - ipBlock:
+                    cidr: ::/0
+                    except:
+                    - fd00:42::42/128
               podSelector: {}
               policyTypes:
               - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-session-to-data
-            spec:
-              ingress:
-              - from:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/component: session
-                      training.educates.dev/environment.name: l002
-                ports:
-                - port: 8080
-                  protocol: TCP
-              podSelector:
-                matchLabels:
-                  app.kubernetes.io/instance: data
-                  app.kubernetes.io/name: data
-              policyTypes:
-              - Ingress
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: l002-datalab
+              name: jeff-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -351,27 +335,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: l002-datalab
+                          name: jeff-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: l002-datalab
+                          name: jeff-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: l002-datalab
+                          name: jeff-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: l002-datalab
+                          name: jeff-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: l002-datalab
+                          name: jeff-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -392,7 +376,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: l002-datalab
+                      claimName: jeff-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -408,7 +392,7 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: l002-datalab
+          - name: jeff-datalab
             namespace: datalab
         session:
           applications:
@@ -421,7 +405,7 @@ spec:
             terminal:
               enabled: true
             vcluster:
-              enabled: true
+              enabled: false
             workshop:
               enabled: false
           dashboards:
@@ -429,7 +413,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: l002-datalab
+              name: jeff-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
@@ -439,46 +423,7 @@ spec:
             budget: medium
             security:
               policy: baseline
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-                  podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-to-environment-data
-            spec:
-              egress:
-              - ports:
-                - port: 8080
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: l002
-                  podSelector:
-                    matchLabels:
-                      app.kubernetes.io/instance: data
-                      app.kubernetes.io/name: data
-              podSelector: {}
-              policyTypes:
-              - Egress
+          objects: []
           resources:
             storage: 1Gi
         title: Default DataLab
@@ -505,25 +450,25 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-l002
+    crossplane.io/composition-resource-name: workshopenvironment-s-jeff
   labels:
-    crossplane.io/composite: l002
-  name: workshopenvironment-l002
-  namespace: datalab
+    crossplane.io/composite: s-jeff
+  name: workshopenvironment-s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: l002
-    uid: abc
+    name: s-jeff
+    uid: ""
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopEnvironment
       metadata:
-        name: l002
+        name: s-jeff
       spec:
         analytics:
           amplitude:
@@ -542,7 +487,50 @@ spec:
         theme:
           name: default-website-theme
         workshop:
-          name: l002
+          name: s-jeff
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: workshopsession-s-jeff-default
+  labels:
+    crossplane.io/composite: s-jeff
+  name: workshopsession-s-jeff-default
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopSession
+      metadata:
+        name: s-jeff-default
+      spec:
+        environment:
+          name: s-jeff
+        session:
+          env:
+          - name: SESSION_NAME
+            value: s-jeff-default
+          - name: FRAME_ANCESTORS
+            value: ""
+          id: default
+          ingress:
+            domain: lab.acme.com
+            secret: wildcard-tls
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

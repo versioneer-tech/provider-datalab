@@ -1,0 +1,24 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Example 2: Datalab with vcluster
+# --------------------------------
+# Datalab "ws-bob"
+# - Users: ["bob"]
+# - Sessions: ["default"] → one WorkshopSession named "default" will be created and started.
+# - vcluster: true → a virtual cluster will be provisioned for this datalab.
+# - Files: [] → explicit empty list, so no workshop files.
+#   Again, the workshop **tab is disabled** in the Educates UI.
+apiVersion: pkg.internal/v1beta1
+kind: Datalab
+metadata:
+  name: s-jeff
+spec:
+  users:
+  - jeff
+  - jim
+  secretName: jeff
+  sessions:
+  - default
+  vcluster: false
+  files: []

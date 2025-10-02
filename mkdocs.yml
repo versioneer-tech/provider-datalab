@@ -1,5 +1,10 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
 site_name: provider-datalab
 site_url: https://versioneer-tech.github.io/provider-datalab/
+repo_url: https://github.com/versioneer-tech/provider-datalab
+repo_name: versioneer-tech/provider-datalab
 copyright: "Copyright &copy; 2025, Versioneer"
 nav:
   - Home: index.md

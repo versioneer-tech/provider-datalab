@@ -1,3 +1,6 @@
+# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
@@ -25,6 +28,12 @@ spec:
               required:
                 - users
               properties:
+                secretName:
+                  type: string
+                  description: >-
+                    Name of the Secret containing the credentials to access the
+                    storage associated with this Datalab. The Secret must exist
+                    in the same namespace as the Datalab.
                 users:
                   type: array
                   description: Users associated with this datalab.
