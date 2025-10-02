@@ -7,7 +7,7 @@ metadata:
   name: provider-keycloak
 spec:
   activate:
-    - groups.user.keycloak.m.crossplane.io
+    - groups.group.keycloak.m.crossplane.io
     - memberships.group.keycloak.m.crossplane.io
     - roles.group.keycloak.m.crossplane.io
     - clients.openidclient.keycloak.m.crossplane.io
