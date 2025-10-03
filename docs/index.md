@@ -1,8 +1,8 @@
-# Provider Datalab
+# Welcome to Provider Datalab
 
-The **Provider Datalab** package turns Kubernetes into a platform for collaborative, cloud-native workspaces. It gives **end users** self-service access to reproducible environments for coding, data exploration, and analysis — and it gives **operators** a unified control plane to provision and secure those environments at scale.
+The **Provider Datalab** package turns Kubernetes into a platform for collaborative, cloud-native workspaces, built on [Crossplane v2](https://crossplane.io). It gives **end users** self-service access to reproducible environments for coding, data exploration, and analysis — and it gives **operators** a unified control plane to provision and secure those environments at scale.
 
-Instead of hand-crafting Jupyter or Educates deployments, every workspace is declared through a single Kubernetes Custom Resource: the `Datalab` claim. This claim captures who should have access, whether a virtual cluster is needed, what sessions should run, and what files or datasets should be preloaded — while Crossplane and the compositions take care of provisioning all the moving parts.
+Instead of hand-crafting Jupyter or Educates deployments, every workspace is declared through a single Kubernetes Custom Resource: the `Datalab` claim. This claim captures who should have access, whether a virtual cluster is needed, what sessions should run, and what files or datasets should be preloaded — while Crossplane v2 and the compositions take care of provisioning all the moving parts.
 
 For **end users**, this means:
 
@@ -17,9 +17,8 @@ For **operators**, this means:
 - Extensibility to plug in additional runtimes or policies without changing the user-facing API.  
 
 At its core, Provider Datalab provides:
-
 - A **Datalab Composite Resource Definition (XRD)**  
-- **Compositions** to provision environments with storage, sessions, vclusters, and identity wiring  
+- **Compositions** powered by **Crossplane v2** to provision environments with storage, sessions, vclusters, and identity wiring  
 - Seamless integration of authentication and access control  
 
 With Provider Datalab, workspaces become **declarative, multi-tenant, and self-service**, while operators retain full control over identity, security, and resource governance.
