@@ -2,6 +2,8 @@
 
 The **Provider Datalab** package turns Kubernetes into a platform for collaborative, cloud-native workspaces, built on [Crossplane v2](https://crossplane.io). It gives **end users** self-service access to reproducible environments for coding, data exploration, and analysis — and it gives **operators** a unified control plane to provision and secure those environments at scale.
 
+It also works seamlessly with [Provider Storage](https://provider-storage.versioneer.at/), enabling S3-compatible storage provisioning and integration directly into Datalabs.
+
 Instead of hand-crafting Jupyter or Educates deployments, every workspace is declared through a single Kubernetes Custom Resource: the `Datalab` claim. This claim captures who should have access, whether a virtual cluster is needed, what sessions should run, and what files or datasets should be preloaded — while Crossplane and the compositions take care of provisioning all the moving parts.
 
 For **end users**, this means:
