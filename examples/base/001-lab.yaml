@@ -1,20 +1,21 @@
 # Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# Example 1: Minimal Datalab
-# --------------------------
-# Datalab "ws-alice"
-# - Users: ["alice"]
-# - Sessions: none → no runtime will be started automatically.
-#   (An operator may patch `spec.sessions` later to add sessions.)
-# - vcluster: omitted → default is false, so no virtual cluster.
-# - Files: omitted → no workshop files will be injected.
-#   This means the workshop **tab is disabled** in the Educates UI.
+# Jeff and Jim share a datalab s-jeff with one default shared session
+# automatically created. That session will run permanently until stopped by the operator.
+# The lab does not use a vcluster and has no workshop files.
+# Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
+# A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
-  name: s-joe
+  name: s-jeff
 spec:
   users:
-  - joe
-  secretName: joe
+  - jeff
+  - jim
+  secretName: jeff
+  sessions:
+  - default
+  vcluster: false
+  files: []

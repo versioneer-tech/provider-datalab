@@ -270,11 +270,35 @@ spec:
               name: allow-web-egress
             spec:
               egress:
+              - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+              - to:
+                - ipBlock:
+                    cidr: 10.0.0.0/8
+                - ipBlock:
+                    cidr: 172.16.0.0/12
+                - ipBlock:
+                    cidr: 192.168.0.0/16
+                - ipBlock:
+                    cidr: 100.64.0.0/10
+              - to:
+                - ipBlock:
+                    cidr: fc00::/7
+              - to:
+                - namespaceSelector: {}
               - to:
                 - ipBlock:
                     cidr: 0.0.0.0/0
                     except:
                     - 169.254.42.42/32
+              - to:
                 - ipBlock:
                     cidr: ::/0
                     except:
@@ -315,7 +339,7 @@ spec:
                   containers:
                   - env:
                     - name: FB_AUTH_MAPPER
-                      value: writer-share
+                      value: writer-noshare
                     - name: WORKSPACE
                       valueFrom:
                         fieldRef:
@@ -420,7 +444,14 @@ spec:
             budget: medium
             security:
               policy: baseline
-          objects: []
+          objects:
+          - apiVersion: v1
+            data:
+              cidr: 10.43.0.0/16
+            kind: ConfigMap
+            metadata:
+              name: vc-cidr-my-vcluster
+              namespace: $(session_namespace)-vc
           resources:
             storage: 1Gi
         title: Default DataLab

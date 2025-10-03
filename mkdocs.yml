@@ -9,8 +9,9 @@ copyright: "Copyright &copy; 2025, Versioneer"
 nav:
   - Home: index.md
   - How-to guides:
-    - datalab-educates: how-to-guides/datalab-educates.md
-    - datalab-jupyter: how-to-guides/datalab-jupyter.md
+    - Usage & Concepts: how-to-guides/usage_concepts.md
+    - Installation: how-to-guides/installation.md
+    - Security: how-to-guides/security.md
   - Reference guides:
     - API: reference-guides/api.md
 plugins:

@@ -69,7 +69,7 @@ spec:
                           }
                       },
                       "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                      "watch": False
+                      "watch": False,
                   },
               })
 
@@ -320,13 +320,13 @@ spec:
               name = meta.get("name")
               ns = meta.get("namespace") or "default"
 
-              files = spec.get("files", []) or []
-              sessions = list(spec.get("sessions", []) or [])
+              files = spec.get("files") or []
+              sessions = list(spec.get("sessions") or [])
               vc_raw = spec.get("vcluster", False)
               if isinstance(vc_raw, bool):
                   vcluster = vc_raw
               else:
-                  vcluster = str(vc_raw).lower() in ("true","1","yes","on")
+                  vcluster = str(vc_raw).lower() in ("true", "1", "yes", "on")
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
@@ -342,261 +342,250 @@ spec:
               storage_secret_ns = storage_env.get("secretNamespace", "default")
 
               allow_web_egress = {
-                "apiVersion": "networking.k8s.io/v1",
-                "kind": "NetworkPolicy",
-                "metadata": {"name": "allow-web-egress"},
-                "spec": {
-                    "podSelector": {},
-                    "policyTypes": ["Egress"],
-                    "egress": [
-                        # allow DNS
-                        {
-                            "to": [
-                                {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
-                            ],
-                            "ports": [
-                                {"protocol": "UDP", "port": 53},
-                                {"protocol": "TCP", "port": 53},
-                            ],
-                        },
-                        # allow in-cluster Service/Pod IPs generically (private address spaces)                        
-                        { 
-                            "to": [
-                                {"ipBlock": {"cidr": "10.0.0.0/8"}},
-                                {"ipBlock": {"cidr": "172.16.0.0/12"}},
-                                {"ipBlock": {"cidr": "192.168.0.0/16"}},
-                                {"ipBlock": {"cidr": "100.64.0.0/10"}},
-                            ]
-                        },
-                        {
-                            "to": [
-                                {"ipBlock": {"cidr": "fc00::/7"}}
-                            ]
-                        },
-                        # allow pod-to-pod by namespace (helps CNIs that evaluate after DNAT)                        
-                        {
-                            "to": [ {"namespaceSelector": {}} ] 
-                        },
-                        # block IMDS - note: default educates clusterNetwork already blocks 169.254.169.254/32 and fd00:ec2::254/128 (AWS/OTC/OVHcloud)
-                        {
-                            "to": [
-                                {
-                                    "ipBlock": {
-                                        "cidr": "0.0.0.0/0",
-                                        "except": ["169.254.42.42/32"],  # Scaleway
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "to": [
-                                {
-                                    "ipBlock": {
-                                        "cidr": "::/0",
-                                        "except": ["fd00:42::42/128"],   # Scaleway
-                                    }
-                                }
-                            ]
-                        },
-                    ],
-                },
+                  "apiVersion": "networking.k8s.io/v1",
+                  "kind": "NetworkPolicy",
+                  "metadata": {"name": "allow-web-egress"},
+                  "spec": {
+                      "podSelector": {},
+                      "policyTypes": ["Egress"],
+                      "egress": [
+                          {
+                              "to": [
+                                  {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
+                              ],
+                              "ports": [
+                                  {"protocol": "UDP", "port": 53},
+                                  {"protocol": "TCP", "port": 53}
+                              ]
+                          },
+                          {
+                              "to": [
+                                  {"ipBlock": {"cidr": "10.0.0.0/8"}},
+                                  {"ipBlock": {"cidr": "172.16.0.0/12"}},
+                                  {"ipBlock": {"cidr": "192.168.0.0/16"}},
+                                  {"ipBlock": {"cidr": "100.64.0.0/10"}}
+                              ]
+                          },
+                          {
+                              "to": [
+                                  {"ipBlock": {"cidr": "fc00::/7"}}
+                              ]
+                          },
+                          { "to": [ {"namespaceSelector": {}} ] },
+                          {
+                              "to": [
+                                  {"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}}
+                              ]
+                          },
+                          {
+                              "to": [
+                                  {"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}}
+                              ]
+                          }
+                      ]
+                  }
               }
 
               workshop = {
-                "apiVersion": "training.educates.dev/v1beta1",
-                "kind": "Workshop",
-                "metadata": {"name": name},
-                "spec": {
-                  "title": "Default DataLab",
-                  "description": "A default DataLab environment.",
-                  "version": "1.0",
-                  "session": {
-                    "applications": {
-                      "console": {"enabled": False},
-                      "editor": {"enabled": True},
-                      "slides": {"enabled": False},
-                      "terminal": {"enabled": True},
-                      "vcluster": {"enabled": vcluster},
-                      "workshop": {"enabled": bool(files or [])}
-                    },
-                    "dashboards": [
-                      {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
-                    ],
-                    "ingresses": [
-                      {
-                        "name": "data",
-                        "protocol": "http",
-                        "host": "data.$(workshop_namespace).svc.$(cluster_domain)",
-                        "port": 8080
-                      }
-                    ],
-                    "resources": {"storage": "1Gi"},
-                    "namespaces": {"budget": "medium", "security": {"policy": "baseline"}},
-                    "envFrom": [{"secretRef": {"name": storage_secret_name}}],
-                    "objects": []
-                  },
-                  "workshop": {
-                    "files": files or [],
-                    "packages": [
-                      {
-                        "name": "awscli",
-                        "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0"}}]
-                      },
-                      {
-                        "name": "rclone",
-                        "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0"}}]
-                      }
-                    ]
-                  },
-                  "environment": {
-                    "secrets": [{"name": storage_secret_name, "namespace": storage_secret_ns}],
-                    "objects": [
-                      allow_web_egress,
-                      {
-                        "apiVersion": "v1",
-                        "kind": "PersistentVolumeClaim",
-                        "metadata": {"name": storage_secret_name},
-                        "spec": {
-                          "accessModes": ["ReadOnlyMany"],
-                          "resources": {"requests": {"storage": "1Mi"}},
-                          "storageClassName": "csi-rclone"
-                        }
-                      },
-                      {
-                        "apiVersion": "apps/v1",
-                        "kind": "Deployment",
-                        "metadata": {
-                          "name": "data",
-                          "labels": {
-                            "app.kubernetes.io/instance": "data",
-                            "app.kubernetes.io/name": "data"
-                          }
-                        },
-                        "spec": {
-                          "replicas": 1,
-                          "selector": {
-                            "matchLabels": {
-                              "app.kubernetes.io/instance": "data",
-                              "app.kubernetes.io/name": "data"
-                            }
+                  "apiVersion": "training.educates.dev/v1beta1",
+                  "kind": "Workshop",
+                  "metadata": {"name": name},
+                  "spec": {
+                      "title": "Default DataLab",
+                      "description": "A default DataLab environment.",
+                      "version": "1.0",
+                      "session": {
+                          "applications": {
+                              "console": {"enabled": False},
+                              "editor": {"enabled": True},
+                              "slides": {"enabled": False},
+                              "terminal": {"enabled": True},
+                              "vcluster": {"enabled": vcluster},
+                              "workshop": {"enabled": bool(files)}
                           },
-                          "template": {
-                            "metadata": {
-                              "labels": {
-                                "app.kubernetes.io/instance": "data",
-                                "app.kubernetes.io/name": "data"
-                              }
-                            },
-                            "spec": {
-                              "serviceAccountName": "$(service_account)",
-                              "containers": [
-                                {
+                          "dashboards": [
+                              {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
+                          ],
+                          "ingresses": [
+                              {
                                   "name": "data",
-                                  "image": "ghcr.io/versioneer-tech/package-r:v2025.7.1",
-                                  "imagePullPolicy": "Always",
-                                  "ports": [{"name": "http", "containerPort": 8080}],
-                                  "env": [
-                                    {"name": "FB_AUTH_MAPPER", "value": "writer-share"},
-                                    {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                    {"name": "FB_ROOT", "value": "/data"},
-                                    {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                    {"name": "FB_AUTH_HEADER", "value": "Accept"},
-                                    {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
-                                    {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_SECRET_ACCESS_KEY"}}},
-                                    {"name": "AWS_REGION", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_REGION"}}},
-                                    {"name": "AWS_ENDPOINT_URL", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ENDPOINT_URL"}}},
-                                    {"name": "AWS_S3_FORCE_PATH_STYLE", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_S3_FORCE_PATH_STYLE"}}}
-                                  ],
-                                  "resources": {
-                                    "requests": {"cpu": "100m", "memory": "128Mi"},
-                                    "limits": {"cpu": "1", "memory": "512Mi"}
-                                  },
-                                  "volumeMounts": [{"name": "data", "mountPath": "/data"}]
-                                }
-                              ],
-                              "volumes": [
-                                {"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}}
-                              ]
-                            }
-                          }
-                        }
+                                  "protocol": "http",
+                                  "host": "data.$(workshop_namespace).svc.$(cluster_domain)",
+                                  "port": 8080
+                              }
+                          ],
+                          "resources": {"storage": "1Gi"},
+                          "namespaces": {"budget": "medium", "security": {"policy": "baseline"}},
+                          "envFrom": [{"secretRef": {"name": storage_secret_name}}],
+                          "objects": []
                       },
-                      {
-                        "apiVersion": "v1",
-                        "kind": "Service",
-                        "metadata": {"name": "data"},
-                        "spec": {
-                          "type": "ClusterIP",
-                          "selector": {
-                            "app.kubernetes.io/instance": "data",
-                            "app.kubernetes.io/name": "data"
-                          },
-                          "ports": [
-                            {"name": "http", "port": 8080, "targetPort": "http", "protocol": "TCP"}
+                      "workshop": {
+                          "files": files,
+                          "packages": [
+                              {"name": "awscli", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0"}}]},
+                              {"name": "rclone", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0"}}]}
                           ]
-                        }
+                      },
+                      "environment": {
+                          "secrets": [{"name": storage_secret_name, "namespace": storage_secret_ns}],
+                          "objects": [
+                              allow_web_egress,
+                              {
+                                  "apiVersion": "v1",
+                                  "kind": "PersistentVolumeClaim",
+                                  "metadata": {"name": storage_secret_name},
+                                  "spec": {
+                                      "accessModes": ["ReadOnlyMany"],
+                                      "resources": {"requests": {"storage": "1Mi"}},
+                                      "storageClassName": "csi-rclone"
+                                  }
+                              },
+                              {
+                                  "apiVersion": "apps/v1",
+                                  "kind": "Deployment",
+                                  "metadata": {
+                                      "name": "data",
+                                      "labels": {
+                                          "app.kubernetes.io/instance": "data",
+                                          "app.kubernetes.io/name": "data"
+                                      }
+                                  },
+                                  "spec": {
+                                      "replicas": 1,
+                                      "selector": {
+                                          "matchLabels": {
+                                              "app.kubernetes.io/instance": "data",
+                                              "app.kubernetes.io/name": "data"
+                                          }
+                                      },
+                                      "template": {
+                                          "metadata": {
+                                              "labels": {
+                                                  "app.kubernetes.io/instance": "data",
+                                                  "app.kubernetes.io/name": "data"
+                                              }
+                                          },
+                                          "spec": {
+                                              "serviceAccountName": "$(service_account)",
+                                              "containers": [{
+                                                  "name": "data",
+                                                  "image": "ghcr.io/versioneer-tech/package-r:v2025.7.1",
+                                                  "imagePullPolicy": "Always",
+                                                  "ports": [{"name": "http", "containerPort": 8080}],
+                                                  "env": [
+                                                      {"name": "FB_AUTH_MAPPER", "value": "writer-noshare"},
+                                                      {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                                                      {"name": "FB_ROOT", "value": "/data"},
+                                                      {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                                                      {"name": "FB_AUTH_HEADER", "value": "Accept"},
+                                                      {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
+                                                      {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_SECRET_ACCESS_KEY"}}},
+                                                      {"name": "AWS_REGION", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_REGION"}}},
+                                                      {"name": "AWS_ENDPOINT_URL", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ENDPOINT_URL"}}},
+                                                      {"name": "AWS_S3_FORCE_PATH_STYLE", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_S3_FORCE_PATH_STYLE"}}}
+                                                  ],
+                                                  "resources": {
+                                                      "requests": {"cpu": "100m", "memory": "128Mi"},
+                                                      "limits": {"cpu": "1", "memory": "512Mi"}
+                                                  },
+                                                  "volumeMounts": [{"name": "data", "mountPath": "/data"}]
+                                              }],
+                                              "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}}]
+                                          }
+                                      }
+                                  }
+                              },
+                              {
+                                  "apiVersion": "v1",
+                                  "kind": "Service",
+                                  "metadata": {"name": "data"},
+                                  "spec": {
+                                      "type": "ClusterIP",
+                                      "selector": {
+                                          "app.kubernetes.io/instance": "data",
+                                          "app.kubernetes.io/name": "data"
+                                      },
+                                      "ports": [
+                                          {"name": "http", "port": 8080, "targetPort": "http", "protocol": "TCP"}
+                                      ]
+                                  }
+                              }
+                          ]
                       }
-                    ]
                   }
-                }
               }
 
+              if vcluster:
+                  service_cidr = (
+                      str((env.get("network") or {}).get("serviceCIDR") or "") or
+                      "10.43.0.0/16"
+                  )
+                  workshop["spec"]["session"]["objects"].append({
+                      "apiVersion": "v1",
+                      "kind": "ConfigMap",
+                      "metadata": {
+                          "name": "vc-cidr-my-vcluster",
+                          "namespace": "$(session_namespace)-vc"
+                      },
+                      "data": {"cidr": service_cidr}
+                  })
+
               environment = {
-                "apiVersion": "training.educates.dev/v1beta1",
-                "kind": "WorkshopEnvironment",
-                "metadata": {"name": name},
-                "spec": {
-                  "analytics": {"amplitude": {"trackingId": ""}},
-                  "cookies": {},
-                  "environment": {"objects": [], "secrets": []},
-                  "request": {"enabled": False},
-                  "session": {"ingress": {"class": ingress_class, "domain": ingress_domain, "secret": ingress_secret}},
-                  "theme": {"name": "default-website-theme"},
-                  "workshop": {"name": name}
-                }
+                  "apiVersion": "training.educates.dev/v1beta1",
+                  "kind": "WorkshopEnvironment",
+                  "metadata": {"name": name},
+                  "spec": {
+                      "analytics": {"amplitude": {"trackingId": ""}},
+                      "cookies": {},
+                      "environment": {"objects": [], "secrets": []},
+                      "request": {"enabled": False},
+                      "session": {"ingress": {"class": ingress_class, "domain": ingress_domain, "secret": ingress_secret}},
+                      "theme": {"name": "default-website-theme"},
+                      "workshop": {"name": name}
+                  }
               }
 
               def emit(kind, manifest, key_suffix=""):
-                suffix = f"-{name}{('-' + key_suffix) if key_suffix else ''}"
-                key = f"{kind.lower()}{suffix}"
-                body = {
-                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
-                  "kind": "Object",
-                  "metadata": {
-                    "name": key,
-                    "namespace": ns,
-                    "annotations": {"crossplane.io/composition-resource-name": key}
-                  },
-                  "spec": {
-                    "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                    "forProvider": {"manifest": manifest},
-                    "readiness": {"policy": "SuccessfulCreate"},
-                    "watch": False
+                  suffix = f"-{name}{('-' + key_suffix) if key_suffix else ''}"
+                  key = f"{kind.lower()}{suffix}"
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": ns,
+                          "annotations": {"crossplane.io/composition-resource-name": key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": manifest},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": False
+                      }
                   }
-                }
-                rsp.desired.resources[key].resource.update(body)
+                  rsp.desired.resources[key].resource.update(body)
 
               emit("Workshop", workshop)
               emit("WorkshopEnvironment", environment)
 
               for sid in sessions:
-                session_manifest = {
-                  "apiVersion": "training.educates.dev/v1beta1",
-                  "kind": "WorkshopSession",
-                  "metadata": {"name": f"{name}-{sid}"},
-                  "spec": {
-                    "environment": {"name": name},
-                    "session": {
-                      "id": str(sid),
-                      "ingress": {"domain": ingress_domain, "secret": ingress_secret},
-                      "env": [
-                        {"name": "SESSION_NAME", "value": f"{name}-{sid}"},
-                        {"name": "FRAME_ANCESTORS", "value": ""}
-                      ]
-                    }
+                  session_manifest = {
+                      "apiVersion": "training.educates.dev/v1beta1",
+                      "kind": "WorkshopSession",
+                      "metadata": {"name": f"{name}-{sid}"},
+                      "spec": {
+                          "environment": {"name": name},
+                          "session": {
+                              "id": str(sid),
+                              "ingress": {"domain": ingress_domain, "secret": ingress_secret},
+                              "env": [
+                                  {"name": "SESSION_NAME", "value": f"{name}-{sid}"},
+                                  {"name": "FRAME_ANCESTORS", "value": ""}
+                              ]
+                          }
+                      }
                   }
-                }
-                emit("WorkshopSession", session_manifest, key_suffix=sid)
+                  emit("WorkshopSession", session_manifest, key_suffix=str(sid))
 
     - step: detect-status
       functionRef:

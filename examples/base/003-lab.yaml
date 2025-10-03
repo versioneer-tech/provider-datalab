@@ -1,14 +1,12 @@
 # Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# Example 3: Datalab with Git-based files
-# ---------------------------------------
-# Datalab "ws-eric"
-# - Users: ["eric"]
-# - Sessions: ["default"] → one WorkshopSession named "default" will be created and started.
-# - vcluster: false → no virtual cluster will be provisioned.
-# - Files: one Git source → workshop and data files are mounted into the environment.
-#   This enables the workshop **tab** in the Educates UI, showing the imported content.
+# Jane runs a datalab s-jane with a default session automatically created.
+# That session will run permanently until stopped by the operator,
+# and a dedicated vcluster is provisioned for runtime isolation.
+# No workshop files are attached. Credentials to storage are expected
+# to exist in a secret "jane" in the same namespace.
+# A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
