@@ -174,7 +174,7 @@ spec:
   files: []
 ```
 
-For more scenarios, see these [`example manifests`](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/labs.yaml), which demonstrate:  
+For more scenarios, see these [`example manifests`](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base), which demonstrate:  
 - labs with multiple users  
 - enabling/disabling `spec.vcluster`  
 - attaching workshop files from Git, OCI images, or HTTP sources  
