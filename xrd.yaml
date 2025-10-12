@@ -199,4 +199,14 @@ spec:
             status:
               type: object
               description: Current observed state of the datalab.
-              properties: {}
+              properties:
+                sessions:
+                  type: object
+                  description: Map of session IDs and their current state.
+                  additionalProperties:
+                    type: object
+                    description: Observed state of a single datalab session.
+                    properties:
+                      url:
+                        type: string
+                        description: Public URL of the active session.

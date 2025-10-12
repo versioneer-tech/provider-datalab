@@ -73,7 +73,7 @@ spec:
                   },
               })
 
-    - step: write-secret-datalab
+    - step: update-secret-datalab
       functionRef:
         name: crossplane-contrib-function-python
       input:
@@ -170,7 +170,7 @@ spec:
               rsp.desired.resources[key].resource.update(manifest)
               rsp.desired.resources[key].ready = True
 
-    - step: keycloak
+    - step: update-keycloak-objects
       functionRef:
         name: crossplane-contrib-function-python
       input:
@@ -300,7 +300,7 @@ spec:
                   },
               })
 
-    - step: educates
+    - step: update-educates-objects
       functionRef:
         name: crossplane-contrib-function-python
       input:
@@ -587,6 +587,62 @@ spec:
                   }
                   emit("WorkshopSession", session_manifest, key_suffix=str(sid))
 
-    - step: detect-status
+    - step: detect-educates-status
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+            from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+            from google.protobuf import json_format as jf
+            from google.protobuf import struct_pb2 as st
+
+            def _to_dict(s):
+                return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
+
+            def _extract_manifest(objres):
+                if not objres or not getattr(objres, "resource", None):
+                    return {}
+                od = _to_dict(objres.resource)
+                atp = (od.get("status") or {}).get("atProvider") or {}
+                return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
+
+            def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+                observed = getattr(req.observed, "resources", None) or {}
+                xr_obs = _to_dict(req.observed.composite.resource)
+                meta = xr_obs.get("metadata", {}) or {}
+                spec = xr_obs.get("spec", {}) or {}
+                name = meta.get("name")
+
+                sessions_map = {}
+
+                for sid in spec.get("sessions") or []:
+                    key = f"workshopsession-{name}-{sid}"
+                    manifest = _extract_manifest(observed.get(key))
+                    if not manifest:
+                        continue
+
+                    ws_spec = (manifest.get("spec") or {}).get("session") or {}
+                    ws_id = str(ws_spec.get("id") or sid)
+
+                    educates = (manifest.get("status") or {}).get("educates") or {}
+                    phase = educates.get("phase")
+                    url = educates.get("url")
+
+                    if phase == "Running" and url:
+                        sessions_map[ws_id] = {"url": url}
+
+                cur_status = (xr_obs.get("status") or {}).copy()
+                cur_sessions = (cur_status.get("sessions") or {}).copy()
+                cur_sessions.update(sessions_map)
+                cur_status["sessions"] = cur_sessions
+
+                v = st.Value()
+                jf.ParseDict(cur_status, v)
+                rsp.desired.composite.resource.fields["status"].CopyFrom(v)
+
+
+    - step: detect-datalab-status
       functionRef:
         name: crossplane-contrib-function-auto-ready
