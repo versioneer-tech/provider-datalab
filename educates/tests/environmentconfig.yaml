@@ -20,5 +20,13 @@ data:
     secretNamespace: datalab
     type: s3
   network:
-    serviceCIDR: "10.43.0.0/16" # default (10.43.0.0/16 K3s / RKE2, 10.96.0.0/16 Kubeadm / Kind, 10.100.0.0/16 EKS / "10.32.0.0/12" Scaleway)
-                    
+    serviceCIDR: "10.43.0.0/16"
+  packages:
+    - name: awscli
+      files:
+        - image:
+            url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
+    - name: rclone
+      files:
+        - image:
+            url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0

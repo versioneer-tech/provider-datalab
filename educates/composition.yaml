@@ -332,6 +332,7 @@ spec:
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
+              packages = env.get("packages") or []
 
               ingress_class  = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
@@ -421,10 +422,7 @@ spec:
                       },
                       "workshop": {
                           "files": files,
-                          "packages": [
-                              {"name": "awscli", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0"}}]},
-                              {"name": "rclone", "files": [{"image": {"url": "ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0"}}]}
-                          ]
+                          "packages": packages
                       },
                       "environment": {
                           "secrets": [{"name": storage_secret_name, "namespace": storage_secret_ns}],
