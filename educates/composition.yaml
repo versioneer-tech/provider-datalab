@@ -313,6 +313,11 @@ spec:
           def _to_dict(struct):
               return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
 
+          def _boolish(v):
+              if isinstance(v, bool):
+                  return v
+              return str(v).lower() in ("true", "1", "yes", "on")
+
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
@@ -322,14 +327,33 @@ spec:
 
               files = spec.get("files") or []
               sessions = list(spec.get("sessions") or [])
-              vc_raw = spec.get("vcluster", False)
-              if isinstance(vc_raw, bool):
-                  vcluster = vc_raw
-              else:
-                  vcluster = str(vc_raw).lower() in ("true", "1", "yes", "on")
+              vcluster = _boolish(spec.get("vcluster", False))
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+              defaults = (env.get("defaults") or {})
+              env_quota = (defaults.get("quota") or {})
+              quota = (spec.get("quota") or {})
+
+              memory = quota.get("memory") or env_quota.get("memory") or "2Gi"
+              storage = quota.get("storage") or env_quota.get("storage") or "1Gi"
+              budget  = quota.get("budget")  or env_quota.get("budget")  or "medium"
+
+              env_security = (defaults.get("security") or {})
+              security = (spec.get("security") or {})
+
+              policy = (security.get("policy") or env_security.get("policy") or "baseline")
+
+              ka = security.get("kubernetesAccess")
+              if ka is None:
+                  ka = env_security.get("kubernetesAccess")
+              if ka is None:
+                  ka = True
+              kubernetes_access = _boolish(ka)
+
+              # enum in XRD: admin|edit|view; default edit
+              role = (security.get("kubernetesRole") or env_security.get("kubernetesRole") or "edit")
+
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
               packages = env.get("packages") or []
@@ -415,8 +439,15 @@ spec:
                                   "port": 8080
                               }
                           ],
-                          "resources": {"storage": "1Gi"},
-                          "namespaces": {"budget": "medium", "security": {"policy": "baseline"}},
+                          "resources": {"memory": memory, "storage": storage},
+                          "namespaces": {
+                              "budget": budget,
+                              "role": role,
+                              "security": {
+                                  "policy": policy,
+                                  "token": {"enabled": kubernetes_access}
+                              }
+                          },
                           "envFrom": [{"secretRef": {"name": storage_secret_name}}],
                           "objects": []
                       },
@@ -512,6 +543,12 @@ spec:
                       }
                   }
               }
+
+              if policy == "privileged":
+                  workshop["spec"]["session"]["applications"]["docker"] = {
+                      "enabled": True,
+                      "storage": "20Gi"
+                  }
 
               if vcluster:
                   service_cidr = (
@@ -639,7 +676,6 @@ spec:
                 v = st.Value()
                 jf.ParseDict(cur_status, v)
                 rsp.desired.composite.resource.fields["status"].CopyFrom(v)
-
 
     - step: detect-datalab-status
       functionRef:

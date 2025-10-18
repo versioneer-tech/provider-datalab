@@ -30,3 +30,12 @@ data:
       files:
         - image:
             url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
+  defaults:
+    quota:
+      memory: 2Gi
+      storage: 1Gi
+      budget: medium
+    security:
+      policy: baseline
+      kubernetesAccess: true
+      kubernetesRole: edit

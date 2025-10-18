@@ -7,7 +7,13 @@ kind: Datalab
 metadata:
   name: s-jane
 spec:
+  quota:
+    budget: x-large
+    memory: 4Gi
+    storage: 10Gi
   secretName: jane
+  security:
+    kubernetesRole: admin
   sessions:
   - default
   users:
@@ -442,9 +448,12 @@ spec:
             port: 8080
             protocol: http
           namespaces:
-            budget: medium
+            budget: x-large
+            role: admin
             security:
               policy: baseline
+              token:
+                enabled: true
           objects:
           - apiVersion: v1
             data:
@@ -454,7 +463,8 @@ spec:
               name: vc-cidr-my-vcluster
               namespace: $(session_namespace)-vc
           resources:
-            storage: 1Gi
+            memory: 4Gi
+            storage: 10Gi
         title: Default DataLab
         version: "1.0"
         workshop:

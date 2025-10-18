@@ -6,16 +6,22 @@
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
+# This configuration runs the lab in privileged mode:
+# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Kubernetes API access is disabled (kubernetesAccess=false).
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
   name: s-jeff
 spec:
   users:
-  - jeff
-  - jim
+    - jeff
+    - jim
   secretName: jeff
   sessions:
   - default
   vcluster: false
   files: []
+  security:
+    policy: privileged
+    kubernetesAccess: false

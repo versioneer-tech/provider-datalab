@@ -6,6 +6,19 @@ Out of the box, our platform applies a **baseline security model**: workloads ar
 
 ---
 
+## Configurable Security Options
+
+Datalabs expose configurable runtime security through the `spec.security` section of the `Datalab` resource. This allows operators to adjust the trust level per environment:
+
+- **`policy`** defines the Pod Security Standard (`restricted`, `baseline`, `privileged`).  
+  - `restricted` → strictest: disallows most privileges.  
+  - `baseline` → safe default: blocks host access and elevated privileges.  
+  - `privileged` → relaxed: allows Docker-in-Docker with 20 Gi of local storage.  
+- **`kubernetesAccess`** toggles whether a Kubernetes API token is mounted in the session pod. When disabled, users can run workloads but not interact with the cluster API.  
+- **`kubernetesRole`** sets the RBAC level (`view`, `edit`, `admin`) within the Datalab namespace or vcluster.
+
+---
+
 ## Network Isolation with NetworkPolicies
 
 Kubernetes **NetworkPolicies** control how pods communicate with each other and with external services. By default, a cluster allows all pod-to-pod and internet traffic. NetworkPolicies reverse this: once isolation is enabled, **only explicitly allowed traffic flows**.
@@ -57,7 +70,7 @@ We assume:
 
 More restrictive egress controls (e.g., whitelisting PyPI, GitHub, or S3) could be added, but these create significant operational overhead and reduce usability. Our design is intentionally permissive, with the option to tighten later.
 
-Kyverno can be added to enforce stricter pod-level policies across environments. For example, you can block privileged pods, disallow host networking, or restrict image registries. or deploying workloads that would otherwise compromise the host cluster.”
+Kyverno can be added to enforce stricter pod-level policies across environments. For example, you can block privileged pods, disallow host networking, or restrict image registries — preventing workloads that could otherwise compromise the host cluster.
 
 ---
 
@@ -67,6 +80,10 @@ In our current configuration, the baseline security model is:
 
 - Apply **one permissive egress policy** per environment namespace: allow everything, except block the **cloud metadata endpoint**.  
 - Use **PodSecurity Admission** to prevent privilege escalation.  
+- Expose **security knobs** per Datalab:  
+  - Enable or disable Kubernetes API access (`kubernetesAccess`).  
+  - Configure role-based privileges (`kubernetesRole`).  
+  - Select an overall Pod Security profile (`restricted`, `baseline`, `privileged`).  
 - Keep policies in the **environment namespace**, where workloads actually run.  
 - Route ingress through a central controller for TLS and auditing.  
 

@@ -39,6 +39,34 @@ Credentials are expected to exist in a Kubernetes Secret named via `spec.secretN
 
 This secret must include at least the `access_key` and `access_secret`. The endpoint and provider are defined in `EnvironmentConfig.data.storage`.
 
+### Security and Access Policy
+The `spec.security` section controls access permissions and runtime privilege level for sessions.
+
+Key fields:
+
+- `policy` — defines Pod Security Standard (`restricted`, `baseline`, `privileged`).  
+  - `privileged` enables Docker-in-Docker with 20 Gi of local storage.  
+- `kubernetesAccess` — whether a Kubernetes service account token is mounted inside the session.  
+- `kubernetesRole` — defines in-namespace RBAC level (`admin`, `edit`, `view`).  
+
+### Resource Quotas
+The `spec.quota` section allows per-Datalab overrides of default compute and storage budgets.  
+
+- `memory` — memory allocation per session (default 2 Gi).  
+- `storage` — persistent volume size (default 1 Gi).  
+- `budget` — Educates resource budget profile (`small`, `medium`, `large`, `x-large`, etc.).  
+
+When unspecified, defaults from the EnvironmentConfig apply.
+
+| Budget    | CPU   | Memory |
+|-----------|-------|--------|
+| small     | 1000m | 1Gi    |
+| medium    | 2000m | 2Gi    |
+| large     | 4000m | 4Gi    |
+| x-large   | 8000m | 8Gi    |
+| xx-large  | 8000m | 12Gi   |
+| xxx-large | 8000m | 16Gi   |
+
 ### Identity and Keycloak Resources
 Users listed under `spec.users` must already exist in Keycloak.  
 When a Datalab is created, the composition also provisions the required **Keycloak resources**:
@@ -75,7 +103,7 @@ spec:
 
 ---
 
-## Example: Jeff and Jim (shared session)
+## Example: Jeff and Jim (shared session, privileged with Docker)
 
 ```yaml
 # Jeff and Jim share a datalab s-jeff with one default shared session
@@ -83,6 +111,9 @@ spec:
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
+# This configuration runs the lab in privileged mode:
+# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Kubernetes API access is disabled (kubernetesAccess=false).
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -95,16 +126,24 @@ spec:
   sessions:
   - default
   vcluster: false
+  security:
+    policy: privileged
+    kubernetesAccess: false
+  quota:
+    memory: 4Gi
+    storage: 5Gi
+    budget: large
   files: []
 ```
 
 - A long-running session is started immediately, shared by both users.  
-- This is the “always-on” style of datalab.  
+- Runs in **privileged mode** with **Docker support** and increased ephemeral disk (20 Gi).  
+- **No Kubernetes API access** is granted inside the environment.  
 - Access is secured through the corresponding Keycloak group and role.  
 
 ---
 
-## Example: Jane (with vcluster)
+## Example: Jane (isolated vcluster with admin role and higher quota)
 
 ```yaml
 # Jane runs a datalab s-jane with a default session automatically created.
@@ -113,6 +152,9 @@ spec:
 # No workshop files are attached. Credentials to storage are expected
 # to exist in a secret "jane" in the same namespace.
 # A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
+# This configuration explicitly overrides default resource quotas and security settings:
+# - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
+# - Kubernetes role: elevated to "admin" for full namespace permissions.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -124,11 +166,21 @@ spec:
   sessions: 
   - default
   vcluster: true
+  security:
+    policy: baseline
+    kubernetesAccess: true
+    kubernetesRole: admin
+  quota:
+    memory: 8Gi
+    storage: 10Gi
+    budget: x-large
 ```
 
-- Jane’s workloads run inside an isolated virtual cluster.  
-- Ideal for complex labs requiring full Kubernetes privileges.  
-- Keycloak resources protect access to Jane’s datalab.  
+- Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).  
+- The **admin role** grants full control within her namespace/vcluster.  
+- Increased quota provides additional compute and storage capacity.  
+- Suitable for advanced development or testing requiring full Kubernetes control.  
+- Keycloak enforces role-based access protection for this lab.  
 
 ---
 
@@ -175,13 +227,11 @@ Once a `Datalab` claim has been applied, you can verify that the provisioning wo
 
 ### Check Composite Status
 
-List all `datalabs` in your namespace:
-
 ```bash
 kubectl get datalabs -n workspace
 ```
 
-You should see `READY=True` once reconciliation is complete:
+You should see all Datalabs `READY=True` once reconciliation is complete:
 
 ```
 NAME       SYNCED   READY   COMPOSITION       AGE
@@ -204,25 +254,11 @@ Look for conditions like `Ready=True` and any event messages.
 Each Datalab references a **Secret in the same namespace** via `spec.secretName`.  
 For example, the claim `s-jeff` with `secretName: jeff` requires a Secret named `jeff`.
 
-List Secrets:
-
-```bash
-kubectl get secrets -n workspace
-```
-
-Inspect:
-
-```bash
-kubectl describe secret jeff -n workspace
-```
-
-View raw YAML:
-
 ```bash
 kubectl get secret jeff -n workspace -o yaml
 ```
 
-Decode keys (AWS style):
+Decode credentials (AWS-style):
 
 ```bash
 kubectl get secret jeff -n workspace -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d; echo
@@ -233,9 +269,10 @@ kubectl get secret jeff -n workspace -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}'
 
 ## Summary
 
-- A `Datalab` defines users, sessions, optional vcluster, optional workshop files, and integrates with Keycloak.  
-- Users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, and a role to secure access.  
+- A `Datalab` defines users, sessions, optional vcluster, quotas, and security policies.  
+- Security controls combine **Pod Security Standards**, **Kubernetes roles**, and **Docker privilege** toggles.  
+- Each Datalab requires a storage credential Secret.  
+- Users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, and a role.  
 - Sessions may be long-lived (auto-created) or on-demand (user started).  
-- Each Datalab requires a storage credentials Secret in the same namespace.  
 - Workshop files enable the Educates UI workshop tab.  
-- Check `kubectl get datalabs` for readiness, ensure Secrets are present, and confirm Keycloak groups/roles are created.  
+- Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation.  

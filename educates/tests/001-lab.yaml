@@ -440,10 +440,14 @@ spec:
             protocol: http
           namespaces:
             budget: medium
+            role: edit
             security:
               policy: baseline
+              token:
+                enabled: true
           objects: []
           resources:
+            memory: 2Gi
             storage: 1Gi
         title: Default DataLab
         version: "1.0"

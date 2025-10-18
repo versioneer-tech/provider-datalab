@@ -9,6 +9,9 @@ metadata:
 spec:
   files: []
   secretName: jeff
+  security:
+    kubernetesAccess: false
+    policy: privileged
   sessions:
   - default
   users:
@@ -423,6 +426,9 @@ spec:
           applications:
             console:
               enabled: false
+            docker:
+              enabled: true
+              storage: 20Gi
             editor:
               enabled: true
             slides:
@@ -446,10 +452,14 @@ spec:
             protocol: http
           namespaces:
             budget: medium
+            role: edit
             security:
-              policy: baseline
+              policy: privileged
+              token:
+                enabled: false
           objects: []
           resources:
+            memory: 2Gi
             storage: 1Gi
         title: Default DataLab
         version: "1.0"

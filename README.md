@@ -46,6 +46,15 @@ data:
     region: acme
     secretNamespace: datalab
     type: s3
+  defaults: # whole block / all indivudal entries are optional
+    quota:
+      memory: 2Gi
+      storage: 1Gi
+      budget: medium
+    security:
+      policy: baseline
+      kubernetesAccess: true
+      kubernetesRole: edit
 ```
 
 ## Datalab Spec
@@ -64,6 +73,12 @@ spec:
   sessions:
   - default
 ```
+
+If `spec.quota` or `spec.security` are omitted, values fall back to  
+`EnvironmentConfig.data.defaults` and then to hard defaults  
+(`memory=2Gi`, `storage=1Gi`, `budget=medium`,  
+`policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`).  
+When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 
 ### More examples
 
@@ -85,7 +100,9 @@ The values must provide access to the storage endpoint listed in `EnvironmentCon
 You can create this secret manually, for example:
 
 ```bash
-kubectl -n datalab create secret generic <DATALAB>   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID>   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
+kubectl -n datalab create secret generic <DATALAB> \
+  --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID> \
+  --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
 ```
 
 ## License
