@@ -198,7 +198,7 @@ EOF
 
 Once running, you can port-forward and use the VS Code **Ports** tab to explore the MLflow UI:
 ```bash
-kubectl port-forward svc/dask-scheduler 8787:8787
+kubectl port-forward svc/mlflow 5000:5000
 ```
 
 ---

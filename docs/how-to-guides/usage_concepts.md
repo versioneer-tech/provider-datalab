@@ -24,7 +24,7 @@ This behavior works as long as the associated `StorageClass` has its `reclaimPol
 
 ### Authentication
 
-Access to a `Datalab` session is restricted, with the environment configuration determining the authentication strategy. By default, the same credentials used to access the connected object storage buckets are also applied for session login. Authentication can be globally disabled by setting `auth.type = anonymous`, for example, in air-gapped environments or when access is already secured at the ingress level through other mechanisms.  
+Access to a `Datalab` session is restricted, with the environment configuration determining the authentication strategy. By default, the same credentials used to access the connected object storage buckets are also applied for session login. Authentication can be globally disabled by setting `auth.type = none`, for example, in air-gapped environments or when access is already secured at the ingress level through other mechanisms.  
 
 Each `Datalab` automatically provisions a dedicated Keycloak **OAuth2 client**, which can be used to protect the session using standard **OIDC** flows.  
 Full integration and automated configuration of this setup are planned for future releases.
