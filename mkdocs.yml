@@ -12,6 +12,7 @@ nav:
     - Usage & Concepts: how-to-guides/usage_concepts.md
     - Installation: how-to-guides/installation.md
     - Security: how-to-guides/security.md
+    - Additional Services: how-to-guides/additional_services.md
   - Reference guides:
     - API: reference-guides/api.md
 plugins:

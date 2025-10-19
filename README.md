@@ -1,8 +1,24 @@
 # Datalab Provider
 
-This package provides the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 Compositions to provision multi-user, multi-runtime data labs.
+This package provides the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 **Compositions** for provisioning multi-user, multi-runtime data labs.
+
+## The Goal
+
+Make life easier for you as an operator by offering ready-to-use **runtime environments** for your end users. All you need is a Kubernetes cluster with **ingress**, **file storage** (e.g. NFS), an **IAM system** (currently only Keycloak is supported), and - for the actual data - **object storage credentials** — whether from an in-cluster service like `MinIO` or an external provider like `AWS S3` or `OTC OBS`. You can provide that directly per team or use the accompanying [provider-storage](https://github.com/versioneer-tech/provider-storage), where object storage access can be automatically provisioned and injected in a way that integrates seamlessly with the `Datalab` environment.
+
+With just a few settings in the global environment configuration, you can deploy a `Datalab` manifest directly to your cluster through the Kubernetes API — for example, using `kubectl`. Alternatively, use higher-level tooling such as the [Workspaces](https://github.com/EOEPCA/workspace) Building Block, which provides a thin API and UI layer on top. Within minutes, your users can launch their own `Datalab` as a working environment.
+
+Beyond the built-in **VS Code Server** and integrated object storage access, users can extend their environments by deploying [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional-services/) directly via the Kubernetes API — from **MLflow** for experiment tracking to **Dask** for scalable data processing. Thanks to **vCluster** support, they can even deploy services **requiring cluster-wide resources** such as `CRDs` or `RBAC cluster roles` — as for example needed by the Dask Gateway Helm chart.
+
+<div align="left">
+  <a href="https://github.com/versioneer-tech/provider-datalab/raw/refs/heads/main/docs/imgs/datalab-vs-code-server.png" target="_blank">
+    <img src="https://github.com/versioneer-tech/provider-datalab/raw/refs/heads/main/docs/imgs/datalab-vs-code-server.png" height="200" alt="Datalab - VS Code Server"/>
+  </a>
+</div>
 
 ✨ For a full introduction, see the [documentation](https://provider-datalab.versioneer.at/).
+
+The Datalab Provider does not introduce new functionality or tooling — in its default form with `datalab-educates`, most functional capabilities are powered by the excellent [Educates Training Platform](https://educates.dev/) project, integrated through Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/) into a reusable building block, as outlined in our blog [Building Data Supply Chains with Lego Bricks](https://medium.com/@stefan.achtsnit_41940/building-data-supply-chains-with-lego-bricks-why-earth-observation-needs-composable-infrastructure-38600b920bb6).
 
 ## API Reference
 
@@ -11,7 +27,8 @@ The published XRD with all fields is documented here:
 
 ## Install the Configuration Package
 
-Install the configuration package into your cluster. Providers and functions should typically be managed by your GitOps process.
+You need Crossplane and some prerequisites [installed](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/) in your Kubernetes cluster. Then you only need to apply the configuration package to your cluster. Providers and functions should typically be managed by your GitOps process.
+
 
 ```yaml
 apiVersion: pkg.crossplane.io/v1
