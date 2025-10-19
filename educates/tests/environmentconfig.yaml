@@ -30,6 +30,8 @@ data:
       files:
         - image:
             url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
+  auth:
+    type: none
   defaults:
     quota:
       memory: 2Gi

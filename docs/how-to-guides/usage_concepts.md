@@ -14,6 +14,22 @@ A `Datalab` claim may declare one or more `spec.sessions`.
 
 Sessions can also be patched into the spec later if needed.
 
+### Persistence
+
+Each `Datalab` session is equipped with a **persistent volume** for storing files, in addition to the connected object storage.  This ensures that user data and session state are preserved even if the workshop pod is restarted or rescheduled by Kubernetes.  Installing code libraries, handling metadata, or working with Git repositories often generates many small files that may be updated frequently. A storage class providing **NFS-like capabilities** is usually a good fit for these kinds of workloads, **object storage** abstractions are not.
+
+The **persistent volume claim (PVC)** is **tied to the active session** and will be deleted automatically when the workshop session shuts down (for example, through a culling process when using session mode `auto`). This does **not necessarily mean that data is lost** — when the session is restarted from the same manifests, Kubernetes will recreate the PVC with the same name, reattaching it to the existing data in environments that use an **NFS server** or another **shared storage backend**, since the PVC will point to the **same physical folder**.
+
+This behavior works as long as the associated `StorageClass` has its `reclaimPolicy` set to `Retain` (not `Delete`), ensuring that data is not removed externally. It also depends on maintaining a **consistent link between the PVC name and the actual storage path**.  If the underlying storage system assigns **randomized volume identifiers** (such as UIDs for folder paths), the data will still remain on the storage backend after the session ends, but Kubernetes will not automatically reattach it to a new PVC — manual reassociation may then be required.
+
+### Authentication
+
+Access to a `Datalab` session is restricted, with the environment configuration determining the authentication strategy. By default, the same credentials used to access the connected object storage buckets are also applied for session login. Authentication can be globally disabled by setting `auth.type = anonymous`, for example, in air-gapped environments or when access is already secured at the ingress level through other mechanisms.  
+
+Each `Datalab` automatically provisions a dedicated Keycloak **OAuth2 client**, which can be used to protect the session using standard **OIDC** flows.  
+Full integration and automated configuration of this setup are planned for future releases.
+
+
 ### Files and the Workshop Tab
 The `spec.files` array is optional.  
 

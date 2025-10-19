@@ -307,6 +307,7 @@ spec:
         apiVersion: python.fn.crossplane.io/v1beta1
         kind: Script
         script: |
+          import base64 as _base64
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
 
@@ -317,6 +318,33 @@ spec:
               if isinstance(v, bool):
                   return v
               return str(v).lower() in ("true", "1", "yes", "on")
+
+          def _b64get_any(d, keys):
+              if not d:
+                  return None
+              for k in keys:
+                  v = d.get(k)
+                  if v is None:
+                      continue
+                  try:
+                      return _base64.b64decode(v).decode("utf-8")
+                  except Exception:
+                      # also allow plain stringData path (not base64)
+                      try:
+                          return str(v)
+                      except Exception:
+                          pass
+              return None
+
+          def _extract_data(objres):
+              """Extract Secret .data/.stringData from an observed kubernetes.m.crossplane.io/Object."""
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              m1 = st.get("manifest") or {}
+              m2 = (st.get("raw") or {}).get("manifest") or {}
+              return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {}) or {}
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
@@ -357,14 +385,31 @@ spec:
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
               packages = env.get("packages") or []
+              access_env = env.get("access") or {}
 
               ingress_class  = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
 
+              access_type = (access_env.get("type") or "credentials").strip().lower()
+
               secret_name = spec.get("secretName") or meta.get("name")
               storage_secret_name = f"{secret_name}-datalab"
               storage_secret_ns = storage_env.get("secretNamespace", "default")
+
+              observed = getattr(req.observed, "resources", None) or {}
+              obs_key = f"observe-secret-{secret_name}"
+              data_b64 = _extract_data(observed.get(obs_key))
+
+              access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
+              secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
+
+              session_username = access_key or name
+
+              if access_type != "credentials":
+                  session_password = "*"
+              else:
+                  session_password = secret_key or "*"
 
               allow_web_egress = {
                   "apiVersion": "networking.k8s.io/v1",
@@ -391,22 +436,10 @@ spec:
                                   {"ipBlock": {"cidr": "100.64.0.0/10"}}
                               ]
                           },
-                          {
-                              "to": [
-                                  {"ipBlock": {"cidr": "fc00::/7"}}
-                              ]
-                          },
+                          { "to": [ {"ipBlock": {"cidr": "fc00::/7"}} ] },
                           { "to": [ {"namespaceSelector": {}} ] },
-                          {
-                              "to": [
-                                  {"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}}
-                              ]
-                          },
-                          {
-                              "to": [
-                                  {"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}}
-                              ]
-                          }
+                          { "to": [ {"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}} ] },
+                          { "to": [ {"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}} ] }
                       ]
                   }
               }
@@ -425,7 +458,7 @@ spec:
                               "editor": {"enabled": True},
                               "slides": {"enabled": False},
                               "terminal": {"enabled": True},
-                              "vcluster": {"enabled": vcluster},
+                              "vcluster": {"enabled": vcluster, "version": "1.30"},
                               "workshop": {"enabled": bool(files)}
                           },
                           "dashboards": [
@@ -616,7 +649,9 @@ spec:
                               "env": [
                                   {"name": "SESSION_NAME", "value": f"{name}-{sid}"},
                                   {"name": "FRAME_ANCESTORS", "value": ""}
-                              ]
+                              ],
+                              "username": session_username,
+                              "password": session_password
                           }
                       }
                   }

@@ -425,6 +425,7 @@ spec:
               enabled: true
             vcluster:
               enabled: false
+              version: "1.30"
             workshop:
               enabled: false
           dashboards:

@@ -437,6 +437,7 @@ spec:
               enabled: true
             vcluster:
               enabled: false
+              version: "1.30"
             workshop:
               enabled: false
           dashboards:
@@ -566,6 +567,8 @@ spec:
           ingress:
             domain: lab.acme.com
             secret: wildcard-tls
+          password: '*'
+          username: s-jeff
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

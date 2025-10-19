@@ -13,7 +13,7 @@ Datalabs expose configurable runtime security through the `spec.security` sectio
 - **`policy`** defines the Pod Security Standard (`restricted`, `baseline`, `privileged`).  
   - `restricted` → strictest: disallows most privileges.  
   - `baseline` → safe default: blocks host access and elevated privileges.  
-  - `privileged` → relaxed: allows Docker-in-Docker with 20 Gi of local storage.  
+  - `privileged` → relaxed: allows Docker-in-Docker with 20 Gi of local storage.  
 - **`kubernetesAccess`** toggles whether a Kubernetes API token is mounted in the session pod. When disabled, users can run workloads but not interact with the cluster API.  
 - **`kubernetesRole`** sets the RBAC level (`view`, `edit`, `admin`) within the Datalab namespace or vcluster.
 
@@ -55,6 +55,24 @@ This “allow everything except IMDS” approach ensures users can fetch package
 - vcluster **mirrors host cluster policies**: it does not itself prevent privileged workloads (`hostPath`, `hostNetwork`, `privileged: true`) unless these are already disallowed at cluster level.  
 
 **Takeaway:** treat vcluster namespaces the same as direct tenant namespaces. Enable **Pod Security Admission** (`baseline` or `restricted`) and rely on NetworkPolicies for communication boundaries.
+
+---
+
+## DNS Architecture in Workshop Environments
+
+For workshop-style environments that spin up many short-lived vclusters, starting a full DNS service inside every vcluster would slow down startup and waste resources. Instead, a **shared DNS service in the host cluster** handles name resolution for all vclusters.
+
+When a vcluster is created, a small **CoreDNS Service and Deployment** is automatically deployed in the host cluster (for example `kube-dns-x-kube-system-x-my-vcluster`).  
+Pods inside the vcluster still use normal Kubernetes DNS names like `kube-dns.kube-system.svc.cluster.local`, but those lookups are transparently routed to the host-level DNS service.  
+That host DNS server then talks to the vcluster’s API to resolve internal service names.
+
+**Advantages:**
+- Fast startup — no DNS bootstrap delay per vcluster  
+- Lower resource use — one lightweight host DNS handles many environments  
+- Simpler networking — all workloads share the same cluster network  
+- Central visibility — DNS logging and policies stay managed in one place  
+
+From the user’s point of view, everything behaves as expected: pods inside each workshop can resolve service names normally, without needing to know that DNS is handled outside their vcluster. However, some cloud environments differ in how their CNI plugins route service traffic, which can affect how the host DNS reaches the vcluster API. In such cases, minor adjustments to NetworkPolicies or CoreDNS endpoints may be required to restore internal name resolution.
 
 ---
 
