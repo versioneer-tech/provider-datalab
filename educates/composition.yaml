@@ -404,12 +404,12 @@ spec:
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
 
-              session_username = access_key or name
+              session_username = "*"
+              session_password = ""              
 
-              if auth_type != "credentials":
-                  session_password = "*"
-              else:
-                  session_password = secret_key or "*"
+              if auth_type == "credentials" and access_key:
+                  session_username = access_key
+                  session_password = secret_key
 
               allow_web_egress = {
                   "apiVersion": "networking.k8s.io/v1",

@@ -567,8 +567,8 @@ spec:
           ingress:
             domain: lab.acme.com
             secret: wildcard-tls
-          password: '*'
-          username: s-jeff
+          password: ""
+          username: '*'
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
