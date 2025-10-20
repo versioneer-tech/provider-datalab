@@ -115,7 +115,23 @@ The following example deploys an MLflow server together with a simple SQLite bac
 <summary><strong>Click to expand: Deploy MLflow</strong></summary>
 
 ```bash
-kubectl apply -f - <<'EOF'
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-creds
+type: Opaque
+stringData:
+  accessKey: "${AWS_ACCESS_KEY_ID}"
+  accessSecret: "${AWS_SECRET_ACCESS_KEY}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-config
+data:
+  endpoint: "${AWS_ENDPOINT_URL}"
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -156,38 +172,49 @@ spec:
       containers:
         - name: mlflow
           image: ghcr.io/mlflow/mlflow:latest
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              python -m pip install --no-cache-dir --upgrade pip &&
+              pip install --no-cache-dir boto3 &&
+              exec mlflow server \
+                --backend-store-uri sqlite:////mlflow/mlflow.db \
+                --serve-artifacts \
+                --artifacts-destination s3://ws-frank/mlruns \
+                --host 0.0.0.0 --port 5000 \
+                --workers 2 \
+                --allowed-hosts '*' \
+                --cors-allowed-origins '*'
           ports:
             - containerPort: 5000
           resources:
-            requests:
-              cpu: "100m"
-              memory: "512Mi"
-            limits:
-              cpu: "300m"
-              memory: "2Gi"
+            requests: { cpu: "100m", memory: "512Mi" }
+            limits:   { cpu: "300m", memory: "2Gi" }
           env:
-            - name: MLFLOW_PORT
-              value: "5000"
-          args:
-            - mlflow
-            - server
-            - --backend-store-uri
-            - sqlite:////mlflow/mlflow.db
-            - --default-artifact-root
-            - /mlflow/artifacts
-            - --host
-            - 0.0.0.0
-            - --port
-            - "5000"
-            - --workers
-            - "2"
-            - --allowed-hosts
-            - "*"
-            - --cors-allowed-origins
-            - "*"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef: { name: minio-config, key: endpoint }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: accessKey }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: secretKey }
+            - name: AWS_S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
           volumeMounts:
             - name: data
               mountPath: /mlflow
+          readinessProbe:
+            httpGet: { path: "/", port: 5000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: "/", port: 5000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -200,6 +227,14 @@ Once running, you can port-forward and use the VS Code **Ports** tab to explore 
 ```bash
 kubectl port-forward svc/mlflow 5000:5000
 ```
+
+To use **MLflow** in your code, you need to connect to the tracking server running at `http://localhost:5000`. This can be done by setting the following environment variable:
+
+```bash
+export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
+```
+
+
 
 ---
 
