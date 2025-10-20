@@ -713,7 +713,23 @@ Once the Datalab is deleted, the PVC and stored data will also be removed unless
 <summary><strong>Click to expand: Deploy MLflow</strong></summary>
 
 
-<pre><code class="language-bash">kubectl apply -f - &lt;&lt;'EOF'
+<pre><code class="language-bash">kubectl apply -f - &lt;&lt;EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-creds
+type: Opaque
+stringData:
+  accessKey: &quot;${AWS_ACCESS_KEY_ID}&quot;
+  accessSecret: &quot;${AWS_SECRET_ACCESS_KEY}&quot;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-config
+data:
+  endpoint: &quot;${AWS_ENDPOINT_URL}&quot;
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -754,38 +770,49 @@ spec:
       containers:
         - name: mlflow
           image: ghcr.io/mlflow/mlflow:latest
+          command: [&quot;/bin/sh&quot;,&quot;-lc&quot;]
+          args:
+            - |
+              python -m pip install --no-cache-dir --upgrade pip &amp;&amp;
+              pip install --no-cache-dir boto3 &amp;&amp;
+              exec mlflow server \
+                --backend-store-uri sqlite:////mlflow/mlflow.db \
+                --serve-artifacts \
+                --artifacts-destination s3://ws-frank/mlruns \
+                --host 0.0.0.0 --port 5000 \
+                --workers 2 \
+                --allowed-hosts '*' \
+                --cors-allowed-origins '*'
           ports:
             - containerPort: 5000
           resources:
-            requests:
-              cpu: &quot;100m&quot;
-              memory: &quot;512Mi&quot;
-            limits:
-              cpu: &quot;300m&quot;
-              memory: &quot;2Gi&quot;
+            requests: { cpu: &quot;100m&quot;, memory: &quot;512Mi&quot; }
+            limits:   { cpu: &quot;300m&quot;, memory: &quot;2Gi&quot; }
           env:
-            - name: MLFLOW_PORT
-              value: &quot;5000&quot;
-          args:
-            - mlflow
-            - server
-            - --backend-store-uri
-            - sqlite:////mlflow/mlflow.db
-            - --default-artifact-root
-            - /mlflow/artifacts
-            - --host
-            - 0.0.0.0
-            - --port
-            - &quot;5000&quot;
-            - --workers
-            - &quot;2&quot;
-            - --allowed-hosts
-            - &quot;*&quot;
-            - --cors-allowed-origins
-            - &quot;*&quot;
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef: { name: minio-config, key: endpoint }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: accessKey }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: secretKey }
+            - name: AWS_S3_FORCE_PATH_STYLE
+              value: &quot;true&quot;
+            - name: AWS_EC2_METADATA_DISABLED
+              value: &quot;true&quot;
           volumeMounts:
             - name: data
               mountPath: /mlflow
+          readinessProbe:
+            httpGet: { path: &quot;/&quot;, port: 5000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: &quot;/&quot;, port: 5000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -797,6 +824,9 @@ EOF
 
 <p>Once running, you can port-forward and use the VS Code <strong>Ports</strong> tab to explore the MLflow UI:</p>
 <pre><code class="language-bash">kubectl port-forward svc/mlflow 5000:5000
+</code></pre>
+<p>To use <strong>MLflow</strong> in your code, you need to connect to the tracking server running at <code>http://localhost:5000</code>. This can be done by setting the following environment variable:</p>
+<pre><code class="language-bash">export MLFLOW_TRACKING_URI=&quot;http://127.0.0.1:5000&quot;
 </code></pre>
 <hr />
 <h2 id="summary">Summary</h2>
