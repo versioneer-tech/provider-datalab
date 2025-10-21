@@ -115,6 +115,8 @@ The following example deploys an MLflow server together with a simple SQLite bac
 <summary><strong>Click to expand: Deploy MLflow</strong></summary>
 
 ```bash
+export BUCKET=ws-frank # replace accordingly
+
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -123,7 +125,7 @@ metadata:
 type: Opaque
 stringData:
   accessKey: "${AWS_ACCESS_KEY_ID}"
-  accessSecret: "${AWS_SECRET_ACCESS_KEY}"
+  secretKey: "${AWS_SECRET_ACCESS_KEY}"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -180,7 +182,7 @@ spec:
               exec mlflow server \
                 --backend-store-uri sqlite:////mlflow/mlflow.db \
                 --serve-artifacts \
-                --artifacts-destination s3://ws-frank/mlruns \
+                --artifacts-destination s3://"${BUCKET}"/mlruns \
                 --host 0.0.0.0 --port 5000 \
                 --workers 2 \
                 --allowed-hosts '*' \
@@ -233,8 +235,6 @@ To use **MLflow** in your code, you need to connect to the tracking server runni
 ```bash
 export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 ```
-
-
 
 ---
 
