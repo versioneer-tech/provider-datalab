@@ -131,6 +131,10 @@ data:
     serviceCIDR: "10.43.0.0/16"
 ```
 
+The `serviceCIDR` defines the internal Service network range expected by the vCluster’s API server. In the Datalab setup, the host cluster’s DNS and networking are reused, and no separate CoreDNS is deployed inside the vCluster. Using the host’s `serviceCIDR` therefore reduces startup time and control-plane overhead, since CoreDNS doesn’t need to start separately within each vCluster.
+
+To find the correct value, use the same `serviceCIDR` as your host cluster — it’s typically visible in your cluster configuration or can be inferred by checking CoreDNS’s Service IP via `kubectl get svc kube-dns -n kube-system`.
+
 ---
 
 ## Step 4 – Storage credentials
