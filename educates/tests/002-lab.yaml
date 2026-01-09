@@ -7,7 +7,17 @@ kind: Datalab
 metadata:
   name: s-jeff
 spec:
+  databases:
+    host0:
+      names:
+      - dev
+      - prod
+      storage: 10Gi
   files: []
+  quota:
+    budget: x-large
+    memory: 6Gi
+    storage: 60Gi
   secretName: jeff
   security:
     kubernetesAccess: false
@@ -419,6 +429,39 @@ spec:
                 app.kubernetes.io/instance: data
                 app.kubernetes.io/name: data
               type: ClusterIP
+          - apiVersion: v1
+            data:
+              init.sql: |
+                \set ON_ERROR_STOP on
+                \connect postgres
+            kind: ConfigMap
+            metadata:
+              name: host0-pg-init-sql
+          - apiVersion: postgres-operator.crunchydata.com/v1beta1
+            kind: PostgresCluster
+            metadata:
+              name: host0-pg
+            spec:
+              databaseInitSQL:
+                key: init.sql
+                name: host0-pg-init-sql
+              instances:
+              - dataVolumeClaimSpec:
+                  accessModes:
+                  - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: 10Gi
+                name: primary
+                replicas: 1
+              postgresVersion: 17
+              users:
+              - databases:
+                - dev
+                - prod
+                name: admin
+              - name: jeff
+              - name: jim
           secrets:
           - name: jeff-datalab
             namespace: datalab
@@ -452,7 +495,7 @@ spec:
             port: 8080
             protocol: http
           namespaces:
-            budget: medium
+            budget: x-large
             role: edit
             security:
               policy: privileged
@@ -460,8 +503,8 @@ spec:
                 enabled: false
           objects: []
           resources:
-            memory: 2Gi
-            storage: 1Gi
+            memory: 6Gi
+            storage: 60Gi
         title: Default DataLab
         version: "1.0"
         workshop:

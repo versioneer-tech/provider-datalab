@@ -129,33 +129,41 @@ spec:
 # A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
+# Additionally, two PostgreSQL databases are provisioned for the lab: "dev" and "prod".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
   name: s-jeff
 spec:
   users:
-  - jeff
-  - jim
+    - jeff
+    - jim
   secretName: jeff
   sessions:
-  - default
+    - default
   vcluster: false
+  quota:
+    memory: 6Gi
+    storage: 60Gi
+    budget: x-large
+  files: []
   security:
     policy: privileged
     kubernetesAccess: false
-  quota:
-    memory: 4Gi
-    storage: 5Gi
-    budget: large
-  files: []
+  databases:
+    host0:
+      names:
+      - dev
+      - prod
+      storage: 10Gi
 ```
 
 - A long-running session is started immediately, shared by both users.  
 - Runs in **privileged mode** with **Docker support** and increased ephemeral disk (20 Gi).  
 - **No Kubernetes API access** is granted inside the environment.  
-- Access is secured through the corresponding Keycloak group and role.  
+- Access is secured through the corresponding Keycloak group and role.
 
 ---
 
@@ -171,25 +179,29 @@ spec:
 # This configuration explicitly overrides default resource quotas and security settings:
 # - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
+# Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
   name: s-jane
 spec:
   users:
-  - jane
+    - jane
   secretName: jane
-  sessions: 
-  - default
+  sessions:
+    - default
   vcluster: true
-  security:
-    policy: baseline
-    kubernetesAccess: true
-    kubernetesRole: admin
   quota:
-    memory: 8Gi
+    memory: 4Gi
     storage: 10Gi
     budget: x-large
+  security:
+    kubernetesRole: admin
+  databases:
+    host0:
+      names:
+      - analytics
+      storage: 3Gi
 ```
 
 - Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).  
@@ -280,6 +292,16 @@ Decode credentials (AWS-style):
 kubectl get secret jeff -n workspace -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d; echo
 kubectl get secret jeff -n workspace -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d; echo
 ```
+
+### Connect to Databases
+
+Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. Optionally, these databases can also be exposed externally using a `TLSRoute`, enabling secure access from outside the cluster.
+
+A dedicated `admin` database user is created automatically and is set as the owner of all provisioned databases. This user has full administrative privileges, including the ability to create extensions, manage schemas, and grant permissions to other users.
+
+All additional users are created as regular database roles. Access to the databases can be granted by the administrator as required, depending on the desired access model.
+
+Database credentials are managed by the PostgreSQL operator and stored as Kubernetes Secrets. To locate the credentials for the administrative user, look for Secrets with the suffix `*-pguser-admin`. These Secrets contain the connection details needed to authenticate as the database administrator.
 
 ---
 

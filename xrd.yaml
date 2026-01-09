@@ -46,6 +46,31 @@ spec:
                   items:
                     type: string
                   default: []
+                databases:
+                  type: object
+                  description: >-
+                    Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab.
+                    Each host defines a single storage size for the cluster volume and a list of logical
+                    PostgreSQL databases to create inside that cluster. Ownership and privileges are
+                    derived from `spec.users` by the Composition.
+                  additionalProperties:
+                    type: object
+                    properties:
+                      names:
+                        type: array
+                        description: >-
+                          Logical PostgreSQL database names to create within this host (e.g., "prod", "dev").
+                        items:
+                          type: string
+                        minItems: 1
+                      storage:
+                        type: string
+                        description: >-
+                          Storage size for this PostgresCluster as a Kubernetes quantity (e.g., "1Gi", "10Gi").
+                    required:
+                      - names
+                      - storage
+                  default: {}
                 vcluster:
                   type: boolean
                   description: Whether to provision an isolated vcluster for each datalab session.
@@ -79,7 +104,13 @@ spec:
                         Namespace budget class determining available compute resources.
                         Accepted values correspond to standard Educates resource budgets.
                         Effective default (if not set here or in EnvironmentConfig): "medium".
-                      enum: ["small", "medium", "large", "x-large", "xx-large", "xxx-large"]
+                      enum:
+                        - small
+                        - medium
+                        - large
+                        - x-large
+                        - xx-large
+                        - xxx-large
                 security:
                   type: object
                   description: >-
@@ -99,7 +130,10 @@ spec:
                         "restricted", "baseline", "privileged". Effective
                         default (if not set here or in EnvironmentConfig):
                         "baseline".
-                      enum: ["restricted", "baseline", "privileged"]
+                      enum:
+                        - restricted
+                        - baseline
+                        - privileged
                     kubernetesAccess:
                       type: boolean
                       description: >-
@@ -112,10 +146,15 @@ spec:
                         Session namespace RBAC role. Accepted values:
                         "admin", "edit", "view". Effective default (if not set
                         here or in EnvironmentConfig): "edit".
-                      enum: ["admin", "edit", "view"]
+                      enum:
+                        - admin
+                        - edit
+                        - view
                 files:
                   type: array
-                  description: File bundles to fetch from remote sources and copy into the environment. Supports image, git, and http sources, path filtering, and optional credentials.
+                  description: >-
+                    File bundles to fetch from remote sources and copy into the environment.
+                    Supports image, git, and http sources, path filtering, and optional credentials.
                   items:
                     type: object
                     properties:
@@ -246,18 +285,25 @@ spec:
                                 type: string
                                 description: Namespace of the Secret.
                     oneOf:
-                      - required: [image]
+                      - required:
+                          - image
                         properties:
                           image:
-                            required: [url]
-                      - required: [git]
+                            required:
+                              - url
+                      - required:
+                          - git
                         properties:
                           git:
-                            required: [url, ref]
-                      - required: [http]
+                            required:
+                              - url
+                              - ref
+                      - required:
+                          - http
                         properties:
                           http:
-                            required: [url]
+                            required:
+                              - url
                   default: []
             status:
               type: object

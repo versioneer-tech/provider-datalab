@@ -109,7 +109,7 @@ spec:
               st = (od.get("status") or {}).get("atProvider") or {}
               m1 = st.get("manifest") or {}
               m2 = (st.get("raw") or {}).get("manifest") or {}
-              return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {})
+              return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {}) or {}
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
@@ -128,10 +128,10 @@ spec:
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
-              endpoint   = _b64get_any(data_b64, ["AWS_ENDPOINT_URL"]) or storage_env.get("endpoint", "")
-              region     = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
-              rtype      = storage_env.get("type", "")
-              provider   = storage_env.get("provider", "")
+              endpoint = _b64get_any(data_b64, ["AWS_ENDPOINT_URL"]) or storage_env.get("endpoint", "")
+              region = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
+              rtype = storage_env.get("type", "")
+              provider = storage_env.get("provider", "")
               force_path_style = str(storage_env.get("force_path_style", "true")).lower()
 
               if not access_key or not secret_key:
@@ -329,7 +329,6 @@ spec:
                   try:
                       return _base64.b64decode(v).decode("utf-8")
                   except Exception:
-                      # also allow plain stringData path (not base64)
                       try:
                           return str(v)
                       except Exception:
@@ -337,7 +336,6 @@ spec:
               return None
 
           def _extract_data(objres):
-              """Extract Secret .data/.stringData from an observed kubernetes.m.crossplane.io/Object."""
               if not objres or not getattr(objres, "resource", None):
                   return {}
               od = _to_dict(objres.resource)
@@ -357,6 +355,12 @@ spec:
               sessions = list(spec.get("sessions") or [])
               vcluster = _boolish(spec.get("vcluster", False))
 
+              users = spec.get("users") or []
+
+              db_hosts = spec.get("databases") or {}
+              if isinstance(db_hosts, str):
+                  db_hosts = {}
+
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               defaults = (env.get("defaults") or {})
@@ -365,7 +369,7 @@ spec:
 
               memory = quota.get("memory") or env_quota.get("memory") or "2Gi"
               storage = quota.get("storage") or env_quota.get("storage") or "1Gi"
-              budget  = quota.get("budget")  or env_quota.get("budget")  or "medium"
+              budget = quota.get("budget") or env_quota.get("budget") or "medium"
 
               env_security = (defaults.get("security") or {})
               security = (spec.get("security") or {})
@@ -379,7 +383,6 @@ spec:
                   ka = True
               kubernetes_access = _boolish(ka)
 
-              # enum in XRD: admin|edit|view; default edit
               role = (security.get("kubernetesRole") or env_security.get("kubernetesRole") or "edit")
 
               ingress_env = env.get("ingress") or {}
@@ -387,7 +390,7 @@ spec:
               packages = env.get("packages") or []
               auth_env = env.get("auth") or {}
 
-              ingress_class  = ingress_env.get("class", "")
+              ingress_class = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
 
@@ -405,7 +408,7 @@ spec:
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
 
               session_username = "*"
-              session_password = ""              
+              session_password = ""
 
               if auth_type == "credentials" and access_key:
                   session_username = access_key
@@ -436,10 +439,10 @@ spec:
                                   {"ipBlock": {"cidr": "100.64.0.0/10"}}
                               ]
                           },
-                          { "to": [ {"ipBlock": {"cidr": "fc00::/7"}} ] },
-                          { "to": [ {"namespaceSelector": {}} ] },
-                          { "to": [ {"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}} ] },
-                          { "to": [ {"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}} ] }
+                          {"to": [{"ipBlock": {"cidr": "fc00::/7"}}]},
+                          {"to": [{"namespaceSelector": {}}]},
+                          {"to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}}]},
+                          {"to": [{"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}}]}
                       ]
                   }
               }
@@ -598,6 +601,97 @@ spec:
                       "data": {"cidr": service_cidr}
                   })
 
+              if db_hosts:
+                  db_env = env.get("database") or {}
+
+                  gateway_parent_name = str(db_env.get("gatewayParentName") or "").strip()
+                  gateway_parent_ns = str(db_env.get("gatewayParentNamespace") or "").strip()
+                  gateway_section = str(db_env.get("gatewaySectionName") or "").strip()
+
+                  has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
+
+                  objs = workshop["spec"]["environment"]["objects"]
+
+                  admin_user = "admin"
+                  other_users = list(users or [])
+                  other_users = [u for u in other_users if u and u != admin_user]
+                  users_all = [admin_user] + other_users
+
+                  for host_key in sorted(list((db_hosts or {}).keys())):
+                      host_cfg = db_hosts.get(host_key) or {}
+                      if isinstance(host_cfg, str):
+                          continue
+
+                      dbnames = list(host_cfg.get("names") or [])
+                      dbnames = [str(x).strip() for x in dbnames if str(x).strip()]
+                      if not dbnames:
+                          continue
+
+                      db_storage = str(host_cfg.get("storage") or "1Gi").strip()
+
+                      cluster_name = f"{host_key}-pg"
+                      cm_name = f"{cluster_name}-init-sql"
+                      init_sql = "\\set ON_ERROR_STOP on\n\\connect postgres\n"
+
+                      objs.append({
+                          "apiVersion": "v1",
+                          "kind": "ConfigMap",
+                          "metadata": {"name": cm_name},
+                          "data": {"init.sql": init_sql},
+                      })
+
+                      pg_cluster = {
+                          "apiVersion": "postgres-operator.crunchydata.com/v1beta1",
+                          "kind": "PostgresCluster",
+                          "metadata": {"name": cluster_name},
+                          "spec": {
+                              "postgresVersion": 17,
+                              "databaseInitSQL": {"name": cm_name, "key": "init.sql"},
+                              "instances": [{
+                                  "name": "primary",
+                                  "replicas": 1,
+                                  "dataVolumeClaimSpec": {
+                                      "accessModes": ["ReadWriteOnce"],
+                                      "resources": {"requests": {"storage": db_storage}},
+                                  },
+                              }],
+                          },
+                      }
+
+                      if users_all:
+                          pg_cluster["spec"]["users"] = (
+                              [{"name": admin_user, "databases": dbnames}] +
+                              [{"name": u} for u in other_users]
+                          )
+
+                      objs.append(pg_cluster)
+
+                      if not has_gateway_parent:
+                          continue
+
+                      hostname = f"{cluster_name}-$(workshop_namespace).{ingress_domain}"
+                      route_name = f"{cluster_name}"
+
+                      objs.append({
+                          "apiVersion": "gateway.networking.k8s.io/v1alpha2",
+                          "kind": "TLSRoute",
+                          "metadata": {"name": route_name},
+                          "spec": {
+                              "parentRefs": [{
+                                  "name": gateway_parent_name,
+                                  "namespace": gateway_parent_ns,
+                                  "sectionName": gateway_section
+                              }],
+                              "hostnames": [hostname],
+                              "rules": [{
+                                  "backendRefs": [{
+                                      "name": f"{cluster_name}-primary",
+                                      "port": 5432
+                                  }]
+                              }]
+                          }
+                      })
+
               environment = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "WorkshopEnvironment",
@@ -664,53 +758,53 @@ spec:
         apiVersion: python.fn.crossplane.io/v1beta1
         kind: Script
         script: |
-            from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-            from google.protobuf import json_format as jf
-            from google.protobuf import struct_pb2 as st
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as jf
+          from google.protobuf import struct_pb2 as st
 
-            def _to_dict(s):
-                return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
+          def _to_dict(s):
+              return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
 
-            def _extract_manifest(objres):
-                if not objres or not getattr(objres, "resource", None):
-                    return {}
-                od = _to_dict(objres.resource)
-                atp = (od.get("status") or {}).get("atProvider") or {}
-                return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              atp = (od.get("status") or {}).get("atProvider") or {}
+              return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
 
-            def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-                observed = getattr(req.observed, "resources", None) or {}
-                xr_obs = _to_dict(req.observed.composite.resource)
-                meta = xr_obs.get("metadata", {}) or {}
-                spec = xr_obs.get("spec", {}) or {}
-                name = meta.get("name")
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              observed = getattr(req.observed, "resources", None) or {}
+              xr_obs = _to_dict(req.observed.composite.resource)
+              meta = xr_obs.get("metadata", {}) or {}
+              spec = xr_obs.get("spec", {}) or {}
+              name = meta.get("name")
 
-                sessions_map = {}
+              sessions_map = {}
 
-                for sid in spec.get("sessions") or []:
-                    key = f"workshopsession-{name}-{sid}"
-                    manifest = _extract_manifest(observed.get(key))
-                    if not manifest:
-                        continue
+              for sid in spec.get("sessions") or []:
+                  key = f"workshopsession-{name}-{sid}"
+                  manifest = _extract_manifest(observed.get(key))
+                  if not manifest:
+                      continue
 
-                    ws_spec = (manifest.get("spec") or {}).get("session") or {}
-                    ws_id = str(ws_spec.get("id") or sid)
+                  ws_spec = (manifest.get("spec") or {}).get("session") or {}
+                  ws_id = str(ws_spec.get("id") or sid)
 
-                    educates = (manifest.get("status") or {}).get("educates") or {}
-                    phase = educates.get("phase")
-                    url = educates.get("url")
+                  educates = (manifest.get("status") or {}).get("educates") or {}
+                  phase = educates.get("phase")
+                  url = educates.get("url")
 
-                    if phase == "Running" and url:
-                        sessions_map[ws_id] = {"url": url}
+                  if phase == "Running" and url:
+                      sessions_map[ws_id] = {"url": url}
 
-                cur_status = (xr_obs.get("status") or {}).copy()
-                cur_sessions = (cur_status.get("sessions") or {}).copy()
-                cur_sessions.update(sessions_map)
-                cur_status["sessions"] = cur_sessions
+              cur_status = (xr_obs.get("status") or {}).copy()
+              cur_sessions = (cur_status.get("sessions") or {}).copy()
+              cur_sessions.update(sessions_map)
+              cur_status["sessions"] = cur_sessions
 
-                v = st.Value()
-                jf.ParseDict(cur_status, v)
-                rsp.desired.composite.resource.fields["status"].CopyFrom(v)
+              v = st.Value()
+              jf.ParseDict(cur_status, v)
+              rsp.desired.composite.resource.fields["status"].CopyFrom(v)
 
     - step: detect-datalab-status
       functionRef:

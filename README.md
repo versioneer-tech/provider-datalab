@@ -6,7 +6,7 @@ This package provides the **Datalab** Composite Resource Definition (XRD) and re
 
 Make life easier for you as an operator by offering ready-to-use **runtime environments** for your end users. All you need is a Kubernetes cluster with **ingress**, **file storage** (e.g. NFS), an **IAM system** (currently only Keycloak is supported), and - for the actual data - **object storage credentials** — whether from an in-cluster service like `MinIO` or an external provider like `AWS S3` or `OTC OBS`. You can provide that directly per team or use the accompanying [provider-storage](https://github.com/versioneer-tech/provider-storage), where object storage access can be automatically provisioned and injected in a way that integrates seamlessly with the `Datalab` environment.
 
-With just a few settings in the global environment configuration, you can deploy a `Datalab` manifest directly to your cluster through the Kubernetes API — for example, using `kubectl`. Alternatively, use higher-level tooling such as the [Workspaces](https://github.com/EOEPCA/workspace) Building Block, which provides a thin API and UI layer on top. Within minutes, your users can launch their own `Datalab` as a working environment.
+With just a few settings in the global environment configuration, you can deploy a `Datalab` manifest directly to your cluster through the Kubernetes API — for example, using `kubectl`. Alternatively, use higher-level tooling such as the [Workspaces](https://github.com/EOEPCA/workspace) Building Block, which provides a thin API and UI layer on top. Within minutes, your users can launch their own `Datalab` as a working environment. If required, PostgreSQL databases can also be automatically provisioned and optionally exposed externally (since version 0.3.0).
 
 Beyond the built-in **VS Code Server** and integrated object storage access, users can extend their environments by deploying [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional-services/) directly via the Kubernetes API — from **MLflow** for experiment tracking to **Dask** for scalable data processing. Thanks to **vCluster** support, they can even deploy services **requiring cluster-wide resources** such as `CRDs` or `RBAC cluster roles` — as for example needed by the Dask Gateway Helm chart.
 
@@ -63,7 +63,9 @@ data:
     region: acme
     secretNamespace: datalab
     type: s3
-  defaults: # whole block / all indivudal entries are optional
+  network: # optional
+    serviceCIDR: "10.43.0.0/16"
+  defaults: # optional
     quota:
       memory: 2Gi
       storage: 1Gi
@@ -72,6 +74,11 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
+  database: # optional (only needed if database host should be externally accessible)
+    gatewayParentName: default
+    gatewayParentNamespace: projectcontour
+    gatewaySectionName: postgres-passthrough
+  
 ```
 
 ## Datalab Spec

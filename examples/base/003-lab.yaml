@@ -10,6 +10,7 @@
 # This configuration explicitly overrides default resource quotas and security settings:
 # - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
+# Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -27,3 +28,8 @@ spec:
     budget: x-large
   security:
     kubernetesRole: admin
+  databases:
+    host0:
+      names:
+      - analytics
+      storage: 3Gi
