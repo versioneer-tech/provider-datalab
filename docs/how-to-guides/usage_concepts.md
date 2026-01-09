@@ -295,13 +295,12 @@ kubectl get secret jeff -n workspace -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}'
 
 ### Connect to Databases
 
-Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. Optionally, these databases can also be exposed externally using a `TLSRoute`, enabling secure access from outside the cluster.
+Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. Optionally, these databases can also be exposed externally using a `TLSRoute`, enabling secure access from outside the cluster. External exposure requires a Kubernetes Gateway Controller that operates at Layer-4, such as Envoy.
 
-A dedicated `admin` database user is created automatically and is set as the owner of all provisioned databases. This user has full administrative privileges, including the ability to create extensions, manage schemas, and grant permissions to other users.
+All additional users are created as regular database roles with limited privileges. Full administrative access is provided through the built-in `postgres` superuser account. This account can create extensions, manage schemas, and grant permissions to other users as needed.
 
-All additional users are created as regular database roles. Access to the databases can be granted by the administrator as required, depending on the desired access model.
-
-Database credentials are managed by the PostgreSQL operator and stored as Kubernetes Secrets. To locate the credentials for the administrative user, look for Secrets with the suffix `*-pguser-admin`. These Secrets contain the connection details needed to authenticate as the database administrator.
+Database credentials are managed by the PostgreSQL operator and stored as Kubernetes Secrets. To locate the credentials for database users, look for Secrets matching:
+`*-pguser-*`. These Secrets contain the connection details required to authenticate against the corresponding PostgreSQL roles.
 
 ---
 

@@ -459,7 +459,7 @@ spec:
               - databases:
                 - dev
                 - prod
-                name: admin
+                name: postgres
               - name: jeff
               - name: jim
           secrets:

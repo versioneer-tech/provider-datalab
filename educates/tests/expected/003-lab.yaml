@@ -453,7 +453,7 @@ spec:
               users:
               - databases:
                 - analytics
-                name: admin
+                name: postgres
               - name: jane
           secrets:
           - name: jane-datalab

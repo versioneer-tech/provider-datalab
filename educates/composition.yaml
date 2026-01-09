@@ -612,7 +612,7 @@ spec:
 
                   objs = workshop["spec"]["environment"]["objects"]
 
-                  admin_user = "admin"
+                  admin_user = "postgres"
                   other_users = list(users or [])
                   other_users = [u for u in other_users if u and u != admin_user]
                   users_all = [admin_user] + other_users
