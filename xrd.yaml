@@ -51,6 +51,7 @@ spec:
                         type: string
                         enum:
                           - admin
+                          - user
                         description: Assigned role for the user.
                       grantedAt:
                         type: string
