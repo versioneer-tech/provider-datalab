@@ -153,11 +153,12 @@ spec:
     policy: privileged
     kubernetesAccess: false
   databases:
-    host0:
+    pg0:
       names:
       - dev
       - prod
-      storage: 10Gi
+      storage: 1Gi
+      backupStorage: 10Gi
 ```
 
 - A long-running session is started immediately, shared by both users.  
@@ -198,10 +199,11 @@ spec:
   security:
     kubernetesRole: admin
   databases:
-    host0:
+    pg0:
       names:
       - analytics
-      storage: 3Gi
+      storage: 2Gi
+      backupStorage: 15Gi
 ```
 
 - Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).  

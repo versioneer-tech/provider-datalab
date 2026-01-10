@@ -604,11 +604,15 @@ spec:
               if db_hosts:
                   db_env = env.get("database") or {}
 
-                  gateway_parent_name = str(db_env.get("gatewayParentName") or "").strip()
-                  gateway_parent_ns = str(db_env.get("gatewayParentNamespace") or "").strip()
-                  gateway_section = str(db_env.get("gatewaySectionName") or "").strip()
+                  gateway_env = db_env.get("gateway") or {}
 
+                  gateway_parent_name = str(gateway_env.get("parentName") or "").strip()
+                  gateway_parent_ns = str(gateway_env.get("parentNamespace") or "").strip()
+                  gateway_section = str(gateway_env.get("sectionName") or "").strip()
                   has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
+
+                  data_sc_default = str(db_env.get("storageClassName") or "").strip()
+                  backup_sc_default = str(db_env.get("backupStorageClassName") or "").strip()
 
                   objs = workshop["spec"]["environment"]["objects"]
 
@@ -627,9 +631,16 @@ spec:
                       if not dbnames:
                           continue
 
-                      db_storage = str(host_cfg.get("storage") or "1Gi").strip()
+                      db_storage = str(host_cfg.get("storage") or "").strip()
+                      backup_storage = str(host_cfg.get("backupStorage") or "").strip()
 
-                      cluster_name = f"{host_key}-pg"
+                      if not db_storage or not backup_storage:
+                          continue
+
+                      db_storage_class = str(host_cfg.get("storageClassName") or data_sc_default).strip()
+                      backup_storage_class = str(host_cfg.get("backupStorageClassName") or backup_sc_default).strip()
+
+                      cluster_name = f"{host_key}"
                       cm_name = f"{cluster_name}-init-sql"
                       init_sql = "\\set ON_ERROR_STOP on\n\\connect postgres\n"
 
@@ -639,6 +650,20 @@ spec:
                           "metadata": {"name": cm_name},
                           "data": {"init.sql": init_sql},
                       })
+
+                      data_vcs = {
+                          "accessModes": ["ReadWriteOnce"],
+                          "resources": {"requests": {"storage": db_storage}},
+                      }
+                      if db_storage_class:
+                          data_vcs["storageClassName"] = db_storage_class
+
+                      repo_vcs = {
+                          "accessModes": ["ReadWriteOnce"],
+                          "resources": {"requests": {"storage": backup_storage}},
+                      }
+                      if backup_storage_class:
+                          repo_vcs["storageClassName"] = backup_storage_class
 
                       pg_cluster = {
                           "apiVersion": "postgres-operator.crunchydata.com/v1beta1",
@@ -650,11 +675,29 @@ spec:
                               "instances": [{
                                   "name": "primary",
                                   "replicas": 1,
-                                  "dataVolumeClaimSpec": {
-                                      "accessModes": ["ReadWriteOnce"],
-                                      "resources": {"requests": {"storage": db_storage}},
-                                  },
+                                  "dataVolumeClaimSpec": data_vcs,
                               }],
+                              "backups": {
+                                  "pgbackrest": {
+                                    "global": {
+                                        "repo1-retention-full-type": "count",
+                                        "repo1-retention-full": "4",
+                                        "repo1-retention-archive-type": "days",
+                                        "repo1-retention-archive": "14",
+                                        "repo1-path": f"/pgbackrest/databases/{cluster_name}/repo1",
+                                    },
+                                    "repos": [{
+                                        "name": "repo1",
+                                        "schedules": {
+                                            "full": "0 1 * * 0",
+                                            "differential": "0 1 * * 1-6",
+                                        },
+                                        "volume": {
+                                            "volumeClaimSpec": repo_vcs,
+                                        },
+                                    }],
+                                  }
+                              },
                           },
                       }
 
@@ -685,8 +728,8 @@ spec:
                               "hostnames": [hostname],
                               "rules": [{
                                   "backendRefs": [{
-                                      "name": f"{cluster_name}-primary",
-                                      "port": 5432
+                                    "name": f"{cluster_name}-primary",
+                                    "port": 5432
                                   }]
                               }]
                           }

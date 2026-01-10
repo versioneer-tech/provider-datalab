@@ -29,7 +29,8 @@ spec:
   security:
     kubernetesRole: admin
   databases:
-    host0:
+    pg0:
       names:
       - analytics
-      storage: 3Gi
+      storage: 2Gi
+      backupStorage: 15Gi

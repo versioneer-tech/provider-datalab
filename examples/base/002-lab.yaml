@@ -32,8 +32,9 @@ spec:
     policy: privileged
     kubernetesAccess: false
   databases:
-    host0:
+    pg0:
       names:
       - dev
       - prod
-      storage: 10Gi
+      storage: 1Gi
+      backupStorage: 10Gi

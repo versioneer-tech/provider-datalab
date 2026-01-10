@@ -50,9 +50,9 @@ spec:
                   type: object
                   description: >-
                     Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab.
-                    Each host defines a single storage size for the cluster volume and a list of logical
-                    PostgreSQL databases to create inside that cluster. Ownership and privileges are
-                    derived from `spec.users` by the Composition.
+                    Each host defines a data volume size and a pgBackRest repository size, plus a list of
+                    logical PostgreSQL databases to create inside that cluster. Ownership and privileges are
+                    derived from spec.users by the Composition.
                   additionalProperties:
                     type: object
                     properties:
@@ -66,10 +66,17 @@ spec:
                       storage:
                         type: string
                         description: >-
-                          Storage size for this PostgresCluster as a Kubernetes quantity (e.g., "1Gi", "10Gi").
+                          Storage size for the PostgreSQL data PVC of this PostgresCluster as a Kubernetes quantity
+                          (e.g., "1Gi", "10Gi").
+                      backupStorage:
+                        type: string
+                        description: >-
+                          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a
+                          Kubernetes quantity (e.g., "10Gi", "100Gi").
                     required:
                       - names
                       - storage
+                      - backupStorage
                   default: {}
                 vcluster:
                   type: boolean

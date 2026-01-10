@@ -74,10 +74,13 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
-  database: # optional (only needed if database host should be externally accessible)
-    gatewayParentName: default
-    gatewayParentNamespace: projectcontour
-    gatewaySectionName: postgres-passthrough
+  database: 
+    gateway: # optional (only needed if database should be externally accessible)
+      parentName: default
+      parentNamespace: projectcontour
+      sectionName: postgres-passthrough
+    storageClassName: ""
+    backupStorageClassName: ""
   
 ```
 

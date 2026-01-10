@@ -8,10 +8,11 @@ metadata:
   name: s-jane
 spec:
   databases:
-    host0:
+    pg0:
+      backupStorage: 15Gi
       names:
       - analytics
-      storage: 3Gi
+      storage: 2Gi
   quota:
     budget: x-large
     memory: 4Gi
@@ -431,22 +432,42 @@ spec:
                 \connect postgres
             kind: ConfigMap
             metadata:
-              name: host0-pg-init-sql
+              name: pg0-init-sql
           - apiVersion: postgres-operator.crunchydata.com/v1beta1
             kind: PostgresCluster
             metadata:
-              name: host0-pg
+              name: pg0
             spec:
+              backups:
+                pgbackrest:
+                  global:
+                    repo1-path: /pgbackrest/databases/pg0/repo1
+                    repo1-retention-archive: "14"
+                    repo1-retention-archive-type: days
+                    repo1-retention-full: "4"
+                    repo1-retention-full-type: count
+                  repos:
+                  - name: repo1
+                    schedules:
+                      differential: 0 1 * * 1-6
+                      full: 0 1 * * 0
+                    volume:
+                      volumeClaimSpec:
+                        accessModes:
+                        - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 15Gi
               databaseInitSQL:
                 key: init.sql
-                name: host0-pg-init-sql
+                name: pg0-init-sql
               instances:
               - dataVolumeClaimSpec:
                   accessModes:
                   - ReadWriteOnce
                   resources:
                     requests:
-                      storage: 3Gi
+                      storage: 2Gi
                 name: primary
                 replicas: 1
               postgresVersion: 17
