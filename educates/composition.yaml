@@ -183,6 +183,9 @@ spec:
           def _to_dict(struct):
               return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
 
+          def _distinct(seq):
+              return list(dict.fromkeys(seq))
+
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
@@ -198,11 +201,11 @@ spec:
               domain = ingress_env.get("domain", "default")
               url = f"https://{name}.{domain}"
 
-              def put(key_base, body_base):
-                  key = f"{key_base}-{name}"
+              def put(key_base, body_base, name_override=name):
+                  key = f"{key_base}-{name_override}"
                   body = body_base.copy()
                   md = body.setdefault("metadata", {})
-                  md.setdefault("name", name if key_base != "keycloak-role" else f"{name}-ws-access")
+                  md.setdefault("name", name_override)
                   md.setdefault("namespace", ns)
                   ann = md.setdefault("annotations", {})
                   ann["crossplane.io/composition-resource-name"] = key
@@ -217,6 +220,15 @@ spec:
                   },
               })
 
+              put("keycloak-group-admin", {
+                  "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "Group",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {"name": f"{name}-admin", "realmId": realm},
+                  },
+              }, f"{name}-admin")
+
               put("keycloak-mapper", {
                   "apiVersion": "openidgroup.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "GroupMembershipProtocolMapper",
@@ -229,7 +241,7 @@ spec:
                           "addToIdToken": True,
                           "addToUserinfo": False,
                           "fullPath": False,
-                          "name": "group-membership-mapper",
+                          "name": name,
                           "realmId": realm,
                       },
                   },
@@ -259,7 +271,7 @@ spec:
                   },
               })
 
-              put("keycloak-role", {
+              put("keycloak-role-user", {
                   "apiVersion": "role.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "Role",
                   "spec": {
@@ -270,9 +282,22 @@ spec:
                           "realmId": realm,
                       },
                   },
-              })
+              }, f"{name}-ws-access")
 
-              put("keycloak-roles", {
+              put("keycloak-role-admin", {
+                  "apiVersion": "role.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "Role",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {
+                          "name": "ws_admin",
+                          "clientIdRef": {"name": name, "policy": {"resolution": "Required"}},
+                          "realmId": realm,
+                      },
+                  },
+              }, f"{name}-ws-admin")
+
+              put("keycloak-roles-user", {
                   "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "Roles",
                   "spec": {
@@ -285,9 +310,30 @@ spec:
                   },
               })
 
-              users = list(spec.get("users", []) or [])
+              put("keycloak-roles-admin", {
+                  "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "Roles",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {
+                          "realmId": realm,
+                          "groupIdRef": {"name": f"{name}-admin", "policy": {"resolution": "Required"}},
+                          "roleIdsRefs": [{"name": f"{name}-ws-admin", "policy": {"resolution": "Required"}}],
+                      },
+                  },
+              }, f"{name}-admin")
 
-              put("keycloak-memberships", {
+              users = list(spec.get("users", []) or [])
+              roles = spec.get("roles", {}) or {}
+
+              role_admins = [
+                  u for u in users
+                  if ("admin" in list(roles.get(u, []) or []))
+              ]
+
+              admins = _distinct((users[0:1] or []) + role_admins)
+
+              put("keycloak-memberships-users", {
                   "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "Memberships",
                   "spec": {
@@ -299,6 +345,19 @@ spec:
                       },
                   },
               })
+
+              put("keycloak-memberships-admins", {
+                  "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "Memberships",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {
+                          "groupIdRef": {"name": f"{name}-admin", "policy": {"resolution": "Required"}},
+                          "realmId": realm,
+                          "members": admins,
+                      },
+                  },
+              }, f"{name}-admin")
 
     - step: update-educates-objects
       functionRef:

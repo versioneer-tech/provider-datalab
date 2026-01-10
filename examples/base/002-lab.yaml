@@ -19,7 +19,7 @@ spec:
   users:
     - jeff
     - jim
-  secretName: jeff
+  secretName: s-jeff
   sessions:
     - default
   vcluster: false

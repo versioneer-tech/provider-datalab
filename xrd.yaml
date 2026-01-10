@@ -40,6 +40,15 @@ spec:
                   items:
                     type: string
                   default: []
+                roles:
+                  type: object
+                  description: Optional role assignments per user.
+                  additionalProperties:
+                    type: array
+                    description: List of roles for the user.
+                    items:
+                      type: string
+                  default: {}
                 sessions:
                   type: array
                   description: Sessions to be started for this datalab.

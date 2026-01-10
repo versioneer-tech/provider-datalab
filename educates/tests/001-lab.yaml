@@ -13,8 +13,8 @@ spec:
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-joe, keycloak-group-s-joe, keycloak-mapper-s-joe,
-      and 6 more'
+    message: 'Unready resources: keycloak-client-s-joe, keycloak-group-admin-s-joe-admin,
+      keycloak-group-s-joe, and 10 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -56,6 +56,30 @@ spec:
     webOrigins:
     - https://s-joe.lab.acme.com/*
     - http://localhost:*
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Group
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-group-admin-s-joe-admin
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    name: s-joe-admin
+    realmId: acme
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -110,7 +134,7 @@ spec:
       matchLabels:
         crossplane.io/claim-name: s-joe
     fullPath: false
-    name: group-membership-mapper
+    name: s-joe
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -120,7 +144,36 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-s-joe
+    crossplane.io/composition-resource-name: keycloak-memberships-admins-s-joe-admin
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    groupIdRef:
+      name: s-joe-admin
+      policy:
+        resolution: Required
+    members:
+    - joe
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Memberships
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-memberships-users-s-joe
   labels:
     crossplane.io/composite: s-joe
   name: s-joe
@@ -149,7 +202,35 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-s-joe
+    crossplane.io/composition-resource-name: keycloak-role-admin-s-joe-ws-admin
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    name: ws_admin
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-role-user-s-joe-ws-access
   labels:
     crossplane.io/composite: s-joe
   name: s-joe-ws-access
@@ -177,7 +258,38 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-s-joe
+    crossplane.io/composition-resource-name: keycloak-roles-admin-s-joe-admin
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    groupIdRef:
+      name: s-joe-admin
+      policy:
+        resolution: Required
+    realmId: acme
+    roleIdsRefs:
+    - name: s-joe-ws-admin
+      policy:
+        resolution: Required
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Roles
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-roles-user-s-joe
   labels:
     crossplane.io/composite: s-joe
   name: s-joe

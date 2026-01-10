@@ -19,7 +19,7 @@ spec:
     budget: x-large
     memory: 6Gi
     storage: 60Gi
-  secretName: jeff
+  secretName: s-jeff
   security:
     kubernetesAccess: false
     policy: privileged
@@ -32,8 +32,8 @@ spec:
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-jeff, keycloak-group-s-jeff, keycloak-mapper-s-jeff,
-      and 7 more'
+    message: 'Unready resources: keycloak-client-s-jeff, keycloak-group-admin-s-jeff-admin,
+      keycloak-group-s-jeff, and 11 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -75,6 +75,30 @@ spec:
     webOrigins:
     - https://s-jeff.lab.acme.com/*
     - http://localhost:*
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Group
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-group-admin-s-jeff-admin
+  labels:
+    crossplane.io/composite: s-jeff
+  name: s-jeff-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    name: s-jeff-admin
+    realmId: acme
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -129,7 +153,7 @@ spec:
       matchLabels:
         crossplane.io/claim-name: s-jeff
     fullPath: false
-    name: group-membership-mapper
+    name: s-jeff
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -139,7 +163,36 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-s-jeff
+    crossplane.io/composition-resource-name: keycloak-memberships-admins-s-jeff-admin
+  labels:
+    crossplane.io/composite: s-jeff
+  name: s-jeff-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    groupIdRef:
+      name: s-jeff-admin
+      policy:
+        resolution: Required
+    members:
+    - jeff
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Memberships
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-memberships-users-s-jeff
   labels:
     crossplane.io/composite: s-jeff
   name: s-jeff
@@ -169,7 +222,35 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-s-jeff
+    crossplane.io/composition-resource-name: keycloak-role-admin-s-jeff-ws-admin
+  labels:
+    crossplane.io/composite: s-jeff
+  name: s-jeff-ws-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jeff
+      policy:
+        resolution: Required
+    name: ws_admin
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-role-user-s-jeff-ws-access
   labels:
     crossplane.io/composite: s-jeff
   name: s-jeff-ws-access
@@ -197,7 +278,38 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-s-jeff
+    crossplane.io/composition-resource-name: keycloak-roles-admin-s-jeff-admin
+  labels:
+    crossplane.io/composite: s-jeff
+  name: s-jeff-admin
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    groupIdRef:
+      name: s-jeff-admin
+      policy:
+        resolution: Required
+    realmId: acme
+    roleIdsRefs:
+    - name: s-jeff-ws-admin
+      policy:
+        resolution: Required
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Roles
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-roles-user-s-jeff
   labels:
     crossplane.io/composite: s-jeff
   name: s-jeff
@@ -228,10 +340,10 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-jeff
+    crossplane.io/composition-resource-name: observe-secret-s-jeff
   labels:
     crossplane.io/composite: s-jeff
-  name: observe-secret-jeff
+  name: observe-secret-s-jeff
   namespace: datalab
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
@@ -246,7 +358,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: jeff
+        name: s-jeff
         namespace: datalab
   managementPolicies:
   - Observe
@@ -327,7 +439,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: jeff-datalab
+              name: s-jeff-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -374,27 +486,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: jeff-datalab
+                          name: s-jeff-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: jeff-datalab
+                          name: s-jeff-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: jeff-datalab
+                          name: s-jeff-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: jeff-datalab
+                          name: s-jeff-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: jeff-datalab
+                          name: s-jeff-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -415,7 +527,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: jeff-datalab
+                      claimName: s-jeff-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -484,7 +596,7 @@ spec:
               - name: jeff
               - name: jim
           secrets:
-          - name: jeff-datalab
+          - name: s-jeff-datalab
             namespace: datalab
         session:
           applications:
@@ -509,7 +621,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: jeff-datalab
+              name: s-jeff-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
