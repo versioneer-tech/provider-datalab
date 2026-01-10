@@ -1,11 +1,11 @@
 # Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# Jeff and Jim share a datalab s-jeff with one default shared session
+# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with one default shared session
 # automatically created. That session will run permanently until stopped by the operator.
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
-# A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
+# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
@@ -19,6 +19,11 @@ spec:
   users:
     - jeff
     - jim
+    - jane
+  userOverrides:
+    jim:
+      grantedAt: "2025-01-10T19:00:00Z"
+      role: admin
   secretName: s-jeff
   sessions:
     - default

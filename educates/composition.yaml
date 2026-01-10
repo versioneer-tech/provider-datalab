@@ -324,11 +324,11 @@ spec:
               }, f"{name}-admin")
 
               users = list(spec.get("users", []) or [])
-              roles = spec.get("roles", {}) or {}
+              userOverrides = spec.get("userOverrides", {}) or {}
 
               role_admins = [
                   u for u in users
-                  if ("admin" in list(roles.get(u, []) or []))
+                  if str(((userOverrides.get(u) or {}).get("role") or "")).strip() == "admin"
               ]
 
               admins = _distinct((users[0:1] or []) + role_admins)

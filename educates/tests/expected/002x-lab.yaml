@@ -25,9 +25,14 @@ spec:
     policy: privileged
   sessions:
   - default
+  userOverrides:
+    jim:
+      grantedAt: "2025-01-10T19:00:00Z"
+      role: admin
   users:
   - jeff
   - jim
+  - jane
   vcluster: false
 status:
   conditions:
@@ -213,6 +218,7 @@ spec:
     members:
     - jeff
     - jim
+    - jane
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -595,6 +601,7 @@ spec:
                 name: postgres
               - name: jeff
               - name: jim
+              - name: jane
           secrets:
           - name: s-jeff-datalab
             namespace: datalab
