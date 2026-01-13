@@ -537,57 +537,6 @@ spec:
                 app.kubernetes.io/instance: data
                 app.kubernetes.io/name: data
               type: ClusterIP
-          - apiVersion: v1
-            data:
-              init.sql: |
-                \set ON_ERROR_STOP on
-                \connect postgres
-            kind: ConfigMap
-            metadata:
-              name: pg0-init-sql
-          - apiVersion: postgres-operator.crunchydata.com/v1beta1
-            kind: PostgresCluster
-            metadata:
-              name: pg0
-            spec:
-              backups:
-                pgbackrest:
-                  global:
-                    repo1-path: /pgbackrest/databases/pg0/repo1
-                    repo1-retention-archive: "14"
-                    repo1-retention-archive-type: days
-                    repo1-retention-full: "4"
-                    repo1-retention-full-type: count
-                  repos:
-                  - name: repo1
-                    schedules:
-                      differential: 0 1 * * 1-6
-                      full: 0 1 * * 0
-                    volume:
-                      volumeClaimSpec:
-                        accessModes:
-                        - ReadWriteOnce
-                        resources:
-                          requests:
-                            storage: 15Gi
-              databaseInitSQL:
-                key: init.sql
-                name: pg0-init-sql
-              instances:
-              - dataVolumeClaimSpec:
-                  accessModes:
-                  - ReadWriteOnce
-                  resources:
-                    requests:
-                      storage: 2Gi
-                name: primary
-                replicas: 1
-              postgresVersion: 17
-              users:
-              - databases:
-                - analytics
-                name: postgres
-              - name: jane
           secrets:
           - name: jane-datalab
             namespace: datalab
@@ -653,7 +602,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -702,7 +651,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -747,4 +696,4 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true

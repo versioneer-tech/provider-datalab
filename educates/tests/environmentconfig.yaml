@@ -41,3 +41,10 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
+  database: 
+    gateway:
+      parentName: default
+      parentNamespace: projectcontour
+      sectionName: postgres-passthrough
+    storageClassName: ""
+    backupStorageClassName: ""

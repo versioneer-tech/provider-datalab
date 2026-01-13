@@ -25,8 +25,7 @@ spec:
       grantedAt: "2025-01-10T19:00:00Z"
       role: admin
   secretName: s-jeff
-  sessions:
-    - default
+  sessions: []
   vcluster: false
   quota:
     memory: 6Gi

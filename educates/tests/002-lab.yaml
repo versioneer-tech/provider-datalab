@@ -23,8 +23,7 @@ spec:
   security:
     kubernetesAccess: false
     policy: privileged
-  sessions:
-  - default
+  sessions: []
   userOverrides:
     jim:
       grantedAt: "2025-01-10T19:00:00Z"
@@ -38,7 +37,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-jeff, keycloak-group-admin-s-jeff-admin,
-      keycloak-group-s-jeff, and 11 more'
+      keycloak-group-s-jeff, and 10 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -188,6 +187,7 @@ spec:
         resolution: Required
     members:
     - jeff
+    - jim
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -548,60 +548,6 @@ spec:
                 app.kubernetes.io/instance: data
                 app.kubernetes.io/name: data
               type: ClusterIP
-          - apiVersion: v1
-            data:
-              init.sql: |
-                \set ON_ERROR_STOP on
-                \connect postgres
-            kind: ConfigMap
-            metadata:
-              name: pg0-init-sql
-          - apiVersion: postgres-operator.crunchydata.com/v1beta1
-            kind: PostgresCluster
-            metadata:
-              name: pg0
-            spec:
-              backups:
-                pgbackrest:
-                  global:
-                    repo1-path: /pgbackrest/databases/pg0/repo1
-                    repo1-retention-archive: "14"
-                    repo1-retention-archive-type: days
-                    repo1-retention-full: "4"
-                    repo1-retention-full-type: count
-                  repos:
-                  - name: repo1
-                    schedules:
-                      differential: 0 1 * * 1-6
-                      full: 0 1 * * 0
-                    volume:
-                      volumeClaimSpec:
-                        accessModes:
-                        - ReadWriteOnce
-                        resources:
-                          requests:
-                            storage: 10Gi
-              databaseInitSQL:
-                key: init.sql
-                name: pg0-init-sql
-              instances:
-              - dataVolumeClaimSpec:
-                  accessModes:
-                  - ReadWriteOnce
-                  resources:
-                    requests:
-                      storage: 1Gi
-                name: primary
-                replicas: 1
-              postgresVersion: 17
-              users:
-              - databases:
-                - dev
-                - prod
-                name: postgres
-              - name: jeff
-              - name: jim
-              - name: jane
           secrets:
           - name: s-jeff-datalab
             namespace: datalab
@@ -663,7 +609,7 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -712,49 +658,4 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: false
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-s-jeff-default
-  labels:
-    crossplane.io/composite: s-jeff
-  name: workshopsession-s-jeff-default
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: ""
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopSession
-      metadata:
-        name: s-jeff-default
-      spec:
-        environment:
-          name: s-jeff
-        session:
-          env:
-          - name: SESSION_NAME
-            value: s-jeff-default
-          - name: FRAME_ANCESTORS
-            value: ""
-          id: default
-          ingress:
-            domain: lab.acme.com
-            secret: wildcard-tls
-          password: ""
-          username: '*'
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: false
+  watch: true

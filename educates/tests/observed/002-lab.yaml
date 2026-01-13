@@ -4,42 +4,19 @@
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: workshopenvironment-s-jeff
+  namespace: datalab
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-jeff
-  labels:
-    crossplane.io/composite: s-jeff
-  name: observe-secret-jeff
-  namespace: datalab
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: ""
-spec:
-  forProvider:
+    crossplane.io/composition-resource-name: workshopenvironment-s-jeff
+status:
+  atProvider:
     manifest:
-      apiVersion: v1
-      kind: Secret
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopEnvironment
       metadata:
-        name: jeff
+        name: s-jeff
         namespace: datalab
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  watch: false
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: jeff
-  namespace: datalab
-  labels:
-    crossplane.io/composite: s-jeff
-type: Opaque
-stringData:
-  AWS_ACCESS_KEY_ID: jeff
-  AWS_SECRET_ACCESS_KEY: testsecret123
+      status:
+        educates:
+          namespace: s-jeff
+          phase: Running

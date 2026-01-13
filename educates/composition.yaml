@@ -414,12 +414,6 @@ spec:
               sessions = list(spec.get("sessions") or [])
               vcluster = _boolish(spec.get("vcluster", False))
 
-              users = spec.get("users") or []
-
-              db_hosts = spec.get("databases") or {}
-              if isinstance(db_hosts, str):
-                  db_hosts = {}
-
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               defaults = (env.get("defaults") or {})
@@ -660,140 +654,6 @@ spec:
                       "data": {"cidr": service_cidr}
                   })
 
-              if db_hosts:
-                  db_env = env.get("database") or {}
-
-                  gateway_env = db_env.get("gateway") or {}
-
-                  gateway_parent_name = str(gateway_env.get("parentName") or "").strip()
-                  gateway_parent_ns = str(gateway_env.get("parentNamespace") or "").strip()
-                  gateway_section = str(gateway_env.get("sectionName") or "").strip()
-                  has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
-
-                  data_sc_default = str(db_env.get("storageClassName") or "").strip()
-                  backup_sc_default = str(db_env.get("backupStorageClassName") or "").strip()
-
-                  objs = workshop["spec"]["environment"]["objects"]
-
-                  admin_user = "postgres"
-                  other_users = list(users or [])
-                  other_users = [u for u in other_users if u and u != admin_user]
-                  users_all = [admin_user] + other_users
-
-                  for host_key in sorted(list((db_hosts or {}).keys())):
-                      host_cfg = db_hosts.get(host_key) or {}
-                      if isinstance(host_cfg, str):
-                          continue
-
-                      dbnames = list(host_cfg.get("names") or [])
-                      dbnames = [str(x).strip() for x in dbnames if str(x).strip()]
-                      if not dbnames:
-                          continue
-
-                      db_storage = str(host_cfg.get("storage") or "").strip()
-                      backup_storage = str(host_cfg.get("backupStorage") or "").strip()
-
-                      if not db_storage or not backup_storage:
-                          continue
-
-                      db_storage_class = str(host_cfg.get("storageClassName") or data_sc_default).strip()
-                      backup_storage_class = str(host_cfg.get("backupStorageClassName") or backup_sc_default).strip()
-
-                      cluster_name = f"{host_key}"
-                      cm_name = f"{cluster_name}-init-sql"
-                      init_sql = "\\set ON_ERROR_STOP on\n\\connect postgres\n"
-
-                      objs.append({
-                          "apiVersion": "v1",
-                          "kind": "ConfigMap",
-                          "metadata": {"name": cm_name},
-                          "data": {"init.sql": init_sql},
-                      })
-
-                      data_vcs = {
-                          "accessModes": ["ReadWriteOnce"],
-                          "resources": {"requests": {"storage": db_storage}},
-                      }
-                      if db_storage_class:
-                          data_vcs["storageClassName"] = db_storage_class
-
-                      repo_vcs = {
-                          "accessModes": ["ReadWriteOnce"],
-                          "resources": {"requests": {"storage": backup_storage}},
-                      }
-                      if backup_storage_class:
-                          repo_vcs["storageClassName"] = backup_storage_class
-
-                      pg_cluster = {
-                          "apiVersion": "postgres-operator.crunchydata.com/v1beta1",
-                          "kind": "PostgresCluster",
-                          "metadata": {"name": cluster_name},
-                          "spec": {
-                              "postgresVersion": 17,
-                              "databaseInitSQL": {"name": cm_name, "key": "init.sql"},
-                              "instances": [{
-                                  "name": "primary",
-                                  "replicas": 1,
-                                  "dataVolumeClaimSpec": data_vcs,
-                              }],
-                              "backups": {
-                                  "pgbackrest": {
-                                    "global": {
-                                        "repo1-retention-full-type": "count",
-                                        "repo1-retention-full": "4",
-                                        "repo1-retention-archive-type": "days",
-                                        "repo1-retention-archive": "14",
-                                        "repo1-path": f"/pgbackrest/databases/{cluster_name}/repo1",
-                                    },
-                                    "repos": [{
-                                        "name": "repo1",
-                                        "schedules": {
-                                            "full": "0 1 * * 0",
-                                            "differential": "0 1 * * 1-6",
-                                        },
-                                        "volume": {
-                                            "volumeClaimSpec": repo_vcs,
-                                        },
-                                    }],
-                                  }
-                              },
-                          },
-                      }
-
-                      if users_all:
-                          pg_cluster["spec"]["users"] = (
-                              [{"name": admin_user, "databases": dbnames}] +
-                              [{"name": u} for u in other_users]
-                          )
-
-                      objs.append(pg_cluster)
-
-                      if not has_gateway_parent:
-                          continue
-
-                      hostname = f"{cluster_name}-$(workshop_namespace).{ingress_domain}"
-                      route_name = f"{cluster_name}"
-
-                      objs.append({
-                          "apiVersion": "gateway.networking.k8s.io/v1alpha2",
-                          "kind": "TLSRoute",
-                          "metadata": {"name": route_name},
-                          "spec": {
-                              "parentRefs": [{
-                                  "name": gateway_parent_name,
-                                  "namespace": gateway_parent_ns,
-                                  "sectionName": gateway_section
-                              }],
-                              "hostnames": [hostname],
-                              "rules": [{
-                                  "backendRefs": [{
-                                    "name": f"{cluster_name}-primary",
-                                    "port": 5432
-                                  }]
-                              }]
-                          }
-                      })
-
               environment = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "WorkshopEnvironment",
@@ -824,7 +684,7 @@ spec:
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": manifest},
                           "readiness": {"policy": "SuccessfulCreate"},
-                          "watch": False
+                          "watch": True
                       }
                   }
                   rsp.desired.resources[key].resource.update(body)
@@ -852,6 +712,210 @@ spec:
                       }
                   }
                   emit("WorkshopSession", session_manifest, key_suffix=str(sid))
+
+    - step: update-database-objects
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(struct):
+              return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              atp = (od.get("status") or {}).get("atProvider") or {}
+              m1 = atp.get("manifest") or {}
+              m2 = (atp.get("raw") or {}).get("manifest") or {}
+              return (m1 or m2) or {}
+
+          def _safe_str(v):
+              return str(v).strip()
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+              name = meta.get("name")
+              ns = meta.get("namespace") or "default"
+
+              db_hosts = spec.get("databases") or {}
+              if not isinstance(db_hosts, dict) or not db_hosts:
+                  return
+
+              ctx = _to_dict(req.context)
+              env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+
+              ingress_env = env.get("ingress") or {}
+              ingress_domain = ingress_env.get("domain", "default")
+
+              db_env = env.get("database") or {}
+              gateway_env = db_env.get("gateway") or {}
+
+              gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
+              gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
+              gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+              has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
+
+              data_sc_default = _safe_str(db_env.get("storageClassName") or "")
+              backup_sc_default = _safe_str(db_env.get("backupStorageClassName") or "")
+
+              users = list(spec.get("users", []) or [])
+              admin_user = "postgres"
+              other_users = [u for u in users if _safe_str(u) and _safe_str(u) != admin_user]
+              users_all = [admin_user] + other_users
+
+              observed = getattr(req.observed, "resources", None) or {}
+              env_key = f"workshopenvironment-{name}"
+              env_manifest = _extract_manifest(observed.get(env_key))
+
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or "")
+              phase = _safe_str(educates_status.get("phase") or "")
+
+              if not workshop_ns or phase.lower() not in ("running", "ready"):
+                  return
+
+              def emit_obj(key, manifest, readiness_policy="SuccessfulCreate", watch=True):
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": ns,
+                          "annotations": {"crossplane.io/composition-resource-name": key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": manifest},
+                          "readiness": {"policy": readiness_policy},
+                          "watch": watch
+                      }
+                  }
+                  rsp.desired.resources[key].resource.update(body)
+
+              for host_key in sorted(list(db_hosts.keys())):
+                  if not isinstance(host_key, str) or not host_key.strip():
+                      continue
+
+                  host_cfg = db_hosts.get(host_key) or {}
+                  if not isinstance(host_cfg, dict):
+                      continue
+
+                  dbnames = list(host_cfg.get("names") or [])
+                  dbnames = [_safe_str(x) for x in dbnames if _safe_str(x)]
+                  if not dbnames:
+                      continue
+
+                  db_storage = _safe_str(host_cfg.get("storage") or "")
+                  backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+                  if not db_storage or not backup_storage:
+                      continue
+
+                  db_storage_class = _safe_str(host_cfg.get("storageClassName") or data_sc_default)
+                  backup_storage_class = _safe_str(host_cfg.get("backupStorageClassName") or backup_sc_default)
+
+                  cluster_name = f"{host_key.strip()}"
+                  cm_name = f"{cluster_name}-init-sql"
+                  init_sql = "\\set ON_ERROR_STOP on\n\\connect postgres\n"
+
+                  cm = {
+                      "apiVersion": "v1",
+                      "kind": "ConfigMap",
+                      "metadata": {"name": cm_name, "namespace": workshop_ns},
+                      "data": {"init.sql": init_sql},
+                  }
+
+                  data_vcs = {
+                      "accessModes": ["ReadWriteOnce"],
+                      "resources": {"requests": {"storage": db_storage}},
+                  }
+                  if db_storage_class:
+                      data_vcs["storageClassName"] = db_storage_class
+
+                  repo_vcs = {
+                      "accessModes": ["ReadWriteOnce"],
+                      "resources": {"requests": {"storage": backup_storage}},
+                  }
+                  if backup_storage_class:
+                      repo_vcs["storageClassName"] = backup_storage_class
+
+                  pg_cluster = {
+                      "apiVersion": "postgres-operator.crunchydata.com/v1beta1",
+                      "kind": "PostgresCluster",
+                      "metadata": {"name": cluster_name, "namespace": workshop_ns},
+                      "spec": {
+                          "postgresVersion": 17,
+                          "databaseInitSQL": {"name": cm_name, "key": "init.sql"},
+                          "instances": [{
+                              "name": "primary",
+                              "replicas": 1,
+                              "dataVolumeClaimSpec": data_vcs,
+                          }],
+                          "backups": {
+                              "pgbackrest": {
+                                "global": {
+                                    "repo1-retention-full-type": "count",
+                                    "repo1-retention-full": "4",
+                                    "repo1-retention-archive-type": "days",
+                                    "repo1-retention-archive": "14",
+                                    "repo1-path": f"/pgbackrest/databases/{cluster_name}/repo1",
+                                },
+                                "repos": [{
+                                    "name": "repo1",
+                                    "schedules": {
+                                        "full": "0 1 * * 0",
+                                        "differential": "0 1 * * 1-6",
+                                    },
+                                    "volume": {
+                                        "volumeClaimSpec": repo_vcs,
+                                    },
+                                }],
+                              }
+                          },
+                      },
+                  }
+
+                  if users_all:
+                      pg_cluster["spec"]["users"] = (
+                          [{"name": admin_user, "databases": dbnames}] +
+                          [{"name": u} for u in other_users]
+                      )
+
+                  emit_obj(f"db-configmap-{name}-{cluster_name}", cm, readiness_policy="SuccessfulCreate", watch=True)
+                  emit_obj(f"db-postgrescluster-{name}-{cluster_name}", pg_cluster, readiness_policy="DeriveFromObject", watch=True)
+
+                  if not has_gateway_parent:
+                      continue
+
+                  hostname = f"{cluster_name}-{workshop_ns}.{ingress_domain}"
+                  route = {
+                      "apiVersion": "gateway.networking.k8s.io/v1alpha2",
+                      "kind": "TLSRoute",
+                      "metadata": {"name": cluster_name, "namespace": workshop_ns},
+                      "spec": {
+                          "parentRefs": [{
+                              "name": gateway_parent_name,
+                              "namespace": gateway_parent_ns,
+                              "sectionName": gateway_section
+                          }],
+                          "hostnames": [hostname],
+                          "rules": [{
+                              "backendRefs": [{
+                                "name": f"{cluster_name}-primary",
+                                "port": 5432
+                              }]
+                          }]
+                      }
+                  }
+
+                  emit_obj(f"db-tlsroute-{name}-{cluster_name}", route, readiness_policy="DeriveFromObject", watch=True)
 
     - step: detect-educates-status
       functionRef:
