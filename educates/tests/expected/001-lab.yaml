@@ -14,7 +14,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-joe, keycloak-group-admin-s-joe-admin,
-      keycloak-group-s-joe, and 10 more'
+      keycloak-group-s-joe, and 11 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -320,11 +320,42 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-joe
+    crossplane.io/composition-resource-name: observe-database-secret-s-joe
   labels:
     crossplane.io/composite: s-joe
-  name: observe-secret-joe
-  namespace: datalab
+  name: observe-database-secret-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pg0-pguser-postgres
+        namespace: s-joe
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: observe-storage-secret-s-joe
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
@@ -419,7 +450,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: joe-datalab
+              name: s-joe-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -466,27 +497,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: joe-datalab
+                          name: s-joe-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: joe-datalab
+                          name: s-joe-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: joe-datalab
+                          name: s-joe-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: joe-datalab
+                          name: s-joe-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: joe-datalab
+                          name: s-joe-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -507,7 +538,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: joe-datalab
+                      claimName: s-joe-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -523,8 +554,8 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: joe-datalab
-            namespace: datalab
+          - name: s-joe-datalab
+            namespace: default
         session:
           applications:
             console:
@@ -545,7 +576,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: joe-datalab
+              name: s-joe-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data

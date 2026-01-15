@@ -42,21 +42,24 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              secret_name = spec.get("secretName") or meta.get("name")
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               storage_env = env.get("storage") or {}
 
-              ns = storage_env.get("secretNamespace") or meta.get("namespace") or "default"
+              secret_name = spec.get("secretName") or meta.get("name")
+              secret_namespace = storage_env.get("secretNamespace") or meta.get("namespace") or "default"
 
-              key = f"observe-secret-{secret_name}"
+              key = f"observe-storage-secret-{xr_name}"
               rsp.desired.resources[key].resource.update({
                   "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                   "kind": "Object",
                   "metadata": {
                       "name": key,
-                      "namespace": ns,
+                      "namespace": xr_namespace,
                       "annotations": {"crossplane.io/composition-resource-name": key},
                   },
                   "spec": {
@@ -65,7 +68,53 @@ spec:
                           "manifest": {
                               "apiVersion": "v1",
                               "kind": "Secret",
-                              "metadata": {"name": secret_name, "namespace": ns},
+                              "metadata": {"name": secret_name, "namespace": secret_namespace},
+                          }
+                      },
+                      "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                      "watch": False,
+                  },
+              })
+
+    - step: observe-database-secret
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(s):
+              return {} if s is None else _json_format.MessageToDict(s, preserving_proto_field_name=True)
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              secret_name = "pg0-pguser-postgres"
+              secret_namespace = meta.get("name")
+
+              key = f"observe-database-secret-{xr_name}"
+              rsp.desired.resources[key].resource.update({
+                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                  "kind": "Object",
+                  "metadata": {
+                      "name": key,
+                      "namespace": xr_namespace,
+                      "annotations": {"crossplane.io/composition-resource-name": key},
+                  },
+                  "spec": {
+                      "managementPolicies": ["Observe"],
+                      "forProvider": {
+                          "manifest": {
+                              "apiVersion": "v1",
+                              "kind": "Secret",
+                              "metadata": {"name": secret_name, "namespace": secret_namespace},
                           }
                       },
                       "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
@@ -88,6 +137,9 @@ spec:
               if s is None:
                   return {}
               return s if isinstance(s, dict) else _json_format.MessageToDict(s, preserving_proto_field_name=True)
+
+          def _safe_str(v):
+              return str(v).strip()
 
           def _b64get_any(d, keys):
               if not d:
@@ -115,15 +167,15 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              secret_name = spec.get("secretName") or meta.get("name")
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
 
               ctx = _to_dict(req.context)
-              ns_from_xr = meta.get("namespace") or "default"
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               storage_env = env.get("storage") or {}
-              ns = storage_env.get("secretNamespace") or ns_from_xr
 
-              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-secret-{secret_name}")
+              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{xr_name}")
               data_b64 = _extract_data(obs)
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
@@ -148,11 +200,10 @@ spec:
                   f"force_path_style = {force_path_style}\n"
               )
 
-              out_name = f"{secret_name}-datalab"
               manifest = {
                   "apiVersion": "v1",
                   "kind": "Secret",
-                  "metadata": {"name": out_name, "namespace": ns},
+                  "metadata": {"name": f"{xr_name}-datalab", "namespace": xr_namespace},
                   "type": "Opaque",
                   "stringData": {
                       "remote": access_key,
@@ -166,7 +217,32 @@ spec:
                   },
               }
 
-              key = f"secret-{secret_name}-datalab"
+              db_obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-database-secret-{xr_name}")
+              db_data_b64 = _extract_data(db_obs)
+              if db_data_b64:
+                  manifest["stringData"]["DATABASE_URL"] = _b64get_any(db_data_b64, ["uri"])
+                  manifest["stringData"]["DATABASE_NAME"] = _b64get_any(db_data_b64, ["dbname"])
+                  manifest["stringData"]["DATABASE_HOST"] = _b64get_any(db_data_b64, ["host"])
+                  manifest["stringData"]["DATABASE_PORT"] = _b64get_any(db_data_b64, ["port"])
+                  manifest["stringData"]["DATABASE_USER"] = _b64get_any(db_data_b64, ["user"])
+                  manifest["stringData"]["DATABASE_PASSWORD"] = _b64get_any(db_data_b64, ["password"])
+
+                  db_env = env.get("database") or {}
+                  gateway_env = db_env.get("gateway") or {}
+
+                  gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
+                  gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
+                  gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+                  has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
+
+                  ingress_env = env.get("ingress") or {}
+
+                  ingress_domain = ingress_env.get("domain", "default")
+
+                  if has_gateway_parent:
+                      manifest["stringData"]["DATABASE_HOST_EXTERNAL"] = f"pgo-{xr_name}.{ingress_domain}"
+
+              key = f"secret-{xr_name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)
               rsp.desired.resources[key].ready = True
 
@@ -190,8 +266,9 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name")
-              ns = meta.get("namespace") or "default"
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
@@ -199,14 +276,14 @@ spec:
               ingress_env = env.get("ingress") or {}
               realm = iam_env.get("realm", "default")
               domain = ingress_env.get("domain", "default")
-              url = f"https://{name}.{domain}"
+              url = f"https://{xr_name}.{domain}"
 
-              def put(key_base, body_base, name_override=name):
+              def put(key_base, body_base, name_override=xr_name):
                   key = f"{key_base}-{name_override}"
                   body = body_base.copy()
                   md = body.setdefault("metadata", {})
                   md.setdefault("name", name_override)
-                  md.setdefault("namespace", ns)
+                  md.setdefault("namespace", xr_namespace)
                   ann = md.setdefault("annotations", {})
                   ann["crossplane.io/composition-resource-name"] = key
                   rsp.desired.resources[key].resource.update(body)
@@ -216,7 +293,7 @@ spec:
                   "kind": "Group",
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
-                      "forProvider": {"name": name, "realmId": realm},
+                      "forProvider": {"name": xr_name, "realmId": realm},
                   },
               })
 
@@ -225,9 +302,9 @@ spec:
                   "kind": "Group",
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
-                      "forProvider": {"name": f"{name}-admin", "realmId": realm},
+                      "forProvider": {"name": f"{xr_name}-admin", "realmId": realm},
                   },
-              }, f"{name}-admin")
+              }, f"{xr_name}-admin")
 
               put("keycloak-mapper", {
                   "apiVersion": "openidgroup.keycloak.m.crossplane.io/v1alpha1",
@@ -236,12 +313,12 @@ spec:
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
                           "claimName": "groups",
-                          "clientIdSelector": {"matchLabels": {"crossplane.io/claim-name": name}},
+                          "clientIdSelector": {"matchLabels": {"crossplane.io/claim-name": xr_name}},
                           "addToAccessToken": False,
                           "addToIdToken": True,
                           "addToUserinfo": False,
                           "fullPath": False,
-                          "name": name,
+                          "name": xr_name,
                           "realmId": realm,
                       },
                   },
@@ -250,12 +327,12 @@ spec:
               put("keycloak-client", {
                   "apiVersion": "openidclient.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "Client",
-                  "metadata": {"labels": {"crossplane.io/claim-name": name}},
+                  "metadata": {"labels": {"crossplane.io/claim-name": xr_name}},
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
-                          "name": name,
-                          "clientId": name,
+                          "name": xr_name,
+                          "clientId": xr_name,
                           "rootUrl": url,
                           "adminUrl": url,
                           "accessType": "PUBLIC",
@@ -278,11 +355,11 @@ spec:
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
                           "name": "ws_access",
-                          "clientIdRef": {"name": name, "policy": {"resolution": "Required"}},
+                          "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
                           "realmId": realm,
                       },
                   },
-              }, f"{name}-ws-access")
+              }, f"{xr_name}-ws-access")
 
               put("keycloak-role-admin", {
                   "apiVersion": "role.keycloak.m.crossplane.io/v1alpha1",
@@ -291,11 +368,11 @@ spec:
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
                           "name": "ws_admin",
-                          "clientIdRef": {"name": name, "policy": {"resolution": "Required"}},
+                          "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
                           "realmId": realm,
                       },
                   },
-              }, f"{name}-ws-admin")
+              }, f"{xr_name}-ws-admin")
 
               put("keycloak-roles-user", {
                   "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
@@ -304,8 +381,8 @@ spec:
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
                           "realmId": realm,
-                          "groupIdRef": {"name": name, "policy": {"resolution": "Required"}},
-                          "roleIdsRefs": [{"name": f"{name}-ws-access", "policy": {"resolution": "Required"}}],
+                          "groupIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                          "roleIdsRefs": [{"name": f"{xr_name}-ws-access", "policy": {"resolution": "Required"}}],
                       },
                   },
               })
@@ -317,11 +394,11 @@ spec:
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
                           "realmId": realm,
-                          "groupIdRef": {"name": f"{name}-admin", "policy": {"resolution": "Required"}},
-                          "roleIdsRefs": [{"name": f"{name}-ws-admin", "policy": {"resolution": "Required"}}],
+                          "groupIdRef": {"name": f"{xr_name}-admin", "policy": {"resolution": "Required"}},
+                          "roleIdsRefs": [{"name": f"{xr_name}-ws-admin", "policy": {"resolution": "Required"}}],
                       },
                   },
-              }, f"{name}-admin")
+              }, f"{xr_name}-admin")
 
               users = list(spec.get("users", []) or [])
               userOverrides = spec.get("userOverrides", {}) or {}
@@ -339,7 +416,7 @@ spec:
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
-                          "groupIdRef": {"name": name, "policy": {"resolution": "Required"}},
+                          "groupIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
                           "realmId": realm,
                           "members": users,
                       },
@@ -352,12 +429,12 @@ spec:
                   "spec": {
                       "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
                       "forProvider": {
-                          "groupIdRef": {"name": f"{name}-admin", "policy": {"resolution": "Required"}},
+                          "groupIdRef": {"name": f"{xr_name}-admin", "policy": {"resolution": "Required"}},
                           "realmId": realm,
                           "members": admins,
                       },
                   },
-              }, f"{name}-admin")
+              }, f"{xr_name}-admin")
 
     - step: update-educates-objects
       functionRef:
@@ -407,8 +484,9 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name")
-              ns = meta.get("namespace") or "default"
+              
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
 
               files = spec.get("files") or []
               sessions = list(spec.get("sessions") or [])
@@ -449,13 +527,10 @@ spec:
 
               auth_type = (auth_env.get("type") or "credentials").strip().lower()
 
-              secret_name = spec.get("secretName") or meta.get("name")
-              storage_secret_name = f"{secret_name}-datalab"
-              storage_secret_ns = storage_env.get("secretNamespace", "default")
+              storage_secret_name = f"{xr_name}-datalab"
 
-              observed = getattr(req.observed, "resources", None) or {}
-              obs_key = f"observe-secret-{secret_name}"
-              data_b64 = _extract_data(observed.get(obs_key))
+              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{xr_name}")
+              data_b64 = _extract_data(obs)
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
@@ -503,7 +578,7 @@ spec:
               workshop = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "Workshop",
-                  "metadata": {"name": name},
+                  "metadata": {"name": xr_name},
                   "spec": {
                       "title": "Default DataLab",
                       "description": "A default DataLab environment.",
@@ -545,7 +620,7 @@ spec:
                           "packages": packages
                       },
                       "environment": {
-                          "secrets": [{"name": storage_secret_name, "namespace": storage_secret_ns}],
+                          "secrets": [{"name": storage_secret_name, "namespace": xr_namespace}],
                           "objects": [
                               allow_web_egress,
                               {
@@ -657,7 +732,7 @@ spec:
               environment = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "WorkshopEnvironment",
-                  "metadata": {"name": name},
+                  "metadata": {"name": xr_name},
                   "spec": {
                       "analytics": {"amplitude": {"trackingId": ""}},
                       "cookies": {},
@@ -665,19 +740,19 @@ spec:
                       "request": {"enabled": False},
                       "session": {"ingress": {"class": ingress_class, "domain": ingress_domain, "secret": ingress_secret}},
                       "theme": {"name": "default-website-theme"},
-                      "workshop": {"name": name}
+                      "workshop": {"name": xr_name}
                   }
               }
 
               def emit(kind, manifest, key_suffix=""):
-                  suffix = f"-{name}{('-' + key_suffix) if key_suffix else ''}"
+                  suffix = f"-{xr_name}{('-' + key_suffix) if key_suffix else ''}"
                   key = f"{kind.lower()}{suffix}"
                   body = {
                       "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                       "kind": "Object",
                       "metadata": {
                           "name": key,
-                          "namespace": ns,
+                          "namespace": xr_namespace,
                           "annotations": {"crossplane.io/composition-resource-name": key}
                       },
                       "spec": {
@@ -696,14 +771,14 @@ spec:
                   session_manifest = {
                       "apiVersion": "training.educates.dev/v1beta1",
                       "kind": "WorkshopSession",
-                      "metadata": {"name": f"{name}-{sid}"},
+                      "metadata": {"name": f"{xr_name}-{sid}"},
                       "spec": {
-                          "environment": {"name": name},
+                          "environment": {"name": xr_name},
                           "session": {
                               "id": str(sid),
                               "ingress": {"domain": ingress_domain, "secret": ingress_secret},
                               "env": [
-                                  {"name": "SESSION_NAME", "value": f"{name}-{sid}"},
+                                  {"name": "SESSION_NAME", "value": f"{xr_name}-{sid}"},
                                   {"name": "FRAME_ANCESTORS", "value": ""}
                               ],
                               "username": session_username,
@@ -742,8 +817,9 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              name = meta.get("name")
-              ns = meta.get("namespace") or "default"
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
 
               db_hosts = spec.get("databases") or {}
               if not isinstance(db_hosts, dict) or not db_hosts:
@@ -772,7 +848,7 @@ spec:
               users_all = [admin_user] + other_users
 
               observed = getattr(req.observed, "resources", None) or {}
-              env_key = f"workshopenvironment-{name}"
+              env_key = f"workshopenvironment-{xr_name}"
               env_manifest = _extract_manifest(observed.get(env_key))
 
               educates_status = (env_manifest.get("status") or {}).get("educates") or {}
@@ -788,7 +864,7 @@ spec:
                       "kind": "Object",
                       "metadata": {
                           "name": key,
-                          "namespace": ns,
+                          "namespace": xr_namespace,
                           "annotations": {"crossplane.io/composition-resource-name": key}
                       },
                       "spec": {
@@ -888,8 +964,8 @@ spec:
                           [{"name": u} for u in other_users]
                       )
 
-                  emit_obj(f"db-configmap-{name}-{cluster_name}", cm, readiness_policy="SuccessfulCreate", watch=True)
-                  emit_obj(f"db-postgrescluster-{name}-{cluster_name}", pg_cluster, readiness_policy="DeriveFromObject", watch=True)
+                  emit_obj(f"db-configmap-{xr_name}-{cluster_name}", cm, readiness_policy="SuccessfulCreate", watch=True)
+                  emit_obj(f"db-postgrescluster-{xr_name}-{cluster_name}", pg_cluster, readiness_policy="DeriveFromObject", watch=True)
 
                   if not has_gateway_parent:
                       continue
@@ -915,7 +991,7 @@ spec:
                       }
                   }
 
-                  emit_obj(f"db-tlsroute-{name}-{cluster_name}", route, readiness_policy="DeriveFromObject", watch=True)
+                  emit_obj(f"db-tlsroute-{xr_name}-{cluster_name}", route, readiness_policy="DeriveFromObject", watch=True)
 
     - step: detect-educates-status
       functionRef:
@@ -943,12 +1019,13 @@ spec:
               xr_obs = _to_dict(req.observed.composite.resource)
               meta = xr_obs.get("metadata", {}) or {}
               spec = xr_obs.get("spec", {}) or {}
-              name = meta.get("name")
+              
+              xr_name = meta.get("name")
 
               sessions_map = {}
 
               for sid in spec.get("sessions") or []:
-                  key = f"workshopsession-{name}-{sid}"
+                  key = f"workshopsession-{xr_name}-{sid}"
                   manifest = _extract_manifest(observed.get(key))
                   if not manifest:
                       continue

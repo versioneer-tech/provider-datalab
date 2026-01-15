@@ -26,7 +26,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-john, keycloak-group-admin-s-john-admin,
-      keycloak-group-s-john, and 11 more'
+      keycloak-group-s-john, and 12 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -332,11 +332,42 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-john
+    crossplane.io/composition-resource-name: observe-database-secret-s-john
   labels:
     crossplane.io/composite: s-john
-  name: observe-secret-john
-  namespace: datalab
+  name: observe-database-secret-s-john
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-john
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pg0-pguser-postgres
+        namespace: s-john
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-john
+  labels:
+    crossplane.io/composite: s-john
+  name: observe-storage-secret-s-john
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
@@ -431,7 +462,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: john-datalab
+              name: s-john-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -478,27 +509,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: john-datalab
+                          name: s-john-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: john-datalab
+                          name: s-john-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: john-datalab
+                          name: s-john-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: john-datalab
+                          name: s-john-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: john-datalab
+                          name: s-john-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -519,7 +550,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: john-datalab
+                      claimName: s-john-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -535,8 +566,8 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: john-datalab
-            namespace: datalab
+          - name: s-john-datalab
+            namespace: default
         session:
           applications:
             console:
@@ -557,7 +588,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: john-datalab
+              name: s-john-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data

@@ -37,7 +37,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 13 more'
+      db-tlsroute-s-jeff-pg0, and 14 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -496,11 +496,42 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-s-jeff
+    crossplane.io/composition-resource-name: observe-database-secret-s-jeff
   labels:
     crossplane.io/composite: s-jeff
-  name: observe-secret-s-jeff
-  namespace: datalab
+  name: observe-database-secret-s-jeff
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pg0-pguser-postgres
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-jeff
+  labels:
+    crossplane.io/composite: s-jeff
+  name: observe-storage-secret-s-jeff
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
@@ -700,7 +731,7 @@ spec:
               type: ClusterIP
           secrets:
           - name: s-jeff-datalab
-            namespace: datalab
+            namespace: default
         session:
           applications:
             console:

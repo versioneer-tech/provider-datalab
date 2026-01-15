@@ -29,7 +29,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-jane, keycloak-group-admin-s-jane-admin,
-      keycloak-group-s-jane, and 11 more'
+      keycloak-group-s-jane, and 12 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -335,11 +335,42 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-secret-jane
+    crossplane.io/composition-resource-name: observe-database-secret-s-jane
   labels:
     crossplane.io/composite: s-jane
-  name: observe-secret-jane
-  namespace: datalab
+  name: observe-database-secret-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pg0-pguser-postgres
+        namespace: s-jane
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: observe-storage-secret-s-jane
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta1
     blockOwnerDeletion: true
@@ -434,7 +465,7 @@ spec:
           - apiVersion: v1
             kind: PersistentVolumeClaim
             metadata:
-              name: jane-datalab
+              name: s-jane-datalab
             spec:
               accessModes:
               - ReadOnlyMany
@@ -481,27 +512,27 @@ spec:
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ACCESS_KEY_ID
-                          name: jane-datalab
+                          name: s-jane-datalab
                     - name: AWS_SECRET_ACCESS_KEY
                       valueFrom:
                         secretKeyRef:
                           key: AWS_SECRET_ACCESS_KEY
-                          name: jane-datalab
+                          name: s-jane-datalab
                     - name: AWS_REGION
                       valueFrom:
                         secretKeyRef:
                           key: AWS_REGION
-                          name: jane-datalab
+                          name: s-jane-datalab
                     - name: AWS_ENDPOINT_URL
                       valueFrom:
                         secretKeyRef:
                           key: AWS_ENDPOINT_URL
-                          name: jane-datalab
+                          name: s-jane-datalab
                     - name: AWS_S3_FORCE_PATH_STYLE
                       valueFrom:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
-                          name: jane-datalab
+                          name: s-jane-datalab
                     image: ghcr.io/versioneer-tech/package-r:v2025.7.1
                     imagePullPolicy: Always
                     name: data
@@ -522,7 +553,7 @@ spec:
                   volumes:
                   - name: data
                     persistentVolumeClaim:
-                      claimName: jane-datalab
+                      claimName: s-jane-datalab
           - apiVersion: v1
             kind: Service
             metadata:
@@ -538,8 +569,8 @@ spec:
                 app.kubernetes.io/name: data
               type: ClusterIP
           secrets:
-          - name: jane-datalab
-            namespace: datalab
+          - name: s-jane-datalab
+            namespace: default
         session:
           applications:
             console:
@@ -560,7 +591,7 @@ spec:
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: jane-datalab
+              name: s-jane-datalab
           ingresses:
           - host: data.$(workshop_namespace).svc.$(cluster_domain)
             name: data
