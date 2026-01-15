@@ -1,0 +1,920 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.4.0/how-to-guides/security/">
+      
+      
+        <link rel="prev" href="../installation/">
+      
+      
+        <link rel="next" href="../additional_services/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../imgs/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Security - provider-datalab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#provider-datalab-security-in-cloud-workspaces" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="provider-datalab" class="md-header__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            provider-datalab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Security
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="provider-datalab" class="md-nav__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    provider-datalab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage_concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage & Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configurable-security-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configurable Security Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-isolation-with-networkpolicies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network Isolation with NetworkPolicies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network Isolation with NetworkPolicies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#allow-web-egress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        allow-web-egress
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vcluster-vs-namespace-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vcluster vs Namespace Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dns-architecture-in-workshop-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DNS Architecture in Workshop Environments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#policy-enforcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Policy Enforcement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../additional_services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference-guides/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configurable-security-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configurable Security Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-isolation-with-networkpolicies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network Isolation with NetworkPolicies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network Isolation with NetworkPolicies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#allow-web-egress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        allow-web-egress
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vcluster-vs-namespace-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vcluster vs Namespace Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dns-architecture-in-workshop-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DNS Architecture in Workshop Environments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#policy-enforcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Policy Enforcement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="provider-datalab-security-in-cloud-workspaces">Provider Datalab – Security in Cloud Workspaces</h1>
+<p>Running Datalabs means letting end users run <strong>their own code on your servers</strong>. In practice, this is like operating a shared computer lab: some users are trusted colleagues, others are students, and some may be external partners. Everyone is authenticated, but <strong>authentication is not the same as trust</strong>. An authenticated user can still make mistakes, run unsafe workloads, or attempt to break out of their sandbox. The security model of Datalabs must therefore acknowledge <strong>different trust levels</strong>: users can be trusted to log in, but not necessarily trusted with unrestricted access.</p>
+<p>Out of the box, our platform applies a <strong>baseline security model</strong>: workloads are isolated into namespaces, Pods are subject to Kubernetes admission controls, and <strong>NetworkPolicies</strong> block access to sensitive metadata endpoints. This baseline is pragmatic but effective. Beyond it, security can be extended with <strong>Kyverno</strong> policies and other admission controllers to enforce stricter boundaries.</p>
+<hr />
+<h2 id="configurable-security-options">Configurable Security Options</h2>
+<p>Datalabs expose configurable runtime security through the <code>spec.security</code> section of the <code>Datalab</code> resource. This allows operators to adjust the trust level per environment:</p>
+<ul>
+<li><strong><code>policy</code></strong> defines the Pod Security Standard (<code>restricted</code>, <code>baseline</code>, <code>privileged</code>).  </li>
+<li><code>restricted</code> → strictest: disallows most privileges.  </li>
+<li><code>baseline</code> → safe default: blocks host access and elevated privileges.  </li>
+<li><code>privileged</code> → relaxed: allows Docker-in-Docker with 20 Gi of local storage.  </li>
+<li><strong><code>kubernetesAccess</code></strong> toggles whether a Kubernetes API token is mounted in the session pod. When disabled, users can run workloads but not interact with the cluster API.  </li>
+<li><strong><code>kubernetesRole</code></strong> sets the RBAC level (<code>view</code>, <code>edit</code>, <code>admin</code>) within the Datalab namespace or vcluster.</li>
+</ul>
+<hr />
+<h2 id="network-isolation-with-networkpolicies">Network Isolation with NetworkPolicies</h2>
+<p>Kubernetes <strong>NetworkPolicies</strong> control how pods communicate with each other and with external services. By default, a cluster allows all pod-to-pod and internet traffic. NetworkPolicies reverse this: once isolation is enabled, <strong>only explicitly allowed traffic flows</strong>.</p>
+<p>Policies are <strong>flexible</strong>: they can be as strict as “this pod only talks to another on one port,” or as permissive as “all pods in this namespace can reach the internet.” What we apply here is not a perfect “zero trust” design but a <strong>pragmatic baseline</strong> balancing usability and protection.</p>
+<p>When a Datalab is created, <strong>NetworkPolicies are provisioned automatically</strong> in the corresponding namespace:</p>
+<ul>
+<li><strong>Egress rules</strong> apply to pods in the namespace (the traffic source).  </li>
+<li><strong>Ingress rules</strong> apply to pods in the namespace (the traffic destination).  </li>
+</ul>
+<h3 id="allow-web-egress">allow-web-egress</h3>
+<p>Currently, we deploy a single permissive policy:</p>
+<ul>
+<li><strong>Pods:</strong> all pods in environment namespaces (where user workloads run)  </li>
+<li><strong>Allows:</strong> all egress traffic to the internet  </li>
+<li><strong>Blocks:</strong> access to the <strong>cloud instance metadata endpoint</strong> <code>169.254.169.254/32</code>  </li>
+</ul>
+<p>This endpoint (known as <strong>IMDS</strong>) provides cloud instance credentials that bypass Kubernetes RBAC if exposed inside a pod. Protecting it is critical in multi-tenant setups.  </p>
+<p><strong>Note:</strong> In our IPv4-only cluster, only <code>169.254.169.254</code> must be blocked. In dual-stack or IPv6-only clusters, the corresponding IPv6 endpoint (commonly <code>fd00:ec2::254</code>) must also be restricted.</p>
+<p>This “allow everything except IMDS” approach ensures users can fetch packages, clone repositories, or access S3 buckets, while removing the most dangerous privilege escalation path.</p>
+<hr />
+<h2 id="vcluster-vs-namespace-security">vcluster vs Namespace Security</h2>
+<p><a href="https://www.vcluster.com/">vcluster</a> improves the developer experience by giving each tenant a virtual control plane, but <strong>it does not create stronger isolation</strong>:</p>
+<ul>
+<li>All workloads still run in the host namespace.  </li>
+<li>PodSecurity and NetworkPolicies apply at the host namespace level.  </li>
+<li>vcluster <strong>mirrors host cluster policies</strong>: it does not itself prevent privileged workloads (<code>hostPath</code>, <code>hostNetwork</code>, <code>privileged: true</code>) unless these are already disallowed at cluster level.  </li>
+</ul>
+<p><strong>Takeaway:</strong> treat vcluster namespaces the same as direct tenant namespaces. Enable <strong>Pod Security Admission</strong> (<code>baseline</code> or <code>restricted</code>) and rely on NetworkPolicies for communication boundaries.</p>
+<hr />
+<h2 id="dns-architecture-in-workshop-environments">DNS Architecture in Workshop Environments</h2>
+<p>For workshop-style environments that spin up many short-lived vclusters, starting a full DNS service inside every vcluster would slow down startup and waste resources. Instead, a <strong>shared DNS service in the host cluster</strong> handles name resolution for all vclusters.</p>
+<p>When a vcluster is created, a small <strong>CoreDNS Service and Deployment</strong> is automatically deployed in the host cluster (for example <code>kube-dns-x-kube-system-x-my-vcluster</code>).<br />
+Pods inside the vcluster still use normal Kubernetes DNS names like <code>kube-dns.kube-system.svc.cluster.local</code>, but those lookups are transparently routed to the host-level DNS service.<br />
+That host DNS server then talks to the vcluster’s API to resolve internal service names.</p>
+<p><strong>Advantages:</strong>
+- Fast startup — no DNS bootstrap delay per vcluster<br />
+- Lower resource use — one lightweight host DNS handles many environments<br />
+- Simpler networking — all workloads share the same cluster network<br />
+- Central visibility — DNS logging and policies stay managed in one place  </p>
+<p>From the user’s point of view, everything behaves as expected: pods inside each workshop can resolve service names normally, without needing to know that DNS is handled outside their vcluster. However, some cloud environments differ in how their CNI plugins route service traffic, which can affect how the host DNS reaches the vcluster API. In such cases, minor adjustments to NetworkPolicies or CoreDNS endpoints may be required to restore internal name resolution.</p>
+<hr />
+<h2 id="policy-enforcement">Policy Enforcement</h2>
+<p>The enforcement of NetworkPolicies depends on the CNI plugin (Cilium, Calico, Antrea, etc.). Without a CNI that supports them, policies have no effect.</p>
+<p>We assume:</p>
+<ul>
+<li><strong>CNI enforces policies</strong> consistently across all nodes.  </li>
+<li><strong>IMDS endpoints are blocked</strong> via the allow-web-egress policy.  </li>
+<li><strong>External access</strong> flows through a central ingress controller for TLS, auditing, and routing.  </li>
+</ul>
+<p>More restrictive egress controls (e.g., whitelisting PyPI, GitHub, or S3) could be added, but these create significant operational overhead and reduce usability. Our design is intentionally permissive, with the option to tighten later.</p>
+<p>Kyverno can be added to enforce stricter pod-level policies across environments. For example, you can block privileged pods, disallow host networking, or restrict image registries — preventing workloads that could otherwise compromise the host cluster.</p>
+<hr />
+<h2 id="summary">Summary</h2>
+<p>In our current configuration, the baseline security model is:</p>
+<ul>
+<li>Apply <strong>one permissive egress policy</strong> per environment namespace: allow everything, except block the <strong>cloud metadata endpoint</strong>.  </li>
+<li>Use <strong>PodSecurity Admission</strong> to prevent privilege escalation.  </li>
+<li>Expose <strong>security knobs</strong> per Datalab:  </li>
+<li>Enable or disable Kubernetes API access (<code>kubernetesAccess</code>).  </li>
+<li>Configure role-based privileges (<code>kubernetesRole</code>).  </li>
+<li>Select an overall Pod Security profile (<code>restricted</code>, <code>baseline</code>, <code>privileged</code>).  </li>
+<li>Keep policies in the <strong>environment namespace</strong>, where workloads actually run.  </li>
+<li>Route ingress through a central controller for TLS and auditing.  </li>
+</ul>
+<p>This setup prioritizes usability for researchers while protecting the cluster’s most critical boundary: preventing pods from stealing cloud instance credentials.  </p>
+<p>Over time, this model can evolve into stricter egress filtering or finer-grained ingress/egress rules, but it already provides a safe and pragmatic baseline for multi-tenant Datalabs.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025, Versioneer
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
