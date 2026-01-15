@@ -7,6 +7,8 @@ kind: Datalab
 metadata:
   name: s-jeff
 spec:
+  data:
+    enabled: false
   databases:
     pg0:
       backupStorage: 10Gi
@@ -623,112 +625,6 @@ spec:
               podSelector: {}
               policyTypes:
               - Egress
-          - apiVersion: v1
-            kind: PersistentVolumeClaim
-            metadata:
-              name: s-jeff-datalab
-            spec:
-              accessModes:
-              - ReadOnlyMany
-              resources:
-                requests:
-                  storage: 1Mi
-              storageClassName: csi-rclone
-          - apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              labels:
-                app.kubernetes.io/instance: data
-                app.kubernetes.io/name: data
-              name: data
-            spec:
-              replicas: 1
-              selector:
-                matchLabels:
-                  app.kubernetes.io/instance: data
-                  app.kubernetes.io/name: data
-              template:
-                metadata:
-                  labels:
-                    app.kubernetes.io/instance: data
-                    app.kubernetes.io/name: data
-                spec:
-                  containers:
-                  - env:
-                    - name: FB_AUTH_MAPPER
-                      value: writer-noshare
-                    - name: WORKSPACE
-                      valueFrom:
-                        fieldRef:
-                          fieldPath: metadata.namespace
-                    - name: FB_ROOT
-                      value: /data
-                    - name: FB_BRANDING_NAME
-                      valueFrom:
-                        fieldRef:
-                          fieldPath: metadata.namespace
-                    - name: FB_AUTH_HEADER
-                      value: Accept
-                    - name: AWS_ACCESS_KEY_ID
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_ACCESS_KEY_ID
-                          name: s-jeff-datalab
-                    - name: AWS_SECRET_ACCESS_KEY
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_SECRET_ACCESS_KEY
-                          name: s-jeff-datalab
-                    - name: AWS_REGION
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_REGION
-                          name: s-jeff-datalab
-                    - name: AWS_ENDPOINT_URL
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_ENDPOINT_URL
-                          name: s-jeff-datalab
-                    - name: AWS_S3_FORCE_PATH_STYLE
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_S3_FORCE_PATH_STYLE
-                          name: s-jeff-datalab
-                    image: ghcr.io/versioneer-tech/package-r:v2025.7.1
-                    imagePullPolicy: Always
-                    name: data
-                    ports:
-                    - containerPort: 8080
-                      name: http
-                    resources:
-                      limits:
-                        cpu: "1"
-                        memory: 512Mi
-                      requests:
-                        cpu: 100m
-                        memory: 128Mi
-                    volumeMounts:
-                    - mountPath: /data
-                      name: data
-                  serviceAccountName: $(service_account)
-                  volumes:
-                  - name: data
-                    persistentVolumeClaim:
-                      claimName: s-jeff-datalab
-          - apiVersion: v1
-            kind: Service
-            metadata:
-              name: data
-            spec:
-              ports:
-              - name: http
-                port: 8080
-                protocol: TCP
-                targetPort: http
-              selector:
-                app.kubernetes.io/instance: data
-                app.kubernetes.io/name: data
-              type: ClusterIP
           secrets:
           - name: s-jeff-datalab
             namespace: default
@@ -750,17 +646,11 @@ spec:
               version: "1.30"
             workshop:
               enabled: false
-          dashboards:
-          - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+          dashboards: []
           envFrom:
           - secretRef:
               name: s-jeff-datalab
-          ingresses:
-          - host: data.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8080
-            protocol: http
+          ingresses: []
           namespaces:
             budget: x-large
             role: edit

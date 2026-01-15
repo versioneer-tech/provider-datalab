@@ -4,7 +4,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # - 001-lab.yaml
+  - 001-lab.yaml
   - 002-lab.yaml
-  # - 003-lab.yaml
-  #- 004-lab.yaml
+  - 003-lab.yaml
+  - 004-lab.yaml

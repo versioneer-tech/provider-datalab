@@ -110,7 +110,7 @@ metadata:
 spec:
   users:
   - joe
-  secretName: joe
+  secretName: s-joe
 ```
 
 - Joe’s Datalab exists but is idle until he launches a session.  
@@ -122,16 +122,17 @@ spec:
 ## Example: Jeff and Jim (shared session, privileged with Docker)
 
 ```yaml
-# Jeff and Jim share a datalab s-jeff with one default shared session
+# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with one default shared session
 # automatically created. That session will run permanently until stopped by the operator.
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
-# A Keycloak group, role, and client are created; users "jeff" and "jim" must exist in Keycloak.
+# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
-# Additionally, two PostgreSQL databases are provisioned for the lab: "dev" and "prod".
+# The data component for the object storage mount and browser UI is disabled.
+# Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -140,10 +141,16 @@ spec:
   users:
     - jeff
     - jim
-  secretName: jeff
-  sessions:
-    - default
+    - jane
+  userOverrides:
+    jim:
+      grantedAt: "2025-01-10T19:00:00Z"
+      role: admin
+  secretName: s-jeff
+  sessions: []
   vcluster: false
+  data:
+    enabled: false
   quota:
     memory: 6Gi
     storage: 60Gi
@@ -180,6 +187,7 @@ spec:
 # This configuration explicitly overrides default resource quotas and security settings:
 # - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
+# The data component for the object storage mount and browser UI is configured as readonly.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
@@ -188,10 +196,12 @@ metadata:
 spec:
   users:
     - jane
-  secretName: jane
+  secretName: s-jane
   sessions:
     - default
   vcluster: true
+  data:
+    readOnlyMount: true
   quota:
     memory: 4Gi
     storage: 10Gi
@@ -230,7 +240,7 @@ metadata:
 spec:
   users:
   - john
-  secretName: john
+  secretName: s-john
   sessions:
   - default
   vcluster: false

@@ -236,7 +236,6 @@ spec:
                   has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
 
                   ingress_env = env.get("ingress") or {}
-
                   ingress_domain = ingress_env.get("domain", "default")
 
                   if has_gateway_parent:
@@ -516,6 +515,17 @@ spec:
 
               role = (security.get("kubernetesRole") or env_security.get("kubernetesRole") or "edit")
 
+              data_cfg = spec.get("data") or {}
+              data_enabled = data_cfg.get("enabled")
+              if data_enabled is None:
+                  data_enabled = True
+              data_enabled = _boolish(data_enabled)
+
+              data_readonly = data_cfg.get("readOnlyMount")
+              if data_readonly is None:
+                  data_readonly = False
+              data_readonly = _boolish(data_readonly)
+
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
               packages = env.get("packages") or []
@@ -592,17 +602,8 @@ spec:
                               "vcluster": {"enabled": vcluster, "version": "1.30"},
                               "workshop": {"enabled": bool(files)}
                           },
-                          "dashboards": [
-                              {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
-                          ],
-                          "ingresses": [
-                              {
-                                  "name": "data",
-                                  "protocol": "http",
-                                  "host": "data.$(workshop_namespace).svc.$(cluster_domain)",
-                                  "port": 8080
-                              }
-                          ],
+                          "dashboards": [],
+                          "ingresses": [],
                           "resources": {"memory": memory, "storage": storage},
                           "namespaces": {
                               "budget": budget,
@@ -622,91 +623,113 @@ spec:
                       "environment": {
                           "secrets": [{"name": storage_secret_name, "namespace": xr_namespace}],
                           "objects": [
-                              allow_web_egress,
-                              {
-                                  "apiVersion": "v1",
-                                  "kind": "PersistentVolumeClaim",
-                                  "metadata": {"name": storage_secret_name},
-                                  "spec": {
-                                      "accessModes": ["ReadOnlyMany"],
-                                      "resources": {"requests": {"storage": "1Mi"}},
-                                      "storageClassName": "csi-rclone"
-                                  }
-                              },
-                              {
-                                  "apiVersion": "apps/v1",
-                                  "kind": "Deployment",
-                                  "metadata": {
-                                      "name": "data",
-                                      "labels": {
-                                          "app.kubernetes.io/instance": "data",
-                                          "app.kubernetes.io/name": "data"
-                                      }
-                                  },
-                                  "spec": {
-                                      "replicas": 1,
-                                      "selector": {
-                                          "matchLabels": {
-                                              "app.kubernetes.io/instance": "data",
-                                              "app.kubernetes.io/name": "data"
-                                          }
-                                      },
-                                      "template": {
-                                          "metadata": {
-                                              "labels": {
-                                                  "app.kubernetes.io/instance": "data",
-                                                  "app.kubernetes.io/name": "data"
-                                              }
-                                          },
-                                          "spec": {
-                                              "serviceAccountName": "$(service_account)",
-                                              "containers": [{
-                                                  "name": "data",
-                                                  "image": "ghcr.io/versioneer-tech/package-r:v2025.7.1",
-                                                  "imagePullPolicy": "Always",
-                                                  "ports": [{"name": "http", "containerPort": 8080}],
-                                                  "env": [
-                                                      {"name": "FB_AUTH_MAPPER", "value": "writer-noshare"},
-                                                      {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                                      {"name": "FB_ROOT", "value": "/data"},
-                                                      {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                                      {"name": "FB_AUTH_HEADER", "value": "Accept"},
-                                                      {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
-                                                      {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_SECRET_ACCESS_KEY"}}},
-                                                      {"name": "AWS_REGION", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_REGION"}}},
-                                                      {"name": "AWS_ENDPOINT_URL", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ENDPOINT_URL"}}},
-                                                      {"name": "AWS_S3_FORCE_PATH_STYLE", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_S3_FORCE_PATH_STYLE"}}}
-                                                  ],
-                                                  "resources": {
-                                                      "requests": {"cpu": "100m", "memory": "128Mi"},
-                                                      "limits": {"cpu": "1", "memory": "512Mi"}
-                                                  },
-                                                  "volumeMounts": [{"name": "data", "mountPath": "/data"}]
-                                              }],
-                                              "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}}]
-                                          }
-                                      }
-                                  }
-                              },
-                              {
-                                  "apiVersion": "v1",
-                                  "kind": "Service",
-                                  "metadata": {"name": "data"},
-                                  "spec": {
-                                      "type": "ClusterIP",
-                                      "selector": {
-                                          "app.kubernetes.io/instance": "data",
-                                          "app.kubernetes.io/name": "data"
-                                      },
-                                      "ports": [
-                                          {"name": "http", "port": 8080, "targetPort": "http", "protocol": "TCP"}
-                                      ]
-                                  }
-                              }
+                              allow_web_egress
                           ]
                       }
                   }
               }
+
+              if data_enabled:
+                  workshop["spec"]["session"]["dashboards"].append(
+                      {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
+                  )
+                  workshop["spec"]["session"]["ingresses"].append(
+                      {
+                          "name": "data",
+                          "protocol": "http",
+                          "host": "data.$(workshop_namespace).svc.$(cluster_domain)",
+                          "port": 8080
+                      }
+                  )
+
+                  data_deploy = {
+                      "apiVersion": "apps/v1",
+                      "kind": "Deployment",
+                      "metadata": {
+                          "name": "data",
+                          "labels": {
+                              "app.kubernetes.io/instance": "data",
+                              "app.kubernetes.io/name": "data"
+                          }
+                      },
+                      "spec": {
+                          "replicas": 1,
+                          "selector": {
+                              "matchLabels": {
+                                  "app.kubernetes.io/instance": "data",
+                                  "app.kubernetes.io/name": "data"
+                              }
+                          },
+                          "template": {
+                              "metadata": {
+                                  "labels": {
+                                      "app.kubernetes.io/instance": "data",
+                                      "app.kubernetes.io/name": "data"
+                                  }
+                              },
+                              "spec": {
+                                  "serviceAccountName": "$(service_account)",
+                                  "containers": [{
+                                      "name": "data",
+                                      "image": "ghcr.io/versioneer-tech/package-r:v2025.7.1",
+                                      "imagePullPolicy": "Always",
+                                      "ports": [{"name": "http", "containerPort": 8080}],
+                                      "env": [
+                                          {"name": "FB_AUTH_MAPPER", "value": "reader-noshare" if data_readonly else "writer-noshare"},
+                                          {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                                          {"name": "FB_ROOT", "value": "/data"},
+                                          {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                                          {"name": "FB_AUTH_HEADER", "value": "Accept"},
+                                          {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
+                                          {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_SECRET_ACCESS_KEY"}}},
+                                          {"name": "AWS_REGION", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_REGION"}}},
+                                          {"name": "AWS_ENDPOINT_URL", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ENDPOINT_URL"}}},
+                                          {"name": "AWS_S3_FORCE_PATH_STYLE", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_S3_FORCE_PATH_STYLE"}}}
+                                      ],
+                                      "resources": {
+                                          "requests": {"cpu": "100m", "memory": "128Mi"},
+                                          "limits": {"cpu": "1", "memory": "512Mi"}
+                                      },
+                                      "volumeMounts": [{
+                                          "name": "data",
+                                          "mountPath": "/data",
+                                          "readOnly": True if data_readonly else False
+                                      }]
+                                  }],
+                                  "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}}]
+                              }
+                          }
+                      }
+                  }
+
+                  workshop["spec"]["environment"]["objects"].extend([
+                      {
+                          "apiVersion": "v1",
+                          "kind": "PersistentVolumeClaim",
+                          "metadata": {"name": storage_secret_name},
+                          "spec": {
+                              "accessModes": ["ReadOnlyMany"],
+                              "resources": {"requests": {"storage": "1Mi"}},
+                              "storageClassName": "csi-rclone"
+                          }
+                      },
+                      data_deploy,
+                      {
+                          "apiVersion": "v1",
+                          "kind": "Service",
+                          "metadata": {"name": "data"},
+                          "spec": {
+                              "type": "ClusterIP",
+                              "selector": {
+                                  "app.kubernetes.io/instance": "data",
+                                  "app.kubernetes.io/name": "data"
+                              },
+                              "ports": [
+                                  {"name": "http", "port": 8080, "targetPort": "http", "protocol": "TCP"}
+                              ]
+                          }
+                      }
+                  ])
 
               if policy == "privileged":
                   workshop["spec"]["session"]["applications"]["docker"] = {

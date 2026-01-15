@@ -7,6 +7,8 @@ kind: Datalab
 metadata:
   name: s-jane
 spec:
+  data:
+    readOnlyMount: true
   databases:
     pg0:
       backupStorage: 15Gi
@@ -17,7 +19,7 @@ spec:
     budget: x-large
     memory: 4Gi
     storage: 10Gi
-  secretName: jane
+  secretName: s-jane
   security:
     kubernetesRole: admin
   sessions:
@@ -384,7 +386,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: jane
+        name: s-jane
         namespace: datalab
   managementPolicies:
   - Observe
@@ -495,7 +497,7 @@ spec:
                   containers:
                   - env:
                     - name: FB_AUTH_MAPPER
-                      value: writer-noshare
+                      value: reader-noshare
                     - name: WORKSPACE
                       valueFrom:
                         fieldRef:
@@ -549,6 +551,7 @@ spec:
                     volumeMounts:
                     - mountPath: /data
                       name: data
+                      readOnly: true
                   serviceAccountName: $(service_account)
                   volumes:
                   - name: data

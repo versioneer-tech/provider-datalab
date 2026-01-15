@@ -14,7 +14,7 @@ metadata:
 spec:
   users:
   - john
-  secretName: john
+  secretName: s-john
   sessions:
   - default
   vcluster: false

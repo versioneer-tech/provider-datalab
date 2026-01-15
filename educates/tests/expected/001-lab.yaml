@@ -7,7 +7,7 @@ kind: Datalab
 metadata:
   name: s-joe
 spec:
-  secretName: joe
+  secretName: s-joe
   users:
   - joe
 status:
@@ -369,7 +369,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: joe
+        name: s-joe
         namespace: datalab
   managementPolicies:
   - Observe
@@ -534,6 +534,7 @@ spec:
                     volumeMounts:
                     - mountPath: /data
                       name: data
+                      readOnly: false
                   serviceAccountName: $(service_account)
                   volumes:
                   - name: data

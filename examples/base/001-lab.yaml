@@ -13,4 +13,4 @@ metadata:
 spec:
   users:
   - joe
-  secretName: joe
+  secretName: s-joe

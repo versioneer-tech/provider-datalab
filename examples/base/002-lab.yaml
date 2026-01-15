@@ -10,6 +10,7 @@
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
+# The data component for the object storage mount and browser UI is disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
@@ -27,6 +28,8 @@ spec:
   secretName: s-jeff
   sessions: []
   vcluster: false
+  data:
+    enabled: false
   quota:
     memory: 6Gi
     storage: 60Gi

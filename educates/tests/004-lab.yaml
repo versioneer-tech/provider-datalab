@@ -16,7 +16,7 @@ spec:
     - /data/**
     - /README.md
     path: .
-  secretName: john
+  secretName: s-john
   sessions:
   - default
   users:
@@ -381,7 +381,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: john
+        name: s-john
         namespace: datalab
   managementPolicies:
   - Observe
@@ -546,6 +546,7 @@ spec:
                     volumeMounts:
                     - mountPath: /data
                       name: data
+                      readOnly: false
                   serviceAccountName: $(service_account)
                   volumes:
                   - name: data
