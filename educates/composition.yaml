@@ -92,9 +92,14 @@ spec:
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
 
               xr_name = meta.get("name")
               xr_namespace = meta.get("namespace") or "default"
+
+              db_hosts = spec.get("databases")
+              if not isinstance(db_hosts, dict) or not db_hosts:
+                  return
 
               secret_name = "pg0-pguser-postgres"
               secret_namespace = meta.get("name")
@@ -964,7 +969,7 @@ spec:
                                     "repo1-retention-full": "4",
                                     "repo1-retention-archive-type": "days",
                                     "repo1-retention-archive": "14",
-                                    "repo1-path": f"/pgbackrest/databases/{cluster_name}/repo1",
+                                    "repo1-path": f"/pgbackrest/repo1",
                                 },
                                 "repos": [{
                                     "name": "repo1",
