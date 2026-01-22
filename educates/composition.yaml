@@ -602,6 +602,21 @@ spec:
                   }
               }
 
+              host_svc_name = "pg0-primary"
+
+              vcluster_cfg = {
+                  "enabled": vcluster,
+                  "version": "1.34",
+                  "services": {
+                      "fromHost": [
+                          {
+                              "from": f"$(workshop_namespace)/{host_svc_name}",
+                              "to": f"$(workshop_namespace)/{host_svc_name}",
+                          }
+                      ]
+                  },
+              }
+
               workshop = {
                   "apiVersion": "training.educates.dev/v1beta1",
                   "kind": "Workshop",
@@ -616,7 +631,7 @@ spec:
                               "editor": {"enabled": True},
                               "slides": {"enabled": False},
                               "terminal": {"enabled": True},
-                              "vcluster": {"enabled": vcluster, "version": "1.30"},
+                              "vcluster": vcluster_cfg,
                               "workshop": {"enabled": bool(files)}
                           },
                           "dashboards": [],

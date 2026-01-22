@@ -26,7 +26,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-john, keycloak-group-admin-s-john-admin,
-      keycloak-group-s-john, and 12 more'
+      keycloak-group-s-john, and 11 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -332,37 +332,6 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-database-secret-s-john
-  labels:
-    crossplane.io/composite: s-john
-  name: observe-database-secret-s-john
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: ""
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: pg0-pguser-postgres
-        namespace: s-john
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  watch: false
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: observe-storage-secret-s-john
   labels:
     crossplane.io/composite: s-john
@@ -581,7 +550,11 @@ spec:
               enabled: true
             vcluster:
               enabled: false
-              version: "1.30"
+              services:
+                fromHost:
+                - from: $(workshop_namespace)/pg0-primary
+                  to: $(workshop_namespace)/pg0-primary
+              version: "1.34"
             workshop:
               enabled: true
           dashboards:

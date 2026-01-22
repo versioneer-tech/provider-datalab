@@ -1,6 +1,6 @@
 # Provider Datalab – Usage & Concepts
 
-This section explains how to **use** the `provider-datalab` configuration packages once they are installed. It focuses on the **concepts** of Sessions, Files, vclusters, Storage Secrets, and the required **Keycloak integration** for identity and access.
+This section explains how to **use** the `provider-datalab` configuration packages once they are installed. It focuses on the **concepts** of Sessions, Files, vclusters, Storage Secrets, Databases and the required **Keycloak integration** for identity and access.
 
 ---
 
@@ -21,6 +21,42 @@ Each `Datalab` session is equipped with a **persistent volume** for storing file
 The **persistent volume claim (PVC)** is **tied to the active session** and will be deleted automatically when the workshop session shuts down (for example, through a culling process when using session mode `auto`). This does **not necessarily mean that data is lost** — when the session is restarted from the same manifests, Kubernetes will recreate the PVC with the same name, reattaching it to the existing data in environments that use an **NFS server** or another **shared storage backend**, since the PVC will point to the **same physical folder**.
 
 This behavior works as long as the associated `StorageClass` has its `reclaimPolicy` set to `Retain` (not `Delete`), ensuring that data is not removed externally. It also depends on maintaining a **consistent link between the PVC name and the actual storage path**.  If the underlying storage system assigns **randomized volume identifiers** (such as UIDs for folder paths), the data will still remain on the storage backend after the session ends, but Kubernetes will not automatically reattach it to a new PVC — manual reassociation may then be required.
+
+### Database
+
+Many Datalab workloads require a **stateful database** in addition to files and object storage, for example metadata catalogs or application backends.
+
+Instead of running databases inside sessions, Datalabs attach to a **platform-managed database cluster**.  The platform creates **logical databases inside that cluster** and provisions credentials automatically.
+
+```yaml
+spec:
+  databases:
+    pg0:
+      names:
+      - dev
+      - prod
+      storage: 1Gi
+      backupStorage: 10Gi
+```
+
+- `pg0` - target **database cluster** managed by the platform  
+- `names` - logical databases created inside the cluster  
+- `storage` - persistent storage allocation  
+- `backupStorage` - space reserved for backups  
+
+The platform automatically:
+
+- creates databases and users
+- stores credentials in a Secret
+- injects connection details into sessions
+- performs backups
+- keeps data independent from session lifecycle
+
+This keeps **compute ephemeral** while **database state remains durable**.
+
+If a Kubernetes gateway service is running in the cluster and enabled in the global configuration, the database **can also be exposed externally**. In that case, corresponding environment variables such as the external hostname or external URL are injected into the session as well.
+
+> Note: The Postgres endpoint is exposed through a gateway `TLSRoute,` which requires immediate TLS with SNI (direct TLS). The PostgreSQL server and libpq-based clients (e.g. psql, psycopg) fully support this. However, some non-libpq drivers such as asyncpg do not yet implement this negotiation correctly and may fail during connection setup.
 
 ### Authentication
 
