@@ -238,6 +238,72 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 
 ---
 
+## Example: Using psql to access and work with a managed database
+
+If you have created a database through the Workspace UI and your Datalab provides database credentials (via `DATABASE_xxx` environment variables), you can immediately connect to the managed PostgreSQL instance by starting a pod that drops you directly into a `psql` shell.
+
+```bash
+envsubst <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pgsql-debug
+spec:
+  restartPolicy: Never
+  containers:
+  - name: psql
+    image: postgres:17
+    stdin: true
+    tty: true
+    command:
+      - sh
+      - -lc
+      - |
+        export PGPASSWORD="$DATABASE_PASSWORD"
+        exec psql "host=$DATABASE_HOST_EXTERNAL port=443 dbname=$DATABASE_NAME user=$DATABASE_USER sslmode=require sslnegotiation=direct"
+    env:
+      - name: DATABASE_HOST_EXTERNAL
+        value: ${DATABASE_HOST_EXTERNAL}
+      - name: DATABASE_USER
+        value: ${DATABASE_USER}
+      - name: DATABASE_PASSWORD
+        value: ${DATABASE_PASSWORD}
+      - name: DATABASE_NAME
+        value: ${DATABASE_NAME}
+EOF
+```
+
+Now attach to the pod.
+
+```bash
+kubectl attach -it pgsql-debug
+```
+
+And run your `psql` commands.
+
+```sql
+\set ON_ERROR_STOP on
+\l
+
+DROP TABLE IF EXISTS demo;
+
+CREATE TABLE demo (
+    id serial PRIMARY KEY,
+    name text,
+    created_at timestamptz DEFAULT now(),
+    meta jsonb
+);
+
+INSERT INTO demo (name, meta) VALUES
+('alpha', '{"type":"test","value":1}'),
+('beta',  '{"type":"test","value":2}'),
+('gamma', '{"type":"prod","value":3}');
+
+SELECT * FROM demo;
+```
+
+---
+
 ## Summary
 
 In its current form, `provider-datalab` focuses on deploying **ephemeral or stateless services** on Kubernetes in a seamless and reproducible way. These services are tied to the Datalab session lifecycle, ensuring automatic cleanup and cost efficiency when sessions are terminated.

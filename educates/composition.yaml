@@ -137,6 +137,7 @@ spec:
           import base64 as _base64
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
+          import re
 
           def _to_dict(s):
               if s is None:
@@ -243,8 +244,19 @@ spec:
                   ingress_env = env.get("ingress") or {}
                   ingress_domain = ingress_env.get("domain", "default")
 
-                  if has_gateway_parent:
-                      manifest["stringData"]["DATABASE_HOST_EXTERNAL"] = f"pgo-{xr_name}.{ingress_domain}"
+                  internal_url = manifest["stringData"].get("DATABASE_URL")
+                  if has_gateway_parent and internal_url:
+                      host_ext = f"pg0-{xr_name}.{ingress_domain}:443"
+
+                      external_url = re.sub(r'@[^/]+', f'@{host_ext}', internal_url)
+
+                      if "?" in external_url:
+                          external_url += "&sslmode=require&sslnegotiation=direct"
+                      else:
+                          external_url += "?sslmode=require&sslnegotiation=direct"
+
+                      manifest["stringData"]["DATABASE_HOST_EXTERNAL"] = host_ext.split(":")[0]
+                      manifest["stringData"]["DATABASE_URL_EXTERNAL"] = external_url
 
               key = f"secret-{xr_name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)
@@ -956,19 +968,18 @@ spec:
                       "metadata": {"name": cluster_name, "namespace": workshop_ns},
                       "spec": {
                           "postgresVersion": 17,
+                          "postGISVersion": "3.5",
                           "databaseInitSQL": {"name": cm_name, "key": "init.sql"},
                           "instances": [{
                               "name": "primary",
                               "replicas": 1,
                               "dataVolumeClaimSpec": data_vcs,
                           }],
-                          "backups": {
+                          "backups": { # up to 4 weekly full backup cycles plus daily differentials within those cycles
                               "pgbackrest": {
                                 "global": {
                                     "repo1-retention-full-type": "count",
                                     "repo1-retention-full": "4",
-                                    "repo1-retention-archive-type": "days",
-                                    "repo1-retention-archive": "14",
                                     "repo1-path": f"/pgbackrest/repo1",
                                 },
                                 "repos": [{
