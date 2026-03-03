@@ -39,6 +39,7 @@ metadata:
 rules:
 - apiGroups:
   - "postgres-operator.crunchydata.com"
+  - "mongodbcommunity.mongodb.com"
   - "gateway.networking.k8s.io"
   resources:
   - "*"

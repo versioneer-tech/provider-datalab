@@ -2,6 +2,13 @@
 
 You can unit-test your Crossplane v2 Composition locally with `crossplane render`, feeding it observed and required resources to validate the pipeline without touching a live cluster. The loop below renders actual outputs and compares them to golden files with `dyff`, which is easy to drop into CI to catch regressions early.
 
+### Required practice in this repo
+
+- `crossplane render` requires Docker running locally.
+- Any change to `xrd.yaml` or `educates/composition.yaml` must be covered by at least one updated test scenario (`examples/base/00*-lab.yaml`).
+- For those changes, update the corresponding golden files in `educates/tests/expected/` after validating the rendered diff.
+- Run `pre-commit run --all-files` at the end of each change cycle.
+
 ```sh
 for file in examples/base/00*-lab.yaml; do
   name="$(basename "$file")"

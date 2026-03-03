@@ -17,10 +17,19 @@ spec:
       - prod
       storage: 1Gi
   files: []
+  keyValueStores:
+    dev:
+      storage: 12Gi
+    prod:
+      members: 3
+      storage: 8Gi
   quota:
     budget: x-large
     memory: 6Gi
     storage: 60Gi
+  registry:
+    enabled: true
+    storage: 15Gi
   secretName: s-jeff
   security:
     kubernetesAccess: false
@@ -487,6 +496,9 @@ spec:
               storage: 20Gi
             editor:
               enabled: true
+            registry:
+              enabled: true
+              storage: 15Gi
             slides:
               enabled: false
             terminal:

@@ -8,10 +8,14 @@
 # A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Docker registry is enabled with 15 Gi storage.
 # - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
 # The data component for the object storage mount and browser UI is disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
+# Additionally, two MongoDB-backed key-value/document stores are provisioned:
+# - dev with 12 Gi storage (single-node ReplicaSet)
+# - prod with 8 Gi storage (3-node ReplicaSet)
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -38,6 +42,15 @@ spec:
   security:
     policy: privileged
     kubernetesAccess: false
+  registry:
+    enabled: true
+    storage: 15Gi
+  keyValueStores:
+    dev:
+      storage: 12Gi
+    prod:
+      storage: 8Gi
+      members: 3
   databases:
     pg0:
       names:

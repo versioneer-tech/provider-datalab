@@ -54,7 +54,7 @@ kind: Configuration
 metadata:
   name: datalab-educates
 spec:
-  package: ghcr.io/versioneer-tech/provider-datalab/eductaes<!version!>
+  package: ghcr.io/versioneer-tech/provider-datalab/educates<!version!>
   skipDependencyResolution: true
 ```
 

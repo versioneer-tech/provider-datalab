@@ -17,10 +17,19 @@ spec:
       - prod
       storage: 1Gi
   files: []
+  keyValueStores:
+    dev:
+      storage: 12Gi
+    prod:
+      members: 3
+      storage: 8Gi
   quota:
     budget: x-large
     memory: 6Gi
     storage: 60Gi
+  registry:
+    enabled: true
+    storage: 15Gi
   secretName: s-jeff
   security:
     kubernetesAccess: false
@@ -39,7 +48,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 14 more'
+      db-tlsroute-s-jeff-pg0, and 16 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -497,6 +506,98 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: mongodb-community-s-jeff-dev
+  labels:
+    crossplane.io/composite: s-jeff
+  name: mongodb-community-s-jeff-dev
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: mongodbcommunity.mongodb.com/v1
+      kind: MongoDBCommunity
+      metadata:
+        name: dev
+        namespace: s-jeff
+      spec:
+        members: 1
+        statefulSet:
+          spec:
+            volumeClaimTemplates:
+            - metadata:
+                name: data-volume
+              spec:
+                accessModes:
+                - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 12Gi
+        type: ReplicaSet
+        version: 8.0.12
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: DeriveFromObject
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: mongodb-community-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: mongodb-community-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: mongodbcommunity.mongodb.com/v1
+      kind: MongoDBCommunity
+      metadata:
+        name: prod
+        namespace: s-jeff
+      spec:
+        members: 3
+        statefulSet:
+          spec:
+            volumeClaimTemplates:
+            - metadata:
+                name: data-volume
+              spec:
+                accessModes:
+                - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 8Gi
+        type: ReplicaSet
+        version: 8.0.12
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: DeriveFromObject
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: observe-database-secret-s-jeff
   labels:
     crossplane.io/composite: s-jeff
@@ -636,6 +737,9 @@ spec:
               storage: 20Gi
             editor:
               enabled: true
+            registry:
+              enabled: true
+              storage: 15Gi
             slides:
               enabled: false
             terminal:

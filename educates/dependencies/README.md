@@ -8,6 +8,7 @@ These manifests declare the dependencies required for the **`datalab-educates`**
 - **Educates** installed in the cluster. This Composition targets that runtime and was tested with Educates **3.3.3**. Installation instructions are available at: https://educates.dev  
   A vendored installation profile for convenience will be published here *(coming soon)*.
 - Cluster DNS/ingress/TLS appropriate for your environment.
+- Further preqrisites for optional capabilitie slike relational databases or key-value/document stores can be found in https://provider-datalab.versioneer.at/latest/how-to-guides/installation/
 
 ## Providers and Functions
 

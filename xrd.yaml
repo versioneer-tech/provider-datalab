@@ -97,6 +97,32 @@ spec:
                       - storage
                       - backupStorage
                   default: {}
+                keyValueStores:
+                  type: object
+                  description: >-
+                    Optional key-value/document stores for this datalab, implemented via MongoDB
+                    and managed through the MongoDB Kubernetes operator.
+                  default: {}
+                  additionalProperties:
+                    type: object
+                    properties:
+                      storage:
+                        type: string
+                        description: >-
+                          Storage size for MongoDB persistent data volume as a Kubernetes quantity
+                          (e.g., "5Gi", "20Gi"). Effective default: "10Gi".
+                      version:
+                        type: string
+                        description: >-
+                          MongoDB server version for the MongoDBCommunity resource.
+                          Effective default: "8.0.12".
+                      members:
+                        type: integer
+                        description: >-
+                          Number of MongoDB replica set members. Effective default: 1.
+                        minimum: 1
+                    required:
+                      - storage
                 vcluster:
                   type: boolean
                   description: Whether to provision an isolated vcluster for each datalab session.
@@ -120,6 +146,24 @@ spec:
                         Whether the workspace storage should be mounted read-only in the Data
                         component. Effective default: false.
                       default: false
+                registry:
+                  type: object
+                  description: >-
+                    Optional settings for the in-session Docker registry.
+                    When enabled, a registry service is added to the session applications.
+                  default: {}
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: >-
+                        Whether to provision the Docker registry application for this Datalab.
+                        Effective default: false.
+                      default: false
+                    storage:
+                      type: string
+                      description: >-
+                        Storage size for the Docker registry data volume as a Kubernetes quantity
+                        (e.g., "5Gi", "20Gi"). Effective default: "5Gi".
                 quota:
                   type: object
                   description: >-

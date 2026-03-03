@@ -33,11 +33,14 @@ helm install crossplane \
   --set provider.defaultActivations={}
 ```
 
-- **Educates installed with all CRDs in the cluster** if you plan to use the Educates runtime.  
+- **Educates installed with all CRDs in the cluster**  for the Educates runtime.  
   See the [Educates Installation Guide](https://educates.dev/docs/installation/) for details.  
-- **JupyterHub / Jupyter Operator installed** if you plan to use the Jupyter runtime (upcoming integration).  
+- **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).  
+  Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).  
+- **MongoDB Kubernetes Operator installed** if you plan to use `spec.keyValueStores` (key-value/document store feature).  
+  Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).  
 
-Without the corresponding runtime installed, Datalab claims for that variant will not reconcile.
+Without the corresponding optional database operators installed, `spec.databases` and/or `spec.keyValueStores` cannot reconcile.
 
 > To reduce control-plane load, we use a `ManagedResourceActivationPolicy` (MRAP) per backend so only the needed Managed Resources are active.
 
@@ -199,6 +202,8 @@ kubectl get configurationrevisions.pkg.crossplane.io
 kubectl api-resources --api-group=kubernetes.crossplane.io
 kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
+kubectl api-resources --api-group=postgres-operator.crunchydata.com
+kubectl api-resources --api-group=mongodbcommunity.mongodb.com
 
 kubectl get managedresourcedefinitions | grep -E 'helm|kubernetes|keycloak'
 
