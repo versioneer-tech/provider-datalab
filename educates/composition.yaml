@@ -1,4 +1,4 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: apiextensions.crossplane.io/v1
@@ -34,6 +34,8 @@ spec:
         script: |
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
+          import base64
+          import hashlib
 
           def _to_dict(s):
               return {} if s is None else _json_format.MessageToDict(s, preserving_proto_field_name=True)
@@ -147,6 +149,18 @@ spec:
           def _safe_str(v):
               return str(v).strip()
 
+          def _strong_token(seed):
+              import hashlib
+              import base64
+              d = hashlib.sha256(seed.encode("utf-8")).digest()
+              return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:28]
+
+          def _strong_token_pd(seed):
+              import hashlib
+              import base64
+              d = hashlib.sha256((seed + ":provider-datalab").encode("utf-8")).digest()
+              return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:32]
+
           def _b64get_any(d, keys):
               if not d:
                   return None
@@ -222,6 +236,36 @@ spec:
                       "AWS_S3_FORCE_PATH_STYLE": force_path_style,
                   },
               }
+
+              def _store_key(prefix, store_name, suffix):
+                  clean = re.sub(r"[^A-Za-z0-9]", "_", str(store_name)).upper()
+                  return f"{prefix}_{clean}_{suffix}"
+
+              doc_stores = spec.get("documentStores") or {}
+              if isinstance(doc_stores, dict):
+                  for store_name in sorted(doc_stores.keys()):
+                      if not isinstance(store_name, str) or not store_name.strip():
+                          continue
+                      pwd = _strong_token_pd(f"{xr_name}:{store_name}:mongodb")
+                      manifest["stringData"][_store_key("MONGO", store_name, "PASSWORD")] = pwd
+
+              cache_stores = spec.get("cacheStores") or {}
+              if isinstance(cache_stores, dict):
+                  for store_name in sorted(cache_stores.keys()):
+                      if not isinstance(store_name, str) or not store_name.strip():
+                          continue
+                      pwd = _strong_token(f"{xr_name}:{store_name}:redis")
+                      manifest["stringData"][_store_key("REDIS", store_name, "PASSWORD")] = pwd
+
+              vector_stores = spec.get("vectorStores") or {}
+              if isinstance(vector_stores, dict):
+                  for store_name in sorted(vector_stores.keys()):
+                      if not isinstance(store_name, str) or not store_name.strip():
+                          continue
+                      api_key = _strong_token_pd(f"{xr_name}:{store_name}:qdrant:write")
+                      read_key = _strong_token_pd(f"{xr_name}:{store_name}:qdrant:read")
+                      manifest["stringData"][_store_key("QDRANT", store_name, "API_KEY")] = api_key
+                      manifest["stringData"][_store_key("QDRANT", store_name, "READ_API_KEY")] = read_key
 
               db_obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-database-secret-{xr_name}")
               db_data_b64 = _extract_data(db_obs)
@@ -881,6 +925,13 @@ spec:
           def _safe_str(v):
               return str(v).strip()
 
+          def _strong_token(seed):
+              import hashlib
+              import base64
+              digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
+              token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+              return token[:32]
+
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
@@ -920,13 +971,12 @@ spec:
               env_manifest = _extract_manifest(observed.get(env_key))
 
               educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-              workshop_ns = _safe_str(educates_status.get("namespace") or "")
-              phase = _safe_str(educates_status.get("phase") or "")
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
 
-              if not workshop_ns or phase.lower() not in ("running", "ready"):
+              if not workshop_ns:
                   return
 
-              def emit_obj(key, manifest, readiness_policy="SuccessfulCreate", watch=True):
+              def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
                   body = {
                       "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
                       "kind": "Object",
@@ -938,10 +988,13 @@ spec:
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": manifest},
-                          "readiness": {"policy": readiness_policy},
                           "watch": watch
                       }
                   }
+                  if readiness is not None:
+                      body["spec"]["readiness"] = readiness
+                  if management_policies:
+                      body["spec"]["managementPolicies"] = management_policies
                   rsp.desired.resources[key].resource.update(body)
 
               for host_key in sorted(list(db_hosts.keys())):
@@ -1031,8 +1084,21 @@ spec:
                           [{"name": u} for u in other_users]
                       )
 
-                  emit_obj(f"db-configmap-{xr_name}-{cluster_name}", cm, readiness_policy="SuccessfulCreate", watch=True)
-                  emit_obj(f"db-postgrescluster-{xr_name}-{cluster_name}", pg_cluster, readiness_policy="DeriveFromObject", watch=True)
+                  emit_obj(
+                      f"db-configmap-{xr_name}-{cluster_name}",
+                      cm,
+                      readiness={"policy": "SuccessfulCreate"},
+                      watch=True,
+                  )
+                  emit_obj(
+                      f"db-postgrescluster-{xr_name}-{cluster_name}",
+                      pg_cluster,
+                      readiness={
+                          "policy": "DeriveFromCelQuery",
+                          "celQuery": "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true",
+                      },
+                      watch=True,
+                  )
 
                   if not has_gateway_parent:
                       continue
@@ -1058,7 +1124,15 @@ spec:
                       }
                   }
 
-                  emit_obj(f"db-tlsroute-{xr_name}-{cluster_name}", route, readiness_policy="DeriveFromObject", watch=True)
+                  emit_obj(
+                      f"db-tlsroute-{xr_name}-{cluster_name}",
+                      route,
+                      readiness={
+                          "policy": "DeriveFromCelQuery",
+                          "celQuery": "has(object.status) && has(object.status.parents) && object.status.parents.exists(p, has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True'))",
+                      },
+                      watch=True,
+                  )
 
     - step: update-mongodb-objects
       functionRef:
@@ -1085,10 +1159,12 @@ spec:
           def _safe_str(v):
               return str(v).strip()
 
-          def _boolish(v):
-              if isinstance(v, bool):
-                  return v
-              return str(v).lower() in ("true", "1", "yes", "on")
+          def _strong_token(seed):
+              import hashlib
+              import base64
+              digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
+              token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+              return token[:32]
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
@@ -1098,22 +1174,8 @@ spec:
               xr_name = meta.get("name")
               xr_namespace = meta.get("namespace") or "default"
 
-              kv_stores = spec.get("keyValueStores")
-              if not isinstance(kv_stores, dict):
-                  kv_stores = {}
-
-              # Backward-compatible fallback for earlier singular fields.
-              if not kv_stores:
-                  legacy_cfg = spec.get("keyValueStore")
-                  if legacy_cfg is None:
-                      legacy_cfg = spec.get("mongodb")
-                  legacy_cfg = legacy_cfg or {}
-                  if isinstance(legacy_cfg, dict) and _boolish(legacy_cfg.get("enabled")):
-                      legacy_cfg = dict(legacy_cfg)
-                      legacy_cfg.pop("enabled", None)
-                      kv_stores = {"dev": legacy_cfg}
-
-              if not kv_stores:
+              document_stores = spec.get("documentStores")
+              if not isinstance(document_stores, dict) or not document_stores:
                   return
 
               ctx = _to_dict(req.context)
@@ -1126,31 +1188,94 @@ spec:
               env_manifest = _extract_manifest(observed.get(env_key))
 
               educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-              workshop_ns = _safe_str(educates_status.get("namespace") or "")
-              phase = _safe_str(educates_status.get("phase") or "")
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
 
-              if not workshop_ns or phase.lower() not in ("running", "ready"):
+              if not workshop_ns:
                   return
 
-              for store_key in sorted(list(kv_stores.keys())):
+              # MongoDB operator expects these namespace-local prerequisites.
+              prereqs = [
+                  (
+                      f"mongodb-sa-appdb-{xr_name}",
+                      {
+                          "apiVersion": "v1",
+                          "kind": "ServiceAccount",
+                          "metadata": {"name": "mongodb-kubernetes-appdb", "namespace": workshop_ns},
+                      },
+                  ),
+                  (
+                      f"mongodb-sa-database-pods-{xr_name}",
+                      {
+                          "apiVersion": "v1",
+                          "kind": "ServiceAccount",
+                          "metadata": {"name": "mongodb-kubernetes-database-pods", "namespace": workshop_ns},
+                      },
+                  ),
+                  (
+                      f"mongodb-sa-ops-manager-{xr_name}",
+                      {
+                          "apiVersion": "v1",
+                          "kind": "ServiceAccount",
+                          "metadata": {"name": "mongodb-kubernetes-ops-manager", "namespace": workshop_ns},
+                      },
+                  ),
+                  (
+                      f"mongodb-role-appdb-{xr_name}",
+                      {
+                          "apiVersion": "rbac.authorization.k8s.io/v1",
+                          "kind": "Role",
+                          "metadata": {"name": "mongodb-kubernetes-appdb", "namespace": workshop_ns},
+                          "rules": [
+                              {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]},
+                              {"apiGroups": [""], "resources": ["pods"], "verbs": ["patch", "delete", "get"]},
+                          ],
+                      },
+                  ),
+                  (
+                      f"mongodb-rb-appdb-{xr_name}",
+                      {
+                          "apiVersion": "rbac.authorization.k8s.io/v1",
+                          "kind": "RoleBinding",
+                          "metadata": {"name": "mongodb-kubernetes-appdb", "namespace": workshop_ns},
+                          "roleRef": {
+                              "apiGroup": "rbac.authorization.k8s.io",
+                              "kind": "Role",
+                              "name": "mongodb-kubernetes-appdb",
+                          },
+                          "subjects": [
+                              {"kind": "ServiceAccount", "name": "mongodb-kubernetes-appdb", "namespace": workshop_ns}
+                          ],
+                      },
+                  ),
+              ]
+              for key, manifest in prereqs:
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key},
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": manifest},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True,
+                      },
+                  }
+                  rsp.desired.resources[key].resource.update(body)
+
+              for store_key in sorted(list(document_stores.keys())):
                   if not isinstance(store_key, str) or not store_key.strip():
                       continue
-                  store_cfg = kv_stores.get(store_key) or {}
+                  store_cfg = document_stores.get(store_key) or {}
                   if not isinstance(store_cfg, dict):
                       continue
 
                   mongo_storage = _safe_str(store_cfg.get("storage") or "10Gi")
                   if not mongo_storage:
                       continue
-                  mongo_version = _safe_str(store_cfg.get("version") or "8.0.12")
-                  members = store_cfg.get("members")
-                  try:
-                      members = int(members) if members is not None else 1
-                  except Exception:
-                      members = 1
-                  if members < 1:
-                      members = 1
-
                   pvc_spec = {
                       "accessModes": ["ReadWriteOnce"],
                       "resources": {"requests": {"storage": mongo_storage}},
@@ -1159,14 +1284,58 @@ spec:
                       pvc_spec["storageClassName"] = mongo_storage_class
 
                   store_name = store_key.strip()
+                  mongo_resource_name = f"mongodb-{store_name}"
+                  password_secret_name = f"{store_name}-mongodb-auth"
+                  mongo_password = _strong_token(f"{xr_name}:{store_name}:mongodb")
+                  password_secret = {
+                      "apiVersion": "v1",
+                      "kind": "Secret",
+                      "metadata": {"name": password_secret_name, "namespace": workshop_ns},
+                      "type": "Opaque",
+                      "stringData": {"password": mongo_password},
+                  }
+                  pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
+                  pwd_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": pwd_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": pwd_key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": password_secret},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[pwd_key].resource.update(pwd_body)
+
                   mongo = {
                       "apiVersion": "mongodbcommunity.mongodb.com/v1",
                       "kind": "MongoDBCommunity",
-                      "metadata": {"name": store_name, "namespace": workshop_ns},
+                      "metadata": {"name": mongo_resource_name, "namespace": workshop_ns},
                       "spec": {
-                          "members": members,
+                          "members": 1,
                           "type": "ReplicaSet",
-                          "version": mongo_version,
+                          "version": "8.0.12",
+                          "security": {
+                              "authentication": {
+                                  "modes": ["SCRAM"],
+                                  "ignoreUnknownUsers": True,
+                              }
+                          },
+                          "users": [{
+                              "name": f"{store_name}-app",
+                              "db": "admin",
+                              "passwordSecretRef": {"name": password_secret_name, "key": "password"},
+                              "roles": [
+                                  {"name": "readWrite", "db": store_name},
+                                  {"name": "dbAdmin", "db": store_name},
+                              ],
+                              "scramCredentialsSecretName": f"{store_name}-app-scram",
+                          }],
                           "statefulSet": {
                               "spec": {
                                   "volumeClaimTemplates": [{
@@ -1190,11 +1359,394 @@ spec:
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": mongo},
-                          "readiness": {"policy": "DeriveFromObject"},
+                          "readiness": {
+                              "policy": "DeriveFromCelQuery",
+                              "celQuery": "has(object.status) && object.status.phase == 'Running' && has(object.status.currentMongoDBMembers) && object.status.currentMongoDBMembers >= 1 && has(object.status.currentStatefulSetReplicas) && object.status.currentStatefulSetReplicas >= 1",
+                          },
                           "watch": True
                       }
                   }
                   rsp.desired.resources[key].resource.update(body)
+
+    - step: update-redis-objects
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as jf
+          import base64
+          import hashlib
+
+          def _to_dict(s):
+              return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              atp = (od.get("status") or {}).get("atProvider") or {}
+              m1 = atp.get("manifest") or {}
+              m2 = (atp.get("raw") or {}).get("manifest") or {}
+              return (m1 or m2) or {}
+
+          def _safe_str(v):
+              return str(v).strip()
+
+          def _strong_token(seed):
+              d = hashlib.sha256(seed.encode("utf-8")).digest()
+              return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:28]
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              cache_stores = spec.get("cacheStores")
+              if not isinstance(cache_stores, dict) or not cache_stores:
+                  return
+
+              ctx = _to_dict(req.context)
+              env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+              redis_env = env.get("redis") or {}
+              redis_storage_class = _safe_str(redis_env.get("storageClassName") or "")
+
+              observed = getattr(req.observed, "resources", None) or {}
+              env_key = f"workshopenvironment-{xr_name}"
+              env_manifest = _extract_manifest(observed.get(env_key))
+
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+
+              if not workshop_ns:
+                  return
+
+              for store_key in sorted(list(cache_stores.keys())):
+                  if not isinstance(store_key, str) or not store_key.strip():
+                      continue
+                  store_cfg = cache_stores.get(store_key) or {}
+                  if not isinstance(store_cfg, dict):
+                      continue
+
+                  redis_storage = _safe_str(store_cfg.get("storage") or "1Gi")
+                  if not redis_storage:
+                      continue
+                  store_name = store_key.strip()
+                  redis_password = _strong_token(f"{xr_name}:{store_name}:redis")
+                  redis_auth_secret_name = f"{store_name}-redis-auth"
+                  redis_auth_secret = {
+                      "apiVersion": "v1",
+                      "kind": "Secret",
+                      "metadata": {"name": redis_auth_secret_name, "namespace": workshop_ns},
+                      "type": "Opaque",
+                      "stringData": {"password": redis_password},
+                  }
+                  auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
+                  auth_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": auth_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": auth_key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": redis_auth_secret},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[auth_key].resource.update(auth_body)
+
+                  redis_acl_secret_name = f"{store_name}-redis-acl"
+                  redis_acl_secret = {
+                      "apiVersion": "v1",
+                      "kind": "Secret",
+                      "metadata": {"name": redis_acl_secret_name, "namespace": workshop_ns},
+                      "type": "Opaque",
+                      "stringData": {
+                          "user.acl": f"user default on >{redis_password} ~* +@all\n"
+                      },
+                  }
+                  acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
+                  acl_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": acl_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": acl_key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": redis_acl_secret},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[acl_key].resource.update(acl_body)
+
+                  pvc_spec = {
+                      "accessModes": ["ReadWriteOnce"],
+                      "resources": {"requests": {"storage": redis_storage}},
+                  }
+                  if redis_storage_class:
+                      pvc_spec["storageClassName"] = redis_storage_class
+
+                  storage = {
+                      "volumeClaimTemplate": {
+                          "metadata": {},
+                          "spec": pvc_spec,
+                      },
+                      "volumeMount": {},
+                  }
+                  redis_manifest = {
+                      "apiVersion": "redis.redis.opstreelabs.in/v1beta2",
+                      "kind": "Redis",
+                      "metadata": {"name": store_name, "namespace": workshop_ns},
+                      "spec": {
+                          "initContainer": {
+                              "enabled": True,
+                              "image": "quay.io/opstree/redis:v7.0.15",
+                              "imagePullPolicy": "IfNotPresent",
+                              "command": ["sh", "-c"],
+                              "args": ["mkdir -p /data/appendonlydir && chmod 0777 /data /data/appendonlydir"],
+                              "securityContext": {"runAsUser": 0},
+                          },
+                          "kubernetesConfig": {
+                              "image": "quay.io/opstree/redis:v7.0.15",
+                              "imagePullPolicy": "IfNotPresent",
+                              "redisSecret": {"name": redis_auth_secret_name, "key": "password"},
+                              "updateStrategy": {},
+                          },
+                          "acl": {"secret": {"secretName": redis_acl_secret_name}},
+                          "storage": storage,
+                      },
+                  }
+
+                  key = f"redis-cache-{xr_name}-{store_name}"
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": redis_manifest},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[key].resource.update(body)
+
+                  pod_key = f"redis-pod-{xr_name}-{store_name}"
+                  pod_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": pod_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": pod_key}
+                      },
+                      "spec": {
+                          "managementPolicies": ["Observe"],
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {
+                              "manifest": {
+                                  "apiVersion": "v1",
+                                  "kind": "Pod",
+                                  "metadata": {"name": f"{store_name}-0", "namespace": workshop_ns},
+                              }
+                          },
+                          "readiness": {
+                              "policy": "DeriveFromCelQuery",
+                              "celQuery": "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')",
+                          },
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[pod_key].resource.update(pod_body)
+
+    - step: update-qdrant-objects
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as jf
+
+          def _to_dict(s):
+              return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              atp = (od.get("status") or {}).get("atProvider") or {}
+              m1 = atp.get("manifest") or {}
+              m2 = (atp.get("raw") or {}).get("manifest") or {}
+              return (m1 or m2) or {}
+
+          def _safe_str(v):
+              return str(v).strip()
+
+          def _strong_token(seed):
+              import hashlib
+              import base64
+              digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
+              token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+              return token[:32]
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              vector_stores = spec.get("vectorStores")
+              if not isinstance(vector_stores, dict) or not vector_stores:
+                  return
+
+              ctx = _to_dict(req.context)
+              env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+              qdrant_env = env.get("qdrant") or {}
+              qdrant_storage_class = _safe_str(qdrant_env.get("storageClassName") or "")
+
+              observed = getattr(req.observed, "resources", None) or {}
+              env_key = f"workshopenvironment-{xr_name}"
+              env_manifest = _extract_manifest(observed.get(env_key))
+
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+
+              if not workshop_ns:
+                  return
+
+              for store_key in sorted(list(vector_stores.keys())):
+                  if not isinstance(store_key, str) or not store_key.strip():
+                      continue
+                  store_cfg = vector_stores.get(store_key) or {}
+                  if not isinstance(store_cfg, dict):
+                      continue
+
+                  qdrant_storage = _safe_str(store_cfg.get("storage") or "1Gi")
+                  if not qdrant_storage:
+                      continue
+                  store_name = store_key.strip()
+                  qdrant_auth_secret_name = f"{store_name}-qdrant-auth"
+                  qdrant_auth_secret = {
+                      "apiVersion": "v1",
+                      "kind": "Secret",
+                      "metadata": {"name": qdrant_auth_secret_name, "namespace": workshop_ns},
+                      "type": "Opaque",
+                      "stringData": {
+                          "apiKey": _strong_token(f"{xr_name}:{store_name}:qdrant:write"),
+                          "readApiKey": _strong_token(f"{xr_name}:{store_name}:qdrant:read"),
+                      },
+                  }
+                  auth_key = f"qdrant-auth-secret-{xr_name}-{store_name}"
+                  auth_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": auth_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": auth_key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": qdrant_auth_secret},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[auth_key].resource.update(auth_body)
+
+                  persistence = {"size": qdrant_storage}
+                  if qdrant_storage_class:
+                      persistence["storageClassName"] = qdrant_storage_class
+
+                  qdrant = {
+                      "apiVersion": "qdrant.io/v1alpha1",
+                      "kind": "QdrantCluster",
+                      "metadata": {"name": store_name, "namespace": workshop_ns},
+                      "spec": {
+                          "antiAffinity": True,
+                          "apiKey": {
+                              "enabled": True,
+                              "secret": {"name": qdrant_auth_secret_name, "key": "apiKey"},
+                          },
+                          "readApiKey": {
+                              "enabled": True,
+                              "secret": {"name": qdrant_auth_secret_name, "key": "readApiKey"},
+                          },
+                          "image": {
+                              "repository": "qdrant/qdrant",
+                              "tag": "v1.13.4",
+                              "pullPolicy": "IfNotPresent",
+                          },
+                          "persistence": persistence,
+                      }
+                  }
+
+                  key = f"qdrant-vector-{xr_name}-{store_name}"
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key}
+                      },
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {"manifest": qdrant},
+                          "readiness": {"policy": "SuccessfulCreate"},
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[key].resource.update(body)
+
+                  pod_key = f"qdrant-pod-{xr_name}-{store_name}"
+                  pod_body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": pod_key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": pod_key}
+                      },
+                      "spec": {
+                          "managementPolicies": ["Observe"],
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "forProvider": {
+                              "manifest": {
+                                  "apiVersion": "v1",
+                                  "kind": "Pod",
+                                  "metadata": {"name": f"qdrant-{store_name}-0", "namespace": workshop_ns},
+                              }
+                          },
+                          "readiness": {
+                              "policy": "DeriveFromCelQuery",
+                              "celQuery": "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')",
+                          },
+                          "watch": True
+                      }
+                  }
+                  rsp.desired.resources[pod_key].resource.update(pod_body)
 
     - step: detect-educates-status
       functionRef:

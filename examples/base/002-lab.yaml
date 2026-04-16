@@ -1,21 +1,28 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with one default shared session
-# automatically created. That session will run permanently until stopped by the operator.
+# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with no pre-created session.
+# This is the canonical shared store-validation example: the lab stays sessionless by default.
 # The lab does not use a vcluster and has no workshop files.
-# Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
+# Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
-# - Docker registry is enabled with 15 Gi storage.
-# - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
+# - Docker registry is disabled for this shared example.
+# - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
 # The data component for the object storage mount and browser UI is disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
-# Additionally, two MongoDB-backed key-value/document stores are provisioned:
-# - dev with 12 Gi storage (single-node ReplicaSet)
-# - prod with 8 Gi storage (3-node ReplicaSet)
+# Additionally, one MongoDB-backed key-value/document store is provisioned:
+# - prod with 1 Gi storage
+# Additionally, one Redis-backed cache store is provisioned:
+# - prod with 1 Gi storage
+# Additionally, one Qdrant-backed vector store is provisioned:
+# - prod with 1 Gi storage
+# Access credentials are generated as secrets in the runtime namespace:
+# - MongoDB: <store>-mongodb-auth
+# - Redis: <store>-redis-auth
+# - Qdrant: <store>-qdrant-auth
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -36,25 +43,26 @@ spec:
     enabled: false
   quota:
     memory: 6Gi
-    storage: 60Gi
+    storage: 1Gi
     budget: x-large
   files: []
   security:
-    policy: privileged
     kubernetesAccess: false
   registry:
-    enabled: true
-    storage: 15Gi
-  keyValueStores:
-    dev:
-      storage: 12Gi
+    enabled: false
+  documentStores:
     prod:
-      storage: 8Gi
-      members: 3
+      storage: 1Gi
+  cacheStores:
+    prod:
+      storage: 1Gi
+  vectorStores:
+    prod:
+      storage: 1Gi
   databases:
     pg0:
       names:
       - dev
       - prod
       storage: 1Gi
-      backupStorage: 10Gi
+      backupStorage: 3Gi

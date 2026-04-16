@@ -1,4 +1,4 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 ---
@@ -11,17 +11,21 @@ spec:
     readOnlyMount: true
   databases:
     pg0:
-      backupStorage: 15Gi
+      backupStorage: 3Gi
       names:
       - analytics
-      storage: 2Gi
+      storage: 1Gi
   quota:
     budget: x-large
     memory: 4Gi
-    storage: 10Gi
+    storage: 40Gi
+  registry:
+    enabled: true
+    storage: 3Gi
   secretName: s-jane
   security:
     kubernetesRole: admin
+    policy: privileged
   sessions:
   - default
   users:
@@ -30,12 +34,166 @@ spec:
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-jane, keycloak-group-admin-s-jane-admin,
-      keycloak-group-s-jane, and 12 more'
+    message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
+      db-tlsroute-s-jane-pg0, and 15 more'
     reason: Creating
     status: "False"
     type: Ready
   sessions: {}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: db-configmap-s-jane-pg0
+  labels:
+    crossplane.io/composite: s-jane
+  name: db-configmap-s-jane-pg0
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        init.sql: |
+          \set ON_ERROR_STOP on
+          \connect postgres
+      kind: ConfigMap
+      metadata:
+        name: pg0-init-sql
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: db-postgrescluster-s-jane-pg0
+  labels:
+    crossplane.io/composite: s-jane
+  name: db-postgrescluster-s-jane-pg0
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: postgres-operator.crunchydata.com/v1beta1
+      kind: PostgresCluster
+      metadata:
+        name: pg0
+        namespace: s-jane
+      spec:
+        backups:
+          pgbackrest:
+            global:
+              repo1-path: /pgbackrest/repo1
+              repo1-retention-full: "4"
+              repo1-retention-full-type: count
+            repos:
+            - name: repo1
+              schedules:
+                differential: 0 1 * * 1-6
+                full: 0 1 * * 0
+              volume:
+                volumeClaimSpec:
+                  accessModes:
+                  - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: 3Gi
+        databaseInitSQL:
+          key: init.sql
+          name: pg0-init-sql
+        instances:
+        - dataVolumeClaimSpec:
+            accessModes:
+            - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+          name: primary
+          replicas: 1
+        postGISVersion: "3.5"
+        postgresVersion: 17
+        users:
+        - databases:
+          - analytics
+          name: postgres
+        - name: jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.instances) && object.status.instances.exists(i,
+      i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest)
+      && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready
+      == true
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: db-tlsroute-s-jane-pg0
+  labels:
+    crossplane.io/composite: s-jane
+  name: db-tlsroute-s-jane-pg0
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1alpha2
+      kind: TLSRoute
+      metadata:
+        name: pg0
+        namespace: s-jane
+      spec:
+        hostnames:
+        - pg0-s-jane.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: projectcontour
+          sectionName: postgres-passthrough
+        rules:
+        - backendRefs:
+          - name: pg0-primary
+            port: 5432
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
+      has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
+      == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status ==
+      'True'))
+    policy: DeriveFromCelQuery
+  watch: true
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
@@ -578,8 +736,14 @@ spec:
           applications:
             console:
               enabled: false
+            docker:
+              enabled: true
+              storage: 20Gi
             editor:
               enabled: true
+            registry:
+              enabled: true
+              storage: 3Gi
             slides:
               enabled: false
             terminal:
@@ -608,7 +772,7 @@ spec:
             budget: x-large
             role: admin
             security:
-              policy: baseline
+              policy: privileged
               token:
                 enabled: true
           objects:
@@ -621,7 +785,7 @@ spec:
               namespace: $(session_namespace)-vc
           resources:
             memory: 4Gi
-            storage: 10Gi
+            storage: 40Gi
         title: Default DataLab
         version: "1.0"
         workshop:

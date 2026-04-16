@@ -1,10 +1,10 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 # Joe gets a personal datalab s-joe with no pre-created session.
 # He must explicitly start a session himself; nothing is running by default.
 # No vcluster is provisioned and no workshop files are attached.
-# Credentials to storage are expected to exist in a secret "joe" in the same namespace.
+# Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab

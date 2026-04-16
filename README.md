@@ -4,7 +4,9 @@ This package provides the **Datalab** Composite Resource Definition (XRD) and re
 
 ## The Goal
 
-Make life easier for you as an operator by offering ready-to-use **runtime environments** for your end users. All you need is a Kubernetes cluster with **ingress**, **file storage** (e.g. NFS), an **IAM system** (currently only Keycloak is supported), and - for the actual data - **object storage credentials** — whether from an in-cluster service like `MinIO` or an external provider like `AWS S3` or `OTC OBS`. You can provide that directly per team or use the accompanying [provider-storage](https://github.com/versioneer-tech/provider-storage), where object storage access can be automatically provisioned and injected in a way that integrates seamlessly with the `Datalab` environment.
+Make life easier for you as an operator by offering ready-to-use **runtime environments** for your end users. All you need is a Kubernetes cluster with **ingress**, **file storage** (e.g. NFS), an **IAM system** (currently only Keycloak is supported), and - for the actual data - **object storage credentials** — whether from an in-cluster service like `MinIO` or an external provider like `AWS S3` or `OTC OBS`. You can provide that directly per team or use the accompanying [provider-storage](https://github.com/versioneer-tech/provider-storage), where object storage access can be automatically provisioned and injected in a way that integrates seamlessly with the `Datalab` environment. Beyond object storage and runtime sessions, the provider can also provision platform-managed relational databases and optional non-relational backends such as MongoDB document stores, Redis cache stores, and Qdrant vector stores from the same `Datalab` claim.
+
+This lets one manifest describe both the interactive lab and the data services it depends on, while still keeping those backends durable and operator-managed outside the user session lifecycle.
 
 With just a few settings in the global environment configuration, you can deploy a `Datalab` manifest directly to your cluster through the Kubernetes API — for example, using `kubectl`. Alternatively, use higher-level tooling such as the [Workspaces](https://github.com/EOEPCA/workspace) Building Block, which provides a thin API and UI layer on top. Within minutes, your users can launch their own `Datalab` as a working environment. If required, PostgreSQL databases can also be automatically provisioned and optionally exposed externally (since version 0.3.0).
 
@@ -112,6 +114,7 @@ When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 See these [`example manifests`](examples/base) for complete scenarios, including:
 - Datalabs without sessions (no runtime started by default).
 - Datalabs with sessions and optional vcluster isolation.
+- Registry-enabled and registry-disabled runtime examples.
 - Datalabs with workshop files fetched from Git, OCI images, or HTTP archives.
 
 ## Storage Credentials

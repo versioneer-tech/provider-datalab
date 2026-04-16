@@ -1,0 +1,88 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-ready registry probe for `examples/base/003-lab.yaml` in namespace `s-jane`.
+# `s-jane-datalab` is present in the namespace, but the live registry host and auth
+# are session-backed and come from `s-jane-default-session`, so this probe consumes both.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: registry-check
+spec:
+  restartPolicy: Always
+  containers:
+  - name: registry-check
+    image: docker:27-cli
+    env:
+    - name: PROBE_INTERVAL_SECONDS
+      value: "60"
+    - name: REGISTRY_ENABLED
+      value: "true"
+    - name: REGISTRY_URL
+      valueFrom:
+        secretKeyRef:
+          name: s-jane-default-session
+          key: ingress_protocol
+    - name: REGISTRY_HOST
+      valueFrom:
+        secretKeyRef:
+          name: s-jane-default-session
+          key: registry_host
+    - name: REGISTRY_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: s-jane-default-session
+          key: registry_username
+    - name: REGISTRY_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: s-jane-default-session
+          key: registry_password
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: s-jane-datalab
+          key: AWS_ACCESS_KEY_ID
+          optional: true
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+      interval="${PROBE_INTERVAL_SECONDS:-60}"
+      now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+      log() { echo "$(now) [registry] $*"; }
+      REGISTRY_URL="${REGISTRY_URL}://${REGISTRY_HOST}"
+      while true; do
+        if [ "${REGISTRY_ENABLED}" != "true" ]; then
+          log "SKIP no live session-backed registry endpoint configured"
+          sleep "${interval}"
+          continue
+        fi
+        export DOCKER_CONFIG="/tmp/docker-config"
+        mkdir -p "${DOCKER_CONFIG}"
+        log "request: printf '<redacted>' | docker login ${REGISTRY_HOST} -u ${REGISTRY_USERNAME} --password-stdin"
+        if login_out="$(printf '%s' "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin 2>&1)"; then
+          login_rc=0
+        else
+          login_rc=$?
+        fi
+        log "response: docker login exit=${login_rc} output=${login_out:-<empty>}"
+        config_file="${DOCKER_CONFIG}/config.json"
+        if [ -f "${config_file}" ]; then
+          config_out="$(cat "${config_file}")"
+          log "response: docker config=${config_out}"
+          config_ok=0
+        else
+          log "response: docker config missing"
+          config_ok=1
+        fi
+        if [ "${login_rc}" -eq 0 ] && [ "${config_ok}" -eq 0 ]; then
+          log "PASS docker login succeeded and config.json was written"
+        else
+          log "FAIL registry check failed login_exit=${login_rc} config_status=${config_ok}"
+        fi
+        rm -rf "${DOCKER_CONFIG}"
+        sleep "${interval}"
+      done

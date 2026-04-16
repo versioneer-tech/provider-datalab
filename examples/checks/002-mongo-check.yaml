@@ -1,0 +1,56 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-ready Mongo probe for `examples/base/002-lab.yaml` in namespace `s-jeff`.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mongo-check
+spec:
+  restartPolicy: Always
+  containers:
+  - name: mongo-check
+    image: mongo:8
+    env:
+    - name: PROBE_INTERVAL_SECONDS
+      value: "60"
+    - name: MONGO_DATABASE
+      value: prod
+    - name: MONGO_COLLECTION
+      value: probe_checks
+    - name: MONGO_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: MONGO_PROD_PASSWORD
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+      interval="${PROBE_INTERVAL_SECONDS:-60}"
+      now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+      log() { echo "$(now) [mongo] $*"; }
+      MONGO_URI="mongodb://prod-app:${MONGO_PASSWORD}@mongodb-prod-svc.s-jeff.svc:27017/admin?authSource=admin"
+      while true; do
+        key="probe_mongo"
+        value="$(date +%s)"
+        script="const dbh = db.getSiblingDB('${MONGO_DATABASE}'); dbh.getCollection('${MONGO_COLLECTION}').updateOne({_id: '${key}'}, {\$set: {value: '${value}'}}, {upsert: true}); const doc = dbh.getCollection('${MONGO_COLLECTION}').findOne({_id: '${key}'}); if (!doc) { print('READ_NOT_FOUND'); quit(2); } print(doc.value);"
+        log "request: mongosh <redacted-uri> --quiet --eval ${script}"
+        if out="$(mongosh "${MONGO_URI}" --quiet --eval "${script}" 2>&1)"; then
+          log "response: ${out}"
+        else
+          rc=$?
+          log "response: request failed exit=${rc} output=${out:-<empty>}"
+          sleep "${interval}"
+          continue
+        fi
+        read_trimmed="$(printf '%s' "${out}" | tail -n 1 | tr -d '[:space:]')"
+        if [ "${read_trimmed}" = "${value}" ]; then
+          log "PASS write-read verified key=${key}"
+        else
+          log "FAIL read-back mismatch expected=${value} actual=${read_trimmed}"
+        fi
+        sleep "${interval}"
+      done

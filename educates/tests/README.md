@@ -8,6 +8,7 @@ You can unit-test your Crossplane v2 Composition locally with `crossplane render
 - Any change to `xrd.yaml` or `educates/composition.yaml` must be covered by at least one updated test scenario (`examples/base/00*-lab.yaml`).
 - For those changes, update the corresponding golden files in `educates/tests/expected/` after validating the rendered diff.
 - Run `pre-commit run --all-files` at the end of each change cycle.
+- The live integration probe manifests live under `examples/checks/`: `probe-env-template.yaml` remains templated, while the backend probe Pods are plain manifests applied with `kubectl -n <runtime-namespace>`.
 
 ```sh
 for file in examples/base/00*-lab.yaml; do

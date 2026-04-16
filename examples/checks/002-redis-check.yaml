@@ -1,0 +1,62 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-ready Redis probe for `examples/base/002-lab.yaml` in namespace `s-jeff`.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis-check
+spec:
+  restartPolicy: Always
+  containers:
+  - name: redis-check
+    image: redis:7
+    env:
+    - name: PROBE_INTERVAL_SECONDS
+      value: "60"
+    - name: REDIS_HOST
+      value: prod
+    - name: REDIS_PORT
+      value: "6379"
+    - name: REDIS_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: REDIS_PROD_PASSWORD
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+      interval="${PROBE_INTERVAL_SECONDS:-60}"
+      now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+      log() { echo "$(now) [redis] $*"; }
+      while true; do
+        key="probe:redis"
+        value="$(date +%s)"
+        log "request: REDISCLI_AUTH=<redacted> redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} SET ${key} ${value}"
+        if set_out="$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" SET "${key}" "${value}" 2>&1)"; then
+          log "response: ${set_out}"
+        else
+          rc=$?
+          log "response: write failed exit=${rc} output=${set_out:-<empty>}"
+          sleep "${interval}"
+          continue
+        fi
+        log "request: REDISCLI_AUTH=<redacted> redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} --raw GET ${key}"
+        if get_out="$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw GET "${key}" 2>&1)"; then
+          log "response: ${get_out}"
+        else
+          rc=$?
+          log "response: read failed exit=${rc} output=${get_out:-<empty>}"
+          sleep "${interval}"
+          continue
+        fi
+        if [ "${get_out}" = "${value}" ]; then
+          log "PASS write-read verified key=${key}"
+        else
+          log "FAIL read-back mismatch expected=${value} actual=${get_out}"
+        fi
+        sleep "${interval}"
+      done

@@ -1,0 +1,91 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-ready Postgres probe for `examples/base/002-lab.yaml` in namespace `s-jeff`.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres-check
+spec:
+  restartPolicy: Always
+  containers:
+  - name: postgres-check
+    image: postgres:17
+    env:
+    - name: PROBE_INTERVAL_SECONDS
+      value: "60"
+    - name: DATABASE_HOST
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: DATABASE_HOST
+    - name: DATABASE_PORT
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: DATABASE_PORT
+    - name: DATABASE_NAME
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: DATABASE_NAME
+    - name: DATABASE_USER
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: DATABASE_USER
+    - name: DATABASE_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: DATABASE_PASSWORD
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+      interval="${PROBE_INTERVAL_SECONDS:-60}"
+      now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+      log() { echo "$(now) [postgres] $*"; }
+      export PGPASSWORD="${DATABASE_PASSWORD}"
+      export PGSSLMODE="${PGSSLMODE:-require}"
+      init_sql="create table if not exists probe_checks (id text primary key, value text not null);"
+      log "request: host=${DATABASE_HOST} port=${DATABASE_PORT} db=${DATABASE_NAME} user=${DATABASE_USER} sql=${init_sql}"
+      if init_out="$(psql -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}" -d "${DATABASE_NAME}" -v ON_ERROR_STOP=1 -tAc "${init_sql}" 2>&1)"; then
+        log "response: init output=${init_out:-<empty>}"
+      else
+        rc=$?
+        log "response: init failed exit=${rc} output=${init_out:-<empty>}"
+      fi
+      while true; do
+        key="probe_postgres"
+        value="$(date +%s)"
+        write_sql="insert into probe_checks (id, value) values ('${key}', '${value}') on conflict (id) do update set value = excluded.value;"
+        read_sql="select value from probe_checks where id = '${key}';"
+        log "request: host=${DATABASE_HOST} port=${DATABASE_PORT} db=${DATABASE_NAME} user=${DATABASE_USER} sql=${write_sql}"
+        if write_out="$(psql -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}" -d "${DATABASE_NAME}" -v ON_ERROR_STOP=1 -tAc "${write_sql}" 2>&1)"; then
+          log "response: write output=${write_out:-<empty>}"
+        else
+          rc=$?
+          log "response: write failed exit=${rc} output=${write_out:-<empty>}"
+          sleep "${interval}"
+          continue
+        fi
+        log "request: host=${DATABASE_HOST} port=${DATABASE_PORT} db=${DATABASE_NAME} user=${DATABASE_USER} sql=${read_sql}"
+        if read_out="$(psql -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}" -d "${DATABASE_NAME}" -v ON_ERROR_STOP=1 -tAc "${read_sql}" 2>&1)"; then
+          log "response: read output=${read_out}"
+        else
+          rc=$?
+          log "response: read failed exit=${rc} output=${read_out:-<empty>}"
+          sleep "${interval}"
+          continue
+        fi
+        read_trimmed="$(printf '%s' "${read_out}" | tr -d '[:space:]')"
+        if [ "${read_trimmed}" = "${value}" ]; then
+          log "PASS write-read verified key=${key}"
+        else
+          log "FAIL read-back mismatch expected=${value} actual=${read_trimmed}"
+        fi
+        sleep "${interval}"
+      done

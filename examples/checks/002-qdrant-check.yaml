@@ -1,0 +1,75 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-ready Qdrant probe for `examples/base/002-lab.yaml` in namespace `s-jeff`.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qdrant-check
+spec:
+  restartPolicy: Always
+  containers:
+  - name: qdrant-check
+    image: curlimages/curl:8.12.1
+    env:
+    - name: PROBE_INTERVAL_SECONDS
+      value: "60"
+    - name: QDRANT_URL
+      value: http://qdrant-prod:6333
+    - name: QDRANT_COLLECTION
+      value: probe_checks
+    - name: QDRANT_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: QDRANT_PROD_API_KEY
+    - name: QDRANT_READ_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: QDRANT_PROD_READ_API_KEY
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+      interval="${PROBE_INTERVAL_SECONDS:-60}"
+      now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+      log() { echo "$(now) [qdrant] $*"; }
+      request() {
+        key="$1"
+        method="$2"
+        path="$3"
+        body="${4:-}"
+        body_file="/tmp/body.$$"
+        log "request: method=${method} url=${QDRANT_URL}${path} body=${body:-<empty>}"
+        if [ -n "${body}" ]; then
+          status="$(curl -sS -o "${body_file}" -w "%{http_code}" -X "${method}" -H "api-key: ${key}" -H "Content-Type: application/json" --data "${body}" "${QDRANT_URL}${path}")" || rc=$?
+        else
+          status="$(curl -sS -o "${body_file}" -w "%{http_code}" -X "${method}" -H "api-key: ${key}" "${QDRANT_URL}${path}")" || rc=$?
+        fi
+        rc="${rc:-0}"
+        response="$(cat "${body_file}")"
+        rm -f "${body_file}"
+        log "response: method=${method} path=${path} status=${status} body=${response}"
+        [ "${rc}" -eq 0 ] || return "${rc}"
+        case "${status}" in
+          200|201|409) return 0 ;;
+          *) return 1 ;;
+        esac
+      }
+      while true; do
+        point_id="1"
+        payload_value="$(date +%s)"
+        coll="${QDRANT_COLLECTION}"
+        if request "${QDRANT_READ_API_KEY}" GET "/collections" \
+          && request "${QDRANT_API_KEY}" PUT "/collections/${coll}" "{\"vectors\":{\"size\":1,\"distance\":\"Dot\"}}" \
+          && request "${QDRANT_API_KEY}" PUT "/collections/${coll}/points?wait=true" "{\"points\":[{\"id\":${point_id},\"vector\":[0.1],\"payload\":{\"value\":\"${payload_value}\"}}]}" \
+          && request "${QDRANT_READ_API_KEY}" POST "/collections/${coll}/points" "{\"ids\":[${point_id}],\"with_payload\":true,\"with_vector\":false}"; then
+          log "PASS write-read requests completed for collection=${coll}"
+        else
+          log "FAIL qdrant request chain failed"
+        fi
+        sleep "${interval}"
+      done

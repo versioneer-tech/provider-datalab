@@ -1,11 +1,11 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 # John has a datalab s-john with a default session automatically created.
 # That session will run permanently until stopped by the operator.
 # No vcluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
-# Credentials to storage are expected in a secret "john" in the same namespace.
+# Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab

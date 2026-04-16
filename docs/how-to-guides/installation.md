@@ -37,10 +37,15 @@ helm install crossplane \
   See the [Educates Installation Guide](https://educates.dev/docs/installation/) for details.  
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).  
   Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).  
-- **MongoDB Kubernetes Operator installed** if you plan to use `spec.keyValueStores` (key-value/document store feature).  
+- **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).  
   Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).  
+  The operator installation must provide its own controller RBAC; `provider-datalab` only creates namespace-local Mongo prerequisites such as service accounts, a Role, and an appdb RoleBinding inside the tenant namespace.
+- **Redis Kubernetes Operator installed** if you plan to use `spec.cacheStores` (cache store feature).  
+  Suggested tested line: Redis Operator `v0.21.x` (or your cluster-validated equivalent).  
+- **Qdrant Kubernetes Operator installed** if you plan to use `spec.vectorStores` (vector store feature).  
+  Suggested tested line: Qdrant Operator `v1.15.x` (or your cluster-validated equivalent).  
 
-Without the corresponding optional database operators installed, `spec.databases` and/or `spec.keyValueStores` cannot reconcile.
+Without the corresponding optional database operators installed, `spec.databases`, `spec.documentStores`, `spec.cacheStores`, and/or `spec.vectorStores` cannot reconcile.
 
 > To reduce control-plane load, we use a `ManagedResourceActivationPolicy` (MRAP) per backend so only the needed Managed Resources are active.
 
@@ -55,6 +60,8 @@ All runtimes follow the same staged pattern you **must** install **before** the 
 4. **ProviderConfigs** (namespaced) – configure providers in your target namespace.  
 5. **Functions** – install supporting Crossplane Functions.  
 6. **RBAC** – permissions for `provider-kubernetes` to observe and reconcile objects.
+
+The `provider-kubernetes` RBAC must also allow Pod observation in tenant namespaces. This is required for the Redis and Qdrant readiness observers used by the Datalab composition.
 
 Repository root: <https://github.com/versioneer-tech/provider-datalab/>
 
@@ -72,6 +79,20 @@ Provider dependencies activate Helm, Kubernetes, and Keycloak resources as neede
 - [03-providerConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/03-providerConfigs.yaml) – **Apply in your target namespace** (e.g., `workspace`); sets up storage and identity configs.  
 - [functions.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/functions.yaml) – Functions used by compositions.  
 - [rbac.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/rbac.yaml) – RBAC for `provider-kubernetes`.
+
+Recommended Crossplane dependency set for `datalab-educates`:
+- Providers:
+  - `provider-kubernetes` (`xpkg.upbound.io/crossplane-contrib/provider-kubernetes`)
+  - `provider-helm` (`xpkg.upbound.io/crossplane-contrib/provider-helm`)
+  - `provider-keycloak` (`ghcr.io/crossplane-contrib/provider-keycloak`)
+- Functions:
+  - `crossplane-contrib-function-python`
+  - `crossplane-contrib-function-environment-configs`
+  - `crossplane-contrib-function-auto-ready`
+
+Pin exact provider and function versions or digests in your GitOps source and upgrade them intentionally after validation.
+
+Identity for Datalabs is managed via Keycloak. The target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, groups, group memberships, roles, and protocol mappers in that realm.
 
 When installed, a Datalab will provision a vcluster (if enabled) and launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus preinstalled tools like `awscli` and `rclone`).
 
@@ -137,6 +158,10 @@ data:
 The `serviceCIDR` defines the internal Service network range expected by the vCluster’s API server. In the Datalab setup, the host cluster’s DNS and networking are reused, and no separate CoreDNS is deployed inside the vCluster. Using the host’s `serviceCIDR` therefore reduces startup time and control-plane overhead, since CoreDNS doesn’t need to start separately within each vCluster.
 
 To find the correct value, use the same `serviceCIDR` as your host cluster — it’s typically visible in your cluster configuration or can be inferred by checking CoreDNS’s Service IP via `kubectl get svc kube-dns -n kube-system`.
+
+Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
+
+Manage provider credentials and storage secrets through your normal secret-management path, such as External Secrets or Sealed Secrets, rather than committing live credentials into Git.
 
 ---
 
@@ -204,6 +229,8 @@ kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
 kubectl api-resources --api-group=postgres-operator.crunchydata.com
 kubectl api-resources --api-group=mongodbcommunity.mongodb.com
+kubectl api-resources --api-group=redis.redis.opstreelabs.in
+kubectl api-resources --api-group=qdrant.io
 
 kubectl get managedresourcedefinitions | grep -E 'helm|kubernetes|keycloak'
 

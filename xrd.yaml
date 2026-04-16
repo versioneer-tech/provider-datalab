@@ -1,4 +1,4 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: apiextensions.crossplane.io/v2
@@ -97,10 +97,10 @@ spec:
                       - storage
                       - backupStorage
                   default: {}
-                keyValueStores:
+                documentStores:
                   type: object
                   description: >-
-                    Optional key-value/document stores for this datalab, implemented via MongoDB
+                    Optional document stores for this datalab, implemented via MongoDB
                     and managed through the MongoDB Kubernetes operator.
                   default: {}
                   additionalProperties:
@@ -111,16 +111,38 @@ spec:
                         description: >-
                           Storage size for MongoDB persistent data volume as a Kubernetes quantity
                           (e.g., "5Gi", "20Gi"). Effective default: "10Gi".
-                      version:
+                    required:
+                      - storage
+                cacheStores:
+                  type: object
+                  description: >-
+                    Optional cache stores for this datalab, implemented via Redis
+                    and managed through the Redis Kubernetes operator.
+                  default: {}
+                  additionalProperties:
+                    type: object
+                    properties:
+                      storage:
                         type: string
                         description: >-
-                          MongoDB server version for the MongoDBCommunity resource.
-                          Effective default: "8.0.12".
-                      members:
-                        type: integer
+                          Storage size for Redis persistent data volume as a Kubernetes quantity
+                          (e.g., "1Gi", "10Gi"). Effective default: "1Gi".
+                    required:
+                      - storage
+                vectorStores:
+                  type: object
+                  description: >-
+                    Optional vector stores for this datalab, implemented via Qdrant
+                    and managed through the Qdrant Kubernetes operator.
+                  default: {}
+                  additionalProperties:
+                    type: object
+                    properties:
+                      storage:
+                        type: string
                         description: >-
-                          Number of MongoDB replica set members. Effective default: 1.
-                        minimum: 1
+                          Storage size for Qdrant persistent data volume as a Kubernetes quantity
+                          (e.g., "1Gi", "10Gi"). Effective default: "1Gi".
                     required:
                       - storage
                 vcluster:

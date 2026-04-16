@@ -10,7 +10,7 @@ This section explains how to **use** the `provider-datalab` configuration packag
 A `Datalab` claim may declare one or more `spec.sessions`.  
 
 - If at least one session is listed, a corresponding **WorkshopSession** is automatically created and will run permanently until stopped by the operator.  
-- If no sessions are given, no runtime will be started; users must explicitly launch a session themselves (`auto` mode).  
+- If no sessions are given, no session object is pre-created. The shared runtime namespace and non-session resources can still be reconciled and tested without a `WorkshopSession`.  
 
 Sessions can also be patched into the spec later if needed.
 
@@ -36,7 +36,7 @@ spec:
       - dev
       - prod
       storage: 1Gi
-      backupStorage: 10Gi
+      backupStorage: 3Gi
 ```
 
 - `pg0` - target **database cluster** managed by the platform  
@@ -57,6 +57,31 @@ This keeps **compute ephemeral** while **database state remains durable**.
 If a Kubernetes gateway service is running in the cluster and enabled in the global configuration, the database **can also be exposed externally**. In that case, corresponding environment variables such as the external hostname or external URL are injected into the session as well.
 
 > Note: The Postgres endpoint is exposed through a gateway `TLSRoute,` which requires immediate TLS with SNI (direct TLS). The PostgreSQL server and libpq-based clients (e.g. psql, psycopg) fully support this. However, some non-libpq drivers such as asyncpg do not yet implement this negotiation correctly and may fail during connection setup.
+
+### Document, Cache, and Vector Stores
+
+For non-relational workloads, a Datalab can also provision optional document, cache, and vector stores:
+
+```yaml
+spec:
+  documentStores:
+    prod:
+      storage: 1Gi
+  cacheStores:
+    prod:
+      storage: 1Gi
+  vectorStores:
+    prod:
+      storage: 1Gi
+```
+
+- `documentStores` provisions `MongoDBCommunity` resources (`mongodbcommunity.mongodb.com/v1`).
+- `cacheStores` provisions Redis resources (`redis.redis.opstreelabs.in/v1beta2`).
+- `vectorStores` provisions `QdrantCluster` resources (`qdrant.io/v1alpha1`).
+- Access credentials are created as namespaced Secrets with predictable names:
+  - Mongo: `<store>-mongodb-auth` (key: `password`)
+  - Redis: `<store>-redis-auth` (key: `password`)
+  - Qdrant: `<store>-qdrant-auth` (keys: `apiKey`, `readApiKey`)
 
 ### Authentication
 
@@ -137,7 +162,7 @@ This ensures that authentication and authorization are consistently enforced acr
 # Joe gets a personal datalab s-joe with no pre-created session.
 # He must explicitly start a session himself; nothing is running by default.
 # No vcluster is provisioned and no workshop files are attached.
-# Credentials to storage are expected to exist in a secret "joe" in the same namespace.
+# Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
@@ -155,20 +180,31 @@ spec:
 
 ---
 
-## Example: Jeff and Jim (shared session, privileged with Docker)
+## Example: Jeff, Jim, and Jane (shared store validation, privileged with Docker)
 
 ```yaml
-# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with one default shared session
-# automatically created. That session will run permanently until stopped by the operator.
+# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with no pre-created session.
+# This is the canonical shared store-validation example: the lab stays sessionless by default.
 # The lab does not use a vcluster and has no workshop files.
-# Credentials to storage are expected to exist in a secret "jeff" in the same namespace.
+# Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration runs the lab in privileged mode:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
-# - Session quota: increased to 6 Gi memory, 60 Gi storage, budget class "x-large".
+# - Docker registry is disabled for this shared example.
+# - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
 # The data component for the object storage mount and browser UI is disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
+# Additionally, one MongoDB-backed document store is provisioned:
+# - prod with 1 Gi storage
+# Additionally, one Redis-backed cache store is provisioned:
+# - prod with 1 Gi storage
+# Additionally, one Qdrant-backed vector store is provisioned:
+# - prod with 1 Gi storage
+# Access credentials are generated as secrets in the runtime namespace:
+# - MongoDB: <store>-mongodb-auth
+# - Redis: <store>-redis-auth
+# - Qdrant: <store>-qdrant-auth
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
@@ -189,24 +225,36 @@ spec:
     enabled: false
   quota:
     memory: 6Gi
-    storage: 60Gi
+    storage: 1Gi
     budget: x-large
   files: []
   security:
     policy: privileged
     kubernetesAccess: false
+  registry:
+    enabled: false
+    storage: 3Gi
+  documentStores:
+    prod:
+      storage: 1Gi
+  cacheStores:
+    prod:
+      storage: 1Gi
+  vectorStores:
+    prod:
+      storage: 1Gi
   databases:
     pg0:
       names:
       - dev
       - prod
       storage: 1Gi
-      backupStorage: 10Gi
+      backupStorage: 3Gi
 ```
 
-- A long-running session is started immediately, shared by both users.  
+- No `WorkshopSession` is pre-created for this shared example. The runtime namespace and backing services can be validated without a session pod.  
 - Runs in **privileged mode** with **Docker support** and increased ephemeral disk (20 Gi).  
-- **No Kubernetes API access** is granted inside the environment.  
+- **No Kubernetes API access** is granted inside the environment. The shared example leaves the registry disabled.  
 - Access is secured through the corresponding Keycloak group and role.
 
 ---
@@ -218,10 +266,12 @@ spec:
 # That session will run permanently until stopped by the operator,
 # and a dedicated vcluster is provisioned for runtime isolation.
 # No workshop files are attached. Credentials to storage are expected
-# to exist in a secret "jane" in the same namespace.
+# to exist in a secret "s-jane" in the same namespace.
 # A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
 # This configuration explicitly overrides default resource quotas and security settings:
-# - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
+# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Docker registry is enabled with 3 Gi storage.
+# - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
 # The data component for the object storage mount and browser UI is configured as readonly.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
@@ -240,21 +290,26 @@ spec:
     readOnlyMount: true
   quota:
     memory: 4Gi
-    storage: 10Gi
+    storage: 40Gi
     budget: x-large
+  registry:
+    enabled: true
+    storage: 3Gi
   security:
+    policy: privileged
     kubernetesRole: admin
   databases:
     pg0:
       names:
       - analytics
-      storage: 2Gi
-      backupStorage: 15Gi
+      storage: 1Gi
+      backupStorage: 3Gi
 ```
 
 - Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).  
+- The lab also runs in **privileged** mode, which enables Docker with 20 Gi of session-local workspace storage.  
 - The **admin role** grants full control within her namespace/vcluster.  
-- Increased quota provides additional compute and storage capacity.  
+- This is the registry-enabled example, so session-backed registry behavior can be validated here.  
 - Suitable for advanced development or testing requiring full Kubernetes control.  
 - Keycloak enforces role-based access protection for this lab.  
 
@@ -267,7 +322,7 @@ spec:
 # That session will run permanently until stopped by the operator.
 # No vcluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
-# Credentials to storage are expected in a secret "john" in the same namespace.
+# Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
 kind: Datalab

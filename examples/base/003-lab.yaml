@@ -1,14 +1,16 @@
-# Copyright 2025, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
 # Jane runs a datalab s-jane with a default session automatically created.
 # That session will run permanently until stopped by the operator,
 # and a dedicated vcluster is provisioned for runtime isolation.
 # No workshop files are attached. Credentials to storage are expected
-# to exist in a secret "jane" in the same namespace.
+# to exist in a secret "s-jane" in the same namespace.
 # A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
 # This configuration explicitly overrides default resource quotas and security settings:
-# - Session quota: increased to 4 Gi memory, 10 Gi storage, budget class "x-large".
+# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# - Docker registry is enabled with 3 Gi storage.
+# - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
 # The data component for the object storage mount and browser UI is configured as readonly.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
@@ -27,13 +29,17 @@ spec:
     readOnlyMount: true
   quota:
     memory: 4Gi
-    storage: 10Gi
+    storage: 40Gi
     budget: x-large
+  registry:
+    enabled: true
+    storage: 3Gi
   security:
+    policy: privileged
     kubernetesRole: admin
   databases:
     pg0:
       names:
       - analytics
-      storage: 2Gi
-      backupStorage: 15Gi
+      storage: 1Gi
+      backupStorage: 3Gi
