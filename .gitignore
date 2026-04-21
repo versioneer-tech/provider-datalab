@@ -5,6 +5,7 @@
 *.swp
 *.swo
 *~
+site/
 
 # Environment files
 .env*

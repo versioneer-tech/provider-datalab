@@ -1,6 +1,6 @@
 # Provider Datalab – Usage & Concepts
 
-This section explains how to **use** the `provider-datalab` configuration packages once they are installed. It focuses on the **concepts** of Sessions, Files, vclusters, Storage Secrets, Databases and the required **Keycloak integration** for identity and access.
+This section explains how to **use** the `provider-datalab` configuration packages once they are installed. It focuses on the **concepts** of Sessions, Files, vclusters, Storage Secrets, Databases and the optional **Keycloak integration** for identity and access.
 
 ---
 
@@ -85,11 +85,52 @@ spec:
 
 ### Authentication
 
-Access to a `Datalab` session is restricted, with the environment configuration determining the authentication strategy. By default, the same credentials used to access the connected object storage buckets are also applied for session login. Authentication can be globally disabled by setting `auth.type = none`, for example, in air-gapped environments or when access is already secured at the ingress level through other mechanisms.  
+Provider Datalab is a building block for workspace provisioning. It can wire authentication into the runtime, but the stronger and more flexible pattern is often to delegate user authentication to the surrounding platform, especially at the ingress layer.
 
-Each `Datalab` automatically provisions a dedicated Keycloak **OAuth2 client**, which can be used to protect the session using standard **OIDC** flows.  
-Full integration and automated configuration of this setup are planned for future releases.
+Multiple options are possible:
 
+- Enable built-in runtime authentication. By default, `auth.type = credentials` uses the same credentials that are used to access the connected object storage buckets for session login. This is a simple basic-auth style option, but it ties workspace users to the credentials known by the Datalab runtime.
+- Set `auth.type = none` and let another platform component protect access before requests reach the workspace. This does not mean that unauthenticated access is required; it means authentication is delegated to another layer, such as the Kubernetes ingress controller.
+
+Delegating authentication is often more flexible because users accessing a workspace do not necessarily have to exist in Keycloak. For example, a workspace ingress can be protected by `oauth2-proxy` with NGINX ingress annotations:
+
+```yaml
+nginx.ingress.kubernetes.io/auth-url: "https://auth.acme.org/oauth2/auth"
+nginx.ingress.kubernetes.io/auth-signin: "https://auth.acme.org/oauth2/start?rd=$escaped_request_uri"
+```
+
+Those annotations can be added by platform policy instead of being specified in every Datalab. One option is a Kyverno mutation policy:
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: annotate-datalab-ingresses
+spec:
+  background: false
+  rules:
+  - name: add-oauth2-proxy-annotations-for-datalab-domain
+    match:
+      any:
+      - resources:
+          kinds:
+          - Ingress
+    preconditions:
+      all:
+      - key: "{{ request.object.spec.rules[?ends_with(host, '.datalab.acme.org')] | length(@) }}"
+        operator: GreaterThan
+        value: 0
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          annotations:
+            nginx.ingress.kubernetes.io/auth-url: "https://auth.acme.org/oauth2/auth"
+            nginx.ingress.kubernetes.io/auth-signin: "https://auth.acme.org/oauth2/start?rd=$escaped_request_uri"
+```
+
+Kyverno is only one way to apply this policy. The same result can be achieved with a mutating admission webhook, a GitOps post-render step, an ingress-controller-specific policy mechanism, or any other platform automation that consistently annotates the generated Ingress resources.
+
+Keycloak-managed access is supported. When it is used, the composition automatically provisions the Keycloak client, groups, roles, role bindings, and memberships needed for the workspace.
 
 ### Files and the Workshop Tab
 The `spec.files` array is optional.  
@@ -145,14 +186,15 @@ When unspecified, defaults from the EnvironmentConfig apply.
 | xxx-large | 8000m | 16Gi   |
 
 ### Identity and Keycloak Resources
-Users listed under `spec.users` must already exist in Keycloak.  
-When a Datalab is created, the composition also provisions the required **Keycloak resources**:
+When Keycloak-managed access is used, users listed under `spec.users` must already exist in Keycloak.  
+When a Datalab is created for that pattern, the composition automatically provisions the required **Keycloak resources**:
 
-- A **Group** for the datalab  
+- **Groups** for the datalab and datalab administrators  
 - **Group memberships** for the listed users  
-- A **Client** and **Role** to protect access to the datalab and installed tooling  
+- A dedicated **OAuth2 client**  
+- User and admin **roles**, plus the role bindings for the generated groups  
 
-This ensures that authentication and authorization are consistently enforced across the runtime and UI.
+This ensures that authentication and authorization are consistently enforced across the runtime and UI. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm.
 
 ---
 
@@ -412,7 +454,8 @@ Database credentials are managed by the PostgreSQL operator and stored as Kubern
 - A `Datalab` defines users, sessions, optional vcluster, quotas, and security policies.  
 - Security controls combine **Pod Security Standards**, **Kubernetes roles**, and **Docker privilege** toggles.  
 - Each Datalab requires a storage credential Secret.  
-- Users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, and a role.  
+- For Keycloak-managed access, users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, roles, and role bindings.  
+- For delegated access, `auth.type = none` leaves authentication to the ingress layer or another platform component.  
 - Sessions may be long-lived (auto-created) or on-demand (user started).  
 - Workshop files enable the Educates UI workshop tab.  
-- Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation.  
+- Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation where applicable.  

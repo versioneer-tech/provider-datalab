@@ -15,14 +15,14 @@ For **end users**, this means:
 For **operators**, this means:
 
 - A consistent, declarative model for managing heterogeneous runtime stacks.  
-- Automated provisioning of vclusters, identity integration via Keycloak, and storage connections.  
+- Automated provisioning of vclusters, optional identity integration via Keycloak, and storage connections.  
 - Extensibility to plug in additional runtimes or policies without changing the user-facing API.  
 
 At its core, Provider Datalab provides:
 
 - A **Datalab Composite Resource Definition (XRD)**  
 - **Compositions** powered by **Crossplane v2** to provision environments with storage, sessions, vclusters, and identity wiring  
-- Seamless integration of authentication and access control  
+- Authentication and access-control integration, either built into the runtime or delegated to the platform ingress layer  
 
 With Provider Datalab, workspaces become **declarative, multi-tenant, and self-service**, while operators retain full control over identity, security, and resource governance.
 
@@ -35,8 +35,8 @@ With Provider Datalab, workspaces become **declarative, multi-tenant, and self-s
   Define and provision full-featured data labs based on Educates or Jupyter as a single resource.  
 - **Multi-tenant support**  
   Each Datalab can run isolated inside a Kubernetes namespace or in a dedicated virtual cluster (vcluster).  
-- **Integrated identity**  
-  Seamless authentication and authorization via Keycloak.  
+- **Integrated or delegated identity**  
+  Use Keycloak-managed workspace access where appropriate, or keep runtime auth disabled and delegate authentication to the platform ingress layer.  
 - **Declarative storage**  
   Provision and attach buckets with access policies.  
 - **Extensible by design**  
@@ -79,7 +79,7 @@ spec:
 
 This provisions a vcluster within a dedicated Kubernetes namespace and starts the Educates tooling stack (including VS Code Server and a terminal), together with bundled utilities. A storage browser is available with storage automatically mounted, and additional tools such as `awscli` and `rclone` are preinstalled to support typical data lab tasks like coding, data exploration, and wrangling.  
 
-Access to the datalab is restricted to Alice, since she currently is the only user associated with this lab.  
+Access to the datalab is intended for Alice, since she currently is the only user associated with this lab. Depending on the platform configuration, access can be enforced by Keycloak-managed resources or by delegated ingress authentication.  
 
 Combined with a small, cluster-specific `EnvironmentConfig` (realm, ingress domain/class, storage secret), the platform handles the rest—provisioning the chosen runtime, mounting credentials, and preloading content.  
 
