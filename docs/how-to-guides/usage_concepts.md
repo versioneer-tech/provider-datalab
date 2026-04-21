@@ -128,7 +128,7 @@ spec:
             nginx.ingress.kubernetes.io/auth-signin: "https://auth.acme.org/oauth2/start?rd=$escaped_request_uri"
 ```
 
-Kyverno is only one way to apply this policy. The same result can be achieved with a mutating admission webhook, a GitOps post-render step, an ingress-controller-specific policy mechanism, or any other platform automation that consistently annotates the generated Ingress resources.
+Kyverno is only one way to apply this policy. The same result can be achieved with a mutating admission webhook or any other platform automation that consistently annotates the generated Ingress resources.
 
 Keycloak-managed access is supported. When it is used, the composition automatically provisions the Keycloak client, groups, roles, role bindings, and memberships needed for the workspace.
 

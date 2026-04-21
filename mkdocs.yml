@@ -27,6 +27,7 @@ theme:
     - content.code.copy
     - search.suggest
     - toc.follow
+    - toc.permalink
   logo: imgs/logo.png
   favicon: imgs/favicon.ico
   palette:
