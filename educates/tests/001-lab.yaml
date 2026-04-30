@@ -5,6 +5,8 @@
 apiVersion: pkg.internal/v1beta1
 kind: Datalab
 metadata:
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
   name: s-joe
 spec:
   secretName: s-joe

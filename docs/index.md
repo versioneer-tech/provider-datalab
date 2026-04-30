@@ -4,13 +4,13 @@ The **Provider Datalab** package turns Kubernetes into a platform for collaborat
 
 It also works seamlessly with [Provider Storage](https://provider-storage.versioneer.at/), enabling S3-compatible storage provisioning and integration directly into Datalabs.
 
-Instead of hand-crafting Jupyter or Educates deployments, every workspace is declared through a single Kubernetes Custom Resource: the `Datalab` claim. This claim captures who should have access, whether a virtual cluster is needed, what sessions should run, and what files or datasets should be preloaded — while Crossplane and the compositions take care of provisioning all the moving parts.
+Instead of hand-crafting runtime deployments, every workspace is declared through a single Kubernetes Custom Resource: the `Datalab` claim. This claim captures who should have access, whether a virtual cluster is needed, what sessions should run, and what files or datasets should be preloaded — while Crossplane and the compositions take care of provisioning all the moving parts.
 
 For **end users**, this means:
 
 - Launch personal or shared analysis environments with one manifest.  
 - Get preconfigured access to storage, credentials, and workshop material.  
-- Work inside familiar tools like **VS Code Server, JupyterLab, or terminals**, bundled with utilities such as `awscli` and `rclone`.  
+- Work inside familiar tools like **VS Code Server and terminals**, bundled with utilities such as `awscli` and `rclone`.
 
 For **operators**, this means:
 
@@ -32,7 +32,7 @@ With Provider Datalab, workspaces become **declarative, multi-tenant, and self-s
 ## Features
 
 - **Workspace abstraction**  
-  Define and provision full-featured data labs based on Educates or Jupyter as a single resource.  
+  Define and provision full-featured data labs based on Educates as a single resource.
 - **Multi-tenant support**  
   Each Datalab can run isolated inside a Kubernetes namespace or in a dedicated virtual cluster (vcluster).  
 - **Integrated or delegated identity**  
@@ -81,12 +81,12 @@ This provisions a vcluster within a dedicated Kubernetes namespace and starts th
 
 Access to the datalab is intended for Alice, since she currently is the only user associated with this lab. Depending on the platform configuration, access can be enforced by Keycloak-managed resources or by delegated ingress authentication.  
 
-Combined with a small, cluster-specific `EnvironmentConfig` (realm, ingress domain/class, storage secret), the platform handles the rest—provisioning the chosen runtime, mounting credentials, and preloading content.  
+Combined with a small, cluster-specific `EnvironmentConfig` (realm, ingress domain/class, storage secret), the platform handles the rest—provisioning the chosen runtime, mounting credentials, and preloading content.
 
 
 !!! note
 
-    All configuration packages built from `provider-datalab` (educates, jupyter,...) share the same Composite Resource Definition!
+    The `datalab-educates` configuration package uses the shared `Datalab` Composite Resource Definition.
 
 ### More Examples
 Check the [examples folder](https://github.com/versioneer-tech/provider-datalab/tree/main/examples/base) in the GitHub repository for complete scenarios, including:

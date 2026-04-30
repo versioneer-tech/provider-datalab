@@ -44,7 +44,7 @@ spec:
 
 ## Environment Configuration
 
-Cluster-specific settings are supplied via an `EnvironmentConfig`. The Datalab composition consumes this in its `prepare-environment` step.
+Cluster-specific settings are supplied via an `EnvironmentConfig`.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1

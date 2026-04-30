@@ -1,6 +1,6 @@
 # Provider Datalab – Installation Guide
 
-The `provider-datalab` configuration packages let you provision **collaborative data labs** on Kubernetes, using either **Educates** or **Jupyter** runtimes.  
+The `provider-datalab` configuration package lets you provision **collaborative data labs** on Kubernetes with the **Educates** runtime.
 Labs, sessions, storage, and identity are declared via a single, namespaced `Datalab` spec.
 
 ---
@@ -87,7 +87,6 @@ Recommended Crossplane dependency set for `datalab-educates`:
   - `provider-keycloak` (`ghcr.io/crossplane-contrib/provider-keycloak`)
 - Functions:
   - `crossplane-contrib-function-python`
-  - `crossplane-contrib-function-environment-configs`
   - `crossplane-contrib-function-auto-ready`
 
 Pin exact provider and function versions or digests in your GitOps source and upgrade them intentionally after validation.
@@ -97,14 +96,6 @@ Keycloak-managed access is supported: the composition automatically provisions t
 When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, groups, group memberships, roles, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component.
 
 When installed, a Datalab will provision a vcluster (if enabled) and launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus preinstalled tools like `awscli` and `rclone`).
-
----
-
-### Jupyter Runtime (upcoming)
-
-Upcoming integration!
-
----
 
 ## Step 2 – Install the Configuration Package (after dependencies)
 
@@ -160,6 +151,8 @@ data:
   network:
     serviceCIDR: "10.43.0.0/16"
 ```
+
+The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
 
 The `serviceCIDR` defines the internal Service network range expected by the vCluster’s API server. In the Datalab setup, the host cluster’s DNS and networking are reused, and no separate CoreDNS is deployed inside the vCluster. Using the host’s `serviceCIDR` therefore reduces startup time and control-plane overhead, since CoreDNS doesn’t need to start separately within each vCluster.
 

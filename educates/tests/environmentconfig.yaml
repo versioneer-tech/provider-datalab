@@ -48,3 +48,51 @@ data:
       sectionName: postgres-passthrough
     storageClassName: ""
     backupStorageClassName: ""
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-custom
+data:
+  iam:
+    realm: acme
+  ingress:
+    class: nginx
+    domain: lab.acme.com
+    secret: wildcard-tls
+  storage:
+    endpoint: https://s3.acme
+    force_path_style: "true"
+    provider: Other
+    region: acme
+    secretNamespace: datalab
+    type: s3
+  network:
+    serviceCIDR: "10.43.0.0/16"
+  packages:
+    - name: awscli
+      files:
+        - image:
+            url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
+    - name: rclone
+      files:
+        - image:
+            url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
+  auth:
+    type: credentials
+  defaults:
+    quota:
+      memory: 2Gi
+      storage: 1Gi
+      budget: medium
+    security:
+      policy: baseline
+      kubernetesAccess: true
+      kubernetesRole: edit
+  database:
+    gateway:
+      parentName: default
+      parentNamespace: projectcontour
+      sectionName: postgres-passthrough
+    storageClassName: ""
+    backupStorageClassName: ""
