@@ -188,6 +188,29 @@ spec:
                       description: >-
                         Storage size for the Docker registry data volume as a Kubernetes quantity
                         (e.g., "5Gi", "20Gi"). Effective default: "5Gi".
+                persistence:
+                  type: object
+                  description: >-
+                    Optional settings for the Datalab session workspace PVC. By default, Educates
+                    creates an ephemeral session-owned PVC that is deleted with the WorkshopSession.
+                    Set ephemeral=false to use a Datalab-owned PVC that survives session deletion
+                    and is mounted as the session home workspace.
+                  default: {}
+                  properties:
+                    ephemeral:
+                      type: boolean
+                      description: >-
+                        Whether the workspace PVC should be scoped to the Educates WorkshopSession.
+                        When false, Provider Datalab creates a stable PVC per declared session.
+                        Effective default: true.
+                      default: true
+                    storageClassName:
+                      type: string
+                      description: >-
+                        Optional StorageClass for the stable workspace PVC when ephemeral=false.
+                        If EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested
+                        class is used only when it is listed there; otherwise the first allowed class
+                        is used. If the allowlist is empty or omitted, any requested class is allowed.
                 quota:
                   type: object
                   description: >-

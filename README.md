@@ -63,8 +63,6 @@ data:
   iam:
     realm: acme
   auth:
-    # Use "credentials" to reuse storage credentials, or "none" when
-    # the ingress/platform layer handles authentication.
     type: none
   ingress:
     class: nginx
@@ -77,6 +75,10 @@ data:
     region: acme
     secretNamespace: datalab
     type: s3
+  storageClasses:
+    allowed:
+    - sbs-default
+    - sbs-default-retain
   network: # optional
     serviceCIDR: "10.43.0.0/16"
   defaults: # optional
@@ -120,6 +122,25 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 (`memory=2Gi`, `storage=1Gi`, `budget=medium`,
 `policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`).
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
+
+Session workspace PVCs are ephemeral by default and follow Educates' normal
+`WorkshopSession` lifecycle. To keep `/home/eduk8s` across session deletion,
+opt into a Datalab-owned PVC:
+
+```yaml
+spec:
+  quota:
+    storage: 20Gi
+  persistence:
+    ephemeral: false
+    storageClassName: sbs-default
+```
+
+When `EnvironmentConfig.data.storageClasses.allowed` is non-empty, the requested
+StorageClass is used only if it appears in that list; otherwise Provider Datalab
+uses the first allowed class. If the list is omitted or empty, any requested
+StorageClass is allowed and an omitted `storageClassName` lets Kubernetes use
+the cluster default.
 
 ### Optional managed services
 

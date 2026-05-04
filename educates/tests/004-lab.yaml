@@ -16,6 +16,9 @@ spec:
     - /data/**
     - /README.md
     path: .
+  persistence:
+    ephemeral: false
+    storageClassName: sbs-default-retain
   secretName: s-john
   sessions:
   - default
@@ -26,7 +29,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-john, keycloak-group-admin-s-john-admin,
-      keycloak-group-s-john, and 11 more'
+      keycloak-group-s-john, and 12 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -363,6 +366,44 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-default-persistent
+  labels:
+    crossplane.io/composite: s-john
+  name: persistentvolumeclaim-s-john-default-persistent
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-john
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: s-john-default-persistent
+        namespace: s-john
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: sbs-default-retain
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: workshop-s-john
   labels:
     crossplane.io/composite: s-john
@@ -578,7 +619,8 @@ spec:
           objects: []
           resources:
             memory: 2Gi
-            storage: 1Gi
+            volume:
+              name: $(session_name)-persistent
         title: Default DataLab
         version: "1.0"
         workshop:

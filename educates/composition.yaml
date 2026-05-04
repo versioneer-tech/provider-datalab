@@ -542,6 +542,9 @@ spec:
                   return v
               return str(v).lower() in ("true", "1", "yes", "on")
 
+          def _safe_str(v):
+              return str(v).strip()
+
           def _b64get_any(d, keys):
               if not d:
                   return None
@@ -566,6 +569,13 @@ spec:
               m1 = st.get("manifest") or {}
               m2 = (st.get("raw") or {}).get("manifest") or {}
               return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {}) or {}
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
@@ -621,8 +631,21 @@ spec:
               registry_enabled = _boolish(registry_enabled)
               registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
+              persistence_cfg = spec.get("persistence") or {}
+              persistence_ephemeral = persistence_cfg.get("ephemeral")
+              if persistence_ephemeral is None:
+                  persistence_ephemeral = True
+              persistence_ephemeral = _boolish(persistence_ephemeral)
+              requested_storage_class = _safe_str(persistence_cfg.get("storageClassName") or "")
+
               ingress_env = env.get("ingress") or {}
               storage_env = env.get("storage") or {}
+              storage_classes_env = env.get("storageClasses") or {}
+              allowed_storage_classes = [
+                  _safe_str(sc)
+                  for sc in (storage_classes_env.get("allowed") or [])
+                  if _safe_str(sc)
+              ]
               packages = env.get("packages") or []
               auth_env = env.get("auth") or {}
 
@@ -633,6 +656,15 @@ spec:
               auth_type = (auth_env.get("type") or "credentials").strip().lower()
 
               storage_secret_name = f"{xr_name}-datalab"
+              persistent_storage_class = ""
+              if allowed_storage_classes:
+                  persistent_storage_class = (
+                      requested_storage_class
+                      if requested_storage_class in allowed_storage_classes
+                      else allowed_storage_classes[0]
+                  )
+              else:
+                  persistent_storage_class = requested_storage_class
 
               obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{xr_name}")
               data_b64 = _extract_data(obs)
@@ -738,6 +770,12 @@ spec:
                       }
                   }
               }
+
+              if sessions and not persistence_ephemeral:
+                  workshop["spec"]["session"]["resources"].pop("storage", None)
+                  workshop["spec"]["session"]["resources"]["volume"] = {
+                      "name": "$(session_name)-persistent"
+                  }
 
               if data_enabled:
                   workshop["spec"]["session"]["dashboards"].append(
@@ -905,6 +943,26 @@ spec:
 
               emit("Workshop", workshop)
               emit("WorkshopEnvironment", environment)
+
+              observed_resources = getattr(req.observed, "resources", {}) or {}
+              env_manifest = _extract_manifest(observed_resources.get(f"workshopenvironment-{xr_name}"))
+              workshop_ns = _safe_str(((env_manifest.get("status") or {}).get("educates") or {}).get("namespace") or xr_name)
+
+              if workshop_ns and not persistence_ephemeral:
+                  for sid in sessions:
+                      persistent_pvc_name = f"{xr_name}-{sid}-persistent"
+                      persistent_pvc_spec = {
+                          "accessModes": ["ReadWriteOnce"],
+                          "resources": {"requests": {"storage": storage}}
+                      }
+                      if persistent_storage_class:
+                          persistent_pvc_spec["storageClassName"] = persistent_storage_class
+                      emit("PersistentVolumeClaim", {
+                          "apiVersion": "v1",
+                          "kind": "PersistentVolumeClaim",
+                          "metadata": {"name": persistent_pvc_name, "namespace": workshop_ns},
+                          "spec": persistent_pvc_spec
+                      }, key_suffix=f"{sid}-persistent")
 
               for sid in sessions:
                   session_manifest = {

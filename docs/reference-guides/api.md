@@ -138,6 +138,15 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#datalabspecpersistence">persistence</a></b></td>
+        <td>object</td>
+        <td>
+          Optional settings for the Datalab session workspace PVC. By default, Educates creates an ephemeral session-owned PVC that is deleted with the WorkshopSession. Set ephemeral=false to use a Datalab-owned PVC that survives session deletion and is mounted as the session home workspace.<br/>
+          <br/>
+            <i>Default</i>: map[]<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#datalabspecquota">quota</a></b></td>
         <td>object</td>
         <td>
@@ -896,6 +905,42 @@ Optional semantic-version tag selection policy.
         <td>[]string</td>
         <td>
           <br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.spec.persistence
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+Optional settings for the Datalab session workspace PVC. By default, Educates creates an ephemeral session-owned PVC that is deleted with the WorkshopSession. Set ephemeral=false to use a Datalab-owned PVC that survives session deletion and is mounted as the session home workspace.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>ephemeral</b></td>
+        <td>boolean</td>
+        <td>
+          Whether the workspace PVC should be scoped to the Educates WorkshopSession. When false, Provider Datalab creates a stable PVC per declared session. Effective default: true.<br/>
+          <br/>
+            <i>Default</i>: true<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>storageClassName</b></td>
+        <td>string</td>
+        <td>
+          Optional StorageClass for the stable workspace PVC when ephemeral=false. If EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested class is used only when it is listed there; otherwise the first allowed class is used. If the allowlist is empty or omitted, any requested class is allowed.<br/>
         </td>
         <td>false</td>
       </tr></tbody>

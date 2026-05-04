@@ -5,6 +5,8 @@
 # That session will run permanently until stopped by the operator.
 # No vcluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
+# The session workspace uses a durable Datalab-owned PVC that survives
+# WorkshopSession deletion and is remounted when the session is recreated.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta1
@@ -18,6 +20,9 @@ spec:
   sessions:
   - default
   vcluster: false
+  persistence:
+    ephemeral: false
+    storageClassName: sbs-default-retain
   files:
   - git:
       url: https://github.com/versioneer-tech/datalab-example

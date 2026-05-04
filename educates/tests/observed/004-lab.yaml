@@ -1,0 +1,22 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: workshopenvironment-s-john
+  namespace: datalab
+  annotations:
+    crossplane.io/composition-resource-name: workshopenvironment-s-john
+status:
+  atProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopEnvironment
+      metadata:
+        name: s-john
+        namespace: datalab
+      status:
+        educates:
+          namespace: s-john
+          phase: Running

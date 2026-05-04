@@ -62,7 +62,7 @@ All runtimes follow the same staged pattern you **must** install **before** the 
 5. **Functions** – install supporting Crossplane Functions.
 6. **RBAC** – permissions for `provider-kubernetes` to observe and reconcile objects.
 
-The `provider-kubernetes` RBAC must also allow Pod observation in tenant namespaces. This is required for the Redis and Qdrant readiness observers used by the Datalab composition.
+The `provider-kubernetes` RBAC must also allow Pod and PVC access in tenant namespaces. Pod access is required for the Redis and Qdrant readiness observers; PVC access is required when Datalab creates durable Educates session volumes.
 
 Repository root: <https://github.com/versioneer-tech/provider-datalab/>
 
@@ -149,11 +149,17 @@ data:
     force_path_style: "true"
     secretNamespace: datalab
     type: s3
+  storageClasses:
+    allowed:
+    - sbs-default
+    - sbs-default-retain
   network:
     serviceCIDR: "10.43.0.0/16"
 ```
 
 The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
+
+`storageClasses.allowed` is an optional allowlist for durable session PVCs. If it is set, Provider Datalab uses a requested StorageClass only when it is listed there; otherwise it falls back to the first entry. If the list is omitted or empty, any requested StorageClass is allowed.
 
 The `serviceCIDR` defines the internal Service network range expected by the vCluster’s API server. In the Datalab setup, the host cluster’s DNS and networking are reused, and no separate CoreDNS is deployed inside the vCluster. Using the host’s `serviceCIDR` therefore reduces startup time and control-plane overhead, since CoreDNS doesn’t need to start separately within each vCluster.
 

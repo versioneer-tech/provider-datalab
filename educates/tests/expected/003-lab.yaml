@@ -15,6 +15,8 @@ spec:
       names:
       - analytics
       storage: 1Gi
+  persistence:
+    ephemeral: false
   quota:
     budget: x-large
     memory: 4Gi
@@ -35,7 +37,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
-      db-tlsroute-s-jane-pg0, and 15 more'
+      db-tlsroute-s-jane-pg0, and 16 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -557,6 +559,44 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: persistentvolumeclaim-s-jane-default-persistent
+  labels:
+    crossplane.io/composite: s-jane
+  name: persistentvolumeclaim-s-jane-default-persistent
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: s-jane-default-persistent
+        namespace: s-jane
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 40Gi
+        storageClassName: sbs-default
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: workshop-s-jane
   labels:
     crossplane.io/composite: s-jane
@@ -785,7 +825,8 @@ spec:
               namespace: $(session_namespace)-vc
           resources:
             memory: 4Gi
-            storage: 40Gi
+            volume:
+              name: $(session_name)-persistent
         title: Default DataLab
         version: "1.0"
         workshop:
