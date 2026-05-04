@@ -157,7 +157,7 @@ Desired configuration of the datalab.
         <td><b>secretName</b></td>
         <td>string</td>
         <td>
-          Name of the Secret containing the credentials to access the storage associated with this Datalab. The Secret must exist in the same namespace as the Datalab.<br/>
+          Name of the Secret containing the credentials to access the storage associated with this Datalab. If omitted, the Datalab name is used. The Secret is read from the namespace configured in EnvironmentConfig.data.storage.secretNamespace, which is usually the same namespace as the Datalab.<br/>
         </td>
         <td>false</td>
       </tr><tr>

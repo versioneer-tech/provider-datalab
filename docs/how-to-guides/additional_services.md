@@ -1,13 +1,15 @@
 # Additional Services
 
-This section explains how end users can **extend** the default `provider-datalab` capabilities by deploying additional services and tools that support their daily workflows.
+This section explains how a `Datalab` can be extended with more services and tools. Users can deploy helpful session-adjacent applications for daily work. Operators should keep durable services - databases, stores, registries, and backup-worthy data - explicit in the platform model.
 
-A `Datalab` environment provides a preconfigured **VS Code Server** with a persistent file system and access to the connected object storage, along with essential CLI tools such as `git`, `curl`, `aws`, or `rclone`.  
+A `Datalab` environment provides a preconfigured **VS Code Server** with a persistent file system and access to the connected object storage, along with essential CLI tools such as `git`, `curl`, `aws`, or `rclone`.
 While this already covers many data exploration and transformation needs, users often require more specialized tooling — for example, dashboards for visualization, services for experiment tracking, or out-of-process compute backends for scalable data processing.
 
 Although many of these tools can be started directly from the integrated terminal and exposed via VS Code’s port forwarding feature, that approach tends to be **fragile and transient** - you must carefully manage Python environments, avoid breaking dependencies during upgrades, and remember that the terminal session lifetime is temporary.
 
-A more robust approach is to deploy such services **as native Kubernetes applications** — directly from within the Datalab. Because each Datalab session has access to the Kubernetes API (depending on the operator configuration), users can deploy workloads within their assigned namespace or, when running in **vCluster** mode, inside a **fully isolated virtual cluster** with their own CRDs, RBAC rules, and controllers.  This enables running even complex frameworks that typically require cluster-wide resources — for example, a Dask Gateway.
+A more robust approach is to deploy such services **as native Kubernetes applications** — directly from within the Datalab. Because each Datalab session has access to the Kubernetes API (depending on the operator configuration), users can deploy workloads within their assigned namespace or, when running in **vCluster** mode, inside a **fully isolated virtual cluster** with their own CRDs, RBAC rules, and controllers. This enables running even complex frameworks that typically require cluster-wide resources — for example, a Dask Gateway.
+
+For production-like state, prefer the declarative `Datalab` service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. For object-storage buckets, use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process, then pass the credentials to Provider Datalab. This keeps the durable parts visible to the operator.
 
 > **Note:** The `kubectl` and `helm` CLIs are preinstalled as well. You can apply manifests, install Helm charts, and inspect Kubernetes resources directly from the terminal.
 
@@ -15,7 +17,7 @@ A more robust approach is to deploy such services **as native Kubernetes applica
 
 ## Example: Deploying a Dask Cluster
 
-The following example shows how to start a simple Dask scheduler and worker deployment directly inside your Datalab namespace.  
+The following example shows how to start a simple Dask scheduler and worker deployment directly inside your Datalab namespace.
 This provides a minimal distributed compute backend that you can connect to from Python via `dask.distributed.Client`.
 
 <details>
@@ -105,11 +107,11 @@ helm upgrade --install dask-gateway dask/dask-gateway   -n "${DEFAULT_NAMESPACE:
 
 ## Example: Deploying MLflow with Persistent Storage
 
-`MLflow` is a popular experiment-tracking platform that complements data exploration workflows.  
+`MLflow` is a popular experiment-tracking platform that complements data exploration workflows.
 The following example deploys an MLflow server together with a simple SQLite backend and a `PersistentVolumeClaim` for artifact and metadata storage.
 
-> **Note:** The PVC is bound to your Datalab session.  
-> Once the Datalab is deleted, the PVC and stored data will also be removed unless your operator configures a persistent storage backend.
+> **Note:** The PVC is bound to your Datalab session.
+> Once the Datalab is deleted, the PVC and stored data will also be removed unless your operator configures a persistent storage backend. For durable MLflow metadata or artifacts, use a managed database and an object-storage bucket provisioned outside Provider Datalab, for example with Provider Storage.
 
 <details>
 <summary><strong>Click to expand: Deploy MLflow</strong></summary>
@@ -306,12 +308,9 @@ SELECT * FROM demo;
 
 ## Summary
 
-In its current form, `provider-datalab` focuses on deploying **ephemeral or stateless services** on Kubernetes in a seamless and reproducible way. These services are tied to the Datalab session lifecycle, ensuring automatic cleanup and cost efficiency when sessions are terminated.
+Additional services fall into two operational categories:
 
-However, if your operator provides additional storage capabilities — for example:
+- **User-deployed, session-adjacent services** such as the Dask and MLflow examples above. These are useful for exploration and can be cleaned up with the workspace lifecycle.
+- **Platform-managed services** requested through the `Datalab` spec, such as PostgreSQL databases, document stores, Redis key-value/cache stores, Qdrant vector stores, and Docker registries. These should be treated as operator-owned resources with explicit backup, monitoring, upgrade, and retirement policies. Object-storage buckets are the exception here: create them through Provider Storage or another storage process, then wire their credentials into the Datalab.
 
-- persistent block storage (via Kubernetes `StorageClass`)
-- relational databases (PostgreSQL, MySQL)
-- key–value stores (Redis, etcd)
-
-then more complex, stateful workloads can also be supported. Such setups, however, come with additional maintenance effort and require clear alignment of responsibilities between operators and end users.  Making these integrations easier and more declarative is planned for future releases.
+The goal is not to prevent users from experimenting. The goal is to make sure that durable state does not become invisible. If a service matters beyond the current session, promote it into the declarative platform model so the operator knows it exists and can take responsibility for it.

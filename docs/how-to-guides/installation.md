@@ -1,7 +1,6 @@
 # Provider Datalab – Installation Guide
 
-The `provider-datalab` configuration package lets you provision **collaborative data labs** on Kubernetes with the **Educates** runtime.
-Labs, sessions, storage, and identity are declared via a single, namespaced `Datalab` spec.
+The `provider-datalab` configuration package lets platform operators expose **collaborative data labs** on Kubernetes as a PaaS-style building block. Labs, sessions, storage access, identity, and optional managed services are declared through one namespaced `Datalab` spec. The operator still owns the backing services, policies, and backup model.
 
 ---
 
@@ -9,19 +8,19 @@ Labs, sessions, storage, and identity are declared via a single, namespaced `Dat
 
 Everything in this guide is **namespaced**:
 
-- You **apply** `Datalab` claims **to a namespace** (e.g., `workspace`).  
-- The **referenced Secret for storage** lives in the same namespace as the `Datalab` claim (Secret name = `spec.secretName`).  
-- Any **namespaced ProviderConfigs** or supporting objects that the compositions depend on **must exist in that same target namespace** (e.g., `workspace`).  
+- You **apply** `Datalab` claims **to a namespace** (e.g., `workspace`).
+- The **referenced Secret for storage** lives in the namespace configured by `EnvironmentConfig.data.storage.secretNamespace`, normally the same namespace as the `Datalab` claim. The Secret name is `spec.secretName`, or the `Datalab` name when `spec.secretName` is omitted.
+- Any **namespaced ProviderConfigs** or supporting objects that the compositions depend on **must exist in that same target namespace** (e.g., `workspace`).
 
-> In short: choose your target namespace (e.g., `workspace`), apply the provider configs there, and create your `Datalab` claims in that namespace.
+> In short: choose your target namespace (e.g., `workspace`), apply the provider configs there, create or provision the referenced object-storage credentials there, and create your `Datalab` claims in that namespace.
 
 ---
 
 ## Prerequisites
 
-- A running Kubernetes cluster (e.g., `kind`, managed K8s).  
-- `kubectl` access.  
-- **Crossplane** installed in the cluster:  
+- A running Kubernetes cluster (e.g., `kind`, managed K8s).
+- `kubectl` access.
+- **Crossplane** installed in the cluster:
 
 ```bash
 helm repo add crossplane-stable https://charts.crossplane.io/stable
@@ -33,19 +32,21 @@ helm install crossplane \
   --set provider.defaultActivations={}
 ```
 
-- **Educates installed with all CRDs in the cluster**  for the Educates runtime.  
-  See the [Educates Installation Guide](https://educates.dev/docs/installation/) for details.  
-- **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).  
-  Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).  
-- **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).  
-  Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).  
+- **Educates installed with all CRDs in the cluster**  for the Educates runtime.
+  See the [Educates Installation Guide](https://educates.dev/docs/installation/) for details.
+- **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
+  Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).
+- **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).
+  Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).
   The operator installation must provide its own controller RBAC; `provider-datalab` only creates namespace-local Mongo prerequisites such as service accounts, a Role, and an appdb RoleBinding inside the tenant namespace.
-- **Redis Kubernetes Operator installed** if you plan to use `spec.cacheStores` (cache store feature).  
-  Suggested tested line: Redis Operator `v0.21.x` (or your cluster-validated equivalent).  
-- **Qdrant Kubernetes Operator installed** if you plan to use `spec.vectorStores` (vector store feature).  
-  Suggested tested line: Qdrant Operator `v1.15.x` (or your cluster-validated equivalent).  
+- **Redis Kubernetes Operator installed** if you plan to use `spec.cacheStores` (cache store feature).
+  Suggested tested line: Redis Operator `v0.21.x` (or your cluster-validated equivalent).
+- **Qdrant Kubernetes Operator installed** if you plan to use `spec.vectorStores` (vector store feature).
+  Suggested tested line: Qdrant Operator `v1.15.x` (or your cluster-validated equivalent).
 
 Without the corresponding optional database operators installed, `spec.databases`, `spec.documentStores`, `spec.cacheStores`, and/or `spec.vectorStores` cannot reconcile.
+
+Treat these optional operators as platform service classes. If you enable a field in the `Datalab` API, make sure the operations model is ready too: storage classes, backup and restore, monitoring, upgrades, and tenant lifecycle.
 
 > To reduce control-plane load, we use a `ManagedResourceActivationPolicy` (MRAP) per backend so only the needed Managed Resources are active.
 
@@ -53,12 +54,12 @@ Without the corresponding optional database operators installed, `spec.databases
 
 ## Step 1 – Install Provider Dependencies (per runtime)
 
-All runtimes follow the same staged pattern you **must** install **before** the configuration package:  
-1. **ManagedResourceActivationPolicy** – activate only the resource kinds that are needed.  
-2. **Deployment Runtime Configs** – define how providers/functions run.  
-3. **Providers** – install the required Crossplane providers.  
-4. **ProviderConfigs** (namespaced) – configure providers in your target namespace.  
-5. **Functions** – install supporting Crossplane Functions.  
+All runtimes follow the same staged pattern you **must** install **before** the configuration package:
+1. **ManagedResourceActivationPolicy** – activate only the resource kinds that are needed.
+2. **Deployment Runtime Configs** – define how providers/functions run.
+3. **Providers** – install the required Crossplane providers.
+4. **ProviderConfigs** (namespaced) – configure providers in your target namespace.
+5. **Functions** – install supporting Crossplane Functions.
 6. **RBAC** – permissions for `provider-kubernetes` to observe and reconcile objects.
 
 The `provider-kubernetes` RBAC must also allow Pod observation in tenant namespaces. This is required for the Redis and Qdrant readiness observers used by the Datalab composition.
@@ -69,15 +70,15 @@ Repository root: <https://github.com/versioneer-tech/provider-datalab/>
 
 ### Educates Runtime
 
-> You operate the Educates training platform in your cluster. Ensure **Educates is installed with all CRDs** before proceeding.  
+> You operate the Educates training platform in your cluster. Ensure **Educates is installed with all CRDs** before proceeding.
 
 Provider dependencies activate Helm, Kubernetes, and Keycloak resources as needed:
 
-- [00-mrap.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/00-mrap.yaml) – Activate Educates-specific Managed Resources.  
-- [01-deploymentRuntimeConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/01-deploymentRuntimeConfigs.yaml) – Runtime configs for providers/functions.  
-- [02-providers.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/02-providers.yaml) – Install Helm, Kubernetes, and Keycloak providers.  
-- [03-providerConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/03-providerConfigs.yaml) – **Apply in your target namespace** (e.g., `workspace`); sets up storage and identity configs.  
-- [functions.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/functions.yaml) – Functions used by compositions.  
+- [00-mrap.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/00-mrap.yaml) – Activate Educates-specific Managed Resources.
+- [01-deploymentRuntimeConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/01-deploymentRuntimeConfigs.yaml) – Runtime configs for providers/functions.
+- [02-providers.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/02-providers.yaml) – Install Helm, Kubernetes, and Keycloak providers.
+- [03-providerConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/03-providerConfigs.yaml) – **Apply in your target namespace** (e.g., `workspace`); sets up storage and identity configs.
+- [functions.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/functions.yaml) – Functions used by compositions.
 - [rbac.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/rbac.yaml) – RBAC for `provider-kubernetes`.
 
 Recommended Crossplane dependency set for `datalab-educates`:
@@ -95,7 +96,7 @@ Keycloak-managed access is supported: the composition automatically provisions t
 
 When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, groups, group memberships, roles, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component.
 
-When installed, a Datalab will provision a vcluster (if enabled) and launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus preinstalled tools like `awscli` and `rclone`).
+When installed, a Datalab will provision a vcluster (if enabled), launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus tools like `awscli` and `rclone`), wire in object-storage credentials, and reconcile any requested platform-managed data services.
 
 ## Step 2 – Install the Configuration Package (after dependencies)
 
@@ -160,17 +161,18 @@ To find the correct value, use the same `serviceCIDR` as your host cluster — i
 
 Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
 
-Manage provider credentials and storage secrets through your normal secret-management path, such as External Secrets or Sealed Secrets, rather than committing live credentials into Git.
+Manage provider credentials and storage secrets through your normal secret-management path, such as External Secrets or Sealed Secrets, rather than committing live credentials into Git. If you use [Provider Storage](https://provider-storage.versioneer.at/), let it create the bucket and credentials, then reference those credentials from the `Datalab`.
 
 ---
 
 ## Step 4 – Storage credentials
 
-The `storage` section in the `EnvironmentConfig` references a Kubernetes Secret — **named identically to `spec.secretName` in the Datalab** — which must already exist in the cluster.  
-This Secret must reside in the namespace specified by `storage.secretNamespace` and include at least:
+Provider Datalab does not create object-storage buckets. Create the bucket and credentials manually, through your platform process, or with [Provider Storage](https://provider-storage.versioneer.at/).
 
-- `AWS_ACCESS_KEY_ID`  
-- `AWS_SECRET_ACCESS_KEY`  
+The `storage` section in the `EnvironmentConfig` tells Provider Datalab where to read the credentials. The composition reads the Secret named by `spec.secretName`, or the `Datalab` name when `spec.secretName` is omitted. This Secret must exist in `storage.secretNamespace` and include at least:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
 
 Create it manually, for example:
 
@@ -184,10 +186,10 @@ kubectl -n datalab create secret generic demo \
 
 ## Step 5 – Create a Datalab
 
-The minimal example creates a user-scoped lab with one session.  
-- Sessions present → a runtime is automatically started until stopped by the operator.  
-- No sessions → no runtime is started until the user explicitly launches one.  
-- Files present → workshop tab enabled; none → no workshop tab.  
+The minimal example creates a user-scoped lab with one session.
+- Sessions present → a runtime is automatically started until stopped by the operator.
+- No sessions → no runtime is started until the user explicitly launches one.
+- Files present → workshop tab enabled; none → no workshop tab.
 - `spec.vcluster: true` → vcluster provisioned; `false` → namespace-scoped runtime.
 
 ```yaml
@@ -205,10 +207,10 @@ spec:
   files: []
 ```
 
-For more scenarios, see these [`example manifests`](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base), which demonstrate:  
-- labs with multiple users  
-- enabling/disabling `spec.vcluster`  
-- attaching workshop files from Git, OCI images, or HTTP sources  
+For more scenarios, see these [`example manifests`](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base), which demonstrate:
+- labs with multiple users
+- enabling/disabling `spec.vcluster`
+- attaching workshop files from Git, OCI images, or HTTP sources
 
 ---
 
