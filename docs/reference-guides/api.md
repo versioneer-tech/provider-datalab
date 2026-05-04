@@ -2,9 +2,9 @@
 
 Packages:
 
-- [pkg.internal/v1beta1](#pkginternalv1beta1)
+- [pkg.internal/v1beta2](#pkginternalv1beta2)
 
-# pkg.internal/v1beta1
+# pkg.internal/v1beta2
 
 Resource Types:
 
@@ -14,7 +14,7 @@ Resource Types:
 
 
 ## Datalab
-<sup><sup>[↩ Parent](#pkginternalv1beta1 )</sup></sup>
+<sup><sup>[↩ Parent](#pkginternalv1beta2 )</sup></sup>
 
 
 
@@ -35,7 +35,7 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines ownershi
     <tbody><tr>
       <td><b>apiVersion</b></td>
       <td>string</td>
-      <td>pkg.internal/v1beta1</td>
+      <td>pkg.internal/v1beta2</td>
       <td>true</td>
       </tr>
       <tr>
@@ -177,10 +177,10 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>sessions</b></td>
-        <td>[]string</td>
+        <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
+        <td>[]object</td>
         <td>
-          Sessions to be started for this datalab.<br/>
+          Sessions declared for this datalab.<br/>
           <br/>
             <i>Default</i>: []<br/>
         </td>
@@ -911,6 +911,37 @@ Optional semantic-version tag selection policy.
 </table>
 
 
+### Datalab.spec.sessions[index]
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Session name.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>state</b></td>
+        <td>enum</td>
+        <td>
+          Whether the session runtime should be running.<br/>
+          <br/>
+            <i>Enum</i>: running, paused<br/>
+            <i>Default</i>: running<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
 ### Datalab.spec.persistence
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
 
@@ -931,7 +962,7 @@ Optional settings for the Datalab session workspace PVC. By default, Educates cr
         <td><b>ephemeral</b></td>
         <td>boolean</td>
         <td>
-          Whether the workspace PVC should be scoped to the Educates WorkshopSession. When false, Provider Datalab creates a stable PVC per declared session. Effective default: true.<br/>
+          Whether the workspace PVC should be scoped to the Educates WorkshopSession. When false, Provider Datalab creates a stable PVC per declared session, including paused sessions. Effective default: true.<br/>
           <br/>
             <i>Default</i>: true<br/>
         </td>

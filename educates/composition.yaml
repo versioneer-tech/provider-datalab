@@ -9,7 +9,7 @@ metadata:
     provider: educates
 spec:
   compositeTypeRef:
-    apiVersion: pkg.internal/v1beta1
+    apiVersion: pkg.internal/v1beta2
     kind: Datalab
   mode: Pipeline
   pipeline:
@@ -586,7 +586,26 @@ spec:
               xr_namespace = meta.get("namespace") or "default"
 
               files = spec.get("files") or []
-              sessions = list(spec.get("sessions") or [])
+              def _session_name(session):
+                  if isinstance(session, dict):
+                      return _safe_str(session.get("name") or "")
+                  return _safe_str(session)
+
+              def _session_state(session):
+                  if isinstance(session, dict):
+                      return _safe_str(session.get("state") or "running").lower()
+                  return "running"
+
+              sessions = [
+                  _session_name(session)
+                  for session in (spec.get("sessions") or [])
+                  if _session_name(session)
+              ]
+              running_sessions = [
+                  _session_name(session)
+                  for session in (spec.get("sessions") or [])
+                  if _session_name(session) and _session_state(session) == "running"
+              ]
               vcluster = _boolish(spec.get("vcluster", False))
 
               ctx = _to_dict(req.context)
@@ -964,7 +983,7 @@ spec:
                           "spec": persistent_pvc_spec
                       }, key_suffix=f"{sid}-persistent")
 
-              for sid in sessions:
+              for sid in running_sessions:
                   session_manifest = {
                       "apiVersion": "training.educates.dev/v1beta1",
                       "kind": "WorkshopSession",
@@ -1854,6 +1873,19 @@ spec:
               atp = (od.get("status") or {}).get("atProvider") or {}
               return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
 
+          def _safe_str(v):
+              return str(v).strip() if v is not None else ""
+
+          def _session_name(session):
+              if isinstance(session, dict):
+                  return _safe_str(session.get("name") or "")
+              return _safe_str(session)
+
+          def _session_state(session):
+              if isinstance(session, dict):
+                  return _safe_str(session.get("state") or "running").lower()
+              return "running"
+
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               observed = getattr(req.observed, "resources", None) or {}
               xr_obs = _to_dict(req.observed.composite.resource)
@@ -1864,7 +1896,11 @@ spec:
 
               sessions_map = {}
 
-              for sid in spec.get("sessions") or []:
+              for session in spec.get("sessions") or []:
+                  sid = _session_name(session)
+                  if not sid or _session_state(session) != "running":
+                      continue
+
                   key = f"workshopsession-{xr_name}-{sid}"
                   manifest = _extract_manifest(observed.get(key))
                   if not manifest:
@@ -1881,9 +1917,7 @@ spec:
                       sessions_map[ws_id] = {"url": url}
 
               cur_status = (xr_obs.get("status") or {}).copy()
-              cur_sessions = (cur_status.get("sessions") or {}).copy()
-              cur_sessions.update(sessions_map)
-              cur_status["sessions"] = cur_sessions
+              cur_status["sessions"] = sessions_map
 
               v = st.Value()
               jf.ParseDict(cur_status, v)

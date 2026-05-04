@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   annotations:
@@ -33,7 +33,7 @@ metadata:
   name: s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -72,7 +72,7 @@ metadata:
   name: s-joe-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -96,7 +96,7 @@ metadata:
   name: s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -120,7 +120,7 @@ metadata:
   name: s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -152,7 +152,7 @@ metadata:
   name: s-joe-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -181,7 +181,7 @@ metadata:
   name: s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -210,7 +210,7 @@ metadata:
   name: s-joe-ws-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -238,7 +238,7 @@ metadata:
   name: s-joe-ws-access
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -266,7 +266,7 @@ metadata:
   name: s-joe-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -297,7 +297,7 @@ metadata:
   name: s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -328,7 +328,7 @@ metadata:
   name: observe-storage-secret-s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -359,7 +359,7 @@ metadata:
   name: workshop-s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -599,7 +599,7 @@ metadata:
   name: workshopenvironment-s-joe
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab

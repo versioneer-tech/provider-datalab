@@ -6,7 +6,7 @@
 # No vcluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-joe

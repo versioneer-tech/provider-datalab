@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-jeff
@@ -65,7 +65,7 @@ metadata:
   name: db-configmap-s-jeff-pg0
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -100,7 +100,7 @@ metadata:
   name: db-postgrescluster-s-jeff-pg0
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -176,7 +176,7 @@ metadata:
   name: db-tlsroute-s-jeff-pg0
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -223,7 +223,7 @@ metadata:
   name: s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -262,7 +262,7 @@ metadata:
   name: s-jeff-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -286,7 +286,7 @@ metadata:
   name: s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -310,7 +310,7 @@ metadata:
   name: s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -342,7 +342,7 @@ metadata:
   name: s-jeff-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -372,7 +372,7 @@ metadata:
   name: s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -403,7 +403,7 @@ metadata:
   name: s-jeff-ws-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -431,7 +431,7 @@ metadata:
   name: s-jeff-ws-access
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -459,7 +459,7 @@ metadata:
   name: s-jeff-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -490,7 +490,7 @@ metadata:
   name: s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -521,7 +521,7 @@ metadata:
   name: mongodb-auth-secret-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -555,7 +555,7 @@ metadata:
   name: mongodb-community-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -621,7 +621,7 @@ metadata:
   name: mongodb-rb-appdb-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -660,7 +660,7 @@ metadata:
   name: mongodb-role-appdb-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -706,7 +706,7 @@ metadata:
   name: mongodb-sa-appdb-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -737,7 +737,7 @@ metadata:
   name: mongodb-sa-database-pods-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -768,7 +768,7 @@ metadata:
   name: mongodb-sa-ops-manager-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -799,7 +799,7 @@ metadata:
   name: observe-database-secret-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -830,7 +830,7 @@ metadata:
   name: observe-storage-secret-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -861,7 +861,7 @@ metadata:
   name: qdrant-auth-secret-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -896,7 +896,7 @@ metadata:
   name: qdrant-pod-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -931,7 +931,7 @@ metadata:
   name: qdrant-vector-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -980,7 +980,7 @@ metadata:
   name: redis-acl-secret-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -1015,7 +1015,7 @@ metadata:
   name: redis-auth-secret-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -1049,7 +1049,7 @@ metadata:
   name: redis-cache-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -1112,7 +1112,7 @@ metadata:
   name: redis-pod-s-jeff-prod
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -1147,7 +1147,7 @@ metadata:
   name: workshop-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -1274,7 +1274,7 @@ metadata:
   name: workshopenvironment-s-jeff
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab

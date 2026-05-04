@@ -105,7 +105,7 @@ data:
 ### Minimal example
 
 ```yaml
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: acme
@@ -114,7 +114,7 @@ spec:
   users:
   - alice
   sessions:
-  - default
+  - name: default
 ```
 
 If `spec.quota` or `spec.security` are omitted, values fall back to
@@ -124,7 +124,9 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 
 Session workspace PVCs are ephemeral by default and follow Educates' normal
-`WorkshopSession` lifecycle. To keep `/home/eduk8s` across session deletion,
+`WorkshopSession` lifecycle. `spec.sessions[].state` defaults to `running`;
+set it to `paused` to keep a declared session without creating its runtime.
+To keep `/home/eduk8s` across session deletion or while a session is paused,
 opt into a Datalab-owned PVC:
 
 ```yaml

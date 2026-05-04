@@ -199,7 +199,7 @@ The minimal example creates a user-scoped lab with one session.
 - `spec.vcluster: true` → vcluster provisioned; `false` → namespace-scoped runtime.
 
 ```yaml
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: demo
@@ -208,7 +208,7 @@ spec:
   users:
   - alice
   sessions:
-  - default
+  - name: default
   vcluster: true
   files: []
 ```

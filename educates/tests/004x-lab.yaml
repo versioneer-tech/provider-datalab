@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-john
@@ -21,7 +21,9 @@ spec:
     storageClassName: sbs-default-retain
   secretName: s-john
   sessions:
-  - default
+  - name: default
+  - name: analysis
+    state: paused
   users:
   - john
   vcluster: false
@@ -29,7 +31,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-john, keycloak-group-admin-s-john-admin,
-      keycloak-group-s-john, and 12 more'
+      keycloak-group-s-john, and 13 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -46,7 +48,7 @@ metadata:
   name: s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -85,7 +87,7 @@ metadata:
   name: s-john-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -109,7 +111,7 @@ metadata:
   name: s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -133,7 +135,7 @@ metadata:
   name: s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -165,7 +167,7 @@ metadata:
   name: s-john-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -194,7 +196,7 @@ metadata:
   name: s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -223,7 +225,7 @@ metadata:
   name: s-john-ws-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -251,7 +253,7 @@ metadata:
   name: s-john-ws-access
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -279,7 +281,7 @@ metadata:
   name: s-john-admin
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -310,7 +312,7 @@ metadata:
   name: s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -341,7 +343,7 @@ metadata:
   name: observe-storage-secret-s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -366,13 +368,51 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-analysis-persistent
+  labels:
+    crossplane.io/composite: s-john
+  name: persistentvolumeclaim-s-john-analysis-persistent
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-john
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: s-john-analysis-persistent
+        namespace: s-john
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: sbs-default-retain
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-default-persistent
   labels:
     crossplane.io/composite: s-john
   name: persistentvolumeclaim-s-john-default-persistent
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -410,7 +450,7 @@ metadata:
   name: workshop-s-john
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -659,7 +699,7 @@ metadata:
   name: workshopenvironment-s-john
   namespace: datalab
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
@@ -708,7 +748,7 @@ metadata:
   name: workshopsession-s-john-default
   namespace: default
   ownerReferences:
-  - apiVersion: pkg.internal/v1beta1
+  - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab

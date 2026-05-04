@@ -11,7 +11,8 @@ Read this page as an operator-facing contract. A `Datalab` gives users a smooth 
 ### Sessions
 A `Datalab` claim may declare one or more `spec.sessions`.
 
-- If at least one session is listed, a corresponding **WorkshopSession** is automatically created and will run permanently until stopped by the operator.
+- Each `spec.sessions` entry declares a session by `name`. `state` defaults to `running`; when set to `paused`, Provider Datalab keeps the declared session but does not create its **WorkshopSession** runtime.
+- If at least one session is listed with `state: running`, a corresponding **WorkshopSession** is automatically created and will run permanently until stopped by the operator.
 - If no sessions are given, no session object is pre-created. The shared runtime namespace and non-session resources can still be reconciled and tested without a `WorkshopSession`.
 
 Sessions can also be patched into the spec later if needed.
@@ -24,7 +25,7 @@ By default, the **persistent volume claim (PVC)** is **tied to the active sessio
 
 That NFS-style reuse is useful when it happens, but it is a storage-backend side effect rather than a Datalab persistence guarantee. It only works when the associated `StorageClass` has its `reclaimPolicy` set to `Retain` (not `Delete`) and when the backend maintains a **consistent link between the PVC name and the actual storage path**. If the underlying storage system assigns **randomized volume identifiers** (such as UIDs for folder paths), the data may still remain on the storage backend after the session ends, but Kubernetes will not automatically reattach it to a new PVC.
 
-For workspaces that must reliably survive `WorkshopSession` deletion, set `spec.persistence.ephemeral: false`. Provider Datalab then creates a stable PVC per declared session in the Educates workshop namespace and configures Educates to use that claim as the `/home/eduk8s` workspace volume. The size still comes from `spec.quota.storage`, and `spec.persistence.storageClassName` may select a StorageClass subject to the operator allowlist in `EnvironmentConfig.data.storageClasses.allowed`.
+For workspaces that must reliably survive `WorkshopSession` deletion, set `spec.persistence.ephemeral: false`. Provider Datalab then creates a stable PVC per declared session, including paused sessions, in the Educates workshop namespace and configures Educates to use that claim as the `/home/eduk8s` workspace volume. The size still comes from `spec.quota.storage`, and `spec.persistence.storageClassName` may select a StorageClass subject to the operator allowlist in `EnvironmentConfig.data.storageClasses.allowed`.
 
 For operators, this is the responsibility boundary. Session PVCs are useful for workspace state and many-small-file workloads, but they are not a replacement for managed data services. If data must survive upgrades, disaster recovery events, or independent service lifecycles, use a managed database, a bucket provisioned outside Provider Datalab, or another store with a clear backup policy.
 
@@ -228,7 +229,7 @@ This ensures that authentication and authorization are consistently enforced acr
 # No vcluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-joe
@@ -269,7 +270,7 @@ spec:
 # - MongoDB: <store>-mongodb-auth
 # - Redis: <store>-redis-auth
 # - Qdrant: <store>-qdrant-auth
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-jeff
@@ -339,7 +340,7 @@ spec:
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
 # The data component for the object storage mount and browser UI is configured as readonly.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-jane
@@ -348,7 +349,8 @@ spec:
     - jane
   secretName: s-jane
   sessions:
-    - default
+    - name: default
+      state: running
   vcluster: true
   data:
     readOnlyMount: true
@@ -388,7 +390,7 @@ spec:
 # enabling the workshop tab in the Educates UI.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-john
@@ -397,7 +399,9 @@ spec:
   - john
   secretName: s-john
   sessions:
-  - default
+  - name: default
+  - name: analysis
+    state: paused
   vcluster: false
   files:
   - git:

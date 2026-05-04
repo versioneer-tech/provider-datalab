@@ -71,7 +71,7 @@ spec:
 ### Minimal Example
 
 ```yaml
-apiVersion: pkg.internal/v1beta1
+apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: team-wonderland
@@ -79,7 +79,7 @@ spec:
   users:
   - alice
   sessions:
-  - default
+  - name: default
   vcluster: true
 ```
 

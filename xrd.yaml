@@ -12,7 +12,7 @@ spec:
     plural: datalabs
   scope: Namespaced
   versions:
-    - name: v1beta1
+    - name: v1beta2
       served: true
       referenceable: true
       schema:
@@ -63,9 +63,22 @@ spec:
                   default: {}
                 sessions:
                   type: array
-                  description: Sessions to be started for this datalab.
+                  description: Sessions declared for this datalab.
                   items:
-                    type: string
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        description: Session name.
+                      state:
+                        type: string
+                        description: Whether the session runtime should be running.
+                        enum:
+                          - running
+                          - paused
+                        default: running
                   default: []
                 databases:
                   type: object
@@ -201,7 +214,8 @@ spec:
                       type: boolean
                       description: >-
                         Whether the workspace PVC should be scoped to the Educates WorkshopSession.
-                        When false, Provider Datalab creates a stable PVC per declared session.
+                        When false, Provider Datalab creates a stable PVC per declared session,
+                        including paused sessions.
                         Effective default: true.
                       default: true
                     storageClassName:
