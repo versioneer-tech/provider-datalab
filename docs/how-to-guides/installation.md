@@ -193,10 +193,11 @@ kubectl -n datalab create secret generic demo \
 ## Step 5 – Create a Datalab
 
 The minimal example creates a user-scoped lab with one session.
-- Sessions present → a runtime is automatically started until stopped by the operator.
-- No sessions → no runtime is started until the user explicitly launches one.
-- Files present → workshop tab enabled; none → no workshop tab.
-- `spec.vcluster: true` → vcluster provisioned; `false` → namespace-scoped runtime.
+- Sessions present -> each declared session gets a workspace PVC; sessions default to `state: started`.
+- `state: started` -> runtime created; `state: stopped` -> PVC retained without runtime.
+- No sessions -> no declared session PVC or runtime is pre-created.
+- Files present -> workshop tab enabled; none -> no workshop tab.
+- `spec.vcluster: true` -> vcluster provisioned; `false` -> namespace-scoped runtime.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2

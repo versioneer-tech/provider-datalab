@@ -593,18 +593,24 @@ spec:
 
               def _session_state(session):
                   if isinstance(session, dict):
-                      return _safe_str(session.get("state") or "running").lower()
-                  return "running"
+                      state = _safe_str(session.get("state") or "started").lower()
+                  else:
+                      state = "started"
+                  if state == "running":
+                      return "started"
+                  if state == "paused":
+                      return "stopped"
+                  return state
 
               sessions = [
                   _session_name(session)
                   for session in (spec.get("sessions") or [])
                   if _session_name(session)
               ]
-              running_sessions = [
+              started_sessions = [
                   _session_name(session)
                   for session in (spec.get("sessions") or [])
-                  if _session_name(session) and _session_state(session) == "running"
+                  if _session_name(session) and _session_state(session) == "started"
               ]
               vcluster = _boolish(spec.get("vcluster", False))
 
@@ -651,10 +657,6 @@ spec:
               registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
               persistence_cfg = spec.get("persistence") or {}
-              persistence_ephemeral = persistence_cfg.get("ephemeral")
-              if persistence_ephemeral is None:
-                  persistence_ephemeral = True
-              persistence_ephemeral = _boolish(persistence_ephemeral)
               requested_storage_class = _safe_str(persistence_cfg.get("storageClassName") or "")
 
               ingress_env = env.get("ingress") or {}
@@ -790,7 +792,7 @@ spec:
                   }
               }
 
-              if sessions and not persistence_ephemeral:
+              if sessions:
                   workshop["spec"]["session"]["resources"].pop("storage", None)
                   workshop["spec"]["session"]["resources"]["volume"] = {
                       "name": "$(session_name)-persistent"
@@ -967,7 +969,7 @@ spec:
               env_manifest = _extract_manifest(observed_resources.get(f"workshopenvironment-{xr_name}"))
               workshop_ns = _safe_str(((env_manifest.get("status") or {}).get("educates") or {}).get("namespace") or xr_name)
 
-              if workshop_ns and not persistence_ephemeral:
+              if workshop_ns:
                   for sid in sessions:
                       persistent_pvc_name = f"{xr_name}-{sid}-persistent"
                       persistent_pvc_spec = {
@@ -983,7 +985,7 @@ spec:
                           "spec": persistent_pvc_spec
                       }, key_suffix=f"{sid}-persistent")
 
-              for sid in running_sessions:
+              for sid in started_sessions:
                   session_manifest = {
                       "apiVersion": "training.educates.dev/v1beta1",
                       "kind": "WorkshopSession",
@@ -1883,8 +1885,14 @@ spec:
 
           def _session_state(session):
               if isinstance(session, dict):
-                  return _safe_str(session.get("state") or "running").lower()
-              return "running"
+                  state = _safe_str(session.get("state") or "started").lower()
+              else:
+                  state = "started"
+              if state == "running":
+                  return "started"
+              if state == "paused":
+                  return "stopped"
+              return state
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               observed = getattr(req.observed, "resources", None) or {}
@@ -1898,7 +1906,13 @@ spec:
 
               for session in spec.get("sessions") or []:
                   sid = _session_name(session)
-                  if not sid or _session_state(session) != "running":
+                  state = _session_state(session)
+                  if not sid:
+                      continue
+
+                  sessions_map[sid] = {"state": state}
+
+                  if state != "started":
                       continue
 
                   key = f"workshopsession-{xr_name}-{sid}"
@@ -1914,7 +1928,7 @@ spec:
                   url = educates.get("url")
 
                   if phase == "Running" and url:
-                      sessions_map[ws_id] = {"url": url}
+                      sessions_map[ws_id] = {"state": state, "url": url}
 
               cur_status = (xr_obs.get("status") or {}).copy()
               cur_status["sessions"] = sessions_map

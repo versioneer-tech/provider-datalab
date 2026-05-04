@@ -25,10 +25,8 @@ spec:
   secretName: s-jane
   sessions:
     - name: default
-      state: running
+      state: started
   vcluster: true
-  persistence:
-    ephemeral: false
   data:
     readOnlyMount: true
   quota:

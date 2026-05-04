@@ -9,23 +9,22 @@ Read this page as an operator-facing contract. A `Datalab` gives users a smooth 
 ## Concepts
 
 ### Sessions
-A `Datalab` claim may declare one or more `spec.sessions`.
+A `Datalab` claim may declare one or more `spec.sessions`. A session is the named workspace identity for a user or workflow. It owns a durable home PVC and may also have a live Educates runtime.
 
-- Each `spec.sessions` entry declares a session by `name`. `state` defaults to `running`; when set to `paused`, Provider Datalab keeps the declared session but does not create its **WorkshopSession** runtime.
-- If at least one session is listed with `state: running`, a corresponding **WorkshopSession** is automatically created and will run permanently until stopped by the operator.
-- If no sessions are given, no session object is pre-created. The shared runtime namespace and non-session resources can still be reconciled and tested without a `WorkshopSession`.
+- Each `spec.sessions` entry declares a session by `name`. `state` defaults to `started`.
+- `state: started` creates the **WorkshopSession** runtime for that session and mounts the session PVC as the home workspace.
+- `state: stopped` keeps the declared session and its PVC, but does not create the **WorkshopSession** runtime. Switching back to `started` reuses the same workspace PVC.
+- If no sessions are given, no declared session PVC or runtime is pre-created. The shared runtime namespace and non-session resources can still be reconciled and tested without a `WorkshopSession`.
 
 Sessions can also be patched into the spec later if needed.
 
 ### Persistence
 
-Each `Datalab` session is equipped with a **persistent volume** for storing files, in addition to the connected object storage.  This ensures that user data and session state are preserved even if the workshop pod is restarted or rescheduled by Kubernetes.  Installing code libraries, handling metadata, or working with Git repositories often generates many small files that may be updated frequently. A storage class providing **NFS-like capabilities** is usually a good fit for these kinds of workloads, **object storage** abstractions are not.
+Each declared `Datalab` session is equipped with a **persistent volume** for storing files, in addition to the connected object storage. This ensures that user data and session state are preserved even if the workshop pod is restarted, rescheduled by Kubernetes, or intentionally stopped through `state: stopped`. Installing code libraries, handling metadata, or working with Git repositories often generates many small files that may be updated frequently. A storage class providing **NFS-like capabilities** is usually a good fit for these kinds of workloads, **object storage** abstractions are not.
 
-By default, the **persistent volume claim (PVC)** is **tied to the active session** and will be deleted automatically when the workshop session shuts down (for example, through a culling process when using session mode `auto`). In some environments, this does **not necessarily mean that data is lost**. For example, with an **NFS server** or another **shared storage backend**, restarting the session from the same manifests may recreate the PVC with the same name and point it back at the same physical folder.
+Provider Datalab creates a stable PVC per declared session, including sessions with `state: stopped`, in the Educates workshop namespace and configures Educates to use that claim as the `/home/eduk8s` workspace volume. The size comes from `spec.quota.storage`, and `spec.persistence.storageClassName` may select a StorageClass subject to the operator allowlist in `EnvironmentConfig.data.storageClasses.allowed`.
 
-That NFS-style reuse is useful when it happens, but it is a storage-backend side effect rather than a Datalab persistence guarantee. It only works when the associated `StorageClass` has its `reclaimPolicy` set to `Retain` (not `Delete`) and when the backend maintains a **consistent link between the PVC name and the actual storage path**. If the underlying storage system assigns **randomized volume identifiers** (such as UIDs for folder paths), the data may still remain on the storage backend after the session ends, but Kubernetes will not automatically reattach it to a new PVC.
-
-For workspaces that must reliably survive `WorkshopSession` deletion, set `spec.persistence.ephemeral: false`. Provider Datalab then creates a stable PVC per declared session, including paused sessions, in the Educates workshop namespace and configures Educates to use that claim as the `/home/eduk8s` workspace volume. The size still comes from `spec.quota.storage`, and `spec.persistence.storageClassName` may select a StorageClass subject to the operator allowlist in `EnvironmentConfig.data.storageClasses.allowed`.
+When `EnvironmentConfig.data.storageClasses.allowed` is non-empty, a requested `storageClassName` is used only if it appears in that list; otherwise Provider Datalab uses the first allowed class. If the list is omitted or empty, any requested class is allowed and an omitted `storageClassName` lets Kubernetes use the cluster default.
 
 For operators, this is the responsibility boundary. Session PVCs are useful for workspace state and many-small-file workloads, but they are not a replacement for managed data services. If data must survive upgrades, disaster recovery events, or independent service lifecycles, use a managed database, a bucket provisioned outside Provider Datalab, or another store with a clear backup policy.
 
@@ -225,7 +224,7 @@ This ensures that authentication and authorization are consistently enforced acr
 
 ```yaml
 # Joe gets a personal datalab s-joe with no pre-created session.
-# He must explicitly start a session himself; nothing is running by default.
+# He must explicitly declare and start a session himself; nothing is running by default.
 # No vcluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
@@ -350,7 +349,7 @@ spec:
   secretName: s-jane
   sessions:
     - name: default
-      state: running
+      state: started
   vcluster: true
   data:
     readOnlyMount: true
@@ -388,6 +387,8 @@ spec:
 # That session will run permanently until stopped by the operator.
 # No vcluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
+# The analysis session is declared but stopped, so it keeps its workspace PVC
+# without creating a runtime.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta2
@@ -401,7 +402,7 @@ spec:
   sessions:
   - name: default
   - name: analysis
-    state: paused
+    state: stopped
   vcluster: false
   files:
   - git:
@@ -485,6 +486,6 @@ Database credentials are managed by the PostgreSQL operator and stored as Kubern
 - Object-storage buckets are created outside Provider Datalab, for example with Provider Storage; Provider Datalab consumes the resulting credentials.
 - For Keycloak-managed access, users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, roles, and role bindings.
 - For delegated access, `auth.type = none` leaves authentication to the ingress layer or another platform component.
-- Sessions may be long-lived (auto-created) or on-demand (user started).
+- Sessions may be started for live work or stopped while keeping their workspace PVC.
 - Workshop files enable the Educates UI workshop tab.
 - Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation where applicable.

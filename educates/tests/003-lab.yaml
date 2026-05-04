@@ -15,8 +15,6 @@ spec:
       names:
       - analytics
       storage: 1Gi
-  persistence:
-    ephemeral: false
   quota:
     budget: x-large
     memory: 4Gi
@@ -30,7 +28,7 @@ spec:
     policy: privileged
   sessions:
   - name: default
-    state: running
+    state: started
   users:
   - jane
   vcluster: true
@@ -42,7 +40,9 @@ status:
     reason: Creating
     status: "False"
     type: Ready
-  sessions: {}
+  sessions:
+    default:
+      state: started
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

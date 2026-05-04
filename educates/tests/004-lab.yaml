@@ -17,13 +17,12 @@ spec:
     - /README.md
     path: .
   persistence:
-    ephemeral: false
     storageClassName: sbs-default-retain
   secretName: s-john
   sessions:
   - name: default
   - name: analysis
-    state: paused
+    state: stopped
   users:
   - john
   vcluster: false
@@ -35,7 +34,11 @@ status:
     reason: Creating
     status: "False"
     type: Ready
-  sessions: {}
+  sessions:
+    analysis:
+      state: stopped
+    default:
+      state: started
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client

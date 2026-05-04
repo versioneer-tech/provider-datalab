@@ -123,18 +123,16 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 `policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`).
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 
-Session workspace PVCs are ephemeral by default and follow Educates' normal
-`WorkshopSession` lifecycle. `spec.sessions[].state` defaults to `running`;
-set it to `paused` to keep a declared session without creating its runtime.
-To keep `/home/eduk8s` across session deletion or while a session is paused,
-opt into a Datalab-owned PVC:
+Each declared session gets a Datalab-owned workspace PVC. `spec.sessions[].state`
+defaults to `started`, which creates an Educates `WorkshopSession` runtime.
+Set it to `stopped` to keep the declared session and its PVC without running
+the session runtime. To choose the StorageClass for those workspace PVCs, set:
 
 ```yaml
 spec:
   quota:
     storage: 20Gi
   persistence:
-    ephemeral: false
     storageClassName: sbs-default
 ```
 
@@ -175,7 +173,7 @@ These services stay visible to the operator, so they can be monitored, backed up
 ### More examples
 
 See these [`example manifests`](examples/base) for complete scenarios, including:
-- Datalabs without sessions (no runtime started by default).
+- Datalabs without declared sessions (no session PVC or runtime started by default).
 - Datalabs with sessions and optional vcluster isolation.
 - Registry-enabled and registry-disabled runtime examples.
 - Datalabs with managed PostgreSQL databases, document stores, cache stores, and vector stores.

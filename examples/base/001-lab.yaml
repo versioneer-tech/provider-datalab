@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Joe gets a personal datalab s-joe with no pre-created session.
-# He must explicitly start a session himself; nothing is running by default.
+# He must explicitly declare and start a session himself; nothing is running by default.
 # No vcluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.

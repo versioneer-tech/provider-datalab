@@ -141,7 +141,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecpersistence">persistence</a></b></td>
         <td>object</td>
         <td>
-          Optional settings for the Datalab session workspace PVC. By default, Educates creates an ephemeral session-owned PVC that is deleted with the WorkshopSession. Set ephemeral=false to use a Datalab-owned PVC that survives session deletion and is mounted as the session home workspace.<br/>
+          Optional settings for Datalab-owned session workspace PVCs. Provider Datalab creates a stable PVC per declared session, including stopped sessions, and mounts it as the session home workspace when the runtime is started.<br/>
           <br/>
             <i>Default</i>: map[]<br/>
         </td>
@@ -933,10 +933,10 @@ Optional semantic-version tag selection policy.
         <td><b>state</b></td>
         <td>enum</td>
         <td>
-          Whether the session runtime should be running.<br/>
+          Desired runtime lifecycle for this session. Started sessions create an Educates WorkshopSession. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.<br/>
           <br/>
-            <i>Enum</i>: running, paused<br/>
-            <i>Default</i>: running<br/>
+            <i>Enum</i>: started, stopped<br/>
+            <i>Default</i>: started<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -947,7 +947,7 @@ Optional semantic-version tag selection policy.
 
 
 
-Optional settings for the Datalab session workspace PVC. By default, Educates creates an ephemeral session-owned PVC that is deleted with the WorkshopSession. Set ephemeral=false to use a Datalab-owned PVC that survives session deletion and is mounted as the session home workspace.
+Optional settings for Datalab-owned session workspace PVCs. Provider Datalab creates a stable PVC per declared session, including stopped sessions, and mounts it as the session home workspace when the runtime is started.
 
 <table>
     <thead>
@@ -959,19 +959,10 @@ Optional settings for the Datalab session workspace PVC. By default, Educates cr
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>ephemeral</b></td>
-        <td>boolean</td>
-        <td>
-          Whether the workspace PVC should be scoped to the Educates WorkshopSession. When false, Provider Datalab creates a stable PVC per declared session, including paused sessions. Effective default: true.<br/>
-          <br/>
-            <i>Default</i>: true<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b>storageClassName</b></td>
         <td>string</td>
         <td>
-          Optional StorageClass for the stable workspace PVC when ephemeral=false. If EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested class is used only when it is listed there; otherwise the first allowed class is used. If the allowlist is empty or omitted, any requested class is allowed.<br/>
+          Optional StorageClass for Datalab-owned session workspace PVCs. If EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested class is used only when it is listed there; otherwise the first allowed class is used. If the allowlist is empty or omitted, any requested class is allowed.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -1188,7 +1179,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatussessionskey">sessions</a></b></td>
         <td>map[string]object</td>
         <td>
-          Map of session IDs and their current state.<br/>
+          Map of session IDs and their lifecycle state and runtime details.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -1212,6 +1203,15 @@ Observed state of a single datalab session.
         </tr>
     </thead>
     <tbody><tr>
+        <td><b>state</b></td>
+        <td>enum</td>
+        <td>
+          Desired lifecycle state for the declared session.<br/>
+          <br/>
+            <i>Enum</i>: started, stopped<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>url</b></td>
         <td>string</td>
         <td>

@@ -5,8 +5,8 @@
 # That session will run permanently until stopped by the operator.
 # No vcluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
-# Session workspaces use durable Datalab-owned PVCs. The default session runs,
-# while the analysis session is paused and keeps only its PVC.
+# Session workspaces use durable Datalab-owned PVCs. The default session starts,
+# while the analysis session is stopped and keeps only its PVC.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
 # A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta2
@@ -20,10 +20,9 @@ spec:
   sessions:
   - name: default
   - name: analysis
-    state: paused
+    state: stopped
   vcluster: false
   persistence:
-    ephemeral: false
     storageClassName: sbs-default-retain
   files:
   - git:
