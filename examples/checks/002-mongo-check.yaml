@@ -19,11 +19,11 @@ spec:
       value: prod
     - name: MONGO_COLLECTION
       value: probe_checks
-    - name: MONGO_PASSWORD
+    - name: MONGO_URI
       valueFrom:
         secretKeyRef:
           name: s-jeff-datalab
-          key: MONGO_PROD_PASSWORD
+          key: MONGO_PROD_URI
     command:
     - sh
     - -c
@@ -32,7 +32,6 @@ spec:
       interval="${PROBE_INTERVAL_SECONDS:-60}"
       now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
       log() { echo "$(now) [mongo] $*"; }
-      MONGO_URI="mongodb://prod-app:${MONGO_PASSWORD}@mongodb-prod-svc.s-jeff.svc:27017/admin?authSource=admin"
       while true; do
         key="probe_mongo"
         value="$(date +%s)"

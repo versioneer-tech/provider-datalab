@@ -20,3 +20,100 @@ status:
         educates:
           namespace: s-jeff
           phase: Running
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-storage-secret-s-jeff
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-jeff
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jeff
+        namespace: datalab
+      data:
+        AWS_ACCESS_KEY_ID: amVmZi1hY2Nlc3Mta2V5
+        AWS_SECRET_ACCESS_KEY: amVmZi1zZWNyZXQta2V5
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-database-secret-s-jeff
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-database-secret-s-jeff
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pg0-pguser-postgres
+        namespace: s-jeff
+      data:
+        uri: cG9zdGdyZXNxbDovL3Bvc3RncmVzOnBnLXNlY3JldEBwZzAtcHJpbWFyeS5zLWplZmYuc3ZjOjU0MzIvcG9zdGdyZXM=
+        dbname: cG9zdGdyZXM=
+        host: cGcwLXByaW1hcnkucy1qZWZmLnN2Yw==
+        port: NTQzMg==
+        user: cG9zdGdyZXM=
+        password: cGctc2VjcmV0
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-mongodb-auth-secret-s-jeff-prod
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-mongodb-auth-secret-s-jeff-prod
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-mongodb-auth
+        namespace: s-jeff
+      data:
+        password: NGhxNVdxN3pWeXdBRUkwaEM3SVAtaXlMWGlMWkVsUVc=
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-redis-auth-secret-s-jeff-prod
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-prod
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-redis-auth
+        namespace: s-jeff
+      data:
+        password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-qdrant-auth-secret-s-jeff-prod
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-qdrant-auth-secret-s-jeff-prod
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-qdrant-auth
+        namespace: s-jeff
+      data:
+        apiKey: b2I5X09rV0pzWEs0dHZVdTNPeDY2bXExSUJWQTFhUHg=
+        readApiKey: WG1Sbm1Qc3NodDRHSzk5VlBRRHhhX0Y4N1Jpb29Za28=

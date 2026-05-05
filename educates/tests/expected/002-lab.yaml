@@ -49,7 +49,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 28 more'
+      db-tlsroute-s-jeff-pg0, and 31 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -812,6 +812,99 @@ spec:
       kind: Secret
       metadata:
         name: pg0-pguser-postgres
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-mongodb-auth-secret-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: observe-mongodb-auth-secret-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-mongodb-auth
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-qdrant-auth-secret-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: observe-qdrant-auth-secret-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-qdrant-auth
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: observe-redis-auth-secret-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-redis-auth
         namespace: s-jeff
   managementPolicies:
   - Observe

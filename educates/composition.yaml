@@ -130,31 +130,125 @@ spec:
               if not isinstance(db_hosts, dict) or not db_hosts:
                   return
 
-              secret_name = "pg0-pguser-postgres"
+              def emit(key, secret_name, secret_namespace):
+                  rsp.desired.resources[key].resource.update({
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key},
+                      },
+                      "spec": {
+                          "managementPolicies": ["Observe"],
+                          "forProvider": {
+                              "manifest": {
+                                  "apiVersion": "v1",
+                                  "kind": "Secret",
+                                  "metadata": {"name": secret_name, "namespace": secret_namespace},
+                              }
+                          },
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "watch": False,
+                      },
+                  })
+
               secret_namespace = meta.get("name")
 
-              key = f"observe-database-secret-{xr_name}"
-              rsp.desired.resources[key].resource.update({
-                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
-                  "kind": "Object",
-                  "metadata": {
-                      "name": key,
-                      "namespace": xr_namespace,
-                      "annotations": {"crossplane.io/composition-resource-name": key},
-                  },
-                  "spec": {
-                      "managementPolicies": ["Observe"],
-                      "forProvider": {
-                          "manifest": {
-                              "apiVersion": "v1",
-                              "kind": "Secret",
-                              "metadata": {"name": secret_name, "namespace": secret_namespace},
-                          }
+              # Keep the legacy observer for existing generic DATABASE_* wiring.
+              emit(f"observe-database-secret-{xr_name}", "pg0-pguser-postgres", secret_namespace)
+
+              for host_key in sorted(list(db_hosts.keys())):
+                  if not isinstance(host_key, str) or not host_key.strip():
+                      continue
+                  cluster_name = host_key.strip()
+                  if cluster_name == "pg0":
+                      continue
+                  emit(
+                      f"observe-database-secret-{xr_name}-{cluster_name}",
+                      f"{cluster_name}-pguser-postgres",
+                      secret_namespace,
+                  )
+
+    - step: observe-store-secrets
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(s):
+              return {} if s is None else _json_format.MessageToDict(s, preserving_proto_field_name=True)
+
+          def _safe_str(v):
+              return str(v).strip() if v is not None else ""
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              observed = getattr(req.observed, "resources", {}) or {}
+              env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+
+              def emit(key, secret_name):
+                  rsp.desired.resources[key].resource.update({
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key},
                       },
-                      "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                      "watch": False,
-                  },
-              })
+                      "spec": {
+                          "managementPolicies": ["Observe"],
+                          "forProvider": {
+                              "manifest": {
+                                  "apiVersion": "v1",
+                                  "kind": "Secret",
+                                  "metadata": {"name": secret_name, "namespace": workshop_ns},
+                              }
+                          },
+                          "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                          "watch": False,
+                      },
+                  })
+
+              document_stores = spec.get("documentStores") or {}
+              if isinstance(document_stores, dict):
+                  for store_name in sorted(document_stores.keys()):
+                      if isinstance(store_name, str) and store_name.strip():
+                          store = store_name.strip()
+                          emit(f"observe-mongodb-auth-secret-{xr_name}-{store}", f"{store}-mongodb-auth")
+
+              cache_stores = spec.get("cacheStores") or {}
+              if isinstance(cache_stores, dict):
+                  for store_name in sorted(cache_stores.keys()):
+                      if isinstance(store_name, str) and store_name.strip():
+                          store = store_name.strip()
+                          emit(f"observe-redis-auth-secret-{xr_name}-{store}", f"{store}-redis-auth")
+
+              vector_stores = spec.get("vectorStores") or {}
+              if isinstance(vector_stores, dict):
+                  for store_name in sorted(vector_stores.keys()):
+                      if isinstance(store_name, str) and store_name.strip():
+                          store = store_name.strip()
+                          emit(f"observe-qdrant-auth-secret-{xr_name}-{store}", f"{store}-qdrant-auth")
 
     - step: update-secret-datalab
       functionRef:
@@ -167,6 +261,7 @@ spec:
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
           import re
+          from urllib.parse import urlsplit, urlunsplit
 
           def _to_dict(s):
               if s is None:
@@ -176,18 +271,6 @@ spec:
           def _safe_str(v):
               return str(v).strip()
 
-          def _strong_token(seed):
-              import hashlib
-              import base64
-              d = hashlib.sha256(seed.encode("utf-8")).digest()
-              return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:28]
-
-          def _strong_token_pd(seed):
-              import hashlib
-              import base64
-              d = hashlib.sha256((seed + ":provider-datalab").encode("utf-8")).digest()
-              return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:32]
-
           def _b64get_any(d, keys):
               if not d:
                   return None
@@ -196,9 +279,9 @@ spec:
                   if v is None:
                       continue
                   try:
-                      return _base64.b64decode(v).decode("utf-8")
+                      return _base64.b64decode(v, validate=True).decode("utf-8")
                   except Exception:
-                      continue
+                      return str(v)
               return None
 
           def _extract_data(objres):
@@ -209,6 +292,42 @@ spec:
               m1 = st.get("manifest") or {}
               m2 = (st.get("raw") or {}).get("manifest") or {}
               return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {}) or {}
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+
+          def _store_key(prefix, store_name, suffix):
+              clean = re.sub(r"[^A-Za-z0-9]", "_", str(store_name)).upper()
+              return f"{prefix}_{clean}_{suffix}"
+
+          def _pg_key(host_name, suffix):
+              clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
+              return f"POSTGRES_{clean}_{suffix}"
+
+          def _pg_db_key(host_name, db_name, suffix):
+              host_clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
+              db_clean = re.sub(r"[^A-Za-z0-9]", "_", str(db_name)).upper()
+              return f"POSTGRES_{host_clean}_{db_clean}_{suffix}"
+
+          def _uri_with_database(uri, db_name):
+              if not uri:
+                  return ""
+              parts = urlsplit(uri)
+              return urlunsplit((parts.scheme, parts.netloc, f"/{db_name}", parts.query, parts.fragment))
+
+          def _external_pg_url(internal_url, external_host):
+              if not internal_url or not external_host:
+                  return ""
+              external_url = re.sub(r'@[^/]+', f'@{external_host}', internal_url)
+              if "sslmode=" not in external_url:
+                  external_url += "&sslmode=require" if "?" in external_url else "?sslmode=require"
+              if "sslnegotiation=" not in external_url:
+                  external_url += "&sslnegotiation=direct" if "?" in external_url else "?sslnegotiation=direct"
+              return external_url
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
@@ -221,8 +340,13 @@ spec:
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               storage_env = env.get("storage") or {}
+              observed = getattr(req.observed, "resources", {}) or {}
 
-              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{xr_name}")
+              env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+
+              obs = observed.get(f"observe-storage-secret-{xr_name}")
               data_b64 = _extract_data(obs)
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
@@ -264,37 +388,66 @@ spec:
                   },
               }
 
-              def _store_key(prefix, store_name, suffix):
-                  clean = re.sub(r"[^A-Za-z0-9]", "_", str(store_name)).upper()
-                  return f"{prefix}_{clean}_{suffix}"
-
               doc_stores = spec.get("documentStores") or {}
               if isinstance(doc_stores, dict):
                   for store_name in sorted(doc_stores.keys()):
                       if not isinstance(store_name, str) or not store_name.strip():
                           continue
-                      pwd = _strong_token_pd(f"{xr_name}:{store_name}:mongodb")
-                      manifest["stringData"][_store_key("MONGO", store_name, "PASSWORD")] = pwd
+                      store = store_name.strip()
+                      host = f"mongodb-{store}-svc.{workshop_ns}.svc"
+                      user = f"{store}-app"
+                      manifest["stringData"][_store_key("MONGO", store, "HOST")] = host
+                      manifest["stringData"][_store_key("MONGO", store, "PORT")] = "27017"
+                      manifest["stringData"][_store_key("MONGO", store, "DATABASE")] = store
+                      manifest["stringData"][_store_key("MONGO", store, "AUTH_SOURCE")] = "admin"
+                      manifest["stringData"][_store_key("MONGO", store, "USER")] = user
+                      auth_data = _extract_data(observed.get(f"observe-mongodb-auth-secret-{xr_name}-{store}"))
+                      pwd = _b64get_any(auth_data, ["password"])
+                      if pwd:
+                          manifest["stringData"][_store_key("MONGO", store, "PASSWORD")] = pwd
+                          manifest["stringData"][_store_key("MONGO", store, "URI")] = (
+                              f"mongodb://{user}:{pwd}@{host}:27017/{store}?authSource=admin"
+                          )
 
               cache_stores = spec.get("cacheStores") or {}
               if isinstance(cache_stores, dict):
                   for store_name in sorted(cache_stores.keys()):
                       if not isinstance(store_name, str) or not store_name.strip():
                           continue
-                      pwd = _strong_token(f"{xr_name}:{store_name}:redis")
-                      manifest["stringData"][_store_key("REDIS", store_name, "PASSWORD")] = pwd
+                      store = store_name.strip()
+                      host = f"{store}.{workshop_ns}.svc"
+                      manifest["stringData"][_store_key("REDIS", store, "HOST")] = host
+                      manifest["stringData"][_store_key("REDIS", store, "PORT")] = "6379"
+                      manifest["stringData"][_store_key("REDIS", store, "USER")] = "default"
+                      manifest["stringData"][_store_key("REDIS", store, "DATABASE")] = "0"
+                      auth_data = _extract_data(observed.get(f"observe-redis-auth-secret-{xr_name}-{store}"))
+                      pwd = _b64get_any(auth_data, ["password"])
+                      if pwd:
+                          manifest["stringData"][_store_key("REDIS", store, "PASSWORD")] = pwd
+                          manifest["stringData"][_store_key("REDIS", store, "URL")] = (
+                              f"redis://default:{pwd}@{host}:6379/0"
+                          )
 
               vector_stores = spec.get("vectorStores") or {}
               if isinstance(vector_stores, dict):
                   for store_name in sorted(vector_stores.keys()):
                       if not isinstance(store_name, str) or not store_name.strip():
                           continue
-                      api_key = _strong_token_pd(f"{xr_name}:{store_name}:qdrant:write")
-                      read_key = _strong_token_pd(f"{xr_name}:{store_name}:qdrant:read")
-                      manifest["stringData"][_store_key("QDRANT", store_name, "API_KEY")] = api_key
-                      manifest["stringData"][_store_key("QDRANT", store_name, "READ_API_KEY")] = read_key
+                      store = store_name.strip()
+                      host = f"qdrant-{store}.{workshop_ns}.svc"
+                      manifest["stringData"][_store_key("QDRANT", store, "HOST")] = host
+                      manifest["stringData"][_store_key("QDRANT", store, "PORT")] = "6333"
+                      manifest["stringData"][_store_key("QDRANT", store, "GRPC_PORT")] = "6334"
+                      manifest["stringData"][_store_key("QDRANT", store, "URL")] = f"http://{host}:6333"
+                      auth_data = _extract_data(observed.get(f"observe-qdrant-auth-secret-{xr_name}-{store}"))
+                      api_key = _b64get_any(auth_data, ["apiKey"])
+                      read_key = _b64get_any(auth_data, ["readApiKey"])
+                      if api_key:
+                          manifest["stringData"][_store_key("QDRANT", store, "API_KEY")] = api_key
+                      if read_key:
+                          manifest["stringData"][_store_key("QDRANT", store, "READ_API_KEY")] = read_key
 
-              db_obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-database-secret-{xr_name}")
+              db_obs = observed.get(f"observe-database-secret-{xr_name}")
               db_data_b64 = _extract_data(db_obs)
               if db_data_b64:
                   manifest["stringData"]["DATABASE_URL"] = _b64get_any(db_data_b64, ["uri"])
@@ -317,7 +470,7 @@ spec:
 
                   internal_url = manifest["stringData"].get("DATABASE_URL")
                   if has_gateway_parent and internal_url:
-                      host_ext = f"pg0-{xr_name}.{ingress_domain}:443"
+                      host_ext = f"pg0-{workshop_ns}.{ingress_domain}:443"
 
                       external_url = re.sub(r'@[^/]+', f'@{host_ext}', internal_url)
 
@@ -328,6 +481,66 @@ spec:
 
                       manifest["stringData"]["DATABASE_HOST_EXTERNAL"] = host_ext.split(":")[0]
                       manifest["stringData"]["DATABASE_URL_EXTERNAL"] = external_url
+
+              db_hosts = spec.get("databases") or {}
+              if isinstance(db_hosts, dict):
+                  db_env = env.get("database") or {}
+                  gateway_env = db_env.get("gateway") or {}
+
+                  gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
+                  gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
+                  gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+                  has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
+
+                  ingress_env = env.get("ingress") or {}
+                  ingress_domain = ingress_env.get("domain", "default")
+
+                  for host_key in sorted(list(db_hosts.keys())):
+                      if not isinstance(host_key, str) or not host_key.strip():
+                          continue
+                      host_cfg = db_hosts.get(host_key) or {}
+                      if not isinstance(host_cfg, dict):
+                          continue
+
+                      cluster_name = host_key.strip()
+                      dbnames = [_safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)]
+                      if not dbnames:
+                          continue
+
+                      host_obs = observed.get(f"observe-database-secret-{xr_name}-{cluster_name}")
+                      host_data_b64 = _extract_data(host_obs)
+                      if not host_data_b64 and cluster_name == "pg0":
+                          host_data_b64 = db_data_b64
+
+                      host = _b64get_any(host_data_b64, ["host"]) or f"{cluster_name}-primary.{workshop_ns}.svc"
+                      port = _b64get_any(host_data_b64, ["port"]) or "5432"
+                      user = _b64get_any(host_data_b64, ["user"]) or "postgres"
+                      password = _b64get_any(host_data_b64, ["password"]) or ""
+                      internal_url = _b64get_any(host_data_b64, ["uri"]) or ""
+
+                      manifest["stringData"][_pg_key(cluster_name, "HOST")] = host
+                      manifest["stringData"][_pg_key(cluster_name, "PORT")] = port
+                      manifest["stringData"][_pg_key(cluster_name, "USER")] = user
+                      manifest["stringData"][_pg_key(cluster_name, "PASSWORD")] = password
+                      manifest["stringData"][_pg_key(cluster_name, "DATABASES")] = ",".join(dbnames)
+
+                      host_ext = ""
+                      if has_gateway_parent:
+                          host_ext = f"{cluster_name}-{workshop_ns}.{ingress_domain}:443"
+                          manifest["stringData"][_pg_key(cluster_name, "HOST_EXTERNAL")] = host_ext.split(":")[0]
+
+                      for dbname in dbnames:
+                          db_url = _uri_with_database(internal_url, dbname)
+                          if not db_url and password:
+                              db_url = (
+                                  f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+                              )
+                          if db_url:
+                              manifest["stringData"][_pg_db_key(cluster_name, dbname, "URL")] = db_url
+                          if host_ext and db_url:
+                              manifest["stringData"][_pg_db_key(cluster_name, dbname, "URL_EXTERNAL")] = (
+                                  _external_pg_url(db_url, host_ext)
+                              )
 
               key = f"secret-{xr_name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)

@@ -62,6 +62,8 @@ This keeps **compute ephemeral** while **database state remains durable**.
 
 If a Kubernetes gateway service is running in the cluster and enabled in the global configuration, the database **can also be exposed externally**. In that case, corresponding environment variables such as the external hostname or external URL are injected into the session as well.
 
+For each declared PostgreSQL host, Provider Datalab also exposes host-scoped aliases in the generated `<datalab>-datalab` Secret. For example, `pg0` receives variables such as `POSTGRES_PG0_HOST`, `POSTGRES_PG0_PORT`, `POSTGRES_PG0_DATABASES`, `POSTGRES_PG0_DEV_URL`, and, when gateway exposure is configured, `POSTGRES_PG0_DEV_URL_EXTERNAL`.
+
 > Note: The Postgres endpoint is exposed through a gateway `TLSRoute,` which requires immediate TLS with SNI (direct TLS). The PostgreSQL server and libpq-based clients (e.g. psql, psycopg) fully support this. However, some non-libpq drivers such as asyncpg do not yet implement this negotiation correctly and may fail during connection setup.
 
 ### Document, Cache, and Vector Stores
@@ -88,6 +90,8 @@ spec:
   - Mongo: `<store>-mongodb-auth` (key: `password`)
   - Redis: `<store>-redis-auth` (key: `password`)
   - Qdrant: `<store>-qdrant-auth` (keys: `apiKey`, `readApiKey`)
+
+Provider Datalab also exposes connection details through the generated `<datalab>-datalab` Secret, which sessions import as environment variables. For a store key such as `prod`, the session receives variables such as `MONGO_PROD_URI`, `REDIS_PROD_URL`, and `QDRANT_PROD_URL`, plus split fields for host, port, user, database, and credentials where applicable.
 
 These stores should be visible platform resources, not ad-hoc services hidden inside a user terminal. The `Datalab` claim records that they exist. The underlying operators handle persistence, upgrades, monitoring, and backups. Before enabling them in production, check the backup and restore guarantees of your MongoDB, Redis, or Qdrant operator setup.
 

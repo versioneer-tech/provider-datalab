@@ -16,7 +16,10 @@ spec:
     - name: PROBE_INTERVAL_SECONDS
       value: "60"
     - name: QDRANT_URL
-      value: http://qdrant-prod:6333
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: QDRANT_PROD_URL
     - name: QDRANT_COLLECTION
       value: probe_checks
     - name: QDRANT_API_KEY

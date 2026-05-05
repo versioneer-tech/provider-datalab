@@ -16,9 +16,15 @@ spec:
     - name: PROBE_INTERVAL_SECONDS
       value: "60"
     - name: REDIS_HOST
-      value: prod
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: REDIS_PROD_HOST
     - name: REDIS_PORT
-      value: "6379"
+      valueFrom:
+        secretKeyRef:
+          name: s-jeff-datalab
+          key: REDIS_PROD_PORT
     - name: REDIS_PASSWORD
       valueFrom:
         secretKeyRef:
