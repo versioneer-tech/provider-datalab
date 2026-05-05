@@ -124,7 +124,7 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 
 Each declared session gets a Datalab-owned workspace PVC. `spec.sessions[].state`
-defaults to `started`, which creates an Educates `WorkshopSession` runtime.
+defaults to `started`, which creates an active runtime session.
 Set it to `stopped` to keep the declared session and its PVC without running
 the session runtime. To choose the StorageClass for those workspace PVCs, set:
 

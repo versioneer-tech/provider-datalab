@@ -1126,7 +1126,7 @@ spec:
                   }
               }
 
-              def emit(kind, manifest, key_suffix=""):
+              def emit(kind, manifest, key_suffix="", readiness=None):
                   suffix = f"-{xr_name}{('-' + key_suffix) if key_suffix else ''}"
                   key = f"{kind.lower()}{suffix}"
                   body = {
@@ -1140,14 +1140,21 @@ spec:
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": manifest},
-                          "readiness": {"policy": "SuccessfulCreate"},
+                          "readiness": readiness or {"policy": "SuccessfulCreate"},
                           "watch": True
                       }
                   }
                   rsp.desired.resources[key].resource.update(body)
 
               emit("Workshop", workshop)
-              emit("WorkshopEnvironment", environment)
+              emit(
+                  "WorkshopEnvironment",
+                  environment,
+                  readiness={
+                      "policy": "DeriveFromCelQuery",
+                      "celQuery": "has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'",
+                  },
+              )
 
               observed_resources = getattr(req.observed, "resources", {}) or {}
               env_manifest = _extract_manifest(observed_resources.get(f"workshopenvironment-{xr_name}"))
@@ -1188,7 +1195,15 @@ spec:
                           }
                       }
                   }
-                  emit("WorkshopSession", session_manifest, key_suffix=str(sid))
+                  emit(
+                      "WorkshopSession",
+                      session_manifest,
+                      key_suffix=str(sid),
+                      readiness={
+                          "policy": "DeriveFromCelQuery",
+                          "celQuery": "has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'",
+                      },
+                  )
 
     - step: update-database-objects
       functionRef:
@@ -1832,7 +1847,10 @@ spec:
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": redis_manifest},
-                          "readiness": {"policy": "SuccessfulCreate"},
+                          "readiness": {
+                              "policy": "DeriveFromCelQuery",
+                              "celQuery": "!has(object.metadata.deletionTimestamp)",
+                          },
                           "watch": True
                       }
                   }
@@ -2004,7 +2022,10 @@ spec:
                       "spec": {
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
                           "forProvider": {"manifest": qdrant},
-                          "readiness": {"policy": "SuccessfulCreate"},
+                          "readiness": {
+                              "policy": "DeriveFromCelQuery",
+                              "celQuery": "!has(object.metadata.deletionTimestamp)",
+                          },
                           "watch": True
                       }
                   }
@@ -2110,9 +2131,14 @@ spec:
                   educates = (manifest.get("status") or {}).get("educates") or {}
                   phase = educates.get("phase")
                   url = educates.get("url")
+                  message = educates.get("message")
 
+                  if phase:
+                      sessions_map[ws_id]["phase"] = phase
+                  if message:
+                      sessions_map[ws_id]["message"] = message
                   if phase == "Running" and url:
-                      sessions_map[ws_id] = {"state": state, "url": url}
+                      sessions_map[ws_id]["url"] = url
 
               cur_status = (xr_obs.get("status") or {}).copy()
               cur_status["sessions"] = sessions_map

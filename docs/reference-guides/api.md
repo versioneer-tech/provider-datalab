@@ -933,7 +933,7 @@ Optional semantic-version tag selection policy.
         <td><b>state</b></td>
         <td>enum</td>
         <td>
-          Desired runtime lifecycle for this session. Started sessions create an Educates WorkshopSession. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.<br/>
+          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.<br/>
           <br/>
             <i>Enum</i>: started, stopped<br/>
             <i>Default</i>: started<br/>
@@ -989,7 +989,7 @@ Optional per-datalab session quota overrides. If a field is not specified here, 
         <td><b>budget</b></td>
         <td>enum</td>
         <td>
-          Namespace budget class determining available compute resources. Accepted values correspond to standard Educates resource budgets. Effective default (if not set here or in EnvironmentConfig): "medium".<br/>
+          Namespace budget class determining available compute resources. Accepted values correspond to the runtime budgets supported by the provider. Effective default (if not set here or in EnvironmentConfig): "medium".<br/>
           <br/>
             <i>Enum</i>: small, medium, large, x-large, xx-large, xxx-large<br/>
         </td>
@@ -1209,6 +1209,20 @@ Observed state of a single datalab session.
           Desired lifecycle state for the declared session.<br/>
           <br/>
             <i>Enum</i>: started, stopped<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>phase</b></td>
+        <td>string</td>
+        <td>
+          Latest observed lifecycle phase for the session runtime.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>message</b></td>
+        <td>string</td>
+        <td>
+          Latest observed status message for the session runtime.<br/>
         </td>
         <td>false</td>
       </tr><tr>

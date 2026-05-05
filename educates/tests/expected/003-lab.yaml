@@ -894,7 +894,9 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    policy: SuccessfulCreate
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
+      == 'Running'
+    policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -939,5 +941,7 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    policy: SuccessfulCreate
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
+      == 'Running'
+    policy: DeriveFromCelQuery
   watch: true

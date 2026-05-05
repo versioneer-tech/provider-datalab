@@ -83,7 +83,7 @@ spec:
                         type: string
                         description: >
                           Desired runtime lifecycle for this session. Started sessions create an
-                          Educates WorkshopSession. Stopped sessions keep their Datalab-owned
+                          active runtime session. Stopped sessions keep their Datalab-owned
                           workspace PVC but do not create a runtime.
                         enum:
                           - started
@@ -253,7 +253,7 @@ spec:
                       type: string
                       description: >-
                         Namespace budget class determining available compute resources.
-                        Accepted values correspond to standard Educates resource budgets.
+                        Accepted values correspond to the runtime budgets supported by the provider.
                         Effective default (if not set here or in EnvironmentConfig): "medium".
                       enum:
                         - small
@@ -473,6 +473,12 @@ spec:
                         enum:
                           - started
                           - stopped
+                      phase:
+                        type: string
+                        description: Latest observed lifecycle phase for the session runtime.
+                      message:
+                        type: string
+                        description: Latest observed status message for the session runtime.
                       url:
                         type: string
                         description: Public URL of the active session.
