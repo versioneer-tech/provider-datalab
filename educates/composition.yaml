@@ -784,6 +784,20 @@ spec:
                   if _session_name(session) and _session_state(session) == "started"
               ]
               vcluster = _boolish(spec.get("vcluster", False))
+              db_service_names = []
+              db_hosts = spec.get("databases") or {}
+              if isinstance(db_hosts, dict):
+                  for host_key in sorted(list(db_hosts.keys())):
+                      if not isinstance(host_key, str) or not host_key.strip():
+                          continue
+                      host_cfg = db_hosts.get(host_key) or {}
+                      if not isinstance(host_cfg, dict):
+                          continue
+                      dbnames = [_safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)]
+                      db_storage = _safe_str(host_cfg.get("storage") or "")
+                      backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+                      if dbnames and db_storage and backup_storage:
+                          db_service_names.append(f"{host_key.strip()}-primary")
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
@@ -904,8 +918,6 @@ spec:
                   }
               }
 
-              host_svc_name = "pg0-primary"
-
               vcluster_cfg = {
                   "enabled": vcluster,
                   "version": "1.34",
@@ -915,6 +927,7 @@ spec:
                               "from": f"$(workshop_namespace)/{host_svc_name}",
                               "to": f"$(workshop_namespace)/{host_svc_name}",
                           }
+                          for host_svc_name in db_service_names
                       ]
                   },
               }
