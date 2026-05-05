@@ -198,6 +198,13 @@ kubectl -n datalab create secret generic <DATALAB> \
   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
 ```
 
+## Breaking Changes
+
+Since `0.6.0`:
+
+- Datalab claims use `pkg.internal/v1beta2` because session state was introduced.
+- PostgreSQL connection details are output in the datalab Secret as host-scoped keys such as `POSTGRES_<HOST>_PASSWORD` and database-scoped URLs such as `POSTGRES_<HOST>_<DBNAME>_URL`.
+
 ## License
 
 Apache 2.0 (Apache License Version 2.0, January 2004)

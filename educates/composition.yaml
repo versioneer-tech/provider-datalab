@@ -155,15 +155,10 @@ spec:
 
               secret_namespace = meta.get("name")
 
-              # Keep the legacy observer for existing generic DATABASE_* wiring.
-              emit(f"observe-database-secret-{xr_name}", "pg0-pguser-postgres", secret_namespace)
-
               for host_key in sorted(list(db_hosts.keys())):
                   if not isinstance(host_key, str) or not host_key.strip():
                       continue
                   cluster_name = host_key.strip()
-                  if cluster_name == "pg0":
-                      continue
                   emit(
                       f"observe-database-secret-{xr_name}-{cluster_name}",
                       f"{cluster_name}-pguser-postgres",
@@ -447,41 +442,6 @@ spec:
                       if read_key:
                           manifest["stringData"][_store_key("QDRANT", store, "READ_API_KEY")] = read_key
 
-              db_obs = observed.get(f"observe-database-secret-{xr_name}")
-              db_data_b64 = _extract_data(db_obs)
-              if db_data_b64:
-                  manifest["stringData"]["DATABASE_URL"] = _b64get_any(db_data_b64, ["uri"])
-                  manifest["stringData"]["DATABASE_NAME"] = _b64get_any(db_data_b64, ["dbname"])
-                  manifest["stringData"]["DATABASE_HOST"] = _b64get_any(db_data_b64, ["host"])
-                  manifest["stringData"]["DATABASE_PORT"] = _b64get_any(db_data_b64, ["port"])
-                  manifest["stringData"]["DATABASE_USER"] = _b64get_any(db_data_b64, ["user"])
-                  manifest["stringData"]["DATABASE_PASSWORD"] = _b64get_any(db_data_b64, ["password"])
-
-                  db_env = env.get("database") or {}
-                  gateway_env = db_env.get("gateway") or {}
-
-                  gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
-                  gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
-                  gateway_section = _safe_str(gateway_env.get("sectionName") or "")
-                  has_gateway_parent = bool(gateway_parent_name and gateway_parent_ns and gateway_section)
-
-                  ingress_env = env.get("ingress") or {}
-                  ingress_domain = ingress_env.get("domain", "default")
-
-                  internal_url = manifest["stringData"].get("DATABASE_URL")
-                  if has_gateway_parent and internal_url:
-                      host_ext = f"pg0-{workshop_ns}.{ingress_domain}:443"
-
-                      external_url = re.sub(r'@[^/]+', f'@{host_ext}', internal_url)
-
-                      if "?" in external_url:
-                          external_url += "&sslmode=require&sslnegotiation=direct"
-                      else:
-                          external_url += "?sslmode=require&sslnegotiation=direct"
-
-                      manifest["stringData"]["DATABASE_HOST_EXTERNAL"] = host_ext.split(":")[0]
-                      manifest["stringData"]["DATABASE_URL_EXTERNAL"] = external_url
-
               db_hosts = spec.get("databases") or {}
               if isinstance(db_hosts, dict):
                   db_env = env.get("database") or {}
@@ -509,8 +469,6 @@ spec:
 
                       host_obs = observed.get(f"observe-database-secret-{xr_name}-{cluster_name}")
                       host_data_b64 = _extract_data(host_obs)
-                      if not host_data_b64 and cluster_name == "pg0":
-                          host_data_b64 = db_data_b64
 
                       host = _b64get_any(host_data_b64, ["host"]) or f"{cluster_name}-primary.{workshop_ns}.svc"
                       port = _b64get_any(host_data_b64, ["port"]) or "5432"

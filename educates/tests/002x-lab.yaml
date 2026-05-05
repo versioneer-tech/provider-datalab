@@ -793,10 +793,10 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-database-secret-s-jeff
+    crossplane.io/composition-resource-name: observe-database-secret-s-jeff-pg0
   labels:
     crossplane.io/composite: s-jeff
-  name: observe-database-secret-s-jeff
+  name: observe-database-secret-s-jeff-pg0
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
@@ -1252,14 +1252,6 @@ stringData:
   AWS_REGION: acme
   AWS_S3_FORCE_PATH_STYLE: "true"
   AWS_SECRET_ACCESS_KEY: jeff-secret-key
-  DATABASE_HOST: pg0-primary.s-jeff.svc
-  DATABASE_HOST_EXTERNAL: pg0-s-jeff.lab.acme.com
-  DATABASE_NAME: postgres
-  DATABASE_PASSWORD: pg-secret
-  DATABASE_PORT: "5432"
-  DATABASE_URL: postgresql://postgres:pg-secret@pg0-primary.s-jeff.svc:5432/postgres
-  DATABASE_URL_EXTERNAL: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/postgres?sslmode=require&sslnegotiation=direct
-  DATABASE_USER: postgres
   MONGO_PROD_AUTH_SOURCE: admin
   MONGO_PROD_DATABASE: prod
   MONGO_PROD_HOST: mongodb-prod-svc.s-jeff.svc

@@ -43,10 +43,10 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: observe-database-secret-s-jeff
+  name: observe-database-secret-s-jeff-pg0
   namespace: default
   annotations:
-    crossplane.io/composition-resource-name: observe-database-secret-s-jeff
+    crossplane.io/composition-resource-name: observe-database-secret-s-jeff-pg0
 status:
   atProvider:
     manifest:

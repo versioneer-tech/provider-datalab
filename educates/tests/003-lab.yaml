@@ -498,10 +498,10 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-database-secret-s-jane
+    crossplane.io/composition-resource-name: observe-database-secret-s-jane-pg0
   labels:
     crossplane.io/composite: s-jane
-  name: observe-database-secret-s-jane
+  name: observe-database-secret-s-jane-pg0
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2

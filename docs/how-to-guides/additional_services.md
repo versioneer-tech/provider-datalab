@@ -242,7 +242,7 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 
 ## Example: Using psql to access and work with a managed database
 
-If you have created a database through the Workspace UI and your Datalab provides database credentials (via `DATABASE_xxx` environment variables), you can immediately connect to the managed PostgreSQL instance by starting a pod that drops you directly into a `psql` shell.
+If you have created a database through the Workspace UI and your Datalab provides database credentials (via `POSTGRES_<HOST>_<DATABASE>_URL_EXTERNAL` environment variables), you can immediately connect to the managed PostgreSQL instance by starting a pod that drops you directly into a `psql` shell.
 
 ```bash
 envsubst <<'EOF' | kubectl apply -f -
@@ -261,17 +261,10 @@ spec:
       - sh
       - -lc
       - |
-        export PGPASSWORD="$DATABASE_PASSWORD"
-        exec psql "host=$DATABASE_HOST_EXTERNAL port=443 dbname=$DATABASE_NAME user=$DATABASE_USER sslmode=require sslnegotiation=direct"
+        exec psql "$POSTGRES_URL_EXTERNAL"
     env:
-      - name: DATABASE_HOST_EXTERNAL
-        value: ${DATABASE_HOST_EXTERNAL}
-      - name: DATABASE_USER
-        value: ${DATABASE_USER}
-      - name: DATABASE_PASSWORD
-        value: ${DATABASE_PASSWORD}
-      - name: DATABASE_NAME
-        value: ${DATABASE_NAME}
+      - name: POSTGRES_URL_EXTERNAL
+        value: ${POSTGRES_PG0_DEV_URL_EXTERNAL}
 EOF
 ```
 
