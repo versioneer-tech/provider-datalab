@@ -32,8 +32,8 @@ helm install crossplane \
   --set provider.defaultActivations={}
 ```
 
-- **Educates installed with all CRDs in the cluster**  for the Educates runtime.
-  See the [Educates Installation Guide](https://educates.dev/docs/installation/) for details.
+- **Educates installed with all CRDs in the cluster** for the Educates runtime.
+  Install it through the upstream [Educates Installation Instructions](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html), [CLI flow](https://docs.educates.dev/en/stable/installation-guides/cli-based-installation.html), or [Carvel flow](https://docs.educates.dev/en/stable/installation-guides/carvel-based-installation.html). For Kustomize/Flux-based platform installs, Versioneer also publishes a vendored Educates base in [`versioneer-tech/bases`](https://github.com/versioneer-tech/bases), overlay [`educates/default`](https://github.com/versioneer-tech/bases/tree/main/educates/default), as `oci://ghcr.io/versioneer-tech/bases:educates-<sha12>`.
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
   Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).
 - **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).

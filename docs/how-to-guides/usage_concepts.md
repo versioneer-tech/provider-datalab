@@ -11,6 +11,10 @@ Read this page as an operator-facing contract. A `Datalab` gives users a smooth 
 ### Sessions
 A `Datalab` claim may declare one or more `spec.sessions`. A session is the named workspace identity for a user or workflow. It owns a durable home PVC and may also have a live Educates runtime.
 
+!!! note "Multiple started sessions"
+
+    Starting with `0.7.0` (coming soon), a single `Datalab` can have multiple sessions started at the same time. This supports patterns such as a default human workspace plus a separate analysis, automation, or agent workspace. Each started session gets its own runtime and durable workspace PVC, while shared Datalab-level credentials and managed services remain operator-visible.
+
 - Each `spec.sessions` entry declares a session by `name`. `state` defaults to `started`.
 - `state: started` creates the **WorkshopSession** runtime for that session and mounts the session PVC as the home workspace.
 - `state: stopped` keeps the declared session and its PVC, but does not create the **WorkshopSession** runtime. Switching back to `started` reuses the same workspace PVC.

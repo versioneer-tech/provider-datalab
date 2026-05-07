@@ -1,6 +1,8 @@
 # Welcome to Provider Datalab
 
-**Provider Datalab is a PaaS-style building block for platform operators:** it turns one `Datalab` claim into an end-user workspace with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry. Users get a smooth workspace. Operators keep visibility into what was provisioned, so they can own access, capacity, lifecycle, and backups.
+**Provider Datalab is a PaaS-style building block for platform operators:** it turns one `Datalab` claim into an operator-governed cloud sandbox with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry. Users get a smooth workspace. Operators keep visibility into what was provisioned, so they can own access, capacity, lifecycle, and backups.
+
+This makes Datalab suitable for both human and agent workloads. The sandbox is not magic; it is an explicit authority boundary. A session runs in a dedicated Kubernetes namespace, or in a dedicated vcluster when a virtual Kubernetes control plane is wanted. A user or agent can only use the workspace, storage credentials, Kubernetes permissions, and service credentials exposed to that session. It can change state it is allowed to touch, while the platform operator remains outside the session and can still enforce RBAC, Pod Security, NetworkPolicies, quotas, database backups, bucket versioning, ingress policy, and lifecycle controls.
 
 Provider Datalab is built on [Crossplane v2](https://crossplane.io). It provides a tenant-facing `Datalab` API and compositions that connect systems you already operate: Kubernetes namespaces, ingress, identity, object-storage credentials, persistent volumes, database operators, cache and vector-store operators, and the Educates runtime.
 
@@ -16,6 +18,8 @@ For an operator, a `Datalab` is not just a notebook or a pod. It is the contract
 - The resulting resources stay visible to the operator, so lifecycle, policy, capacity, and backup responsibility are clear.
 
 This is the main design point: Provider Datalab makes self-service smooth without hiding state from the platform team. Sessions can be disposable. Databases, buckets, persistent volumes, and other stateful services remain platform concerns.
+
+For agent workloads, this means the operator does not have to trust the agent with the whole platform. The agent gets a bounded runtime and explicit credentials. The platform keeps the guardrails, observability, and recovery mechanisms.
 
 ## What It Provides
 

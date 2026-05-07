@@ -6,6 +6,30 @@ Out of the box, our platform applies a **baseline security model**: workloads ar
 
 ---
 
+## Datalabs as Sandboxes for Agents
+
+A Datalab session is a sandbox for both humans and agents, but the practical question is what that sandbox is authorized to touch:
+
+- With `vcluster: false`, workloads are sandboxed to the Datalab's dedicated host-cluster namespace.
+- With `vcluster: true`, users and agents also get a dedicated virtual Kubernetes API. Workloads still run under the host namespace's Pod Security, NetworkPolicy, quota, and admission controls.
+- `kubernetesAccess` exposes a Kubernetes API token inside the session. The token is scoped to the configured namespace or vcluster and its role is controlled by `kubernetesRole`.
+- Storage and service credentials are intentionally exposed to the session when configured. A user or agent can modify any state those credentials allow, such as workspace files, object-storage contents, registry images, or data in attached services.
+
+This means agents should be treated like authorized users with automation speed. They cannot do more than the session's credentials, RBAC, and policies allow, but they can accidentally or intentionally change everything inside that allowed scope. Durable guardrails therefore belong outside the session: database backups, bucket versioning, retention policy, admission control, quotas, audit logs, and lifecycle management. The goal is defense in depth through platform policy, not trust in the agent process.
+
+### Example Security Audit
+
+| Example | Runtime boundary | Kubernetes access | Risk level | Notes for agent workloads |
+| --- | --- | --- | --- | --- |
+| `s-jeff` (`002-lab.yaml`) | No active session by default; managed services are created in the dedicated runtime namespace | Disabled (`kubernetesAccess: false`) | Lowest | Good default for service validation and idle environments. The example has no running session and no session token. |
+| `s-joe` (`001-lab.yaml`) | No active session by default; a later session would run in a dedicated host namespace | Default token with `edit` role if a session is started | Low while idle, medium when started | Safe as an idle personal Datalab. For agents, consider `kubernetesAccess: false` unless Kubernetes API access is required. |
+| `s-john` (`004-lab.yaml`) | Active sessions in a dedicated host namespace (`vcluster: false`) | Token enabled with `edit` role | Medium | This is still sandboxed by namespace, Pod Security, NetworkPolicy, and quota. Agents can create real host-cluster namespaced resources and can write to exposed workspace and storage state. |
+| `s-jane` (`003-lab.yaml`) | Active session with a dedicated vcluster (`vcluster: true`) | Token enabled with `admin` role in the vcluster | Highest | Best fit for trusted build-heavy workflows. `privileged` mode, Docker, registry, and vcluster admin access make it powerful; use only where that level of trust is intended. |
+
+For a conservative agent profile, start with `vcluster: true`, `policy: baseline` or `restricted`, `kubernetesRole: edit`, and only expose storage or service credentials that the agent is meant to mutate. Enable `privileged` mode and Docker only for trusted workloads that need them.
+
+---
+
 ## Configurable Security Options
 
 Datalabs expose configurable runtime security through the `spec.security` section of the `Datalab` resource. This allows operators to adjust the trust level per environment:
