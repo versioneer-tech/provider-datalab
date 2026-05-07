@@ -19,14 +19,16 @@ This means agents should be treated like authorized users with automation speed.
 
 ### Example Security Audit
 
-| Example | Runtime boundary | Kubernetes access | Risk level | Notes for agent workloads |
-| --- | --- | --- | --- | --- |
-| `s-jeff` (`002-lab.yaml`) | No active session by default; managed services are created in the dedicated runtime namespace | Disabled (`kubernetesAccess: false`) | Lowest | Good default for service validation and idle environments. The example has no running session and no session token. |
-| `s-joe` (`001-lab.yaml`) | No active session by default; a later session would run in a dedicated host namespace | Default token with `edit` role if a session is started | Low while idle, medium when started | Safe as an idle personal Datalab. For agents, consider `kubernetesAccess: false` unless Kubernetes API access is required. |
-| `s-john` (`004-lab.yaml`) | Active sessions in a dedicated host namespace (`vcluster: false`) | Token enabled with `edit` role | Medium | This is still sandboxed by namespace, Pod Security, NetworkPolicy, and quota. Agents can create real host-cluster namespaced resources and can write to exposed workspace and storage state. |
-| `s-jane` (`003-lab.yaml`) | Active session with a dedicated vcluster (`vcluster: true`) | Token enabled with `admin` role in the vcluster | Highest | Best fit for trusted build-heavy workflows. `privileged` mode, Docker, registry, and vcluster admin access make it powerful; use only where that level of trust is intended. |
+The table assumes a session is started for each example. It compares the authority and blast radius of that session, not whether the example starts one by default. `admin` inside a vcluster is not automatically more dangerous than `edit` in a host namespace; those are different API boundaries. Higher risk usually comes from the combination of Kubernetes authority, exposed credentials, runtime policy, Docker/registry access, and writable state.
 
-For a conservative agent profile, start with `vcluster: true`, `policy: baseline` or `restricted`, `kubernetesRole: edit`, and only expose storage or service credentials that the agent is meant to mutate. Enable `privileged` mode and Docker only for trusted workloads that need them.
+| Example | Runtime boundary | Policy | Docker access | Kubernetes access | Assessment |
+| --- | --- | --- | --- | --- | --- |
+| `s-jeff` (`002-lab.yaml`) | Dedicated host namespace (`vcluster: false`) | `baseline` | Disabled | Disabled (`kubernetesAccess: false`) | The session can use exposed credentials and services, but cannot interact with the Kubernetes API from inside the workspace. Useful when an agent only needs files, storage, and service endpoints. |
+| `s-joe` (`001-lab.yaml`) | Dedicated host namespace (`vcluster: false`) | `baseline` | Disabled | Token enabled with `edit` role | The session is namespace-sandboxed and can create namespaced host-cluster resources. Good for trusted workspace automation; set `kubernetesAccess: false` when Kubernetes API access is unnecessary. |
+| `s-john` (`004-lab.yaml`) | Dedicated host namespace (`vcluster: false`) | `baseline` | Disabled | Token enabled with `edit` role | Similar to `s-joe`, with workshop files and writable exposed storage state. Agents can modify workspace content, object-storage contents, and namespaced Kubernetes resources. |
+| `s-jane` (`003-lab.yaml`) | Dedicated vcluster plus host namespace controls (`vcluster: true`) | `privileged` | Docker enabled | Token enabled with `admin` role in the vcluster | Best fit for trusted build-heavy workflows. The vcluster admin role is powerful inside the virtual API, but the stronger trust signal here is privileged execution with Docker and registry access. |
+
+For a restrictive agent profile, start with `vcluster: true`, `policy: baseline` or `restricted`, Docker access disabled, and only expose storage or service credentials that the agent is meant to mutate. A useful compromise not shown in the examples is `vcluster: true` with `policy: baseline`, Docker disabled, and `kubernetesRole: admin` inside the vcluster when the agent needs broad virtual-cluster API freedom. Enable `privileged` mode and Docker only for trusted workloads that need them.
 
 ---
 
