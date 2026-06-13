@@ -47,7 +47,7 @@ data:
   iam:
     realm: acme
   auth:
-    type: none
+    type: delegated
   ingress:
     class: nginx
     domain: lab.acme.com

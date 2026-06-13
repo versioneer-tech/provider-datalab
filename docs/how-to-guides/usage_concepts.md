@@ -13,7 +13,7 @@ A `Datalab` claim may declare one or more `spec.sessions`. A session is the name
 
 !!! note "Multiple started sessions"
 
-    Starting with `0.7.0` (coming soon), a single `Datalab` can have multiple sessions started at the same time. This supports patterns such as a default human workspace plus a separate analysis, automation, or agent workspace. Each started session gets its own runtime and durable workspace PVC, while shared Datalab-level credentials and managed services remain operator-visible.
+    A single `Datalab` can have multiple sessions started at the same time. This supports patterns such as a default human workspace plus a separate analysis, automation, or agent workspace. Each started session gets its own runtime and durable workspace PVC, while shared Datalab-level credentials and managed services remain operator-visible.
 
 - Each `spec.sessions` entry declares a session by `name`. `state` defaults to `started`.
 - `state: started` creates the **WorkshopSession** runtime for that session and mounts the session PVC as the home workspace.
@@ -119,45 +119,280 @@ Provider Datalab is a workspace building block. It can wire authentication into 
 Multiple options are possible:
 
 - Enable built-in runtime authentication. By default, `auth.type = credentials` uses the same credentials that are used to access the connected object-storage buckets for session login. This is a simple basic-auth style option, but it ties workspace users to the credentials known by the Datalab runtime.
-- Set `auth.type = none` and let another platform component protect access before requests reach the workspace. This does not mean that unauthenticated access is required; it means authentication is delegated to another layer, such as the Kubernetes ingress controller.
+- Set `auth.type = delegated` and let another platform component protect access before requests reach the workspace. This does not mean that unauthenticated access is required; it means authentication is delegated to another layer, such as the Kubernetes ingress controller.
 
-Delegating authentication is often more flexible because users accessing a workspace do not necessarily have to exist in Keycloak. For example, a workspace ingress can be protected by `oauth2-proxy` with NGINX ingress annotations:
+Delegating authentication is often more flexible because users accessing a workspace do not necessarily have to exist in the same identity model used by the Datalab composition. For example, NGINX Ingress can call a shared `oauth2-proxy`, while APISIX can enforce OIDC directly with its `openid-connect` plugin, optionally combined with `keycloak-authz` or the OPA plugin for authorization.
 
-```yaml
-nginx.ingress.kubernetes.io/auth-url: "https://auth.acme.org/oauth2/auth"
-nginx.ingress.kubernetes.io/auth-signin: "https://auth.acme.org/oauth2/start?rd=$escaped_request_uri"
-```
+Those controller-specific settings should be added by platform policy instead of being repeated in every Datalab. Kyverno is one option, but the same result can be achieved with a mutating admission webhook, GitOps post-processing, or any other automation that consistently targets the generated Educates Ingress resources. In all examples below, the Datalab environment keeps `auth.type: delegated`; the protection is established externally at the ingress layer.
 
-Those annotations can be added by platform policy instead of being specified in every Datalab. One option is a Kyverno mutation policy:
+??? info "Generated workshop session resources"
 
-```yaml
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: annotate-datalab-ingresses
-spec:
-  background: false
-  rules:
-  - name: add-oauth2-proxy-annotations-for-datalab-domain
-    match:
-      any:
-      - resources:
-          kinds:
-          - Ingress
-    preconditions:
-      all:
-      - key: "{{ request.object.spec.rules[?ends_with(host, '.datalab.acme.org')] | length(@) }}"
-        operator: GreaterThan
-        value: 0
-    mutate:
-      patchStrategicMerge:
-        metadata:
-          annotations:
-            nginx.ingress.kubernetes.io/auth-url: "https://auth.acme.org/oauth2/auth"
-            nginx.ingress.kubernetes.io/auth-signin: "https://auth.acme.org/oauth2/start?rd=$escaped_request_uri"
-```
+    For a Datalab named `s-jane` with a `default` session and `ingress.domain: lab.acme.org`, Educates creates session ingress hosts such as:
 
-Kyverno is only one way to apply this policy. The same result can be achieved with a mutating admission webhook or any other platform automation that consistently annotates the generated Ingress resources.
+    ```text
+    s-jane-default.lab.acme.org
+    editor-s-jane-default.lab.acme.org
+    s-jane-default-editor.lab.acme.org
+    data-s-jane-default.lab.acme.org
+    s-jane-default-data.lab.acme.org
+    ```
+
+    The generated ingresses carry labels that are suitable for platform policy:
+
+    ```yaml
+    training.educates.dev/application: workshop
+    training.educates.dev/component: session
+    training.educates.dev/environment.name: s-jane
+    ```
+
+    Provider Datalab also creates a Keycloak client named after the Datalab. For `s-jane`, the generated client includes redirect and web-origin entries for the workspace root and each declared session host:
+
+    ```text
+    https://s-jane.lab.acme.org/*
+    https://s-jane-default.lab.acme.org/*
+    https://editor-s-jane-default.lab.acme.org/*
+    https://s-jane-default-editor.lab.acme.org/*
+    https://data-s-jane-default.lab.acme.org/*
+    https://s-jane-default-data.lab.acme.org/*
+    http://localhost:*
+    ```
+
+    This allows ingress-layer OIDC implementations, such as APISIX `openid-connect`, to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy.
+
+??? example "Shared delegated-auth environment configuration"
+
+    Both nginx and APISIX examples use delegated auth at the Datalab layer. Change `ingress.class` to match the ingress controller you operate.
+
+    ```yaml
+    apiVersion: apiextensions.crossplane.io/v1beta1
+    kind: EnvironmentConfig
+    metadata:
+      name: datalab
+    data:
+      iam:
+        realm: acme
+      auth:
+        type: delegated
+      ingress:
+        class: apisix # use "nginx" for the nginx example
+        domain: lab.acme.org
+        secret: workspace-tls
+      storage:
+        endpoint: https://s3.acme.org
+        provider: Other
+        region: acme
+        force_path_style: "true"
+        secretNamespace: workspace
+        type: s3
+    ```
+
+    The Educates installation must use the same ingress class, domain, and TLS secret. For example, an APISIX-based deployment would set:
+
+    ```yaml
+    clusterIngressDomain: lab.acme.org
+    clusterIngressClass: apisix
+    tlsCertificateRef:
+      name: workspace-tls
+      namespace: workspace
+    ```
+
+    For TLS, use a wildcard certificate for the session domain:
+
+    ```yaml
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: workspace-cert
+      namespace: workspace
+    spec:
+      dnsNames:
+      - "*.lab.acme.org"
+      issuerRef:
+        kind: ClusterIssuer
+        name: letsencrypt-dns-prod
+      secretName: workspace-tls
+    ```
+
+??? example "NGINX Ingress with oauth2-proxy"
+
+    With NGINX Ingress, the usual pattern is an externally deployed `oauth2-proxy` instance and NGINX external-auth annotations on the generated workshop-session ingresses.
+
+    In this model, `oauth2-proxy` normally uses its own OAuth client, for example with redirect URI:
+
+    ```text
+    https://auth.lab.acme.org/oauth2/callback
+    ```
+
+    The Datalab-generated Keycloak clients are still useful for direct OIDC ingress controllers, but a central `oauth2-proxy` does not need one client per Datalab unless you intentionally deploy it that way.
+
+    ```yaml
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: protect-workshop-sessions-nginx
+    spec:
+      admission: true
+      background: false
+      rules:
+      - name: add-oauth2-proxy-annotations
+        match:
+          any:
+          - resources:
+              kinds:
+              - Ingress
+              selector:
+                matchLabels:
+                  training.educates.dev/application: workshop
+                  training.educates.dev/component: session
+        preconditions:
+          all:
+          - key: "{{ request.object.spec.ingressClassName || '' }}"
+            operator: Equals
+            value: nginx
+          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+        mutate:
+          patchStrategicMerge:
+            metadata:
+              annotations:
+                +(nginx.ingress.kubernetes.io/auth-url): "https://auth.lab.acme.org/oauth2/auth"
+                +(nginx.ingress.kubernetes.io/auth-signin): "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri"
+                +(nginx.ingress.kubernetes.io/auth-response-headers): "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
+    ```
+
+    Configure `oauth2-proxy` with a cookie domain that covers the workshop hosts, for example `.lab.acme.org`, and restrict allowed redirect domains to the same boundary.
+
+??? example "APISIX Ingress with openid-connect"
+
+    With APISIX, the ingress controller can enforce OIDC directly. This pattern mirrors the EOEPCA deployment, adapted to `acme.org`.
+
+    Kyverno needs permission to create `ApisixPluginConfig` resources in the generated session namespaces:
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: kyverno:workspace-session-apisix-pluginconfigs
+      labels:
+        rbac.kyverno.io/aggregate-to-admission-controller: "true"
+        rbac.kyverno.io/aggregate-to-background-controller: "true"
+    rules:
+    - apiGroups:
+      - apisix.apache.org
+      resources:
+      - apisixpluginconfigs
+      verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+    ```
+
+    The policy generates one APISIX plugin config per session namespace and annotates the matching workshop ingress to use it:
+
+    ```yaml
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: protect-workshop-sessions-apisix
+    spec:
+      admission: true
+      background: false
+      rules:
+      - name: generate-apisix-oidc-plugin-config
+        match:
+          any:
+          - resources:
+              kinds:
+              - Ingress
+              selector:
+                matchLabels:
+                  training.educates.dev/application: workshop
+                  training.educates.dev/component: session
+        preconditions:
+          all:
+          - key: "{{ request.object.spec.ingressClassName || '' }}"
+            operator: Equals
+            value: apisix
+          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
+            operator: NotEquals
+            value: ""
+        generate:
+          apiVersion: apisix.apache.org/v2
+          kind: ApisixPluginConfig
+          name: "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+          namespace: "{{ request.namespace }}"
+          synchronize: false
+          data:
+            metadata:
+              labels:
+                training.educates.dev/application: workshop
+                training.educates.dev/component: session
+                training.educates.dev/environment.name: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+            spec:
+              plugins:
+              - name: openid-connect
+                enable: true
+                config:
+                  discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
+                  use_jwks: true
+                  bearer_only: false
+                  client_id: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+                  client_secret: ""
+                  session:
+                    secret: "{{ random('[A-Za-z0-9]{32}') }}"
+                  access_token_in_authorization_header: false
+                  set_access_token_header: false
+                  set_id_token_header: false
+                  set_userinfo_header: false
+                  set_refresh_token_header: false
+      - name: add-apisix-oidc-plugin-config
+        match:
+          any:
+          - resources:
+              kinds:
+              - Ingress
+              selector:
+                matchLabels:
+                  training.educates.dev/application: workshop
+                  training.educates.dev/component: session
+        preconditions:
+          all:
+          - key: "{{ request.object.spec.ingressClassName || '' }}"
+            operator: Equals
+            value: apisix
+          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
+            operator: NotEquals
+            value: ""
+        mutate:
+          patchStrategicMerge:
+            metadata:
+              annotations:
+                +(k8s.apisix.apache.org/plugin-config-name): "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+    ```
+
+    The plugin uses the Datalab name as `client_id`, taken from `training.educates.dev/environment.name`. Because Provider Datalab creates the matching public Keycloak client and redirect URIs, no additional Keycloak mutation is required for declared sessions.
+
+    The session secret is generated when Kyverno creates the `ApisixPluginConfig`. `synchronize: false` keeps the generated object stable; if you intentionally change the plugin template for existing sessions, recreate the generated plugin config or restart the session so Kyverno can generate a fresh one.
+
+    Token and userinfo forwarding flags are disabled by default. Enable them only when the upstream workspace application explicitly needs those headers.
+
+Other ingress controllers follow the same delegated pattern: set `auth.type: delegated`, match the generated workshop session ingresses by label and domain, and attach the controller-specific authentication policy.
+
+Full example manifests are available in the repository:
+
+- [examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
+- [examples/ingress-protection/apisix-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
 
 Keycloak-managed access is supported. When it is used, the composition automatically provisions the Keycloak client, groups, roles, role bindings, and memberships needed for the workspace.
 
@@ -493,7 +728,7 @@ Database credentials are managed by the PostgreSQL operator and stored as Kubern
 - Durable data services remain visible to operators, which is the basis for backup, restore, monitoring, and lifecycle responsibility.
 - Object-storage buckets are created outside Provider Datalab, for example with Provider Storage; Provider Datalab consumes the resulting credentials.
 - For Keycloak-managed access, users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, roles, and role bindings.
-- For delegated access, `auth.type = none` leaves authentication to the ingress layer or another platform component.
+- For delegated access, `auth.type = delegated` leaves authentication to the ingress layer or another platform component.
 - Sessions may be started for live work or stopped while keeping their workspace PVC.
 - Workshop files enable the Educates UI workshop tab.
 - Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation where applicable.

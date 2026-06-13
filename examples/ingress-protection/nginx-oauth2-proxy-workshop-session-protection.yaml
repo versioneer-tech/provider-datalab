@@ -1,0 +1,77 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Example platform-side protection for Educates workshop sessions rendered by
+# Provider Datalab. This uses NGINX Ingress external auth annotations and a
+# separately operated oauth2-proxy deployment.
+#
+# Adapt namespaces, issuer names, storage settings, and oauth2-proxy endpoints
+# for your cluster. The important Datalab-side setting is auth.type: delegated.
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab
+data:
+  iam:
+    realm: acme
+  auth:
+    type: delegated
+  ingress:
+    class: nginx
+    domain: lab.acme.org
+    secret: workspace-tls
+  storage:
+    endpoint: https://s3.acme.org
+    provider: Other
+    region: acme
+    force_path_style: "true"
+    secretNamespace: workspace
+    type: s3
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: workspace-cert
+  namespace: workspace
+spec:
+  dnsNames:
+    - "*.lab.acme.org"
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-dns-prod
+  secretName: workspace-tls
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: protect-workshop-sessions-nginx
+spec:
+  admission: true
+  background: false
+  rules:
+    - name: add-oauth2-proxy-annotations
+      match:
+        any:
+          - resources:
+              kinds:
+                - Ingress
+              selector:
+                matchLabels:
+                  training.educates.dev/application: workshop
+                  training.educates.dev/component: session
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.ingressClassName || '' }}"
+            operator: Equals
+            value: nginx
+          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              +(nginx.ingress.kubernetes.io/auth-url): "https://auth.lab.acme.org/oauth2/auth"
+              +(nginx.ingress.kubernetes.io/auth-signin): "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri"
+              +(nginx.ingress.kubernetes.io/auth-response-headers): "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"

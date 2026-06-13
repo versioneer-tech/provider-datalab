@@ -1,0 +1,45 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: workshop-s-jane
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: workshop-s-jane
+status:
+  atProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: Workshop
+      metadata:
+        name: s-jane
+        generation: 2
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: workshopenvironment-s-jane
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: workshopenvironment-s-jane
+status:
+  atProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopEnvironment
+      metadata:
+        name: s-jane
+      status:
+        educates:
+          namespace: s-jane
+          phase: Running
+          workshop:
+            generation: 1
+            spec:
+              session:
+                applications:
+                  vcluster:
+                    services:
+                      fromHost: []

@@ -230,9 +230,19 @@ spec:
     standardFlowEnabled: true
     validRedirectUris:
     - https://s-jane.lab.acme.com/*
+    - https://s-jane-default.lab.acme.com/*
+    - https://editor-s-jane-default.lab.acme.com/*
+    - https://s-jane-default-editor.lab.acme.com/*
+    - https://data-s-jane-default.lab.acme.com/*
+    - https://s-jane-default-data.lab.acme.com/*
     - http://localhost:*
     webOrigins:
     - https://s-jane.lab.acme.com/*
+    - https://s-jane-default.lab.acme.com/*
+    - https://editor-s-jane-default.lab.acme.com/*
+    - https://s-jane-default-editor.lab.acme.com/*
+    - https://data-s-jane-default.lab.acme.com/*
+    - https://s-jane-default-data.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
@@ -931,6 +941,8 @@ spec:
             value: s-jane-default
           - name: FRAME_ANCESTORS
             value: ""
+          - name: KUBECONFIG
+            value: /opt/kubeconfig/config
           id: default
           ingress:
             domain: lab.acme.com

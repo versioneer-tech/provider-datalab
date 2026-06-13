@@ -72,9 +72,29 @@ spec:
     standardFlowEnabled: true
     validRedirectUris:
     - https://s-john.lab.acme.com/*
+    - https://s-john-default.lab.acme.com/*
+    - https://editor-s-john-default.lab.acme.com/*
+    - https://s-john-default-editor.lab.acme.com/*
+    - https://data-s-john-default.lab.acme.com/*
+    - https://s-john-default-data.lab.acme.com/*
+    - https://s-john-analysis.lab.acme.com/*
+    - https://editor-s-john-analysis.lab.acme.com/*
+    - https://s-john-analysis-editor.lab.acme.com/*
+    - https://data-s-john-analysis.lab.acme.com/*
+    - https://s-john-analysis-data.lab.acme.com/*
     - http://localhost:*
     webOrigins:
     - https://s-john.lab.acme.com/*
+    - https://s-john-default.lab.acme.com/*
+    - https://editor-s-john-default.lab.acme.com/*
+    - https://s-john-default-editor.lab.acme.com/*
+    - https://data-s-john-default.lab.acme.com/*
+    - https://s-john-default-data.lab.acme.com/*
+    - https://s-john-analysis.lab.acme.com/*
+    - https://editor-s-john-analysis.lab.acme.com/*
+    - https://s-john-analysis-editor.lab.acme.com/*
+    - https://data-s-john-analysis.lab.acme.com/*
+    - https://s-john-analysis-data.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig

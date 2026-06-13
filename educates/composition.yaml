@@ -520,6 +520,28 @@ spec:
           def _distinct(seq):
               return list(dict.fromkeys(seq))
 
+          def _safe_str(v):
+              return str(v).strip() if v is not None else ""
+
+          def _session_name(session):
+              if isinstance(session, dict):
+                  return _safe_str(session.get("name") or "")
+              return _safe_str(session)
+
+          def _workspace_redirect_uris(xr_name, domain, session_names):
+              uris = [f"https://{xr_name}.{domain}/*"]
+              for sid in session_names:
+                  session_host = f"{xr_name}-{sid}"
+                  uris.extend([
+                      f"https://{session_host}.{domain}/*",
+                      f"https://editor-{session_host}.{domain}/*",
+                      f"https://{session_host}-editor.{domain}/*",
+                      f"https://data-{session_host}.{domain}/*",
+                      f"https://{session_host}-data.{domain}/*",
+                  ])
+              uris.append("http://localhost:*")
+              return _distinct(uris)
+
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
@@ -535,6 +557,12 @@ spec:
               realm = iam_env.get("realm", "default")
               domain = ingress_env.get("domain", "default")
               url = f"https://{xr_name}.{domain}"
+              session_names = [
+                  _session_name(session)
+                  for session in (spec.get("sessions") or [])
+                  if _session_name(session)
+              ]
+              redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
 
               def put(key_base, body_base, name_override=xr_name):
                   key = f"{key_base}-{name_override}"
@@ -599,8 +627,8 @@ spec:
                           "directAccessGrantsEnabled": False,
                           "serviceAccountsEnabled": False,
                           "oauth2DeviceAuthorizationGrantEnabled": True,
-                          "webOrigins": [f"{url}/*", "http://localhost:*"],
-                          "validRedirectUris": [f"{url}/*", "http://localhost:*"],
+                          "webOrigins": redirect_uris,
+                          "validRedirectUris": redirect_uris,
                           "realmId": realm,
                       },
                   },
@@ -1189,7 +1217,10 @@ spec:
                               "env": [
                                   {"name": "SESSION_NAME", "value": f"{xr_name}-{sid}"},
                                   {"name": "FRAME_ANCESTORS", "value": ""}
-                              ],
+                              ] + (
+                                  [{"name": "KUBECONFIG", "value": "/opt/kubeconfig/config"}]
+                                  if vcluster else []
+                              ),
                               "username": session_username,
                               "password": session_password
                           }

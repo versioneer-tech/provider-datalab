@@ -92,9 +92,9 @@ Recommended Crossplane dependency set for `datalab-educates`:
 
 Pin exact provider and function versions or digests in your GitOps source and upgrade them intentionally after validation.
 
-Keycloak-managed access is supported: the composition automatically provisions the workspace client, groups, roles, role bindings, and memberships. At the same time, the provider is intentionally only a workspace provisioning building block. In many production deployments it is better to delegate authentication to the platform, for example to the ingress layer with `oauth2-proxy`, while keeping `auth.type = none` in the Datalab environment configuration.
+Keycloak-managed access is supported: the composition automatically provisions the workspace client, groups, roles, role bindings, and memberships. At the same time, the provider is intentionally only a workspace provisioning building block. In many production deployments it is better to delegate authentication to the platform, for example to NGINX Ingress with `oauth2-proxy` or APISIX with the `openid-connect` plugin, while keeping `auth.type = delegated` in the Datalab environment configuration.
 
-When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, groups, group memberships, roles, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component.
+When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, groups, group memberships, roles, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component. Direct OIDC ingress integrations can still reuse the Datalab-generated Keycloak client because the composition includes redirect and web-origin entries for declared session hosts.
 
 When installed, a Datalab will provision a vcluster (if enabled), launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus tools like `awscli` and `rclone`), wire in object-storage credentials, and reconcile any requested platform-managed data services.
 
@@ -135,9 +135,9 @@ data:
   iam:
     realm: demo
   auth:
-    # Use "credentials" to reuse storage credentials, or "none" when
+    # Use "credentials" to reuse storage credentials, or "delegated" when
     # the ingress/platform layer handles authentication.
-    type: none
+    type: delegated
   ingress:
     class: nginx
     domain: datalab.acme.org
