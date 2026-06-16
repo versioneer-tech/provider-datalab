@@ -68,7 +68,7 @@ If a Kubernetes gateway service is running in the cluster and enabled in the glo
 
 For each declared PostgreSQL host, Provider Datalab also exposes host-scoped aliases in the generated `<datalab>-datalab` Secret. For example, `pg0` receives variables such as `POSTGRES_PG0_HOST`, `POSTGRES_PG0_PORT`, `POSTGRES_PG0_DATABASES`, `POSTGRES_PG0_DEV_URL`, and, when gateway exposure is configured, `POSTGRES_PG0_DEV_URL_EXTERNAL`.
 
-> Note: The Postgres endpoint is exposed through a gateway `TLSRoute,` which requires immediate TLS with SNI (direct TLS). The PostgreSQL server and libpq-based clients (e.g. psql, psycopg) fully support this. However, some non-libpq drivers such as asyncpg do not yet implement this negotiation correctly and may fail during connection setup.
+> Note: The Postgres endpoint is exposed through a gateway `TLSRoute`, which requires immediate TLS with SNI (direct TLS). The PostgreSQL server and libpq-based clients (e.g. psql, psycopg) fully support this. However, some non-libpq drivers such as asyncpg do not yet implement this negotiation correctly and may fail during connection setup.
 
 ### Document, Cache, and Vector Stores
 
@@ -263,9 +263,11 @@ Those controller-specific settings should be added by platform policy instead of
 
     Configure `oauth2-proxy` with a cookie domain that covers the workshop hosts, for example `.lab.acme.org`, and restrict allowed redirect domains to the same boundary.
 
-??? example "APISIX Ingress with openid-connect"
+??? example "APISIX Ingress with openid-connect and OPA"
 
-    With APISIX, the ingress controller can enforce OIDC directly. This pattern mirrors the EOEPCA deployment, adapted to `acme.org`.
+    With APISIX, the ingress controller can enforce OIDC directly. For authorization, add the APISIX OPA plugin to the same `ApisixPluginConfig` and point it at a policy that validates workspace access. This pattern mirrors the EOEPCA deployment, adapted to `acme.org`.
+
+    If the OPA policy checks Keycloak client roles in `resource_access`, request the `roles` scope in the APISIX `openid-connect` plugin. The access token must also be made available as an `Authorization: Bearer ...` header so the APISIX OPA plugin can pass it to OPA for policy evaluation. Without the `roles` scope, Keycloak may issue a valid access token that contains identity claims but not the client-role claims needed by the policy.
 
     Kyverno needs permission to create `ApisixPluginConfig` resources in the generated session namespaces:
 
@@ -344,15 +346,21 @@ Those controller-specific settings should be added by platform policy instead of
                   discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
                   use_jwks: true
                   bearer_only: false
+                  scope: openid profile email roles
                   client_id: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
                   client_secret: ""
                   session:
                     secret: "{{ random('[A-Za-z0-9]{32}') }}"
-                  access_token_in_authorization_header: false
-                  set_access_token_header: false
+                  access_token_in_authorization_header: true
+                  set_access_token_header: true
                   set_id_token_header: false
                   set_userinfo_header: false
                   set_refresh_token_header: false
+              - name: opa
+                enable: true
+                config:
+                  host: http://opa.iam:8181
+                  policy: example/workspace/wsui
       - name: add-apisix-oidc-plugin-config
         match:
           any:
@@ -381,11 +389,11 @@ Those controller-specific settings should be added by platform policy instead of
                 +(k8s.apisix.apache.org/plugin-config-name): "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
     ```
 
-    The plugin uses the Datalab name as `client_id`, taken from `training.educates.dev/environment.name`. Because Provider Datalab creates the matching public Keycloak client and redirect URIs, no additional Keycloak mutation is required for declared sessions.
+    The `openid-connect` plugin uses the Datalab name as `client_id`, taken from `training.educates.dev/environment.name`. Because Provider Datalab creates the matching public Keycloak client and redirect URIs, no additional Keycloak mutation is required for declared sessions. The `opa` plugin should use a policy that derives the workspace from the requested host or client and allows only platform administrators or users with the generated workspace roles such as `ws_access` or `ws_admin`.
 
     The session secret is generated when Kyverno creates the `ApisixPluginConfig`. `synchronize: false` keeps the generated object stable; if you intentionally change the plugin template for existing sessions, recreate the generated plugin config or restart the session so Kyverno can generate a fresh one.
 
-    Token and userinfo forwarding flags are disabled by default. Enable them only when the upstream workspace application explicitly needs those headers.
+    The ID token, userinfo, and refresh token forwarding flags are disabled by default. The access token is placed in the `Authorization` header for the APISIX OPA plugin, matching the common APISIX plugin chain where `openid-connect` runs before `opa`. If you do not want the upstream workspace application to receive that header, add an APISIX header-rewrite or equivalent platform policy after authorization to strip it before proxying upstream.
 
 Other ingress controllers follow the same delegated pattern: set `auth.type: delegated`, match the generated workshop session ingresses by label and domain, and attach the controller-specific authentication policy.
 
@@ -710,7 +718,7 @@ kubectl get secret s-jeff -n workspace -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY
 
 ### Connect to Databases
 
-Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. Optionally, these databases can also be exposed externally using a `TLSRoute`, enabling secure access from outside the cluster. External exposure requires a Kubernetes Gateway Controller that operates at Layer-4, such as Envoy.
+Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. The current baseline expects Crunchy PostgreSQL Operator `v6.0.x` and renders `PostgresCluster` as `postgres-operator.crunchydata.com/v1`. Optionally, these databases can also be exposed externally using a Gateway API `TLSRoute`, enabling secure access from outside the cluster. External exposure requires a Layer-4 capable Gateway implementation, such as Envoy Gateway or your cluster-validated equivalent, with `TLSRoute` served as `gateway.networking.k8s.io/v1`. The bundled Gateway API `v1.5.1` CRDs serve `TLSRoute` as `v1`.
 
 All additional users are created as regular database roles with limited privileges. Full administrative access is provided through the built-in `postgres` superuser account. This account can create extensions, manage schemas, and grant permissions to other users as needed.
 

@@ -98,7 +98,7 @@ metadata:
 spec:
   forProvider:
     manifest:
-      apiVersion: postgres-operator.crunchydata.com/v1beta1
+      apiVersion: postgres-operator.crunchydata.com/v1
       kind: PostgresCluster
       metadata:
         name: pg0
@@ -171,7 +171,7 @@ metadata:
 spec:
   forProvider:
     manifest:
-      apiVersion: gateway.networking.k8s.io/v1alpha2
+      apiVersion: gateway.networking.k8s.io/v1
       kind: TLSRoute
       metadata:
         name: pg0

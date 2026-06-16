@@ -35,7 +35,9 @@ helm install crossplane \
 - **Educates installed with all CRDs in the cluster** for the Educates runtime.
   Install it through the upstream [Educates Installation Instructions](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html), [CLI flow](https://docs.educates.dev/en/stable/installation-guides/cli-based-installation.html), or [Carvel flow](https://docs.educates.dev/en/stable/installation-guides/carvel-based-installation.html). For Kustomize/Flux-based platform installs, Versioneer also publishes a vendored Educates base in [`versioneer-tech/bases`](https://github.com/versioneer-tech/bases), overlay [`educates/default`](https://github.com/versioneer-tech/bases/tree/main/educates/default), as `oci://ghcr.io/versioneer-tech/bases:educates-<sha12>`.
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
-  Suggested tested line: PGO `v5.8.x` (or your cluster-validated equivalent).
+  Baseline: PGO `v6.0.x`, which serves `PostgresCluster` as `postgres-operator.crunchydata.com/v1`.
+- **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.gateway`.
+  Use a Layer-4 capable controller such as Envoy Gateway, or your cluster-validated equivalent. The bundled Gateway API `v1.5.1` CRDs serve `TLSRoute` as `gateway.networking.k8s.io/v1`.
 - **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).
   Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).
   The operator installation must provide its own controller RBAC; `provider-datalab` only creates namespace-local Mongo prerequisites such as service accounts, a Role, and an appdb RoleBinding inside the tenant namespace.
@@ -236,6 +238,7 @@ kubectl api-resources --api-group=kubernetes.crossplane.io
 kubectl api-resources --api-group=helm.crossplane.io
 kubectl api-resources --api-group=keycloak.crossplane.io
 kubectl api-resources --api-group=postgres-operator.crunchydata.com
+kubectl api-resources --api-group=gateway.networking.k8s.io
 kubectl api-resources --api-group=mongodbcommunity.mongodb.com
 kubectl api-resources --api-group=redis.redis.opstreelabs.in
 kubectl api-resources --api-group=qdrant.io
