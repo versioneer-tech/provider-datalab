@@ -265,14 +265,14 @@ spec:
                 security:
                   type: object
                   description: >-
-                    Optional per-datalab session security settings. If a field
-                    is not specified here, the composition falls back to
+                    Optional per-datalab runtime namespace security settings. If a
+                    field is not specified here, the composition falls back to
                     EnvironmentConfig at `spec.defaults.security`, and then to
                     hard defaults. Effective defaults (when neither XR nor
                     EnvironmentConfig provides a value): policy=baseline,
-                    kubernetesAccess=true, kubernetesRole=edit. When policy is
-                    "privileged", Docker is automatically enabled with 20Gi
-                    storage.
+                    kubernetesAccess=true, kubernetesRole=edit,
+                    externalEgress=true. When policy is "privileged", Docker
+                    is automatically enabled with 20Gi storage.
                   properties:
                     policy:
                       type: string
@@ -301,6 +301,16 @@ spec:
                         - admin
                         - edit
                         - view
+                    externalEgress:
+                      type: boolean
+                      description: >-
+                        Whether the Datalab runtime namespace may egress outside
+                        itself. When false, Provider Datalab only renders the
+                        namespace-internal egress allow policy in addition to
+                        default deny. When true, external egress is allowed with
+                        EnvironmentConfig network blacklist CIDRs excluded.
+                        Effective default (if not set here or in
+                        EnvironmentConfig): true.
                 files:
                   type: array
                   description: >-

@@ -11,8 +11,11 @@ nav:
   - How-to guides:
     - Usage & Concepts: how-to-guides/usage_concepts.md
     - Installation: how-to-guides/installation.md
-    - Security: how-to-guides/security.md
     - Additional Services: how-to-guides/additional_services.md
+  - Security:
+    - Overview: security/index.md
+    - Workspace Sessions as Sandboxes: security/workspace-sessions.md
+    - Sandbox Security Measures: security/sandbox-controls.md
   - Reference guides:
     - API: reference-guides/api.md
 plugins:

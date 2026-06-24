@@ -18,8 +18,12 @@ Everything in this guide is **namespaced**:
 
 ## Prerequisites
 
+Before installing Provider Datalab, decide which parts of the service catalogue the platform will offer. The base runtime needs Crossplane, Educates, an enforcing CNI, and the platform ingress/identity/storage path. Optional database and store fields should only be enabled when the corresponding operators, backup model, and lifecycle ownership are ready.
+
 - A running Kubernetes cluster (e.g., `kind`, managed K8s).
 - `kubectl` access.
+- **A CNI that enforces Kubernetes NetworkPolicy**. The generated Datalab policies are useful only when the dataplane enforces them.
+- **Kyverno** installed in the cluster. Provider Datalab uses Kyverno policies to enforce platform guardrails for generated workloads and sandbox resources.
 - **Crossplane** installed in the cluster:
 
 ```bash
@@ -34,6 +38,7 @@ helm install crossplane \
 
 - **Educates installed with all CRDs in the cluster** for the Educates runtime.
   Install it through the upstream [Educates Installation Instructions](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html), [CLI flow](https://docs.educates.dev/en/stable/installation-guides/cli-based-installation.html), or [Carvel flow](https://docs.educates.dev/en/stable/installation-guides/carvel-based-installation.html). For Kustomize/Flux-based platform installs, Versioneer also publishes a vendored Educates base in [`versioneer-tech/bases`](https://github.com/versioneer-tech/bases), overlay [`educates/default`](https://github.com/versioneer-tech/bases/tree/main/educates/default), as `oci://ghcr.io/versioneer-tech/bases:educates-<sha12>`.
+  Use the latest Versioneer Educates install from `versioneer-tech/bases`; the current install requires Kyverno.
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
   Baseline: PGO `v6.0.x`, which serves `PostgresCluster` as `postgres-operator.crunchydata.com/v1`.
 - **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.gateway`.
@@ -48,7 +53,7 @@ helm install crossplane \
 
 Without the corresponding optional database operators installed, `spec.databases`, `spec.documentStores`, `spec.cacheStores`, and/or `spec.vectorStores` cannot reconcile.
 
-Treat these optional operators as platform service classes. If you enable a field in the `Datalab` API, make sure the operations model is ready too: storage classes, backup and restore, monitoring, upgrades, and tenant lifecycle.
+Treat these optional operators as platform service classes. If you enable a field in the `Datalab` API, make sure the operations model is ready too: storage classes, backup and restore, monitoring, upgrades, tenant lifecycle, and who may request the service.
 
 > To reduce control-plane load, we use a `ManagedResourceActivationPolicy` (MRAP) per backend so only the needed Managed Resources are active.
 
@@ -126,7 +131,7 @@ kubectl apply -f configuration.yaml
 
 ## Step 3 – Environment configuration
 
-Provide cluster-specific settings through an `EnvironmentConfig`. The composition consumes this to render ingress, identity, and storage correctly:
+Provide cluster-specific settings through an `EnvironmentConfig`. This is the operator-owned policy surface for an environment: it defines where ingress terminates, how authentication is handled, which storage endpoint is trusted, which storage classes may be used, and what the default security posture is.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -156,7 +161,21 @@ data:
     - sbs-default
     - sbs-default-retain
   network:
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    - ::/0
     serviceCIDR: "10.43.0.0/16"
+    podCIDRs:
+    - 10.42.0.0/16
+    blacklistIPs:
+    - 169.254.169.254/32
+    - fd00:ec2::254/128
+    - 169.254.42.42/32
+    - fd00:42::42/128
+    excludePolicies: []
+  defaults:
+    security:
+      externalEgress: true
 ```
 
 The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
@@ -167,9 +186,28 @@ The `serviceCIDR` defines the internal Service network range expected by the vCl
 
 To find the correct value, use the same `serviceCIDR` as your host cluster — it’s typically visible in your cluster configuration or can be inferred by checking CoreDNS’s Service IP via `kubectl get svc kube-dns -n kube-system`.
 
+Set `podCIDRs` to the host cluster Pod network ranges. Provider Datalab excludes
+`podCIDRs` and `serviceCIDR` from broad generated external egress so traffic to
+other runtime namespaces stays blocked unless you add an explicit
+operator-owned NetworkPolicy.
+
+`network.externalEgressCIDRs` lists the CIDRs targeted by broad generated
+external egress when `externalEgress` is true. Use `0.0.0.0/0` and `::/0` for
+internet egress, or narrower operator-approved CIDRs for restricted
+environments. If the list is empty or omitted, Provider Datalab does not render
+a broad external egress allow block.
+
+`network.blacklistIPs` lists CIDRs excluded from broad generated external
+egress, such as cloud metadata endpoints. Provider Datalab always renders
+`deny-egress` and `allow-namespace-egress` unless their names are listed in
+`network.excludePolicies`. It renders `allow-dns-egress` and
+`allow-external-egress` only when `externalEgress` is true. Use
+`excludePolicies` only as an operator escape hatch when another policy system
+supplies equivalent controls.
+
 Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
 
-Manage provider credentials and storage secrets through your normal secret-management path, such as External Secrets or Sealed Secrets, rather than committing live credentials into Git. If you use [Provider Storage](https://provider-storage.versioneer.at/), let it create the bucket and credentials, then reference those credentials from the `Datalab`.
+Manage provider credentials and storage secrets through your normal secret-management path, such as External Secrets or Sealed Secrets, rather than committing live credentials into Git. If you use [Provider Storage](https://provider-storage.versioneer.at/), let it create the bucket and credentials, then reference those credentials from the `Datalab`. This keeps credential issuance, rotation, and revocation auditable outside the workspace session.
 
 ---
 
@@ -194,7 +232,7 @@ kubectl -n datalab create secret generic demo \
 
 ## Step 5 – Create a Datalab
 
-The minimal example creates a user-scoped lab with one session.
+The minimal example creates a user-scoped lab with one session. From an operator view, this is the tenant request; whether it is allowed, which defaults apply, and which backing services exist are controlled by the installed package and `EnvironmentConfig`.
 - Sessions present -> each declared session gets a workspace PVC; sessions default to `state: started`.
 - `state: started` -> runtime created; `state: stopped` -> PVC retained without runtime.
 - No sessions -> no declared session PVC or runtime is pre-created.

@@ -1,15 +1,15 @@
 # Additional Services
 
-This section explains how a `Datalab` can be extended with more services and tools. Users can deploy helpful session-adjacent applications for daily work. Operators should keep durable services - databases, stores, registries, and backup-worthy data - explicit in the platform model.
+This section explains how a `Datalab` can be extended with more services and tools. Users can deploy helpful session-adjacent applications for daily work. Operators should keep durable services - databases, stores, registries, and backup-worthy data - explicit in the platform model, where they can be reviewed, costed, monitored, and retired.
 
 A `Datalab` environment provides a preconfigured **VS Code Server** with a persistent file system and access to the connected object storage, along with essential CLI tools such as `git`, `curl`, `aws`, or `rclone`.
 While this already covers many data exploration and transformation needs, users often require more specialized tooling — for example, dashboards for visualization, services for experiment tracking, or out-of-process compute backends for scalable data processing.
 
 Although many of these tools can be started directly from the integrated terminal and exposed via VS Code’s port forwarding feature, that approach tends to be **fragile and transient** - you must carefully manage Python environments, avoid breaking dependencies during upgrades, and remember that the terminal session lifetime is temporary.
 
-A more robust approach is to deploy such services **as native Kubernetes applications** — directly from within the Datalab. Because each Datalab session has access to the Kubernetes API (depending on the operator configuration), users can deploy workloads within their assigned namespace or, when running in **vCluster** mode, inside a **fully isolated virtual cluster** with their own CRDs, RBAC rules, and controllers. This enables running even complex frameworks that typically require cluster-wide resources — for example, a Dask Gateway.
+A more robust approach is to deploy such services **as native Kubernetes applications** - directly from within the Datalab when the operator has allowed Kubernetes API access. Users can deploy workloads within their assigned namespace, or, when running in **vCluster** mode, inside a virtual control plane with its own CRDs, RBAC rules, and controllers. This enables running frameworks that typically require cluster-wide resources, for example a Dask Gateway, without handing users the host cluster.
 
-For production-like state, prefer the declarative `Datalab` service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. For object-storage buckets, use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process, then pass the credentials to Provider Datalab. This keeps the durable parts visible to the operator.
+For production-like state, prefer the declarative `Datalab` service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. For object-storage buckets, use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process, then pass the credentials to Provider Datalab. This keeps the durable parts visible to the operator and gives governance reviewers a named service to inspect instead of unmanaged state inside a session.
 
 > **Note:** The `kubectl` and `helm` CLIs are preinstalled as well. You can apply manifests, install Helm charts, and inspect Kubernetes resources directly from the terminal.
 

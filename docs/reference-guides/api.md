@@ -173,7 +173,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecsecurity">security</a></b></td>
         <td>object</td>
         <td>
-          Optional per-datalab session security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit. When policy is "privileged", Docker is automatically enabled with 20Gi storage.<br/>
+          Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. When policy is "privileged", Docker is automatically enabled with 20Gi storage.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1053,7 +1053,7 @@ Optional settings for the in-session Docker registry. When enabled, a registry s
 
 
 
-Optional per-datalab session security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit. When policy is "privileged", Docker is automatically enabled with 20Gi storage.
+Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. When policy is "privileged", Docker is automatically enabled with 20Gi storage.
 
 <table>
     <thead>
@@ -1065,6 +1065,13 @@ Optional per-datalab session security settings. If a field is not specified here
         </tr>
     </thead>
     <tbody><tr>
+        <td><b>externalEgress</b></td>
+        <td>boolean</td>
+        <td>
+          Whether the Datalab runtime namespace may egress outside itself. When false, Provider Datalab only renders the namespace-internal egress allow policy in addition to default deny. When true, external egress is allowed with EnvironmentConfig network blacklist CIDRs excluded. Effective default (if not set here or in EnvironmentConfig): true.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>kubernetesAccess</b></td>
         <td>boolean</td>
         <td>

@@ -41,3 +41,22 @@ for file in examples/base/00*-lab.yaml; do
   fi
 done
 ```
+
+### Local sandbox benchmark
+
+Run the local end-to-end benchmark when NetworkPolicy or sandbox hardening
+changes need dataplane proof, not only rendered manifests. This is an operator
+validation tool: it proves that the selected CNI and Kyverno setup enforce the
+policy contract that users and governance reviewers rely on.
+
+```sh
+RECREATE_CLUSTER=1 KEEP_CLUSTER=1 ./scripts/benchmark-datalab-sandbox.sh
+```
+
+The script creates a dedicated kind cluster with kind's default CNI disabled,
+installs Calico for NetworkPolicy enforcement, installs Kyverno, applies the
+Datalab-style external-egress and no-external-egress policy modes, and records
+traffic/admission timings in `/tmp/provider-datalab-sandbox-benchmark.tsv`.
+Override `POD_CIDR`, `SERVICE_CIDR`, `EXTERNAL_URL`, `ITERATIONS`, or image and
+chart versions through environment variables when the local cluster shape needs
+to match another target.

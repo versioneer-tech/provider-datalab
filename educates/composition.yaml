@@ -730,6 +730,7 @@ spec:
         kind: Script
         script: |
           import base64 as _base64
+          import ipaddress as _ipaddress
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
 
@@ -743,6 +744,11 @@ spec:
 
           def _safe_str(v):
               return str(v).strip()
+
+          def _string_list(v):
+              if not isinstance(v, list):
+                  return []
+              return [_safe_str(item) for item in v if _safe_str(item)]
 
           def _b64get_any(d, keys):
               if not d:
@@ -913,38 +919,88 @@ spec:
                   session_username = access_key
                   session_password = secret_key
 
-              allow_web_egress = {
-                  "apiVersion": "networking.k8s.io/v1",
-                  "kind": "NetworkPolicy",
-                  "metadata": {"name": "allow-web-egress"},
-                  "spec": {
-                      "podSelector": {},
-                      "policyTypes": ["Egress"],
-                      "egress": [
-                          {
-                              "to": [
-                                  {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
-                              ],
-                              "ports": [
-                                  {"protocol": "UDP", "port": 53},
-                                  {"protocol": "TCP", "port": 53}
-                              ]
-                          },
-                          {
-                              "to": [
-                                  {"ipBlock": {"cidr": "10.0.0.0/8"}},
-                                  {"ipBlock": {"cidr": "172.16.0.0/12"}},
-                                  {"ipBlock": {"cidr": "192.168.0.0/16"}},
-                                  {"ipBlock": {"cidr": "100.64.0.0/10"}}
-                              ]
-                          },
-                          {"to": [{"ipBlock": {"cidr": "fc00::/7"}}]},
-                          {"to": [{"namespaceSelector": {}}]},
-                          {"to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.42.42/32"]}}]},
-                          {"to": [{"ipBlock": {"cidr": "::/0", "except": ["fd00:42::42/128"]}}]}
-                      ]
+              external_egress = security.get("externalEgress")
+              if external_egress is None:
+                  external_egress = env_security.get("externalEgress")
+              if external_egress is None:
+                  external_egress = True
+              external_egress = _boolish(external_egress)
+
+              network_env = env.get("network") or {}
+              excluded_network_policies = set(_string_list(network_env.get("excludePolicies") or []))
+              blacklist_ips = _string_list(network_env.get("blacklistIPs") or [])
+              external_egress_cidrs = _string_list(network_env.get("externalEgressCIDRs") or [])
+              internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
+              service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
+              if service_cidr:
+                  internal_cidrs.append(service_cidr)
+
+              def _dedupe(items):
+                  result = []
+                  for item in items:
+                      if item not in result:
+                          result.append(item)
+                  return result
+
+              external_egress_exceptions = _dedupe(blacklist_ips + internal_cidrs)
+
+              def _policy_enabled(name):
+                  return name not in excluded_network_policies
+
+              def _network_policy(name, egress):
+                  return {
+                      "apiVersion": "networking.k8s.io/v1",
+                      "kind": "NetworkPolicy",
+                      "metadata": {"name": name},
+                      "spec": {
+                          "podSelector": {},
+                          "policyTypes": ["Egress"],
+                          "egress": egress,
+                      },
                   }
-              }
+
+              def _cidr_contains(cidr, child):
+                  try:
+                      parent = _ipaddress.ip_network(cidr, strict=False)
+                      candidate = _ipaddress.ip_network(child, strict=False)
+                  except Exception:
+                      return False
+                  return parent.version == candidate.version and candidate.subnet_of(parent)
+
+              def _exceptions_for(cidr):
+                  return [ip for ip in external_egress_exceptions if _cidr_contains(cidr, ip)]
+
+              def _ip_block(cidr, exceptions):
+                  block = {"cidr": cidr}
+                  if exceptions:
+                      block["except"] = exceptions
+                  return {"ipBlock": block}
+
+              def _add_policy(policies, name, egress):
+                  if _policy_enabled(name):
+                      policies.append(_network_policy(name, egress))
+
+              network_policies = []
+              _add_policy(network_policies, "deny-egress", [])
+              _add_policy(network_policies, "allow-namespace-egress", [{"to": [{"podSelector": {}}]}])
+
+              if external_egress:
+                  _add_policy(network_policies, "allow-dns-egress", [
+                      {
+                          "to": [
+                              {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
+                          ],
+                          "ports": [
+                              {"protocol": "UDP", "port": 53},
+                              {"protocol": "TCP", "port": 53},
+                          ],
+                      }
+                  ])
+                  if external_egress_cidrs:
+                      _add_policy(network_policies, "allow-external-egress", [
+                          {"to": [_ip_block(cidr, _exceptions_for(cidr))]}
+                          for cidr in external_egress_cidrs
+                      ])
 
               vcluster_cfg = {
                   "enabled": vcluster,
@@ -997,9 +1053,7 @@ spec:
                       },
                       "environment": {
                           "secrets": [{"name": storage_secret_name, "namespace": xr_namespace}],
-                          "objects": [
-                              allow_web_egress
-                          ]
+                          "objects": network_policies,
                       }
                   }
               }
@@ -1124,11 +1178,7 @@ spec:
                       "storage": registry_storage
                   }
 
-              if vcluster:
-                  service_cidr = (
-                      str((env.get("network") or {}).get("serviceCIDR") or "") or
-                      "10.43.0.0/16"
-                  )
+              if vcluster and service_cidr:
                   workshop["spec"]["session"]["objects"].append({
                       "apiVersion": "v1",
                       "kind": "ConfigMap",

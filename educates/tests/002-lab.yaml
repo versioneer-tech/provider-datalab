@@ -31,6 +31,7 @@ spec:
     enabled: false
   secretName: s-jeff
   security:
+    externalEgress: false
     kubernetesAccess: false
   sessions: []
   userOverrides:
@@ -1262,42 +1263,20 @@ spec:
           - apiVersion: networking.k8s.io/v1
             kind: NetworkPolicy
             metadata:
-              name: allow-web-egress
+              name: deny-egress
+            spec:
+              egress: []
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-namespace-egress
             spec:
               egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
               - to:
-                - ipBlock:
-                    cidr: 10.0.0.0/8
-                - ipBlock:
-                    cidr: 172.16.0.0/12
-                - ipBlock:
-                    cidr: 192.168.0.0/16
-                - ipBlock:
-                    cidr: 100.64.0.0/10
-              - to:
-                - ipBlock:
-                    cidr: fc00::/7
-              - to:
-                - namespaceSelector: {}
-              - to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                    - 169.254.42.42/32
-              - to:
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                    - fd00:42::42/128
+                - podSelector: {}
               podSelector: {}
               policyTypes:
               - Egress

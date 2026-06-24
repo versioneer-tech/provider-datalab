@@ -1,6 +1,8 @@
 # Welcome to Provider Datalab
 
-**Provider Datalab is a PaaS-style building block for platform operators:** it turns one `Datalab` claim into an operator-governed cloud sandbox with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry. Users get a smooth workspace. Operators keep visibility into what was provisioned, so they can own access, capacity, lifecycle, and backups.
+**Provider Datalab is a PaaS-style building block for platform operators.** It turns one `Datalab` claim into an operator-governed cloud workspace with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry.
+
+The primary reader for these docs is the platform operator. The operator decides which teams may run which workloads, which services are available, how egress is controlled, which state is backed up, and how lifecycle is governed. Engineers and data users should still be able to read the examples and understand the contract they are asking the platform to fulfill. Sponsors and governance stakeholders should be able to see where accountability lives: policy, capacity, audit, and durable data are platform responsibilities, not hidden inside a user terminal.
 
 This makes Datalab suitable for both human and agent workloads. The sandbox is not magic; it is an explicit authority boundary. A session runs in a dedicated Kubernetes namespace, or in a dedicated vcluster when a virtual Kubernetes control plane is wanted. A user or agent can only use the workspace, storage credentials, Kubernetes permissions, and service credentials exposed to that session. It can change state it is allowed to touch, while the platform operator remains outside the session and can still enforce RBAC, Pod Security, NetworkPolicies, quotas, database backups, bucket versioning, ingress policy, and lifecycle controls.
 
@@ -21,6 +23,8 @@ This is the main design point: Provider Datalab makes self-service smooth withou
 
 For agent workloads, this means the operator does not have to trust the agent with the whole platform. The agent gets a bounded runtime and explicit credentials. The platform keeps the guardrails, observability, and recovery mechanisms.
 
+For governance, this gives sponsors a concrete review surface: a Datalab can be approved, costed, secured, and retired as a named platform service instead of becoming unmanaged compute plus scattered credentials.
+
 ## What It Provides
 
 At its core, Provider Datalab provides:
@@ -32,7 +36,7 @@ At its core, Provider Datalab provides:
 - Support for delegated authentication through the surrounding platform, for example NGINX external auth or APISIX OIDC protection at the ingress layer.
 - Optional platform-managed services from the same `Datalab` claim: PostgreSQL databases, MongoDB document stores, Redis key-value/cache stores, Qdrant vector stores, and a Docker registry.
 
-For end users, this means a simple workspace experience: they can open a familiar online IDE, access storage and credentials that have already been wired in, and work with higher-level services without understanding every underlying Kubernetes resource.
+For end users, this means a simple workspace experience: they can open a familiar online IDE, access storage and credentials that have already been wired in, and work with higher-level services without understanding every underlying Kubernetes resource. For software engineers, it means the platform contract is declarative and reviewable instead of a long checklist of manual setup steps.
 
 
 ---

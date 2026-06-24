@@ -24,7 +24,18 @@ data:
     - sbs-default
     - sbs-default-retain
   network:
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    - ::/0
     serviceCIDR: "10.43.0.0/16"
+    podCIDRs:
+    - 10.42.0.0/16
+    blacklistIPs:
+    - 169.254.169.254/32
+    - fd00:ec2::254/128
+    - 169.254.42.42/32
+    - fd00:42::42/128
+    excludePolicies: []
   packages:
     - name: awscli
       files:
@@ -45,6 +56,7 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
+      externalEgress: true
   database: 
     gateway:
       parentName: default
@@ -76,7 +88,18 @@ data:
     - sbs-default
     - sbs-default-retain
   network:
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    - ::/0
     serviceCIDR: "10.43.0.0/16"
+    podCIDRs:
+    - 10.42.0.0/16
+    blacklistIPs:
+    - 169.254.169.254/32
+    - fd00:ec2::254/128
+    - 169.254.42.42/32
+    - fd00:42::42/128
+    excludePolicies: []
   packages:
     - name: awscli
       files:
@@ -97,6 +120,7 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
+      externalEgress: true
   database:
     gateway:
       parentName: default

@@ -1,10 +1,10 @@
 # Datalab Provider
 
-**Provider Datalab packages a Crossplane API for operator-governed cloud sandboxes.** It gives people and agents workspace sessions with VS Code Server, terminals, storage access, optional vclusters, and managed data services behind one `Datalab` claim.
+**Provider Datalab packages a Crossplane API for platform-operated cloud workspaces.** A platform operator defines the guardrails once: ingress, identity, storage credentials, quotas, sandbox policy, network egress, and optional service classes. Teams then request a `Datalab` claim and get workspace sessions with VS Code Server, terminals, storage access, optional vclusters, and managed data services.
 
-The package ships the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 **Compositions** for provisioning multi-user, multi-runtime data labs.
+The package ships the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 **Compositions**. The API is meant to be useful to software engineers and data teams, but the ownership model is operator-first: durable state, security posture, backup, capacity, and lifecycle stay visible to the platform team.
 
-For the motivation and operating model, start with the [welcome guide](https://provider-datalab.versioneer.at/). The documentation also covers [usage concepts](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/), [agent sandbox security](https://provider-datalab.versioneer.at/latest/how-to-guides/security/), and [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional_services/) such as Dask and MLflow.
+For the operating model, start with the [welcome guide](https://provider-datalab.versioneer.at/). The documentation also covers [usage concepts](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/), [sandbox security](https://provider-datalab.versioneer.at/latest/security/), and [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional_services/) such as Dask and MLflow.
 
 <div align="left">
   <a href="https://github.com/versioneer-tech/provider-datalab/raw/refs/heads/main/docs/imgs/datalab-vs-code-server.png" target="_blank">
@@ -12,7 +12,17 @@ For the motivation and operating model, start with the [welcome guide](https://p
   </a>
 </div>
 
-Provider Datalab does not replace the tools you already operate. In the default `datalab-educates` package, most runtime features come from the excellent [Educates Training Platform](https://educates.dev/) and are packaged with Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/). The same principle applies to storage, identity, databases, and backups: Provider Datalab exposes them through a tenant-facing API, while the operator keeps ownership and policy.
+Provider Datalab does not replace the tools you already operate. In the default `datalab-educates` package, most runtime features come from the excellent [Educates Training Platform](https://educates.dev/) and are packaged with Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/). The same principle applies to storage, identity, databases, and backups: Provider Datalab exposes them through a tenant-facing API, while the operator keeps policy and accountability.
+
+## Who It Is For
+
+- **Platform operators** get a governable self-service API for workspace runtimes, security defaults, data-service classes, and lifecycle controls.
+- **Software engineers and data users** get a concise `Datalab` spec instead of hand-wiring namespaces, ingress, credentials, IDE pods, databases, and registries.
+- **Sponsors and governance stakeholders** get a clearer control plane: who can run code, what can persist, which services are backed up, and where policy is enforced.
+
+## Operator Contract
+
+A `Datalab` claim should be treated as a service contract, not only as a pod launcher. The operator decides the platform boundary in `EnvironmentConfig`, installs the required controllers, pins package versions through GitOps, and verifies that the CNI, admission policy, storage classes, backup jobs, identity system, and ingress controls match the trust model. The user-facing claim stays small because those decisions are centralized.
 
 ## API Reference
 
@@ -21,7 +31,7 @@ The published XRD with all fields is documented here:
 
 ## Install the Configuration Package
 
-You need Crossplane and some prerequisites [installed](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/) in your Kubernetes cluster. Then you only need to apply the configuration package to your cluster. Providers and functions should typically be managed by your GitOps process.
+You need Crossplane and the runtime prerequisites [installed](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/) in your Kubernetes cluster first. Operators should manage providers, functions, Educates, Kyverno, CNI enforcement, and optional data-service operators through GitOps, then apply the configuration package.
 
 
 ```yaml
@@ -36,7 +46,7 @@ spec:
 
 ## Environment Configuration
 
-Cluster-specific settings are supplied via an `EnvironmentConfig`.
+Cluster-specific operator decisions are supplied via an `EnvironmentConfig`. This is where the platform sets the trust boundary for all teams using that environment.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -64,7 +74,18 @@ data:
     - sbs-default
     - sbs-default-retain
   network: # optional
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    - ::/0
     serviceCIDR: "10.43.0.0/16"
+    podCIDRs:
+    - 10.42.0.0/16
+    blacklistIPs:
+    - 169.254.169.254/32
+    - fd00:ec2::254/128
+    - 169.254.42.42/32
+    - fd00:42::42/128
+    excludePolicies: []
   defaults: # optional
     quota:
       memory: 2Gi
@@ -74,6 +95,7 @@ data:
       policy: baseline
       kubernetesAccess: true
       kubernetesRole: edit
+      externalEgress: true
   database:
     gateway: # optional (only needed if database should be externally accessible)
       parentName: default
@@ -104,8 +126,19 @@ spec:
 If `spec.quota` or `spec.security` are omitted, values fall back to
 `EnvironmentConfig.data.defaults` and then to hard defaults
 (`memory=2Gi`, `storage=1Gi`, `budget=medium`,
-`policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`).
+`policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`,
+`externalEgress=true`).
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
+
+`spec.security.externalEgress` controls namespace-level external egress for all
+sessions and workloads in the runtime namespace. When it is omitted, the value
+falls back to `EnvironmentConfig.data.defaults.security.externalEgress` and then
+to the hard default `true`. Broad external egress targets CIDRs listed in
+`EnvironmentConfig.data.network.externalEgressCIDRs` and excludes CIDRs listed
+in `network.blacklistIPs` plus the configured `network.podCIDRs` and
+`network.serviceCIDR`, so cross-namespace PodIP and ServiceIP traffic still
+needs an explicit operator-owned NetworkPolicy. If `externalEgressCIDRs` is
+empty or omitted, no broad external allow block is rendered.
 
 Each declared session gets a Datalab-owned workspace PVC. `spec.sessions[].state`
 defaults to `started`, which creates an active runtime session.

@@ -46,6 +46,7 @@ spec:
         path="$3"
         body="${4:-}"
         body_file="/tmp/body.$$"
+        rc=0
         log "request: method=${method} url=${QDRANT_URL}${path} body=${body:-<empty>}"
         if [ -n "${body}" ]; then
           status="$(curl -sS -o "${body_file}" -w "%{http_code}" -X "${method}" -H "api-key: ${key}" -H "Content-Type: application/json" --data "${body}" "${QDRANT_URL}${path}")" || rc=$?

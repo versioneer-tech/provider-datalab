@@ -1,10 +1,23 @@
 # Provider Datalab – Usage & Concepts
 
-This section explains how to **use** the `provider-datalab` configuration packages once they are installed. It focuses on the **concepts** of Sessions, Files, vclusters, Storage Secrets, Databases and the optional **Keycloak integration** for identity and access.
+This section explains how to use the `provider-datalab` configuration packages once they are installed. Read it as an operator-facing contract that software engineers and workspace users can also understand.
 
-Read this page as an operator-facing contract. A `Datalab` gives users a smooth workspace, but durable state should stay visible to the platform team: object-storage credentials, persistent volumes, databases, key-value/cache stores, vector stores, registries, identity resources, and network policy. That visibility lets operators own lifecycle, monitoring, and backups.
+A `Datalab` gives users a smooth workspace, but durable state should stay visible to the platform team: object-storage credentials, persistent volumes, databases, key-value/cache stores, vector stores, registries, identity resources, and network policy. That visibility lets operators own lifecycle, monitoring, backups, quota, audit, and decommissioning.
 
 ---
+
+## Operator View
+
+When reviewing a `Datalab`, start with these questions:
+
+- Who is allowed to access the workspace, and which identity layer enforces it?
+- What state will persist after a session stops or the lab is deleted?
+- Which credentials and managed services are exposed to workspace code?
+- Is Kubernetes API access needed, and should it be namespace-scoped or vcluster-scoped?
+- Is external egress broad, blocked, or routed through another control?
+- Which parts are backed up, monitored, upgraded, and retired by platform processes?
+
+The sections below map those governance questions to the fields users and engineers see in the `Datalab` spec.
 
 ## Concepts
 
@@ -62,7 +75,7 @@ The platform automatically:
 - configures backups according to the operator-managed database setup
 - keeps data independent from session lifecycle
 
-This keeps **compute ephemeral** while **database state remains durable**.
+This keeps **compute ephemeral** while **database state remains durable** and reviewable by the platform team.
 
 If a Kubernetes gateway service is running in the cluster and enabled in the global configuration, the database **can also be exposed externally**. In that case, corresponding environment variables such as the external hostname or external URL are injected into the session as well.
 
@@ -110,11 +123,14 @@ spec:
     storage: 3Gi
 ```
 
-This is useful when users need to push and pull images inside the lab. Treat it as workspace-scoped registry storage. If registry contents need backup, retention, scanning, or promotion into a central registry, define that in platform policy before enabling it.
+This is useful when users need to push and pull images inside the lab. Treat it as workspace-scoped registry storage and an operator-approved capability. If registry contents need backup, retention, scanning, or promotion into a central registry, define that in platform policy before enabling it.
 
 ### Authentication
 
 Provider Datalab is a workspace building block. It can wire authentication into the runtime, but the cleaner production pattern is often to delegate authentication to the surrounding platform, especially at ingress.
+
+For the ownership boundary around workspace access, see the
+[Security overview](../security/index.md#access-to-a-datalab).
 
 Multiple options are possible:
 
@@ -439,6 +455,18 @@ Key fields:
   - `privileged` enables Docker-in-Docker with 20 Gi of local storage.
 - `kubernetesAccess` — whether a Kubernetes service account token is mounted inside the session.
 - `kubernetesRole` — defines in-namespace RBAC level (`admin`, `edit`, `view`).
+- `externalEgress` — controls generated external egress for all sessions and
+  workloads in the runtime namespace.
+
+For the operator security model, workspace sandbox boundaries, and recommended
+policy bundles, see the [Security](../security/index.md) section.
+
+When `externalEgress` is omitted, Provider Datalab uses
+`EnvironmentConfig.data.defaults.security.externalEgress` and then the hard
+default `true`. With `externalEgress: false`, the generated policies only allow
+namespace-local Pod egress. With external egress enabled, Provider Datalab
+excludes the configured pod and service CIDRs from broad external egress.
+Cross-namespace traffic still needs a separate operator-owned NetworkPolicy.
 
 ### Resource Quotas
 The `spec.quota` section allows per-Datalab overrides of default compute and storage budgets.
@@ -495,7 +523,7 @@ spec:
 
 ---
 
-## Example: Jeff, Jim, and Jane (shared store validation, privileged with Docker)
+## Example: Jeff, Jim, and Jane (shared store validation, no Kubernetes API access)
 
 ```yaml
 # Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with no pre-created session.
@@ -503,8 +531,7 @@ spec:
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
-# This configuration runs the lab in privileged mode:
-# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
+# This configuration keeps the default baseline security policy:
 # - Docker registry is disabled for this shared example.
 # - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
@@ -544,8 +571,8 @@ spec:
     budget: x-large
   files: []
   security:
-    policy: privileged
     kubernetesAccess: false
+    externalEgress: false
   registry:
     enabled: false
     storage: 3Gi
@@ -568,7 +595,7 @@ spec:
 ```
 
 - No `WorkshopSession` is pre-created for this shared example. The runtime namespace and backing services can be validated without a session pod.
-- Runs in **privileged mode** with **Docker support** and increased ephemeral disk (20 Gi).
+- Runs with the default **baseline** security policy.
 - **No Kubernetes API access** is granted inside the environment. The shared example leaves the registry disabled.
 - Access is secured through the corresponding Keycloak group and role.
 
@@ -626,8 +653,9 @@ spec:
 - The lab also runs in **privileged** mode, which enables Docker with 20 Gi of session-local workspace storage.
 - The **admin role** grants full control within her namespace/vcluster.
 - This is the registry-enabled example, so session-backed registry behavior can be validated here.
-- Suitable for advanced development or testing requiring full Kubernetes control.
-- Keycloak enforces role-based access protection for this lab.
+- Suitable for trusted advanced development or testing that really needs full Kubernetes control.
+- Treat this as an operator-approved exception because it combines privileged runtime, registry writes, and elevated Kubernetes authority.
+- Keycloak enforces role-based access protection for this lab when Keycloak-managed access is used.
 
 ---
 
@@ -731,7 +759,7 @@ Database credentials are managed by the PostgreSQL operator and stored as Kubern
 
 - A `Datalab` defines users, sessions, optional vcluster, quotas, and security policies.
 - A `Datalab` can also define platform-managed databases, document stores, key-value/cache stores, vector stores, and registry storage.
-- Security controls combine **Pod Security Standards**, **Kubernetes roles**, and **Docker privilege** toggles.
+- Security controls combine **Pod Security Standards**, **Kubernetes roles**, **NetworkPolicies**, and **Docker privilege** toggles.
 - Each Datalab requires a storage credential Secret.
 - Durable data services remain visible to operators, which is the basis for backup, restore, monitoring, and lifecycle responsibility.
 - Object-storage buckets are created outside Provider Datalab, for example with Provider Storage; Provider Datalab consumes the resulting credentials.
