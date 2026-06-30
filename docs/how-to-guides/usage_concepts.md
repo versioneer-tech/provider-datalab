@@ -161,7 +161,7 @@ Those controller-specific settings should be added by platform policy instead of
     training.educates.dev/environment.name: s-jane
     ```
 
-    Provider Datalab also creates a Keycloak client named after the Datalab. For `s-jane`, the generated client includes redirect and web-origin entries for the workspace root and each declared session host:
+    Provider Datalab also creates a confidential Keycloak client named after the Datalab. For `s-jane`, the generated client includes redirect and web-origin entries for the workspace root and each declared session host:
 
     ```text
     https://s-jane.lab.acme.org/*
@@ -173,7 +173,9 @@ Those controller-specific settings should be added by platform policy instead of
     http://localhost:*
     ```
 
-    This allows ingress-layer OIDC implementations, such as APISIX `openid-connect`, to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy.
+    This allows ingress-layer OIDC implementations, such as APISIX `openid-connect`, to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy. Provider Datalab publishes the credentials for OIDC consumers as runtime Secret `s-jane-oauth2-client` with data keys `client_id` and `client_secret`. The client keeps human and machine authority separate. Browser users receive `ws_access` or `ws_admin` through Datalab groups. Client-credentials automation uses the same confidential client but receives only the service-account role `ws_api`.
+
+    To call Workspace API with the client-credentials flow from the runtime namespace, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to Workspace API.
 
 ??? example "Shared delegated-auth environment configuration"
 
@@ -283,6 +285,8 @@ Those controller-specific settings should be added by platform policy instead of
 
     With APISIX, the ingress controller can enforce OIDC directly. For authorization, add the APISIX OPA plugin to the same `ApisixPluginConfig` and point it at a policy that validates workspace access. This pattern mirrors the EOEPCA deployment, adapted to `acme.org`.
 
+    The APISIX `openid-connect` plugin must use the generated confidential client secret. Use APISIX Ingress Controller's plugin-level `secretRef` to use the automatically generated `<datalab>-oauth2-client` Secret in the runtime namespace with APISIX-compatible `client_id` and `client_secret` keys.
+
     If the OPA policy checks Keycloak client roles in `resource_access`, request the `roles` scope in the APISIX `openid-connect` plugin. The access token must also be made available as an `Authorization: Bearer ...` header so the APISIX OPA plugin can pass it to OPA for policy evaluation. Without the `roles` scope, Keycloak may issue a valid access token that contains identity claims but not the client-role claims needed by the policy.
 
     Kyverno needs permission to create `ApisixPluginConfig` resources in the generated session namespaces:
@@ -309,6 +313,8 @@ Those controller-specific settings should be added by platform policy instead of
       - patch
       - delete
     ```
+
+    The Kyverno policy does not need `secrets/get`: it writes APISIX `secretRef` to the generated plugin config. The APISIX ingress-controller service account must be allowed to read the generated `<datalab>-oauth2-client` Secret in the runtime namespace.
 
     The policy generates one APISIX plugin config per session namespace and annotates the matching workshop ingress to use it:
 
@@ -358,13 +364,12 @@ Those controller-specific settings should be added by platform policy instead of
               plugins:
               - name: openid-connect
                 enable: true
+                secretRef: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}-oauth2-client"
                 config:
                   discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
                   use_jwks: true
                   bearer_only: false
                   scope: openid profile email roles
-                  client_id: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-                  client_secret: ""
                   session:
                     secret: "{{ random('[A-Za-z0-9]{32}') }}"
                   access_token_in_authorization_header: true
@@ -405,7 +410,7 @@ Those controller-specific settings should be added by platform policy instead of
                 +(k8s.apisix.apache.org/plugin-config-name): "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
     ```
 
-    The `openid-connect` plugin uses the Datalab name as `client_id`, taken from `training.educates.dev/environment.name`. Because Provider Datalab creates the matching public Keycloak client and redirect URIs, no additional Keycloak mutation is required for declared sessions. The `opa` plugin should use a policy that derives the workspace from the requested host or client and allows only platform administrators or users with the generated workspace roles such as `ws_access` or `ws_admin`.
+    The `openid-connect` plugin gets `client_id` and `client_secret` from the generated runtime Secret referenced by `secretRef`. Because Provider Datalab creates the matching confidential Keycloak client, redirect URIs, and runtime OAuth2 credential Secret, no additional Keycloak mutation is required for declared sessions. The `opa` plugin should use a policy that derives the workspace from the requested host or client and allows browser requests only for platform administrators or users with generated workspace roles such as `ws_access` or `ws_admin`. Client-credentials tokens should be handled as machine/API tokens and accepted only where the generated `ws_api` role is intended.
 
     The session secret is generated when Kyverno creates the `ApisixPluginConfig`. `synchronize: false` keeps the generated object stable; if you intentionally change the plugin template for existing sessions, recreate the generated plugin config or restart the session so Kyverno can generate a fresh one.
 
@@ -418,7 +423,7 @@ Full example manifests are available in the repository:
 - [examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
 - [examples/ingress-protection/apisix-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
 
-Keycloak-managed access is supported. When it is used, the composition automatically provisions the Keycloak client, groups, roles, role bindings, and memberships needed for the workspace.
+Keycloak-managed access is supported. When it is used, the composition automatically provisions the confidential Keycloak client, runtime OAuth2 credential Secret, groups, roles, role scope mappings, group role bindings, service-account role binding, and memberships needed for the workspace.
 
 ### Files and the Workshop Tab
 The `spec.files` array is optional.
@@ -490,12 +495,18 @@ When unspecified, defaults from the EnvironmentConfig apply.
 When Keycloak-managed access is used, users listed under `spec.users` must already exist in Keycloak.
 When a Datalab is created for that pattern, the composition automatically provisions the required **Keycloak resources**:
 
-- **Groups** for the datalab and datalab administrators
-- **Group memberships** for the listed users
-- A dedicated **OAuth2 client**
-- User and admin **roles**, plus the role bindings for the generated groups
+- **Groups** for the Datalab and Datalab administrators. The regular group is named after the Datalab, and the administrator group uses `<datalab>-admin`.
+- **Group memberships** for the listed users. Users listed in `spec.users` join the regular group; selected administrators also join the admin group.
+- A dedicated confidential **OAuth2 client** named after the Datalab. It allows authorization-code browser login and client credentials, while implicit, device, and direct access grants are disabled.
+- A runtime **Secret** named `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`, generated by Provider Datalab in the runtime workshop namespace for ingress controllers and client-credentials automation.
+- User, admin, and machine/API **roles**: `ws_access`, `ws_admin`, and `ws_api`.
+- Role scope mappings for the generated client because `fullScopeAllowed` is disabled. Tokens only get the generated workspace client roles that are explicitly mapped.
+- Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. The central Workspace API OAuth client also needs to emit the same Workspace API audience when that audience is required, but it is managed by the realm or platform identity setup rather than by Provider Datalab.
+- Group role bindings for `ws_access` and `ws_admin`, plus a service-account role binding for `ws_api`.
 
-This ensures that authentication and authorization are consistently enforced across the runtime and UI. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm.
+This ensures that authentication and authorization are consistently enforced across the runtime and UI. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. The Workspace API gateway should treat those client-credentials tokens as machine tokens and require the configured Workspace API audience; Workspace API authorization should require the `ws_api` client role, not user group membership.
+
+The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported consumer contract for ingress-side resources such as APISIX and other controller-side policy.
 
 ---
 
@@ -517,7 +528,8 @@ spec:
   secretName: s-joe
 ```
 
-- Joe’s Datalab exists but is idle until he launches a session.
+- Joe’s Datalab exists but is idle until he launches a session; the Data tab's
+  `package-r` runtime starts with the session when `spec.data.enabled` is true.
 - Useful for lightweight, on-demand environments.
 - Keycloak ensures Joe is authorized to access his workspace.
 

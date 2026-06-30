@@ -32,7 +32,7 @@ At its core, Provider Datalab provides:
 - A **Datalab Composite Resource Definition (XRD)**.
 - **Crossplane v2 compositions** for creating environments with sessions, storage access, vclusters, identity wiring, and optional managed backends.
 - A default `datalab-educates` runtime that launches **VS Code Server**, terminals, a storage browser, and common tools such as `awscli` and `rclone`.
-- Optional **Keycloak-managed access**, including clients, groups, roles, role bindings, and memberships.
+- Optional **Keycloak-managed access**, including confidential clients, runtime OAuth2 credential Secrets, groups, roles, role scope mappings, role bindings, service-account API access, and memberships.
 - Support for delegated authentication through the surrounding platform, for example NGINX external auth or APISIX OIDC protection at the ingress layer.
 - Optional platform-managed services from the same `Datalab` claim: PostgreSQL databases, MongoDB document stores, Redis key-value/cache stores, Qdrant vector stores, and a Docker registry.
 
@@ -50,7 +50,7 @@ For end users, this means a simple workspace experience: they can open a familia
 - **Multi-tenant runtime isolation**
   Run each Datalab inside a namespace or, where useful, inside a dedicated virtual cluster (vcluster).
 - **Integrated or delegated identity**
-  Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the platform ingress layer.
+  Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the platform ingress layer. Generated Datalab clients are confidential, include a service-account-only `ws_api` role for automation, and can add configured platform API audiences to access tokens.
 - **Storage integration**
   Consume object-storage credentials from Provider Storage or another storage process, and mount them into the lab.
 - **Extensible by design**

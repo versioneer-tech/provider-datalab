@@ -44,6 +44,14 @@ the platform ingress layer with `auth.type: delegated`. Delegated mode does not
 mean unauthenticated access; it means authentication and authorization are
 attached before traffic reaches the workspace runtime.
 
+For Keycloak-backed access, each Datalab gets a confidential OAuth client named
+after the Datalab. Provider Datalab publishes the credentials consumers need in
+the runtime workshop namespace as `<datalab>-oauth2-client`, with keys
+`client_id` and `client_secret`.
+Treat the runtime Secret as a workspace machine credential: readers can mint
+client-credentials tokens for that Datalab. Human access uses `ws_access` or
+`ws_admin`; the generated client service account receives only `ws_api`.
+
 See the [Authentication](../how-to-guides/usage_concepts.md#authentication)
 guide for the concrete Keycloak-managed and delegated-ingress patterns,
 including NGINX `oauth2-proxy` and APISIX `openid-connect` examples.
@@ -56,7 +64,7 @@ including NGINX `oauth2-proxy` and APISIX `openid-connect` examples.
 | Pod security | `spec.security.policy` maps to Educates namespace security policy: `restricted`, `baseline`, or `privileged`. Default is `baseline`. | Decide who may request `privileged`; it enables Docker support. |
 | Kubernetes API access | `kubernetesAccess` controls whether a token is mounted. Default is enabled with `kubernetesRole: edit`. | Use stricter environment defaults where workspace code should not call the API. A vcluster changes the API surface; it is not stronger Pod isolation. |
 | Network policy | Provider Datalab renders namespace-level egress policies for all runtime Pods. `externalEgress` defaults to `true`; when `false`, only namespace-local Pod egress is allowed by the generated policies. | Verify the CNI enforces NetworkPolicy. Put broad allowed egress CIDRs in `EnvironmentConfig.data.network.externalEgressCIDRs`; put pod/service CIDRs in `podCIDRs` and `serviceCIDR`; put cloud metadata and control-plane CIDRs in `blacklistIPs`; add explicit policies for cross-namespace needs. |
-| Ingress auth | `auth.type: delegated` hands authentication to the platform ingress layer. | Delegated mode is protected only when the operator attaches external auth/authz policy. |
+| Ingress auth | `auth.type: delegated` hands authentication to the platform ingress layer. Generated Keycloak clients are confidential and can be reused by direct OIDC ingress integrations through the runtime `<datalab>-oauth2-client` Secret. | Delegated mode is protected only when the operator attaches external auth/authz policy and allows the ingress controller to read the generated runtime Secret. |
 | Data access | Object storage, service credentials, PVCs, databases, caches, vector stores, and registry state may be exposed to the session. | Scope credentials and define backup, retention, and deletion behavior outside the session. |
 
 ## What Stays Outside

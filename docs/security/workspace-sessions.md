@@ -22,11 +22,17 @@ The effective authority of a Datalab session is the combination of:
 - Docker or registry access
 - network ingress and egress policy
 - delegated ingress authentication and authorization
+- the per-Datalab OAuth client secret when namespace users or automation can
+  read the runtime namespace `<datalab>-oauth2-client` Secret
 
 With `spec.vcluster: false`, workloads run directly in the Datalab runtime
 namespace. With `spec.vcluster: true`, users also get a virtual Kubernetes API,
 but workloads still run as Pods in the host cluster and remain subject to host
 namespace policy.
+
+The generated OAuth client separates browser and machine authority. Browser
+users are authorized through `ws_access` or `ws_admin`; the generated client
+service account receives only `ws_api` for client-credentials automation.
 
 ## Example Trust Levels
 

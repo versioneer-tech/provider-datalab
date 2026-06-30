@@ -105,6 +105,49 @@ spec:
                   },
               })
 
+    - step: observe-oauth-client-secret
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(s):
+              return {} if s is None else _json_format.MessageToDict(s, preserving_proto_field_name=True)
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              key = f"observe-oauth-client-secret-{xr_name}"
+              rsp.desired.resources[key].resource.update({
+                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                  "kind": "Object",
+                  "metadata": {
+                      "name": key,
+                      "namespace": xr_namespace,
+                      "annotations": {"crossplane.io/composition-resource-name": key},
+                  },
+                  "spec": {
+                      "managementPolicies": ["Observe"],
+                      "forProvider": {
+                          "manifest": {
+                              "apiVersion": "v1",
+                              "kind": "Secret",
+                              "metadata": {"name": f"{xr_name}-oauth-client", "namespace": xr_namespace},
+                          }
+                      },
+                      "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                      "watch": False,
+                  },
+              })
+
     - step: observe-database-secret
       functionRef:
         name: crossplane-contrib-function-python
@@ -504,6 +547,100 @@ spec:
               rsp.desired.resources[key].resource.update(manifest)
               rsp.desired.resources[key].ready = True
 
+    - step: update-secret-oauth2-client
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          import base64 as _base64
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(s):
+              if s is None:
+                  return {}
+              return s if isinstance(s, dict) else _json_format.MessageToDict(s, preserving_proto_field_name=True)
+
+          def _safe_str(v):
+              return str(v).strip() if v is not None else ""
+
+          def _b64get_any(d, keys):
+              if not d:
+                  return None
+              for k in keys:
+                  v = d.get(k)
+                  if v is None:
+                      continue
+                  try:
+                      return _base64.b64decode(v, validate=True).decode("utf-8")
+                  except Exception:
+                      return str(v)
+              return None
+
+          def _extract_data(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              m1 = st.get("manifest") or {}
+              m2 = (st.get("raw") or {}).get("manifest") or {}
+              return (m1.get("data") or m1.get("stringData") or m2.get("data") or m2.get("stringData") or {}) or {}
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              od = _to_dict(objres.resource)
+              st = (od.get("status") or {}).get("atProvider") or {}
+              return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              meta = xr.get("metadata", {}) or {}
+
+              xr_name = meta.get("name")
+              xr_namespace = meta.get("namespace") or "default"
+
+              observed = getattr(req.observed, "resources", {}) or {}
+              oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
+              client_secret = _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+              if not client_secret:
+                  return
+              client_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"]) or xr_name
+
+              env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
+              educates_status = (env_manifest.get("status") or {}).get("educates") or {}
+              workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+
+              secret_name = f"{xr_name}-oauth2-client"
+              key = f"oauth2-client-secret-{xr_name}"
+              manifest = {
+                  "apiVersion": "v1",
+                  "kind": "Secret",
+                  "metadata": {"name": secret_name, "namespace": workshop_ns},
+                  "type": "Opaque",
+                  "stringData": {
+                      "client_id": client_id,
+                      "client_secret": client_secret,
+                  },
+              }
+              rsp.desired.resources[key].resource.update({
+                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                  "kind": "Object",
+                  "metadata": {
+                      "name": key,
+                      "namespace": xr_namespace,
+                      "annotations": {"crossplane.io/composition-resource-name": key},
+                  },
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
+                      "forProvider": {"manifest": manifest},
+                      "readiness": {"policy": "SuccessfulCreate"},
+                      "watch": True,
+                  },
+              })
+
     - step: update-keycloak-objects
       functionRef:
         name: crossplane-contrib-function-python
@@ -555,6 +692,16 @@ spec:
               iam_env = env.get("iam") or {}
               ingress_env = env.get("ingress") or {}
               realm = iam_env.get("realm", "default")
+              extra_audiences_raw = iam_env.get("extraAudiences")
+              if isinstance(extra_audiences_raw, str):
+                  extra_audiences_raw = [extra_audiences_raw]
+              elif not isinstance(extra_audiences_raw, list):
+                  extra_audiences_raw = []
+              extra_audiences = _distinct([
+                  _safe_str(audience)
+                  for audience in extra_audiences_raw
+                  if _safe_str(audience)
+              ])
               domain = ingress_env.get("domain", "default")
               url = f"https://{xr_name}.{domain}"
               session_names = [
@@ -621,16 +768,18 @@ spec:
                           "clientId": xr_name,
                           "rootUrl": url,
                           "adminUrl": url,
-                          "accessType": "PUBLIC",
+                          "accessType": "CONFIDENTIAL",
+                          "fullScopeAllowed": False,
                           "standardFlowEnabled": True,
-                          "implicitFlowEnabled": True,
+                          "implicitFlowEnabled": False,
                           "directAccessGrantsEnabled": False,
-                          "serviceAccountsEnabled": False,
-                          "oauth2DeviceAuthorizationGrantEnabled": True,
+                          "serviceAccountsEnabled": True,
+                          "oauth2DeviceAuthorizationGrantEnabled": False,
                           "webOrigins": redirect_uris,
                           "validRedirectUris": redirect_uris,
                           "realmId": realm,
                       },
+                      "writeConnectionSecretToRef": {"name": f"{xr_name}-oauth-client"},
                   },
               })
 
@@ -660,6 +809,64 @@ spec:
                   },
               }, f"{xr_name}-ws-admin")
 
+              put("keycloak-role-api", {
+                  "apiVersion": "role.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "Role",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {
+                          "name": "ws_api",
+                          "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                          "realmId": realm,
+                      },
+                  },
+              }, f"{xr_name}-ws-api")
+
+              def put_keycloak_role_mapper(key_base, role_name_override):
+                  put(key_base, {
+                      "apiVersion": "client.keycloak.m.crossplane.io/v1alpha1",
+                      "kind": "RoleMapper",
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                          "forProvider": {
+                              "realmId": realm,
+                              "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                              "roleIdRef": {"name": role_name_override, "policy": {"resolution": "Required"}},
+                          },
+                      },
+                  }, role_name_override)
+
+              put_keycloak_role_mapper("keycloak-role-mapper-user", f"{xr_name}-ws-access")
+              put_keycloak_role_mapper("keycloak-role-mapper-admin", f"{xr_name}-ws-admin")
+              put_keycloak_role_mapper("keycloak-role-mapper-api", f"{xr_name}-ws-api")
+
+              for audience in extra_audiences:
+                  audience_name = "".join([
+                      char.lower() if char.isalnum() else "-"
+                      for char in audience
+                  ]).strip("-") or "extra"
+                  audience_name = "-".join([part for part in audience_name.split("-") if part])[:48].strip("-") or "extra"
+                  key_base = "keycloak-workspace-api-audience" if audience_name == "workspace-api" else f"keycloak-extra-audience-{audience_name}"
+                  put(key_base, {
+                      "apiVersion": "client.keycloak.m.crossplane.io/v1alpha1",
+                      "kind": "ProtocolMapper",
+                      "spec": {
+                          "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                          "forProvider": {
+                              "realmId": realm,
+                              "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                              "protocol": "openid-connect",
+                              "protocolMapper": "oidc-audience-mapper",
+                              "name": f"{audience_name}-audience",
+                              "config": {
+                                  "included.client.audience": audience,
+                                  "access.token.claim": "true",
+                                  "id.token.claim": "false",
+                              },
+                          },
+                      },
+                  }, f"{xr_name}-{audience_name}-audience")
+
               put("keycloak-roles-user", {
                   "apiVersion": "group.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "Roles",
@@ -685,6 +892,20 @@ spec:
                       },
                   },
               }, f"{xr_name}-admin")
+
+              put("keycloak-service-account-role-api", {
+                  "apiVersion": "openidclient.keycloak.m.crossplane.io/v1alpha1",
+                  "kind": "ClientServiceAccountRole",
+                  "spec": {
+                      "providerConfigRef": {"name": "provider-keycloak", "kind": "ProviderConfig"},
+                      "forProvider": {
+                          "realmId": realm,
+                          "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                          "roleRef": {"name": f"{xr_name}-ws-api", "policy": {"resolution": "Required"}},
+                          "serviceAccountUserClientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                      },
+                  },
+              }, f"{xr_name}-ws-api")
 
               users = list(spec.get("users", []) or [])
               userOverrides = spec.get("userOverrides", {}) or {}
@@ -1052,7 +1273,9 @@ spec:
                           "packages": packages
                       },
                       "environment": {
-                          "secrets": [{"name": storage_secret_name, "namespace": xr_namespace}],
+                          "secrets": [
+                              {"name": storage_secret_name, "namespace": xr_namespace},
+                          ],
                           "objects": network_policies,
                       }
                   }
@@ -1065,6 +1288,7 @@ spec:
                   }
 
               if data_enabled:
+                  data_service_name = "data-$(session_name)"
                   workshop["spec"]["session"]["dashboards"].append(
                       {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
                   )
@@ -1072,8 +1296,8 @@ spec:
                       {
                           "name": "data",
                           "protocol": "http",
-                          "host": "data.$(workshop_namespace).svc.$(cluster_domain)",
-                          "port": 8080
+                          "host": f"{data_service_name}.$(workshop_namespace).svc.$(cluster_domain)",
+                          "port": 8888
                       }
                   )
 
@@ -1081,9 +1305,10 @@ spec:
                       "apiVersion": "apps/v1",
                       "kind": "Deployment",
                       "metadata": {
-                          "name": "data",
+                          "name": data_service_name,
+                          "namespace": "$(workshop_namespace)",
                           "labels": {
-                              "app.kubernetes.io/instance": "data",
+                              "app.kubernetes.io/instance": data_service_name,
                               "app.kubernetes.io/name": "data"
                           }
                       },
@@ -1091,28 +1316,45 @@ spec:
                           "replicas": 1,
                           "selector": {
                               "matchLabels": {
-                                  "app.kubernetes.io/instance": "data",
+                                  "app.kubernetes.io/instance": data_service_name,
                                   "app.kubernetes.io/name": "data"
                               }
                           },
                           "template": {
                               "metadata": {
                                   "labels": {
-                                      "app.kubernetes.io/instance": "data",
+                                      "app.kubernetes.io/instance": data_service_name,
                                       "app.kubernetes.io/name": "data"
                                   }
                               },
                               "spec": {
+                                  "securityContext": {
+                                      "runAsNonRoot": True,
+                                      "runAsUser": 1000,
+                                      "runAsGroup": 100,
+                                      "fsGroup": 100,
+                                      "fsGroupChangePolicy": "OnRootMismatch",
+                                      "seccompProfile": {"type": "RuntimeDefault"},
+                                  },
                                   "serviceAccountName": "$(service_account)",
                                   "containers": [{
                                       "name": "data",
-                                      "image": "ghcr.io/versioneer-tech/package-r:v2025.7.1",
+                                      "image": "ghcr.io/versioneer-tech/package-r:v2026.6.4",
                                       "imagePullPolicy": "Always",
-                                      "ports": [{"name": "http", "containerPort": 8080}],
+                                      "securityContext": {
+                                          "allowPrivilegeEscalation": False,
+                                          "capabilities": {"drop": ["ALL"]},
+                                      },
+                                      "ports": [{"name": "http", "containerPort": 8888}],
                                       "env": [
                                           {"name": "FB_AUTH_MAPPER", "value": "reader-noshare" if data_readonly else "writer-noshare"},
+                                          {"name": "FB_ALLOW_CHANGING", "value": "false" if data_readonly else "true"},
+                                          {"name": "FB_ALLOW_SHARING", "value": "false"},
+                                          {"name": "FB_CREATE_USER_DIR", "value": "false"},
+                                          {"name": "FB_DATABASE", "value": "/db/bolt.db"},
+                                          {"name": "FB_SERVER_PORT", "value": "8888"},
                                           {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                          {"name": "FB_ROOT", "value": "/data"},
+                                          {"name": "FB_ROOT", "value": "/workspace"},
                                           {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
                                           {"name": "FB_AUTH_HEADER", "value": "Accept"},
                                           {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
@@ -1125,13 +1367,39 @@ spec:
                                           "requests": {"cpu": "100m", "memory": "128Mi"},
                                           "limits": {"cpu": "1", "memory": "512Mi"}
                                       },
+                                      "readinessProbe": {
+                                          "exec": {
+                                              "command": [
+                                                  "/bin/sh",
+                                                  "-lc",
+                                                  "stat /workspace >/dev/null",
+                                              ],
+                                          },
+                                          "periodSeconds": 10,
+                                      },
+                                      "livenessProbe": {
+                                          "exec": {
+                                              "command": [
+                                                  "/bin/sh",
+                                                  "-lc",
+                                                  "out=\"$( (stat /workspace >/dev/null) 2>&1 || true )\"; if echo \"$out\" | grep -qi \"Transport endpoint is not connected\"; then exit 1; fi; exit 0",
+                                              ],
+                                          },
+                                          "periodSeconds": 20,
+                                      },
                                       "volumeMounts": [{
                                           "name": "data",
-                                          "mountPath": "/data",
+                                          "mountPath": "/workspace",
                                           "readOnly": True if data_readonly else False
+                                      }, {
+                                          "name": "db",
+                                          "mountPath": "/db"
                                       }]
                                   }],
-                                  "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}}]
+                                  "volumes": [
+                                      {"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}},
+                                      {"name": "db", "emptyDir": {}},
+                                  ]
                               }
                           }
                       }
@@ -1147,20 +1415,22 @@ spec:
                               "resources": {"requests": {"storage": "1Mi"}},
                               "storageClassName": "csi-rclone"
                           }
-                      },
+                      }
+                  ])
+                  workshop["spec"]["session"]["objects"].extend([
                       data_deploy,
                       {
                           "apiVersion": "v1",
                           "kind": "Service",
-                          "metadata": {"name": "data"},
+                          "metadata": {"name": data_service_name, "namespace": "$(workshop_namespace)"},
                           "spec": {
                               "type": "ClusterIP",
                               "selector": {
-                                  "app.kubernetes.io/instance": "data",
+                                  "app.kubernetes.io/instance": data_service_name,
                                   "app.kubernetes.io/name": "data"
                               },
                               "ports": [
-                                  {"name": "http", "port": 8080, "targetPort": "http", "protocol": "TCP"}
+                                  {"name": "http", "port": 8888, "targetPort": "http", "protocol": "TCP"}
                               ]
                           }
                       }

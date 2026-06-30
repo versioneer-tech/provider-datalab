@@ -72,6 +72,8 @@ metadata:
 data:
   iam:
     realm: acme
+    extraAudiences:
+    - workspace-api-custom
   ingress:
     class: nginx
     domain: lab.acme.com

@@ -105,7 +105,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecdata">data</a></b></td>
         <td>object</td>
         <td>
-          Optional settings for the Data component. When enabled, the composition provisions the data service UI and mounts workspace storage into it at /data.<br/>
+          Optional settings for the Data component. When enabled, each started session gets a Data service UI backed by package-r and the workspace storage mount.<br/>
           <br/>
             <i>Default</i>: map[]<br/>
         </td>
@@ -249,7 +249,7 @@ Desired configuration of the datalab.
 
 
 
-Optional settings for the Data component. When enabled, the composition provisions the data service UI and mounts workspace storage into it at /data.
+Optional settings for the Data component. When enabled, each started session gets a Data service UI backed by package-r and the workspace storage mount.
 
 <table>
     <thead>
@@ -264,7 +264,7 @@ Optional settings for the Data component. When enabled, the composition provisio
         <td><b>enabled</b></td>
         <td>boolean</td>
         <td>
-          Whether to provision the Data component for this Datalab session. Effective default: true.<br/>
+          Whether to provision the Data component for each started Datalab session. Effective default: true.<br/>
           <br/>
             <i>Default</i>: true<br/>
         </td>

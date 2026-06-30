@@ -7,6 +7,9 @@
 #
 # Adapt namespaces, issuer names, storage settings, and the OIDC discovery URL
 # for your cluster. The important Datalab-side setting is auth.type: delegated.
+# Provider Datalab projects the generated Keycloak client credentials into
+# Secret <datalab>-oauth2-client in the runtime workshop namespace, with
+# APISIX-compatible keys client_id and client_secret.
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
@@ -108,13 +111,12 @@ spec:
             plugins:
               - name: openid-connect
                 enable: true
+                secretRef: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}-oauth2-client"
                 config:
                   discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
                   use_jwks: true
                   bearer_only: false
                   scope: openid profile email roles
-                  client_id: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-                  client_secret: ""
                   session:
                     secret: "{{ random('[A-Za-z0-9]{32}') }}"
                   access_token_in_authorization_header: true

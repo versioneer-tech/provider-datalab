@@ -20,6 +20,24 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: observe-oauth-client-secret-s-jane
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-jane
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jane-oauth-client
+        namespace: default
+      data:
+        clientSecret: c2FtcGxlLW9hdXRoMi1jbGllbnQtc2VjcmV0
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: workshopenvironment-s-jane
   namespace: default
   annotations:

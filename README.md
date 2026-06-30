@@ -14,6 +14,8 @@ For the operating model, start with the [welcome guide](https://provider-datalab
 
 Provider Datalab does not replace the tools you already operate. In the default `datalab-educates` package, most runtime features come from the excellent [Educates Training Platform](https://educates.dev/) and are packaged with Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/). The same principle applies to storage, identity, databases, and backups: Provider Datalab exposes them through a tenant-facing API, while the operator keeps policy and accountability.
 
+For Keycloak-managed access, Provider Datalab can create a confidential OAuth client, workspace roles, and machine/API credentials per Datalab. See the [installation guide](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/#crossplane-providers-and-functions) and [authentication usage guide](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/#authentication) for ingress and client-credentials details.
+
 ## Who It Is For
 
 - **Platform operators** get a governable self-service API for workspace runtimes, security defaults, data-service classes, and lifecycle controls.

@@ -184,11 +184,12 @@ EOF
 apply_clients() {
   log "creating curl clients"
   for ns in "$NS_OPEN" "$NS_CLOSED"; do
+    kubectl -n "$ns" delete pod client --ignore-not-found --wait=true >/dev/null
     kubectl -n "$ns" run client \
       --image="$CLIENT_IMAGE" \
       --image-pull-policy=IfNotPresent \
       --restart=Never \
-      --command -- sleep 3600 >/dev/null 2>&1 || true
+      --command -- sleep 3600 >/dev/null
     kubectl -n "$ns" wait --for=condition=Ready pod/client --timeout=180s >/dev/null
   done
 }
@@ -357,14 +358,64 @@ run_apply_denied_case() {
   record_result "admission" "$name" 1 "block" "$observed" "$duration" "$exit_code"
 }
 
-validate_rendered_contract() {
-  if [[ -f educates/tests/expected/001-lab.yaml ]]; then
-    log "checking rendered fixture contains metadata and internal CIDR exceptions"
-    grep -q '169.254.169.254/32' educates/tests/expected/001-lab.yaml
-    grep -q 'fd00:ec2::254/128' educates/tests/expected/001-lab.yaml
-    grep -q '10.42.0.0/16' educates/tests/expected/001-lab.yaml
-    grep -q '10.43.0.0/16' educates/tests/expected/001-lab.yaml
+require_fixture_contains() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+
+  if ! grep -q -- "$pattern" "$file"; then
+    printf 'fixture contract failed: %s must contain %s (%s)\n' "$file" "$pattern" "$description" >&2
+    exit 1
   fi
+}
+
+require_fixture_absent() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+
+  if grep -q -- "$pattern" "$file"; then
+    printf 'fixture contract failed: %s must not contain %s (%s)\n' "$file" "$pattern" "$description" >&2
+    exit 1
+  fi
+}
+
+validate_external_egress_fixture() {
+  local file="$1"
+
+  require_fixture_contains "$file" 'name: deny-egress' "default-deny egress baseline"
+  require_fixture_contains "$file" 'name: allow-namespace-egress' "same-namespace egress allow"
+  require_fixture_contains "$file" 'name: allow-dns-egress' "DNS egress allow"
+  require_fixture_contains "$file" 'name: allow-external-egress' "external egress allow"
+  require_fixture_contains "$file" '169.254.169.254/32' "AWS metadata block"
+  require_fixture_contains "$file" '169.254.42.42/32' "Scaleway metadata block"
+  require_fixture_contains "$file" 'fd00:ec2::254/128' "AWS IPv6 metadata block"
+  require_fixture_contains "$file" 'fd00:42::42/128' "Scaleway IPv6 metadata block"
+  require_fixture_contains "$file" '10.42.0.0/16' "cluster pod CIDR exclusion"
+  require_fixture_contains "$file" '10.43.0.0/16' "cluster service CIDR exclusion"
+  require_fixture_absent "$file" 'name: allow-web-egress' "legacy broad egress policy"
+}
+
+validate_no_external_egress_fixture() {
+  local file="$1"
+
+  require_fixture_contains "$file" 'name: deny-egress' "default-deny egress baseline"
+  require_fixture_contains "$file" 'name: allow-namespace-egress' "same-namespace egress allow"
+  require_fixture_absent "$file" 'name: allow-dns-egress' "DNS egress must be disabled with externalEgress=false"
+  require_fixture_absent "$file" 'name: allow-external-egress' "external egress must be disabled with externalEgress=false"
+  require_fixture_absent "$file" 'name: allow-web-egress' "legacy broad egress policy"
+}
+
+validate_rendered_contract() {
+  if [[ ! -f educates/tests/expected/001-lab.yaml ]]; then
+    return
+  fi
+
+  log "checking rendered NetworkPolicy fixture contract"
+  validate_external_egress_fixture educates/tests/expected/001-lab.yaml
+  validate_no_external_egress_fixture educates/tests/expected/002-lab.yaml
+  validate_external_egress_fixture educates/tests/expected/003-lab.yaml
+  validate_external_egress_fixture educates/tests/expected/004-lab.yaml
 }
 
 print_summary() {
@@ -421,6 +472,9 @@ main() {
   run_exec_case "open same-namespace ServiceIP" "$NS_OPEN" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${open_svc}/ >/dev/null"
   run_exec_case "open cross-namespace PodIP" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_pod}/ >/dev/null"
   run_exec_case "open cross-namespace ServiceIP" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_svc}/ >/dev/null"
+  run_exec_case "open AWS metadata IPv4" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://169.254.169.254/ >/dev/null"
+  run_exec_case "open Scaleway metadata IPv4" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://169.254.42.42/ >/dev/null"
+  run_exec_case "open Scaleway metadata IPv6" "$NS_OPEN" block "curl -g -fsS --connect-timeout 2 --max-time 5 'http://[fd00:42::42]/' >/dev/null"
   run_exec_case "open external URL" "$NS_OPEN" allow "curl -fsS --connect-timeout 5 --max-time 15 ${EXTERNAL_URL} >/dev/null"
 
   run_exec_case "closed same-namespace PodIP" "$NS_CLOSED" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_pod}/ >/dev/null"
