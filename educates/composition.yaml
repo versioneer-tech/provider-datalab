@@ -1339,7 +1339,7 @@ spec:
                                   "serviceAccountName": "$(service_account)",
                                   "containers": [{
                                       "name": "data",
-                                      "image": "ghcr.io/versioneer-tech/package-r:v2026.6.4",
+                                      "image": "ghcr.io/versioneer-tech/package-r:v2026.6.5",
                                       "imagePullPolicy": "Always",
                                       "securityContext": {
                                           "allowPrivilegeEscalation": False,

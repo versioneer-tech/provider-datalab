@@ -12,7 +12,7 @@ on:
 
 jobs:
   build_and_publish_configuration_packages:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -29,7 +29,7 @@ jobs:
 
       - name: Install Crossplane CLI
         run: |
-          curl -sL "https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh" | XP_VERSION=v2.0.2 sh
+          curl -sL "https://raw.githubusercontent.com/crossplane/crossplane/v2.0.2/install.sh" | XP_VERSION=v2.0.2 sh
           sudo mv crossplane /usr/local/bin
 
       - name: Build and publish datalab-educates Configuration Package
@@ -55,7 +55,7 @@ jobs:
             --verbose
 
   build_docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build_and_publish_configuration_packages
     permissions:
       contents: write
@@ -79,7 +79,7 @@ jobs:
           cache: true
 
       - name: Install crdoc
-        run: go install fybrik.io/crdoc@latest
+        run: go install fybrik.io/crdoc@v0.6.4
 
       - name: Generate API docs
         run: |

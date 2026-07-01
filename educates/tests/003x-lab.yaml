@@ -1046,7 +1046,7 @@ spec:
                         secretKeyRef:
                           key: AWS_S3_FORCE_PATH_STYLE
                           name: s-jane-datalab
-                    image: ghcr.io/versioneer-tech/package-r:v2026.6.4
+                    image: ghcr.io/versioneer-tech/package-r:v2026.6.5
                     imagePullPolicy: Always
                     livenessProbe:
                       exec:
