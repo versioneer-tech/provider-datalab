@@ -272,8 +272,11 @@ spec:
                     hard defaults. Effective defaults (when neither XR nor
                     EnvironmentConfig provides a value): policy=baseline,
                     kubernetesAccess=true, kubernetesRole=edit,
-                    externalEgress=true. When policy is "privileged", Docker
-                    is automatically enabled with 20Gi storage.
+                    externalEgress=true. Use
+                    `EnvironmentConfig.data.network.internalEgress` to allow
+                    explicit backend Pods in other namespaces. When policy is
+                    "privileged", Docker is automatically enabled with 20Gi
+                    storage.
                   properties:
                     policy:
                       type: string
@@ -308,7 +311,10 @@ spec:
                         Whether the Datalab runtime namespace may egress outside
                         itself. When false, Provider Datalab only renders the
                         namespace-internal egress allow policy in addition to
-                        default deny. When true, external egress is allowed with
+                        default deny. Use
+                        `EnvironmentConfig.data.network.internalEgress` to
+                        whitelist explicit backend Pods in other namespaces.
+                        When true, external egress is allowed with
                         EnvironmentConfig network blacklist CIDRs excluded.
                         Effective default (if not set here or in
                         EnvironmentConfig): true.
