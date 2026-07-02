@@ -1151,6 +1151,7 @@ spec:
               excluded_network_policies = set(_string_list(network_env.get("excludePolicies") or []))
               blacklist_ips = _string_list(network_env.get("blacklistIPs") or [])
               external_egress_cidrs = _string_list(network_env.get("externalEgressCIDRs") or [])
+              internal_egress = network_env.get("internalEgress") or []
               internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
               service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
               if service_cidr:
@@ -1197,6 +1198,68 @@ spec:
                       block["except"] = exceptions
                   return {"ipBlock": block}
 
+              def _selector_for(match_labels_or_expr):
+                  if not isinstance(match_labels_or_expr, dict):
+                      return {}
+                  selector = {}
+                  match_labels = match_labels_or_expr.get("matchLabels")
+                  if isinstance(match_labels, dict) and match_labels:
+                      selector["matchLabels"] = match_labels
+                  match_expressions = match_labels_or_expr.get("matchExpressions")
+                  if isinstance(match_expressions, list) and match_expressions:
+                      selector["matchExpressions"] = [
+                          expr for expr in match_expressions
+                          if isinstance(expr, dict) and expr.get("key") and expr.get("operator")
+                      ]
+                  return selector
+
+              def _internal_egress_ports(items):
+                  ports = []
+                  if not isinstance(items, list):
+                      return ports
+                  for item in items:
+                      if not isinstance(item, dict):
+                          continue
+                      port = item.get("port")
+                      if port is None:
+                          continue
+                      port_entry = {"port": port}
+                      protocol = _safe_str(item.get("protocol"))
+                      if protocol:
+                          port_entry["protocol"] = protocol
+                      end_port = item.get("endPort")
+                      if end_port is not None:
+                          port_entry["endPort"] = end_port
+                      ports.append(port_entry)
+                  return ports
+
+              def _internal_egress_rules(items):
+                  rules = []
+                  if not isinstance(items, list):
+                      return rules
+                  for item in items:
+                      if not isinstance(item, dict):
+                          continue
+                      namespace = _safe_str(item.get("namespace"))
+                      if not namespace:
+                          continue
+                      peer = {
+                          "namespaceSelector": {
+                              "matchLabels": {
+                                  "kubernetes.io/metadata.name": namespace,
+                              }
+                          }
+                      }
+                      pod_selector = _selector_for(item.get("podSelector") or {})
+                      if pod_selector:
+                          peer["podSelector"] = pod_selector
+                      rule = {"to": [peer]}
+                      ports = _internal_egress_ports(item.get("ports") or [])
+                      if ports:
+                          rule["ports"] = ports
+                      rules.append(rule)
+                  return rules
+
               def _add_policy(policies, name, egress):
                   if _policy_enabled(name):
                       policies.append(_network_policy(name, egress))
@@ -1222,6 +1285,10 @@ spec:
                           {"to": [_ip_block(cidr, _exceptions_for(cidr))]}
                           for cidr in external_egress_cidrs
                       ])
+
+              internal_egress_rules = _internal_egress_rules(internal_egress)
+              if internal_egress_rules:
+                  _add_policy(network_policies, "allow-internal-egress", internal_egress_rules)
 
               vcluster_cfg = {
                   "enabled": vcluster,

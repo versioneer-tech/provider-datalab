@@ -32,19 +32,57 @@ environment objects. They select all Pods in the runtime namespace.
   runtime namespace.
 - `allow-dns-egress` and `allow-external-egress` are rendered only when
   `externalEgress` is true.
+- `allow-internal-egress` is rendered when `EnvironmentConfig.data.network.internalEgress`
+  contains explicit backend targets. It allows operator-approved Pods in other
+  namespaces through namespace and pod selectors.
 - `spec.security.externalEgress` falls back to
   `EnvironmentConfig.data.defaults.security.externalEgress`, then to the hard
   default `true`.
-- `EnvironmentConfig.data.network.externalEgressCIDRs` lists the CIDRs targeted
-  by broad external egress. Operators can use internet-wide CIDRs or narrower
-  platform-approved ranges. If the list is empty or omitted, no broad external
-  allow block is rendered.
+- `EnvironmentConfig.data.network.externalEgressCIDRs` is the external egress
+  allowlist. Operators can use `0.0.0.0/0` and `::/0` for open external
+  IPv4/IPv6 egress, or narrower platform-approved ranges. If the list is empty
+  or omitted, no broad external allow block is rendered, even though
+  `externalEgress` defaults to `true`.
 - `EnvironmentConfig.data.network.blacklistIPs` lists CIDRs excluded from broad
   external egress, for example AWS EC2 and Scaleway metadata IPv4/IPv6
   endpoints.
 - `EnvironmentConfig.data.network.podCIDRs` and `serviceCIDR` are also excluded
   from broad external egress. This keeps other runtime namespaces unreachable
   by PodIP or ServiceIP unless an operator adds an explicit allow policy.
+
+`deny-egress` is the default-deny base policy, so it blocks all egress unless
+another selected policy also allows it.
+
+`allow-namespace-egress` allows Pod-to-Pod traffic inside the same runtime
+namespace, which is why the workshop can still reach its own namespace-local
+Pods.
+
+`allow-dns-egress` allows DNS lookups to `kube-system` on TCP and UDP port 53,
+and it is only rendered when `externalEgress` is true.
+
+`allow-external-egress` allows outbound traffic to the CIDRs in
+`externalEgressCIDRs`, minus the excluded ranges from `blacklistIPs`,
+`podCIDRs`, and `serviceCIDR`.
+
+`allow-internal-egress` allows explicit backend Pods in other namespaces,
+using the namespace and pod selectors configured in
+`EnvironmentConfig.data.network.internalEgress`.
+
+A CIDR is just IP-range notation, such as `10.42.0.0/16`, which means "all IPs
+in that block." Kubernetes `NetworkPolicy` works with IP blocks, so Provider
+Datalab configures explicit CIDRs instead of a separate "cluster internal"
+label.
+
+The system cannot auto-detect "cluster internal" in a portable way because
+Kubernetes does not expose a universal internal-vs-external egress concept and
+Pod/Service ranges vary by cluster, CNI, and dual-stack setup. That is why the
+operator supplies `podCIDRs` and `serviceCIDR`.
+
+The closest upstream convention is the standardized namespace label
+`kubernetes.io/metadata.name`, which lets a `namespaceSelector` target a
+specific namespace by name. Kubernetes does not define a standard label such as
+`internal=true` for services or workloads, so any "internal service" label
+scheme is an operator convention, not a Kubernetes one.
 
 With `externalEgress: false`, the generated policies do not allow DNS or
 external network access. Cross-namespace traffic is not allowed by default;

@@ -396,11 +396,21 @@ validate_external_egress_fixture() {
   require_fixture_absent "$file" 'name: allow-web-egress' "legacy broad egress policy"
 }
 
+validate_default_environment_fixture() {
+  local file="$1"
+
+  validate_external_egress_fixture "$file"
+  require_fixture_contains "$file" 'name: allow-internal-egress' "explicit internal backend allow"
+  require_fixture_contains "$file" 'v1.min.io/tenant: default' "MinIO backend selector"
+  require_fixture_contains "$file" 'namespace: minio' "MinIO backend namespace"
+}
+
 validate_no_external_egress_fixture() {
   local file="$1"
 
   require_fixture_contains "$file" 'name: deny-egress' "default-deny egress baseline"
   require_fixture_contains "$file" 'name: allow-namespace-egress' "same-namespace egress allow"
+  require_fixture_contains "$file" 'name: allow-internal-egress' "explicit internal backend allow"
   require_fixture_absent "$file" 'name: allow-dns-egress' "DNS egress must be disabled with externalEgress=false"
   require_fixture_absent "$file" 'name: allow-external-egress' "external egress must be disabled with externalEgress=false"
   require_fixture_absent "$file" 'name: allow-web-egress' "legacy broad egress policy"
@@ -414,8 +424,8 @@ validate_rendered_contract() {
   log "checking rendered NetworkPolicy fixture contract"
   validate_external_egress_fixture educates/tests/expected/001-lab.yaml
   validate_no_external_egress_fixture educates/tests/expected/002-lab.yaml
-  validate_external_egress_fixture educates/tests/expected/003-lab.yaml
-  validate_external_egress_fixture educates/tests/expected/004-lab.yaml
+  validate_default_environment_fixture educates/tests/expected/003-lab.yaml
+  validate_default_environment_fixture educates/tests/expected/004-lab.yaml
 }
 
 print_summary() {

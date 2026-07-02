@@ -35,6 +35,16 @@ data:
     - fd00:ec2::254/128
     - 169.254.42.42/32
     - fd00:42::42/128
+    internalEgress:
+    - namespace: minio
+      podSelector:
+        matchLabels:
+          v1.min.io/tenant: default
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 9000
     excludePolicies: []
   packages:
     - name: awscli

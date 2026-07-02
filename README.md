@@ -132,15 +132,13 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 `externalEgress=true`).
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
 
-`spec.security.externalEgress` controls namespace-level external egress for all
-sessions and workloads in the runtime namespace. When it is omitted, the value
-falls back to `EnvironmentConfig.data.defaults.security.externalEgress` and then
-to the hard default `true`. Broad external egress targets CIDRs listed in
-`EnvironmentConfig.data.network.externalEgressCIDRs` and excludes CIDRs listed
-in `network.blacklistIPs` plus the configured `network.podCIDRs` and
-`network.serviceCIDR`, so cross-namespace PodIP and ServiceIP traffic still
-needs an explicit operator-owned NetworkPolicy. If `externalEgressCIDRs` is
-empty or omitted, no broad external allow block is rendered.
+`spec.security.externalEgress` controls whether Provider Datalab renders the
+external egress policy path for all sessions and workloads in the runtime
+namespace. If it is omitted, the value falls back to
+`EnvironmentConfig.data.defaults.security.externalEgress` and then to the hard
+default `true`, so the platform-level setting decides whether broad egress is
+allowed. See [Sandbox Security Measures](docs/security/sandbox-controls.md)
+for the full policy model.
 
 Each declared session gets a Datalab-owned workspace PVC. `spec.sessions[].state`
 defaults to `started`, which creates an active runtime session.

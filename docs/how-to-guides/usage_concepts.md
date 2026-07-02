@@ -461,17 +461,12 @@ Key fields:
 - `kubernetesAccess` — whether a Kubernetes service account token is mounted inside the session.
 - `kubernetesRole` — defines in-namespace RBAC level (`admin`, `edit`, `view`).
 - `externalEgress` — controls generated external egress for all sessions and
-  workloads in the runtime namespace.
+  workloads in the runtime namespace. External egress can be restricted at the
+  platform level in `EnvironmentConfig` or per workspace in `spec.security`;
+  see [Sandbox Security Measures](../security/sandbox-controls.md) for the
+  policy details.
 
-For the operator security model, workspace sandbox boundaries, and recommended
-policy bundles, see the [Security](../security/index.md) section.
-
-When `externalEgress` is omitted, Provider Datalab uses
-`EnvironmentConfig.data.defaults.security.externalEgress` and then the hard
-default `true`. With `externalEgress: false`, the generated policies only allow
-namespace-local Pod egress. With external egress enabled, Provider Datalab
-excludes the configured pod and service CIDRs from broad external egress.
-Cross-namespace traffic still needs a separate operator-owned NetworkPolicy.
+For the full policy model, see [Sandbox Security Measures](../security/sandbox-controls.md).
 
 ### Resource Quotas
 The `spec.quota` section allows per-Datalab overrides of default compute and storage budgets.

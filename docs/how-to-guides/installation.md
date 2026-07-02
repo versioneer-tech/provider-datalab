@@ -195,11 +195,50 @@ Set `podCIDRs` to the host cluster Pod network ranges. Provider Datalab excludes
 other runtime namespaces stays blocked unless you add an explicit
 operator-owned NetworkPolicy.
 
-`network.externalEgressCIDRs` lists the CIDRs targeted by broad generated
-external egress when `externalEgress` is true. Use `0.0.0.0/0` and `::/0` for
-internet egress, or narrower operator-approved CIDRs for restricted
-environments. If the list is empty or omitted, Provider Datalab does not render
-a broad external egress allow block.
+For backend Pods in other namespaces that should be reachable by name, add an
+explicit `internalEgress` entry. A MinIO backend in the `minio` namespace can
+be modeled like this:
+
+```yaml
+network:
+  internalEgress:
+  - namespace: minio
+    podSelector:
+      matchLabels:
+        v1.min.io/tenant: default
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 9000
+```
+
+That renders an operator-owned `allow-internal-egress` NetworkPolicy alongside
+`allow-namespace-egress` and the external egress policy path.
+
+If you only have `kubectl`, you can usually read `podCIDRs` from the nodes:
+
+```bash
+kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"  "}{.spec.podCIDR}{"  "}{.spec.podCIDRs}{"\n"}{end}'
+```
+
+If a node has one or more Pod CIDR values, those are the ranges to configure.
+`serviceCIDR` is usually not exposed as a first-class Kubernetes API field, so
+the reliable sources are the control-plane configuration (`--service-cluster-ip-range`)
+or your cluster bootstrap documentation. A `kube-dns` or `coredns` Service IP can
+confirm the range, but it cannot reliably reveal the full CIDR on its own.
+
+Provider Datalab asks for explicit CIDRs because Kubernetes NetworkPolicy
+matches IP blocks, not a portable "cluster internal" label. The actual Pod and
+Service ranges vary across clusters, CNIs, and IPv4/IPv6 setups, so the operator
+has to provide the values that represent the local cluster topology.
+
+`network.externalEgressCIDRs` is the external egress allowlist used when
+`externalEgress` is true. Use `0.0.0.0/0` and `::/0` for open external
+IPv4/IPv6 egress, or narrower operator-approved CIDRs for restricted
+environments. `externalEgress` defaults to `true`, but if
+`externalEgressCIDRs` is empty or omitted, Provider Datalab does not render a
+broad external egress allow block.
 
 `network.blacklistIPs` lists CIDRs excluded from broad generated external
 egress, such as cloud metadata endpoints. Provider Datalab always renders
@@ -208,6 +247,8 @@ egress, such as cloud metadata endpoints. Provider Datalab always renders
 `allow-external-egress` only when `externalEgress` is true. Use
 `excludePolicies` only as an operator escape hatch when another policy system
 supplies equivalent controls.
+
+If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes the DNS and broad external egress policies so only internal access remains.
 
 Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
 
