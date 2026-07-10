@@ -161,7 +161,7 @@ Those controller-specific settings should be added by platform policy instead of
     training.educates.dev/environment.name: s-jane
     ```
 
-    Provider Datalab also creates a confidential Keycloak client named after the Datalab. For `s-jane`, the generated client includes redirect and web-origin entries for the workspace root and each declared session host:
+    Provider Datalab also creates a confidential Keycloak client named after the Datalab. For `s-jane`, the generated client includes redirect and web-origin entries for the Datalab root and each declared session host:
 
     ```text
     https://s-jane.lab.acme.org/*
@@ -173,9 +173,9 @@ Those controller-specific settings should be added by platform policy instead of
     http://localhost:*
     ```
 
-    This allows ingress-layer OIDC implementations, such as APISIX `openid-connect`, to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy. Provider Datalab publishes the credentials for OIDC consumers as runtime Secret `s-jane-oauth2-client` with data keys `client_id` and `client_secret`. The client keeps human and machine authority separate. Browser users receive `ws_access` or `ws_admin` through Datalab groups. Client-credentials automation uses the same confidential client but receives only the service-account role `ws_api`.
+    This allows services intentionally owned by `s-jane` to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy. Provider Datalab publishes the credentials for direct per-Datalab OIDC consumers and client-credentials automation as runtime Secret `s-jane-oauth2-client` with data keys `client_id` and `client_secret`. Shared browser ingress for many Datalabs can instead use a central platform OAuth client. The generated client keeps human and machine authority separate. Human users receive `ws_access` or `ws_admin` through Datalab groups. Client-credentials automation uses the same confidential client but receives only the service-account role `ws_api`.
 
-    To call Workspace API with the client-credentials flow from the runtime namespace, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to Workspace API.
+    To call a platform API that accepts Datalab-scoped machine tokens, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to the API. The API policy should require `ws_api` and any configured audience.
 
 ??? example "Shared delegated-auth environment configuration"
 
@@ -241,7 +241,7 @@ Those controller-specific settings should be added by platform policy instead of
     https://auth.lab.acme.org/oauth2/callback
     ```
 
-    The Datalab-generated Keycloak clients are still useful for direct OIDC ingress controllers, but a central `oauth2-proxy` does not need one client per Datalab unless you intentionally deploy it that way.
+    The Datalab-generated Keycloak clients are still useful for Datalab-owned services or direct per-Datalab OIDC integrations, but a central `oauth2-proxy` does not need one client per Datalab unless you intentionally deploy it that way.
 
     ```yaml
     apiVersion: kyverno.io/v1
@@ -283,9 +283,9 @@ Those controller-specific settings should be added by platform policy instead of
 
 ??? example "APISIX Ingress with openid-connect and OPA"
 
-    With APISIX, the ingress controller can enforce OIDC directly. For authorization, add the APISIX OPA plugin to the same `ApisixPluginConfig` and point it at a policy that validates workspace access. This pattern mirrors the EOEPCA deployment, adapted to `acme.org`.
+    With APISIX, the ingress controller can enforce OIDC directly. For authorization, add the APISIX OPA plugin to the same `ApisixPluginConfig` and point it at a policy that validates Datalab access.
 
-    The APISIX `openid-connect` plugin must use the generated confidential client secret. Use APISIX Ingress Controller's plugin-level `secretRef` to use the automatically generated `<datalab>-oauth2-client` Secret in the runtime namespace with APISIX-compatible `client_id` and `client_secret` keys.
+    For shared workshop-session browser ingress, prefer a central platform OAuth client such as `datalab-sessions`. The generated `<datalab>-oauth2-client` Secret remains useful for client-credentials automation and for services intentionally owned by one Datalab, but it should not be the default shared browser-ingress credential.
 
     If the OPA policy checks Keycloak client roles in `resource_access`, request the `roles` scope in the APISIX `openid-connect` plugin. The access token must also be made available as an `Authorization: Bearer ...` header so the APISIX OPA plugin can pass it to OPA for policy evaluation. Without the `roles` scope, Keycloak may issue a valid access token that contains identity claims but not the client-role claims needed by the policy.
 
@@ -295,7 +295,7 @@ Those controller-specific settings should be added by platform policy instead of
     apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRole
     metadata:
-      name: kyverno:workspace-session-apisix-pluginconfigs
+      name: kyverno:datalab-session-apisix-pluginconfigs
       labels:
         rbac.kyverno.io/aggregate-to-admission-controller: "true"
         rbac.kyverno.io/aggregate-to-background-controller: "true"
@@ -314,7 +314,7 @@ Those controller-specific settings should be added by platform policy instead of
       - delete
     ```
 
-    The Kyverno policy does not need `secrets/get`: it writes APISIX `secretRef` to the generated plugin config. The APISIX ingress-controller service account must be allowed to read the generated `<datalab>-oauth2-client` Secret in the runtime namespace.
+    The Kyverno policy below does not need Secret read access because it uses a central public OAuth client. If your platform uses a confidential central client, inject that platform-managed credential using your ingress-controller's supported Secret mechanism instead of the generated per-Datalab runtime Secret.
 
     The policy generates one APISIX plugin config per session namespace and annotates the matching workshop ingress to use it:
 
@@ -351,7 +351,7 @@ Those controller-specific settings should be added by platform policy instead of
         generate:
           apiVersion: apisix.apache.org/v2
           kind: ApisixPluginConfig
-          name: "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+          name: "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
           namespace: "{{ request.namespace }}"
           synchronize: false
           data:
@@ -364,12 +364,13 @@ Those controller-specific settings should be added by platform policy instead of
               plugins:
               - name: openid-connect
                 enable: true
-                secretRef: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}-oauth2-client"
                 config:
                   discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
                   use_jwks: true
                   bearer_only: false
                   scope: openid profile email roles
+                  client_id: datalab-sessions
+                  client_secret: ""
                   session:
                     secret: "{{ random('[A-Za-z0-9]{32}') }}"
                   access_token_in_authorization_header: true
@@ -381,7 +382,7 @@ Those controller-specific settings should be added by platform policy instead of
                 enable: true
                 config:
                   host: http://opa.iam:8181
-                  policy: example/workspace/wsui
+                  policy: example/datalab/session
       - name: add-apisix-oidc-plugin-config
         match:
           any:
@@ -407,10 +408,10 @@ Those controller-specific settings should be added by platform policy instead of
           patchStrategicMerge:
             metadata:
               annotations:
-                +(k8s.apisix.apache.org/plugin-config-name): "workspace-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+                +(k8s.apisix.apache.org/plugin-config-name): "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
     ```
 
-    The `openid-connect` plugin gets `client_id` and `client_secret` from the generated runtime Secret referenced by `secretRef`. Because Provider Datalab creates the matching confidential Keycloak client, redirect URIs, and runtime OAuth2 credential Secret, no additional Keycloak mutation is required for declared sessions. The `opa` plugin should use a policy that derives the workspace from the requested host or client and allows browser requests only for platform administrators or users with generated workspace roles such as `ws_access` or `ws_admin`. Client-credentials tokens should be handled as machine/API tokens and accepted only where the generated `ws_api` role is intended.
+    The `opa` plugin should use a policy that derives the Datalab from the requested host and allows browser requests only for users with generated Datalab roles such as `ws_access` or `ws_admin`. Client-credentials tokens minted from the generated `<datalab>-oauth2-client` Secret should be handled as machine/API tokens and accepted only where the generated `ws_api` role is intended.
 
     The session secret is generated when Kyverno creates the `ApisixPluginConfig`. `synchronize: false` keeps the generated object stable; if you intentionally change the plugin template for existing sessions, recreate the generated plugin config or restart the session so Kyverno can generate a fresh one.
 
@@ -469,13 +470,20 @@ Key fields:
 For the full policy model, see [Sandbox Security Measures](../security/sandbox-controls.md).
 
 ### Resource Quotas
-The `spec.quota` section allows per-Datalab overrides of default compute and storage budgets.
+The `spec.quota` section allows per-Datalab overrides of default per-session
+compute and storage settings.
 
 - `memory` — memory allocation per session (default 2 Gi).
 - `storage` — persistent volume size (default 1 Gi).
 - `budget` — Educates resource budget profile (`small`, `medium`, `large`, `x-large`, etc.).
 
-When unspecified, defaults from the EnvironmentConfig apply.
+When unspecified, values from `EnvironmentConfig.data.defaults.quota` apply.
+
+`spec.overallQuota.storage` controls the aggregate PVC requested-storage quota
+in the Datalab environment namespace. It falls back to
+`EnvironmentConfig.data.defaults.overallQuota.storage` and then to the hard
+default `100Gi`. Because Kubernetes resource quotas are namespace-scoped, this
+limit does not include PVCs in other namespaces.
 
 | Budget    | CPU   | Memory |
 |-----------|-------|--------|
@@ -492,16 +500,16 @@ When a Datalab is created for that pattern, the composition automatically provis
 
 - **Groups** for the Datalab and Datalab administrators. The regular group is named after the Datalab, and the administrator group uses `<datalab>-admin`.
 - **Group memberships** for the listed users. Users listed in `spec.users` join the regular group; selected administrators also join the admin group.
-- A dedicated confidential **OAuth2 client** named after the Datalab. It allows authorization-code browser login and client credentials, while implicit, device, and direct access grants are disabled.
-- A runtime **Secret** named `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`, generated by Provider Datalab in the runtime workshop namespace for ingress controllers and client-credentials automation.
+- A dedicated confidential **OAuth2 client** named after the Datalab. It provides the Datalab's machine identity and role namespace, supports client credentials, and can also protect services intentionally owned by that Datalab. Implicit, device, and direct access grants are disabled.
+- A runtime **Secret** named `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`, generated by Provider Datalab in the runtime workshop namespace for client-credentials automation and direct per-Datalab service protection.
 - User, admin, and machine/API **roles**: `ws_access`, `ws_admin`, and `ws_api`.
-- Role scope mappings for the generated client because `fullScopeAllowed` is disabled. Tokens only get the generated workspace client roles that are explicitly mapped.
-- Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. The central Workspace API OAuth client also needs to emit the same Workspace API audience when that audience is required, but it is managed by the realm or platform identity setup rather than by Provider Datalab.
+- Role scope mappings for the generated client because `fullScopeAllowed` is disabled. Tokens only get the generated Datalab client roles that are explicitly mapped.
+- Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. Any central platform OAuth client also needs to emit the same audience when that audience is required, but it is managed by the realm or platform identity setup rather than by Provider Datalab.
 - Group role bindings for `ws_access` and `ws_admin`, plus a service-account role binding for `ws_api`.
 
-This ensures that authentication and authorization are consistently enforced across the runtime and UI. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. The Workspace API gateway should treat those client-credentials tokens as machine tokens and require the configured Workspace API audience; Workspace API authorization should require the `ws_api` client role, not user group membership.
+This ensures that authentication and authorization can be enforced consistently across the runtime and Datalab-owned services. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. Platform APIs should treat those client-credentials tokens as machine tokens and require the configured audience when an audience is used; API authorization should require the `ws_api` client role, not user group membership.
 
-The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported consumer contract for ingress-side resources such as APISIX and other controller-side policy.
+The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported consumer contract for Datalab-scoped M2M credentials and direct per-Datalab service protection. Shared browser ingress can use a separate central platform OAuth client.
 
 ---
 
@@ -621,6 +629,7 @@ spec:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Docker registry is enabled with 3 Gi storage.
 # - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
+# - Overall environment PVC storage quota: increased to 200 Gi.
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
 # The data component for the object storage mount and browser UI is configured as readonly.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
@@ -642,6 +651,8 @@ spec:
     memory: 4Gi
     storage: 40Gi
     budget: x-large
+  overallQuota:
+    storage: 200Gi
   registry:
     enabled: true
     storage: 3Gi
@@ -658,6 +669,7 @@ spec:
 
 - Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).
 - The lab also runs in **privileged** mode, which enables Docker with 20 Gi of session-local workspace storage.
+- The Datalab environment namespace accepts at most 200 Gi of aggregate PVC requests.
 - The **admin role** grants full control within her namespace/vcluster.
 - This is the registry-enabled example, so session-backed registry behavior can be validated here.
 - Suitable for trusted advanced development or testing that really needs full Kubernetes control.

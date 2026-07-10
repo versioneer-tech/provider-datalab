@@ -1059,10 +1059,17 @@ spec:
               defaults = (env.get("defaults") or {})
               env_quota = (defaults.get("quota") or {})
               quota = (spec.get("quota") or {})
+              env_overall_quota = (defaults.get("overallQuota") or {})
+              overall_quota = (spec.get("overallQuota") or {})
 
               memory = quota.get("memory") or env_quota.get("memory") or "2Gi"
               storage = quota.get("storage") or env_quota.get("storage") or "1Gi"
               budget = quota.get("budget") or env_quota.get("budget") or "medium"
+              overall_storage = _safe_str(
+                  overall_quota.get("storage")
+                  or env_overall_quota.get("storage")
+                  or "100Gi"
+              )
 
               env_security = (defaults.get("security") or {})
               security = (spec.get("security") or {})
@@ -1576,6 +1583,17 @@ spec:
               workshop_ns = _safe_str(((env_manifest.get("status") or {}).get("educates") or {}).get("namespace") or xr_name)
 
               if workshop_ns:
+                  emit("ResourceQuota", {
+                      "apiVersion": "v1",
+                      "kind": "ResourceQuota",
+                      "metadata": {"name": "overall-storage", "namespace": workshop_ns},
+                      "spec": {
+                          "hard": {
+                              "requests.storage": overall_storage,
+                          }
+                      },
+                  }, key_suffix="overall-storage")
+
                   for sid in sessions:
                       persistent_pvc_name = f"{xr_name}-{sid}-persistent"
                       persistent_pvc_spec = {

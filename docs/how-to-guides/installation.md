@@ -101,11 +101,11 @@ Pin exact provider and function versions or digests in your GitOps source and up
 
 Keycloak-managed access is supported: the composition automatically provisions the workspace client, groups, roles, role bindings, service-account role binding, and memberships. At the same time, the provider is intentionally only a workspace provisioning building block. In many production deployments it is better to delegate authentication to the platform, for example to NGINX Ingress with `oauth2-proxy` or APISIX with the `openid-connect` plugin, while keeping `auth.type = delegated` in the Datalab environment configuration.
 
-When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, client service-account roles, groups, group memberships, roles, role mappers, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component. Direct OIDC ingress integrations can still reuse the Datalab-generated Keycloak client because the composition includes redirect and web-origin entries for declared session hosts.
+When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, client service-account roles, groups, group memberships, roles, role mappers, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component. Shared browser ingress can use a central platform OAuth client, while direct OIDC integrations for a service owned by one Datalab can reuse the generated Datalab client because the composition includes redirect and web-origin entries for declared session hosts.
 
-Each generated Datalab client is confidential. Provider Datalab publishes the credentials for ingress controllers and client-credentials automation in the runtime workshop namespace as `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`. Treat that runtime Secret as a workspace machine credential: namespace users who may create automation tokens can read it, and operators should rotate or revoke it when that trust boundary changes.
+Each generated Datalab client is confidential. Provider Datalab publishes credentials in the runtime workshop namespace as `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`. Treat that runtime Secret as a workspace machine credential: namespace users who may create automation tokens can read it, and operators should rotate or revoke it when that trust boundary changes. Use it for client-credentials automation or for direct per-Datalab service protection, not as a default shared browser-ingress credential.
 
-The generated roles are intentionally separated. Users get `ws_access` through the Datalab group, selected administrators get `ws_admin` through the admin group, and the generated client service account gets only `ws_api`. Extra token audiences are opt-in: when `EnvironmentConfig.data.iam.extraAudiences` is set, tokens issued by generated workspace clients include those audience values. The Workspace API gateway and central Workspace API OAuth client must use the same configured audience value; configure the central client with an equivalent audience mapper in the realm or platform identity setup. Client-credentials tokens therefore identify machine/API automation and must not be accepted as browser-user tokens by ingress or application policy.
+The generated roles are intentionally separated. Users get `ws_access` through the Datalab group, selected administrators get `ws_admin` through the admin group, and the generated client service account gets only `ws_api`. Extra token audiences are opt-in: when `EnvironmentConfig.data.iam.extraAudiences` is set, tokens issued by generated Datalab clients include those audience values. Any platform API or gateway that requires such an audience must use the same configured value and the corresponding central OAuth client must emit it from the realm or platform identity setup. Client-credentials tokens therefore identify machine/API automation and must not be accepted as browser-user tokens by ingress or application policy.
 
 When installed, a Datalab will provision a vcluster (if enabled), launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus tools like `awscli` and `rclone`), wire in object-storage credentials, and reconcile any requested platform-managed data services.
 
@@ -178,6 +178,8 @@ data:
     - fd00:42::42/128
     excludePolicies: []
   defaults:
+    overallQuota:
+      storage: 100Gi
     security:
       externalEgress: true
 ```
@@ -185,6 +187,11 @@ data:
 The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
 
 `storageClasses.allowed` is an optional allowlist for durable session PVCs. If it is set, Provider Datalab uses a requested StorageClass only when it is listed there; otherwise it falls back to the first entry. If the list is omitted or empty, any requested StorageClass is allowed.
+
+`defaults.overallQuota.storage` sets the default aggregate PVC
+requested-storage quota for each Datalab environment namespace. A Datalab can
+override it with `spec.overallQuota.storage`; when both fields are omitted, the
+hard default is `100Gi`. This quota does not include PVCs in other namespaces.
 
 The `serviceCIDR` defines the internal Service network range expected by the vCluster’s API server. In the Datalab setup, the host cluster’s DNS and networking are reused, and no separate CoreDNS is deployed inside the vCluster. Using the host’s `serviceCIDR` therefore reduces startup time and control-plane overhead, since CoreDNS doesn’t need to start separately within each vCluster.
 

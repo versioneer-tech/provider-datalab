@@ -227,6 +227,21 @@ spec:
                         EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested class
                         is used only when it is listed there; otherwise the first allowed class is used.
                         If the allowlist is empty or omitted, any requested class is allowed.
+                overallQuota:
+                  type: object
+                  description: >-
+                    Optional per-Datalab override for aggregate resource quotas in the
+                    Datalab environment namespace. If omitted, the composition falls back
+                    to EnvironmentConfig.data.defaults.overallQuota and then to hard
+                    defaults.
+                  properties:
+                    storage:
+                      type: string
+                      description: >-
+                        Aggregate PVC requested-storage limit for the Datalab environment
+                        namespace as a Kubernetes quantity (e.g., "100Gi"). This limit
+                        does not cover PVCs in other namespaces. Effective default:
+                        "100Gi".
                 quota:
                   type: object
                   description: >-

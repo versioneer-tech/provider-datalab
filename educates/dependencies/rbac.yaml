@@ -52,6 +52,7 @@ rules:
   resources:
   - "pods"
   - "persistentvolumeclaims"
+  - "resourcequotas"
   verbs:
   - "get"
   - "list"

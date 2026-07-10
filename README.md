@@ -14,7 +14,7 @@ For the operating model, start with the [welcome guide](https://provider-datalab
 
 Provider Datalab does not replace the tools you already operate. In the default `datalab-educates` package, most runtime features come from the excellent [Educates Training Platform](https://educates.dev/) and are packaged with Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/). The same principle applies to storage, identity, databases, and backups: Provider Datalab exposes them through a tenant-facing API, while the operator keeps policy and accountability.
 
-For Keycloak-managed access, Provider Datalab can create a confidential OAuth client, workspace roles, and machine/API credentials per Datalab. See the [installation guide](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/#crossplane-providers-and-functions) and [authentication usage guide](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/#authentication) for ingress and client-credentials details.
+For Keycloak-managed access, Provider Datalab can create a confidential OAuth client, workspace roles, and machine/API credentials per Datalab. The generated client is useful for Datalab-scoped automation and for protecting services owned by that Datalab; shared browser ingress can also use a central platform OAuth client. See the [installation guide](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/#crossplane-providers-and-functions) and [authentication usage guide](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/#authentication) for ingress and client-credentials details.
 
 ## Who It Is For
 
@@ -93,6 +93,8 @@ data:
       memory: 2Gi
       storage: 1Gi
       budget: medium
+    overallQuota:
+      storage: 100Gi
     security:
       policy: baseline
       kubernetesAccess: true
@@ -131,6 +133,11 @@ If `spec.quota` or `spec.security` are omitted, values fall back to
 `policy=baseline`, `kubernetesAccess=true`, `kubernetesRole=edit`,
 `externalEgress=true`).
 When `policy=privileged`, Docker is automatically enabled with `storage: 20Gi`.
+
+`spec.overallQuota.storage` sets the aggregate PVC requested-storage quota for
+the Datalab environment namespace. It falls back to
+`EnvironmentConfig.data.defaults.overallQuota.storage` and then to `100Gi`.
+The quota is namespace-scoped and does not cover PVCs in other namespaces.
 
 `spec.security.externalEgress` controls whether Provider Datalab renders the
 external egress policy path for all sessions and workloads in the runtime

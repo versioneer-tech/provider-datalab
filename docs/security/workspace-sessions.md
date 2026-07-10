@@ -30,9 +30,12 @@ namespace. With `spec.vcluster: true`, users also get a virtual Kubernetes API,
 but workloads still run as Pods in the host cluster and remain subject to host
 namespace policy.
 
-The generated OAuth client separates browser and machine authority. Browser
-users are authorized through `ws_access` or `ws_admin`; the generated client
-service account receives only `ws_api` for client-credentials automation.
+The generated OAuth client separates human and machine authority. Human access
+is authorized through `ws_access` or `ws_admin`; the generated client service
+account receives only `ws_api` for client-credentials automation. The client is
+also a useful boundary for services that intentionally belong to one Datalab,
+but shared browser ingress can use a central platform client and still check the
+generated Datalab roles.
 
 ## Example Trust Levels
 

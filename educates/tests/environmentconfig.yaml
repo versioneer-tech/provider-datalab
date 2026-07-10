@@ -62,6 +62,8 @@ data:
       memory: 2Gi
       storage: 1Gi
       budget: medium
+    overallQuota:
+      storage: 100Gi
     security:
       policy: baseline
       kubernetesAccess: true
@@ -128,6 +130,8 @@ data:
       memory: 2Gi
       storage: 1Gi
       budget: medium
+    overallQuota:
+      storage: 80Gi
     security:
       policy: baseline
       kubernetesAccess: true

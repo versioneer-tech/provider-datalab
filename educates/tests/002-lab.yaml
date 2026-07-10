@@ -50,7 +50,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 37 more'
+      db-tlsroute-s-jeff-pg0, and 38 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -1421,6 +1421,40 @@ spec:
     celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
       c.type == 'Ready' && c.status == 'True')
     policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: resourcequota-s-jeff-overall-storage
+  labels:
+    crossplane.io/composite: s-jeff
+  name: resourcequota-s-jeff-overall-storage
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: overall-storage
+        namespace: s-jeff
+      spec:
+        hard:
+          requests.storage: 100Gi
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1

@@ -16,7 +16,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-joe, keycloak-extra-audience-workspace-api-custom-s-joe-workspace-api-custom-audience,
-      keycloak-group-admin-s-joe-admin, and 17 more'
+      keycloak-group-admin-s-joe-admin, and 18 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -572,6 +572,40 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   watch: false
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: resourcequota-s-joe-overall-storage
+  labels:
+    crossplane.io/composite: s-joe
+  name: resourcequota-s-joe-overall-storage
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: overall-storage
+        namespace: s-joe
+      spec:
+        hard:
+          requests.storage: 80Gi
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

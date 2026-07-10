@@ -11,6 +11,7 @@
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Docker registry is enabled with 3 Gi storage.
 # - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
+# - Overall environment PVC storage quota: increased to 200 Gi.
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
 # The data component for the object storage mount and browser UI is configured as readonly.
 # The session workspace uses a durable Datalab-owned PVC with the default allowed StorageClass.
@@ -33,6 +34,8 @@ spec:
     memory: 4Gi
     storage: 40Gi
     budget: x-large
+  overallQuota:
+    storage: 200Gi
   registry:
     enabled: true
     storage: 3Gi

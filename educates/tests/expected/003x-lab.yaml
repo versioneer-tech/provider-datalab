@@ -15,6 +15,8 @@ spec:
       names:
       - analytics
       storage: 1Gi
+  overallQuota:
+    storage: 200Gi
   quota:
     budget: x-large
     memory: 4Gi
@@ -36,7 +38,7 @@ status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
-      db-tlsroute-s-jane-pg0, and 23 more'
+      db-tlsroute-s-jane-pg0, and 24 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -822,6 +824,40 @@ spec:
           requests:
             storage: 40Gi
         storageClassName: sbs-default
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: resourcequota-s-jane-overall-storage
+  labels:
+    crossplane.io/composite: s-jane
+  name: resourcequota-s-jane-overall-storage
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: ""
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: overall-storage
+        namespace: s-jane
+      spec:
+        hard:
+          requests.storage: 200Gi
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

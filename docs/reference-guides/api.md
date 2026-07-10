@@ -2,7 +2,22 @@
 
 Packages:
 
+- [pkg.internal/v1beta1](#pkginternalv1beta1)
 - [pkg.internal/v1beta2](#pkginternalv1beta2)
+
+# pkg.internal/v1beta1
+
+Resource Types:
+
+- [Datalab](#datalab)
+
+
+
+
+## Datalab
+<sup><sup>[↩ Parent](#pkginternalv1beta1 )</sup></sup>
+
+
 
 # pkg.internal/v1beta2
 
@@ -138,6 +153,13 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#datalabspecoverallquota">overallQuota</a></b></td>
+        <td>object</td>
+        <td>
+          Optional per-Datalab override for aggregate resource quotas in the Datalab environment namespace. If omitted, the composition falls back to EnvironmentConfig.data.defaults.overallQuota and then to hard defaults.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#datalabspecpersistence">persistence</a></b></td>
         <td>object</td>
         <td>
@@ -173,7 +195,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecsecurity">security</a></b></td>
         <td>object</td>
         <td>
-          Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. When policy is "privileged", Docker is automatically enabled with 20Gi storage.<br/>
+          Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. Use `EnvironmentConfig.data.network.internalEgress` to allow explicit backend Pods in other namespaces. When policy is "privileged", Docker is automatically enabled with 20Gi storage.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -911,7 +933,12 @@ Optional semantic-version tag selection policy.
 </table>
 
 
-### Datalab.spec.sessions[index]
+### Datalab.spec.overallQuota
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+Optional per-Datalab override for aggregate resource quotas in the Datalab environment namespace. If omitted, the composition falls back to EnvironmentConfig.data.defaults.overallQuota and then to hard defaults.
 
 <table>
     <thead>
@@ -923,24 +950,15 @@ Optional semantic-version tag selection policy.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>name</b></td>
+        <td><b>storage</b></td>
         <td>string</td>
         <td>
-          Session name.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-            <i>Default</i>: started<br/>
+          Aggregate PVC requested-storage limit for the Datalab environment namespace as a Kubernetes quantity (e.g., "100Gi"). This limit does not cover PVCs in other namespaces. Effective default: "100Gi".<br/>
         </td>
         <td>false</td>
       </tr></tbody>
 </table>
+
 
 ### Datalab.spec.persistence
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
@@ -1068,8 +1086,7 @@ Optional per-datalab runtime namespace security settings. If a field is not spec
         <td><b>externalEgress</b></td>
         <td>boolean</td>
         <td>
-          Whether the Datalab runtime namespace may egress outside itself. When false, Provider Datalab only renders the namespace-internal egress allow policy in addition to default deny. When true, external egress is allowed with EnvironmentConfig network blacklist CIDRs excluded. Effective default (if not set here or in EnvironmentConfig): true.<br/>
-          Use <code>EnvironmentConfig.data.network.internalEgress</code> to whitelist explicit backend Pods in other namespaces.<br/>
+          Whether the Datalab runtime namespace may egress outside itself. When false, Provider Datalab only renders the namespace-internal egress allow policy in addition to default deny. Use `EnvironmentConfig.data.network.internalEgress` to whitelist explicit backend Pods in other namespaces. When true, external egress is allowed with EnvironmentConfig network blacklist CIDRs excluded. Effective default (if not set here or in EnvironmentConfig): true.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1095,6 +1112,44 @@ Optional per-datalab runtime namespace security settings. If a field is not spec
           Pod Security Standard policy level. Accepted values: "restricted", "baseline", "privileged". Effective default (if not set here or in EnvironmentConfig): "baseline".<br/>
           <br/>
             <i>Enum</i>: restricted, baseline, privileged<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.spec.sessions[index]
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Session name.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>state</b></td>
+        <td>enum</td>
+        <td>
+          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.
+<br/>
+          <br/>
+            <i>Enum</i>: started, stopped<br/>
+            <i>Default</i>: started<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -1211,12 +1266,10 @@ Observed state of a single datalab session.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
+        <td><b>message</b></td>
+        <td>string</td>
         <td>
-          Desired lifecycle state for the declared session.<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
+          Latest observed status message for the session runtime.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1227,10 +1280,12 @@ Observed state of a single datalab session.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>message</b></td>
-        <td>string</td>
+        <td><b>state</b></td>
+        <td>enum</td>
         <td>
-          Latest observed status message for the session runtime.<br/>
+          Desired lifecycle state for the declared session.<br/>
+          <br/>
+            <i>Enum</i>: started, stopped<br/>
         </td>
         <td>false</td>
       </tr><tr>
