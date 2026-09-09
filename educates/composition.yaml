@@ -846,7 +846,7 @@ spec:
                       for char in audience
                   ]).strip("-") or "extra"
                   audience_name = "-".join([part for part in audience_name.split("-") if part])[:48].strip("-") or "extra"
-                  key_base = "keycloak-workspace-api-audience" if audience_name == "workspace-api" else f"keycloak-extra-audience-{audience_name}"
+                  key_base = f"keycloak-extra-audience-{audience_name}"
                   put(key_base, {
                       "apiVersion": "client.keycloak.m.crossplane.io/v1alpha1",
                       "kind": "ProtocolMapper",
@@ -1275,7 +1275,33 @@ spec:
               _add_policy(network_policies, "deny-egress", [])
               _add_policy(network_policies, "allow-namespace-egress", [{"to": [{"podSelector": {}}]}])
 
-              if external_egress:
+              if vcluster:
+                  _add_policy(network_policies, "allow-vcluster-egress", [
+                      {
+                          "to": [
+                              {
+                                  "namespaceSelector": {
+                                      "matchLabels": {
+                                          "training.educates.dev/environment.name": xr_name,
+                                          "training.educates.dev/session.objects": "true",
+                                      }
+                                  },
+                                  "podSelector": {
+                                      "matchLabels": {
+                                          "app": "vcluster",
+                                          "release": "my-vcluster",
+                                      }
+                                  },
+                              }
+                          ],
+                          "ports": [
+                              {"protocol": "TCP", "port": 443},
+                              {"protocol": "TCP", "port": 8443},
+                          ],
+                      }
+                  ])
+
+              if external_egress or vcluster:
                   _add_policy(network_policies, "allow-dns-egress", [
                       {
                           "to": [
@@ -1287,6 +1313,8 @@ spec:
                           ],
                       }
                   ])
+
+              if external_egress:
                   if external_egress_cidrs:
                       _add_policy(network_policies, "allow-external-egress", [
                           {"to": [_ip_block(cidr, _exceptions_for(cidr))]}

@@ -13,6 +13,7 @@ CALICO_MANIFEST_URL="${CALICO_MANIFEST_URL:-https://raw.githubusercontent.com/pr
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-3.8.1}"
 CLIENT_IMAGE="${CLIENT_IMAGE:-curlimages/curl:8.10.1}"
 SERVER_IMAGE="${SERVER_IMAGE:-nginx:1.27-alpine}"
+VCLUSTER_SERVER_IMAGE="${VCLUSTER_SERVER_IMAGE:-busybox:1.36.1}"
 EXTERNAL_URL="${EXTERNAL_URL:-https://example.com}"
 ITERATIONS="${ITERATIONS:-3}"
 RECREATE_CLUSTER="${RECREATE_CLUSTER:-0}"
@@ -22,6 +23,7 @@ RESULTS_FILE="${RESULTS_FILE:-/tmp/provider-datalab-sandbox-benchmark.tsv}"
 NS_OPEN="pdla-egress-open"
 NS_CLOSED="pdla-egress-closed"
 NS_PEER="pdla-peer"
+NS_VCLUSTER="pdla-egress-open-vc"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -118,6 +120,7 @@ spec:
           - ${NS_OPEN}
           - ${NS_CLOSED}
           - ${NS_PEER}
+          - ${NS_VCLUSTER}
     validate:
       message: "Datalab benchmark namespaces must not use host namespaces, hostPath volumes, or privileged containers."
       pattern:
@@ -135,9 +138,14 @@ EOF
 
 apply_namespaces() {
   log "creating benchmark namespaces"
-  for ns in "$NS_OPEN" "$NS_CLOSED" "$NS_PEER"; do
+  for ns in "$NS_OPEN" "$NS_CLOSED" "$NS_PEER" "$NS_VCLUSTER"; do
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   done
+
+  kubectl label namespace "$NS_VCLUSTER" \
+    "training.educates.dev/environment.name=${NS_OPEN}" \
+    'training.educates.dev/session.objects=true' \
+    --overwrite >/dev/null
 }
 
 apply_servers() {
@@ -179,6 +187,52 @@ spec:
 EOF
     kubectl -n "$ns" rollout status deployment/echo --timeout=180s >/dev/null
   done
+}
+
+apply_vcluster_server() {
+  log "creating a vcluster control-plane HTTP target"
+  kubectl -n "$NS_VCLUSTER" apply -f - <<EOF >/dev/null
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vcluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vcluster
+      release: my-vcluster
+  template:
+    metadata:
+      labels:
+        app: vcluster
+        release: my-vcluster
+    spec:
+      containers:
+      - name: api
+        image: ${VCLUSTER_SERVER_IMAGE}
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - mkdir -p /www && echo ok > /www/index.html && exec httpd -f -p 8443 -h /www
+        ports:
+        - containerPort: 8443
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vcluster
+spec:
+  selector:
+    app: vcluster
+    release: my-vcluster
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+EOF
+  kubectl -n "$NS_VCLUSTER" rollout status deployment/vcluster --timeout=180s >/dev/null
 }
 
 apply_clients() {
@@ -274,6 +328,32 @@ apply_network_policies() {
   log "applying Datalab-style NetworkPolicy modes"
   apply_datalab_policies "$NS_OPEN" true
   apply_datalab_policies "$NS_CLOSED" false
+
+  kubectl -n "$NS_OPEN" apply -f - <<EOF >/dev/null
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vcluster-egress
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          training.educates.dev/environment.name: ${NS_OPEN}
+          training.educates.dev/session.objects: "true"
+      podSelector:
+        matchLabels:
+          app: vcluster
+          release: my-vcluster
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 8443
+EOF
 }
 
 pod_ip() {
@@ -282,6 +362,14 @@ pod_ip() {
 
 service_ip() {
   kubectl -n "$1" get svc echo -o jsonpath='{.spec.clusterIP}'
+}
+
+vcluster_pod_ip() {
+  kubectl -n "$NS_VCLUSTER" get pod -l app=vcluster,release=my-vcluster -o jsonpath='{.items[0].status.podIP}'
+}
+
+vcluster_service_ip() {
+  kubectl -n "$NS_VCLUSTER" get svc my-vcluster -o jsonpath='{.spec.clusterIP}'
 }
 
 record_result() {
@@ -402,7 +490,7 @@ validate_default_environment_fixture() {
   validate_external_egress_fixture "$file"
   require_fixture_contains "$file" 'name: allow-internal-egress' "explicit internal backend allow"
   require_fixture_contains "$file" 'v1.min.io/tenant: default' "MinIO backend selector"
-  require_fixture_contains "$file" 'namespace: minio' "MinIO backend namespace"
+  require_fixture_contains "$file" 'kubernetes.io/metadata.name: minio' "MinIO backend namespace selector"
 }
 
 validate_no_external_egress_fixture() {
@@ -416,6 +504,21 @@ validate_no_external_egress_fixture() {
   require_fixture_absent "$file" 'name: allow-web-egress' "legacy broad egress policy"
 }
 
+validate_vcluster_fixture() {
+  local file="$1"
+
+  require_fixture_contains "$file" 'name: allow-vcluster-egress' "vcluster API egress allow"
+  require_fixture_contains "$file" 'training.educates.dev/environment.name: s-jane' "same-Datalab vcluster namespace selector"
+  require_fixture_contains "$file" 'training.educates.dev/session.objects: "true"' "Educates session-object namespace selector"
+  require_fixture_contains "$file" 'release: my-vcluster' "vcluster control-plane Pod selector"
+}
+
+validate_no_vcluster_fixture() {
+  local file="$1"
+
+  require_fixture_absent "$file" 'name: allow-vcluster-egress' "vcluster policy without a vcluster"
+}
+
 validate_rendered_contract() {
   if [[ ! -f educates/tests/expected/001-lab.yaml ]]; then
     return
@@ -426,6 +529,10 @@ validate_rendered_contract() {
   validate_no_external_egress_fixture educates/tests/expected/002-lab.yaml
   validate_default_environment_fixture educates/tests/expected/003-lab.yaml
   validate_default_environment_fixture educates/tests/expected/004-lab.yaml
+  validate_no_vcluster_fixture educates/tests/expected/001-lab.yaml
+  validate_no_vcluster_fixture educates/tests/expected/002-lab.yaml
+  validate_vcluster_fixture educates/tests/expected/003-lab.yaml
+  validate_no_vcluster_fixture educates/tests/expected/004-lab.yaml
 }
 
 print_summary() {
@@ -463,25 +570,30 @@ main() {
   apply_namespaces
   apply_kyverno_policy
   apply_servers
+  apply_vcluster_server
   apply_clients
   apply_network_policies
 
   printf 'category\tcase\titeration\texpected\tobserved\tduration_ms\texit_code\n' > "$RESULTS_FILE"
 
-  local open_pod open_svc closed_pod closed_svc peer_pod peer_svc
+  local open_pod open_svc closed_pod closed_svc peer_pod peer_svc vcluster_pod vcluster_svc
   open_pod=$(pod_ip "$NS_OPEN")
   open_svc=$(service_ip "$NS_OPEN")
   closed_pod=$(pod_ip "$NS_CLOSED")
   closed_svc=$(service_ip "$NS_CLOSED")
   peer_pod=$(pod_ip "$NS_PEER")
   peer_svc=$(service_ip "$NS_PEER")
+  vcluster_pod=$(vcluster_pod_ip)
+  vcluster_svc=$(vcluster_service_ip)
 
-  log "open pod=${open_pod} service=${open_svc}; closed pod=${closed_pod} service=${closed_svc}; peer pod=${peer_pod} service=${peer_svc}"
+  log "open pod=${open_pod} service=${open_svc}; closed pod=${closed_pod} service=${closed_svc}; peer pod=${peer_pod} service=${peer_svc}; vcluster pod=${vcluster_pod} service=${vcluster_svc}"
 
   run_exec_case "open same-namespace PodIP" "$NS_OPEN" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${open_pod}/ >/dev/null"
   run_exec_case "open same-namespace ServiceIP" "$NS_OPEN" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${open_svc}/ >/dev/null"
   run_exec_case "open cross-namespace PodIP" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_pod}/ >/dev/null"
   run_exec_case "open cross-namespace ServiceIP" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_svc}/ >/dev/null"
+  run_exec_case "open vcluster control-plane PodIP" "$NS_OPEN" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_pod}:8443/ >/dev/null"
+  run_exec_case "open vcluster control-plane ServiceIP" "$NS_OPEN" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_svc}:443/ >/dev/null"
   run_exec_case "open AWS metadata IPv4" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://169.254.169.254/ >/dev/null"
   run_exec_case "open Scaleway metadata IPv4" "$NS_OPEN" block "curl -fsS --connect-timeout 2 --max-time 5 http://169.254.42.42/ >/dev/null"
   run_exec_case "open Scaleway metadata IPv6" "$NS_OPEN" block "curl -g -fsS --connect-timeout 2 --max-time 5 'http://[fd00:42::42]/' >/dev/null"
@@ -491,6 +603,7 @@ main() {
   run_exec_case "closed same-namespace ServiceIP" "$NS_CLOSED" allow "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_svc}/ >/dev/null"
   run_exec_case "closed cross-namespace PodIP" "$NS_CLOSED" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_pod}/ >/dev/null"
   run_exec_case "closed cross-namespace ServiceIP" "$NS_CLOSED" block "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_svc}/ >/dev/null"
+  run_exec_case "closed vcluster control-plane ServiceIP" "$NS_CLOSED" block "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_svc}:443/ >/dev/null"
   run_exec_case "closed external URL" "$NS_CLOSED" block "curl -fsS --connect-timeout 5 --max-time 15 ${EXTERNAL_URL} >/dev/null"
 
   run_exec_case "normal pod has no Docker socket" "$NS_OPEN" allow "test ! -S /var/run/docker.sock"

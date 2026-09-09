@@ -56,7 +56,9 @@ RECREATE_CLUSTER=1 KEEP_CLUSTER=1 ./scripts/benchmark-datalab-sandbox.sh
 The script creates a dedicated kind cluster with kind's default CNI disabled,
 installs Calico for NetworkPolicy enforcement, installs Kyverno, applies the
 Datalab-style external-egress and no-external-egress policy modes, and records
-traffic/admission timings in `/tmp/provider-datalab-sandbox-benchmark.tsv`.
+traffic/admission timings in `/tmp/provider-datalab-sandbox-benchmark.tsv`. It
+also verifies that only the Datalab with `allow-vcluster-egress` can reach the
+matching vCluster control-plane Pod and Service in a separate namespace.
 Override `POD_CIDR`, `SERVICE_CIDR`, `EXTERNAL_URL`, `ITERATIONS`, or image and
 chart versions through environment variables when the local cluster shape needs
 to match another target.

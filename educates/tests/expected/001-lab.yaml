@@ -15,7 +15,7 @@ spec:
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-joe, keycloak-extra-audience-workspace-api-custom-s-joe-workspace-api-custom-audience,
+    message: 'Unready resources: keycloak-client-s-joe, keycloak-extra-audience-datalab-service-custom-s-joe-datalab-service-custom-audience,
       keycloak-group-admin-s-joe-admin, and 18 more'
     reason: Creating
     status: "False"
@@ -69,10 +69,10 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: ProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-extra-audience-workspace-api-custom-s-joe-workspace-api-custom-audience
+    crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-joe-datalab-service-custom-audience
   labels:
     crossplane.io/composite: s-joe
-  name: s-joe-workspace-api-custom-audience
+  name: s-joe-datalab-service-custom-audience
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
@@ -90,8 +90,8 @@ spec:
     config:
       access.token.claim: "true"
       id.token.claim: "false"
-      included.client.audience: workspace-api-custom
-    name: workspace-api-custom-audience
+      included.client.audience: datalab-service-custom
+    name: datalab-service-custom-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
     realmId: acme

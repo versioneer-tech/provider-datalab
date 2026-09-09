@@ -88,6 +88,8 @@ Provider dependencies activate Helm, Kubernetes, and Keycloak resources as neede
 - [functions.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/functions.yaml) – Functions used by compositions.
 - [rbac.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/rbac.yaml) – RBAC for `provider-kubernetes`.
 
+The supplied runtime configs apply the `RuntimeDefault` seccomp profile to provider and function Pods. They also prevent privilege escalation and remove all Linux capabilities from package runtime containers.
+
 Recommended Crossplane dependency set for `datalab-educates`:
 - Providers:
   - `provider-kubernetes` (`xpkg.upbound.io/crossplane-contrib/provider-kubernetes`)
@@ -105,7 +107,7 @@ When Keycloak-managed access is used, the target realm is configured with `Envir
 
 Each generated Datalab client is confidential. Provider Datalab publishes credentials in the runtime workshop namespace as `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`. Treat that runtime Secret as a workspace machine credential: namespace users who may create automation tokens can read it, and operators should rotate or revoke it when that trust boundary changes. Use it for client-credentials automation or for direct per-Datalab service protection, not as a default shared browser-ingress credential.
 
-The generated roles are intentionally separated. Users get `ws_access` through the Datalab group, selected administrators get `ws_admin` through the admin group, and the generated client service account gets only `ws_api`. Extra token audiences are opt-in: when `EnvironmentConfig.data.iam.extraAudiences` is set, tokens issued by generated Datalab clients include those audience values. Any platform API or gateway that requires such an audience must use the same configured value and the corresponding central OAuth client must emit it from the realm or platform identity setup. Client-credentials tokens therefore identify machine/API automation and must not be accepted as browser-user tokens by ingress or application policy.
+The generated roles are intentionally separated. Users get `ws_access` through the Datalab group, selected administrators get `ws_admin` through the admin group, and the generated client service account gets only `ws_api`. Extra token audiences are opt-in: when `EnvironmentConfig.data.iam.extraAudiences` is set, tokens issued by generated Datalab clients include those audience values. Any service or gateway that requires such an audience must use the same configured value and its OAuth client must emit it. Client-credentials tokens therefore identify machine automation and must not be accepted as browser-user tokens by ingress or application policy.
 
 When installed, a Datalab will provision a vcluster (if enabled), launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus tools like `awscli` and `rclone`), wire in object-storage credentials, and reconcile any requested platform-managed data services.
 
@@ -250,12 +252,15 @@ broad external egress allow block.
 `network.blacklistIPs` lists CIDRs excluded from broad generated external
 egress, such as cloud metadata endpoints. Provider Datalab always renders
 `deny-egress` and `allow-namespace-egress` unless their names are listed in
-`network.excludePolicies`. It renders `allow-dns-egress` and
+`network.excludePolicies`. When a Datalab enables a vCluster, it also renders
+`allow-vcluster-egress`. This policy permits TCP ports 443 and 8443 only to
+that Datalab's vCluster control-plane Pods. Provider Datalab renders
+`allow-dns-egress` when `externalEgress` or the vCluster is enabled. It renders
 `allow-external-egress` only when `externalEgress` is true. Use
 `excludePolicies` only as an operator escape hatch when another policy system
 supplies equivalent controls.
 
-If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes the DNS and broad external egress policies so only internal access remains.
+If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes broad external egress while retaining namespace-local and vCluster API access. DNS remains enabled only when a vCluster needs service-name resolution.
 
 Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
 

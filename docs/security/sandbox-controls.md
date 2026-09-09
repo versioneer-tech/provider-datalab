@@ -30,8 +30,12 @@ environment objects. They select all Pods in the runtime namespace.
 - `deny-egress` and `allow-namespace-egress` are rendered by default.
   Together they deny egress first, then allow traffic to Pods in the same
   runtime namespace.
-- `allow-dns-egress` and `allow-external-egress` are rendered only when
-  `externalEgress` is true.
+- `allow-dns-egress` is rendered when `externalEgress` is true or a vCluster is
+  enabled. `allow-external-egress` is rendered only when `externalEgress` is
+  true.
+- `allow-vcluster-egress` is rendered when `spec.vcluster` is true. It allows
+  TCP ports 443 and 8443 only to vCluster control-plane Pods in Educates
+  session-object namespaces for the same Datalab.
 - `allow-internal-egress` is rendered when `EnvironmentConfig.data.network.internalEgress`
   contains explicit backend targets. It allows operator-approved Pods in other
   namespaces through namespace and pod selectors.
@@ -57,8 +61,13 @@ another selected policy also allows it.
 namespace, which is why the workshop can still reach its own namespace-local
 Pods.
 
-`allow-dns-egress` allows DNS lookups to `kube-system` on TCP and UDP port 53,
-and it is only rendered when `externalEgress` is true.
+`allow-vcluster-egress` allows the runtime to use its virtual Kubernetes API.
+The namespace and Pod selectors prevent the rule from granting access to
+another Datalab or to unrelated Pods in a vCluster host namespace.
+
+`allow-dns-egress` allows DNS lookups to `kube-system` on TCP and UDP port 53.
+An enabled vCluster retains this rule because its kubeconfig uses the
+`my-vcluster` Service name.
 
 `allow-external-egress` allows outbound traffic to the CIDRs in
 `externalEgressCIDRs`, minus the excluded ranges from `blacklistIPs`,
@@ -84,10 +93,11 @@ specific namespace by name. Kubernetes does not define a standard label such as
 `internal=true` for services or workloads, so any "internal service" label
 scheme is an operator convention, not a Kubernetes one.
 
-With `externalEgress: false`, the generated policies do not allow DNS or
-external network access. Cross-namespace traffic is not allowed by default;
-operators should add a separate NetworkPolicy for explicit cross-namespace
-dependencies.
+With `externalEgress: false`, the generated policies do not allow external
+network access. DNS remains enabled only when a vCluster needs service-name
+resolution. The Datalab's vCluster API remains reachable when it is enabled.
+Other cross-namespace traffic is not allowed by default; operators must
+configure `internalEgress` for explicit cross-namespace dependencies.
 
 NetworkPolicies are additive: if any selected egress policy allows traffic, the
 traffic is allowed. Generated policies can be skipped with

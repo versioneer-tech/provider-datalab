@@ -20,8 +20,16 @@ spec:
           labels:
             runtime: provider-keycloak
         spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
             resources:
               requests:
                 cpu: 100m
@@ -50,8 +58,16 @@ spec:
             runtime: provider-kubernetes
         spec:
           serviceAccountName: provider-kubernetes
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
             # args:
             # - --debug
             resources:
@@ -81,8 +97,16 @@ spec:
           labels:
             runtime: provider-helm
         spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
             resources:
               requests:
                 cpu: 100m
@@ -90,3 +114,63 @@ spec:
               limits:
                 cpu: 500m
                 memory: 512Mi
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: function-python
+spec:
+  deploymentTemplate:
+    metadata:
+      labels:
+        runtime: function-python
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          runtime: function-python
+      template:
+        metadata:
+          labels:
+            runtime: function-python
+        spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: function-auto-ready
+spec:
+  deploymentTemplate:
+    metadata:
+      labels:
+        runtime: function-auto-ready
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          runtime: function-auto-ready
+      template:
+        metadata:
+          labels:
+            runtime: function-auto-ready
+        spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL

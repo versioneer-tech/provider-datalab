@@ -85,7 +85,7 @@ data:
   iam:
     realm: acme
     extraAudiences:
-    - workspace-api-custom
+    - datalab-service-custom
   ingress:
     class: nginx
     domain: lab.acme.com
