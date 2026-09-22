@@ -1,0 +1,15 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: storage-minio
+data:
+  storage:
+    endpoint: http://default-hl.minio:9000
+    force_path_style: "true"
+    provider: Minio
+    region: us-east-1
+    type: s3
+

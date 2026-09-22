@@ -1,0 +1,44 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vcluster
+  namespace: __NAMESPACE__
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vcluster
+      release: my-vcluster
+  template:
+    metadata:
+      labels:
+        app: vcluster
+        release: my-vcluster
+    spec:
+      containers:
+        - name: api
+          image: __VCLUSTER_IMAGE__
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - mkdir -p /www && echo ok > /www/index.html && exec httpd -f -p 8443 -h /www
+          ports:
+            - containerPort: 8443
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vcluster
+  namespace: __NAMESPACE__
+spec:
+  selector:
+    app: vcluster
+    release: my-vcluster
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443

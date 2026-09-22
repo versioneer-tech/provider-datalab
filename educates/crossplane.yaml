@@ -15,4 +15,4 @@ spec:
   # Intentionally no 'dependsOn' since GitOps based management of providers/functions is recommended
   skipDependencyResolution: true
   crossplane:
-    version: ">=v2.0.2-0"
+    version: ">=v2.0.0-0 <v3.0.0-0"

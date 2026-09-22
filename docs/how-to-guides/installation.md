@@ -23,7 +23,6 @@ Before installing Provider Datalab, decide which parts of the service catalogue 
 - A running Kubernetes cluster (e.g., `kind`, managed K8s).
 - `kubectl` access.
 - **A CNI that enforces Kubernetes NetworkPolicy**. The generated Datalab policies are useful only when the dataplane enforces them.
-- **Kyverno** installed in the cluster. Provider Datalab uses Kyverno policies to enforce platform guardrails for generated workloads and sandbox resources.
 - **Crossplane** installed in the cluster:
 
 ```bash
@@ -32,13 +31,31 @@ helm repo update
 helm install crossplane \
   --namespace crossplane-system \
   --create-namespace crossplane-stable/crossplane \
-  --version 2.0.2 \
+  --version 2.4.1 \
   --set provider.defaultActivations={}
 ```
 
+The configuration package supports Crossplane `v2.0.0` or later. The package
+metadata does not restrict later major versions. Crossplane `v2.4.1` is the
+version used by this repository's current tests and the installation example
+above; it is not the minimum supported version. Validate upgrades through your
+normal platform test process.
+
+The supplied dependency manifests and tests use the following tested pins:
+
+| Dependency | Tested version |
+| --- | --- |
+| Crossplane | `v2.4.1` |
+| provider-kubernetes | `v1.3.1` |
+| provider-helm | `v1.0.0` |
+| provider-keycloak | `v2.21.1` |
+| function-python | `v0.5.0` |
+| function-auto-ready | `v0.6.8` |
+
 - **Educates installed with all CRDs in the cluster** for the Educates runtime.
   Install it through the upstream [Educates Installation Instructions](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html), [CLI flow](https://docs.educates.dev/en/stable/installation-guides/cli-based-installation.html), or [Carvel flow](https://docs.educates.dev/en/stable/installation-guides/carvel-based-installation.html). For Kustomize/Flux-based platform installs, Versioneer also publishes a vendored Educates base in [`versioneer-tech/bases`](https://github.com/versioneer-tech/bases), overlay [`educates/default`](https://github.com/versioneer-tech/bases/tree/main/educates/default), as `oci://ghcr.io/versioneer-tech/bases:educates-<sha12>`.
-  Use the latest Versioneer Educates install from `versioneer-tech/bases`; the current install requires Kyverno.
+  Use the latest Versioneer Educates install from `versioneer-tech/bases` and
+  follow the prerequisites of that installation.
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
   Baseline: PGO `v6.0.x`, which serves `PostgresCluster` as `postgres-operator.crunchydata.com/v1`.
 - **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.gateway`.
@@ -91,13 +108,14 @@ Provider dependencies activate Helm, Kubernetes, and Keycloak resources as neede
 The supplied runtime configs apply the `RuntimeDefault` seccomp profile to provider and function Pods. They also prevent privilege escalation and remove all Linux capabilities from package runtime containers.
 
 Recommended Crossplane dependency set for `datalab-educates`:
+
 - Providers:
-  - `provider-kubernetes` (`xpkg.upbound.io/crossplane-contrib/provider-kubernetes`)
-  - `provider-helm` (`xpkg.upbound.io/crossplane-contrib/provider-helm`)
-  - `provider-keycloak` (`ghcr.io/crossplane-contrib/provider-keycloak`)
+  - `provider-kubernetes` `v1.3.1` (`xpkg.upbound.io/crossplane-contrib/provider-kubernetes`)
+  - `provider-helm` `v1.0.0` (`xpkg.upbound.io/crossplane-contrib/provider-helm`)
+  - `provider-keycloak` `v2.21.1` (`ghcr.io/crossplane-contrib/provider-keycloak`)
 - Functions:
-  - `crossplane-contrib-function-python`
-  - `crossplane-contrib-function-auto-ready`
+  - `crossplane-contrib-function-python` `v0.5.0`
+  - `crossplane-contrib-function-auto-ready` `v0.6.8`
 
 Pin exact provider and function versions or digests in your GitOps source and upgrade them intentionally after validation.
 

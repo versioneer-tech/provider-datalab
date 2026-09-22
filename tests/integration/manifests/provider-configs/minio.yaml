@@ -1,0 +1,24 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: minio.crossplane.io/v1
+kind: ProviderConfig
+metadata:
+  name: provider-minio
+spec:
+  credentials:
+    apiSecretRef:
+      name: default-env-configuration
+      namespace: minio
+    source: InjectedIdentity
+  minioURL: http://default-hl.minio:9000
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: provider-kubernetes
+  namespace: __WORKSPACE_NAMESPACE__
+spec:
+  credentials:
+    source: InjectedIdentity
+

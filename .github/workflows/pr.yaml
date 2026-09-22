@@ -1,0 +1,61 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+name: PR
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit_and_simple_integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      PROVIDER_DATALAB_KUBECONFIG: /tmp/provider-datalab-it.kubeconfig
+      PROVIDER_STORAGE_REPO: ${{ github.workspace }}/.integration/provider-storage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Checkout Provider Storage
+        uses: actions/checkout@v5
+        with:
+          repository: versioneer-tech/provider-storage
+          ref: 0.3.0
+          path: .integration/provider-storage
+
+      - name: Install test CLIs
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/crossplane/crossplane/v2.4.1/install.sh \
+            --output /tmp/crossplane-install.sh
+          XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
+          sudo install crossplane /usr/local/bin/crossplane
+          go install github.com/homeport/dyff/cmd/dyff@v1.12.0
+          sudo install "$(go env GOPATH)/bin/dyff" /usr/local/bin/dyff
+
+      - name: Run Composition unit tests
+        run: tests/unit.bash
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: provider-datalab-it
+          config: tests/integration/manifests/kind.yaml
+
+      - name: Run simple integration test
+        run: tests/integration/run.bash simple
+
+      - name: Collect integration diagnostics
+        if: failure()
+        run: tests/integration/diagnostics.bash

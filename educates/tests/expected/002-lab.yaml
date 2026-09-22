@@ -10,6 +10,172 @@ spec:
   cacheStores:
     prod:
       storage: 1Gi
+  crossplane:
+    resourceRefs:
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-jeff-ws-access
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-jeff-ws-admin
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-jeff-ws-api
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Group
+      name: s-jeff-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Group
+      name: s-jeff
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Memberships
+      name: s-jeff-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Memberships
+      name: s-jeff
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Roles
+      name: s-jeff-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Roles
+      name: s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: db-configmap-s-jeff-pg0
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: db-postgrescluster-s-jeff-pg0
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: db-tlsroute-s-jeff-pg0
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-community-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-rb-appdb-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-role-appdb-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-sa-appdb-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-sa-database-pods-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-sa-ops-manager-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-database-secret-s-jeff-pg0
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-mongodb-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-oauth-client-secret-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-qdrant-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-redis-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-storage-secret-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: qdrant-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: qdrant-pod-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: qdrant-vector-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-acl-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-cache-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-pod-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: resourcequota-s-jeff-overall-storage
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: workshop-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: workshopenvironment-s-jeff
+      namespace: default
+    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+      kind: ClientServiceAccountRole
+      name: s-jeff-ws-api
+      namespace: default
+    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+      kind: Client
+      name: s-jeff
+      namespace: default
+    - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
+      kind: GroupMembershipProtocolMapper
+      name: s-jeff
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-jeff-ws-access
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-jeff-ws-admin
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-jeff-ws-api
+      namespace: default
   data:
     enabled: false
   databases:
@@ -49,6 +215,14 @@ spec:
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: WatchCircuitClosed
+    status: "True"
+    type: Responsive
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: ReconcileSuccess
+    status: "True"
+    type: Synced
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
       db-tlsroute-s-jeff-pg0, and 38 more'
     reason: Creating
@@ -71,7 +245,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -106,7 +280,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -182,7 +356,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -229,7 +403,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     accessType: CONFIDENTIAL
@@ -271,7 +445,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     name: s-jeff-admin
@@ -295,7 +469,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     name: s-jeff
@@ -319,7 +493,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     addToAccessToken: false
@@ -351,7 +525,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     groupIdRef:
@@ -381,7 +555,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     groupIdRef:
@@ -412,7 +586,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -440,7 +614,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -468,7 +642,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -499,7 +673,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -530,7 +704,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -561,7 +735,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -589,7 +763,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     groupIdRef:
@@ -620,7 +794,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     groupIdRef:
@@ -651,7 +825,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     clientIdRef:
@@ -686,7 +860,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -720,7 +894,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -786,7 +960,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -825,7 +999,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -871,7 +1045,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -902,7 +1076,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -933,7 +1107,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -964,7 +1138,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -995,7 +1169,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1026,7 +1200,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1057,7 +1231,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1088,7 +1262,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1119,7 +1293,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1150,7 +1324,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1185,7 +1359,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1220,7 +1394,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1270,7 +1444,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1305,7 +1479,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1339,7 +1513,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1403,7 +1577,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1438,7 +1612,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1472,7 +1646,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:
@@ -1598,7 +1772,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-jeff
-    uid: ""
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
 spec:
   forProvider:
     manifest:

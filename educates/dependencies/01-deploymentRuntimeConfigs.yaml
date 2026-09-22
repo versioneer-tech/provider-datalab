@@ -20,6 +20,7 @@ spec:
           labels:
             runtime: provider-keycloak
         spec:
+          serviceAccountName: provider-keycloak
           securityContext:
             seccompProfile:
               type: RuntimeDefault

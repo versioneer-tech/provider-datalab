@@ -4,9 +4,23 @@
 
 The primary reader for these docs is the platform operator. The operator decides which teams may run which workloads, which services are available, how egress is controlled, which state is backed up, and how lifecycle is governed. Engineers and data users should still be able to read the examples and understand the contract they are asking the platform to fulfill. Sponsors and governance stakeholders should be able to see where accountability lives: policy, capacity, audit, and durable data are platform responsibilities, not hidden inside a user terminal.
 
-This makes Datalab suitable for both human and agent workloads. The sandbox is not magic; it is an explicit authority boundary. A session runs in a dedicated Kubernetes namespace, or in a dedicated vcluster when a virtual Kubernetes control plane is wanted. A user or agent can only use the workspace, storage credentials, Kubernetes permissions, and service credentials exposed to that session. It can change state it is allowed to touch, while the platform operator remains outside the session and can still enforce RBAC, Pod Security, NetworkPolicies, quotas, database backups, bucket versioning, ingress policy, and lifecycle controls.
+A named Datalab session gives users a browser editor, terminal, persistent
+workspace, and approved service access. A session runs in a dedicated
+Kubernetes namespace and may include a vCluster when it needs a separate
+Kubernetes API. Users receive only the workspace access, credentials, and
+permissions assigned to that session. Platform operators continue to manage
+RBAC, Pod Security, NetworkPolicies, quotas, backups, ingress, and lifecycle
+controls.
 
-Provider Datalab is built on [Crossplane v2](https://crossplane.io). It provides a tenant-facing `Datalab` API and compositions that connect systems you already operate: Kubernetes namespaces, ingress, identity, object-storage credentials, persistent volumes, database operators, cache and vector-store operators, and the Educates runtime.
+## Architecture
+
+The current Educates runtime provides the Datalab browser editor and terminal.
+Platform ingress can protect it through delegated Keycloak authentication.
+[ADR-001](architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md)
+defines the `Datalab` resource as the public contract and keeps runtime
+resources as internal implementation details.
+
+Provider Datalab requires [Crossplane v2 or later](https://crossplane.io). It provides a tenant-facing `Datalab` API and compositions that connect systems you already operate: Kubernetes namespaces, ingress, identity, object-storage credentials, persistent volumes, database operators, cache and vector-store operators, and the Educates runtime.
 
 Provider Datalab does **not** create object-storage buckets. Use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process to create buckets and credentials. Provider Datalab consumes those credentials and wires storage access into the lab.
 
@@ -19,9 +33,14 @@ For an operator, a `Datalab` is not just a notebook or a pod. It is the contract
 - Crossplane compositions create or configure the required Kubernetes, identity, storage access, and backend resources.
 - The resulting resources stay visible to the operator, so lifecycle, policy, capacity, and backup responsibility are clear.
 
-This is the main design point: Provider Datalab makes self-service smooth without hiding state from the platform team. Sessions can be disposable. Databases, buckets, persistent volumes, and other stateful services remain platform concerns.
-
-For agent workloads, this means the operator does not have to trust the agent with the whole platform. The agent gets a bounded runtime and explicit credentials. The platform keeps the guardrails, observability, and recovery mechanisms.
+This is the main design point: Provider Datalab makes self-service smooth
+without hiding state from the platform team. In the current API, a named
+session is a long-lived environment, while its workspace Pod is replaceable.
+The Pod provides the browser editor, terminal, tools, and preconfigured session
+access. Large, isolated, or repeatable work belongs on separate task workloads.
+Its `/home/eduk8s` workspace is backed by the session's stable PVC; persistence
+of other session applications is not yet proven. Databases, buckets, persistent
+volumes, and other stateful services remain platform concerns.
 
 For governance, this gives sponsors a concrete review surface: a Datalab can be approved, costed, secured, and retired as a named platform service instead of becoming unmanaged compute plus scattered credentials.
 
@@ -30,14 +49,13 @@ For governance, this gives sponsors a concrete review surface: a Datalab can be 
 At its core, Provider Datalab provides:
 
 - A **Datalab Composite Resource Definition (XRD)**.
-- **Crossplane v2 compositions** for creating environments with sessions, storage access, vclusters, identity wiring, and optional managed backends.
+- **Compositions for Crossplane v2 or later** that create environments with sessions, storage access, vClusters, identity wiring, and optional managed backends.
 - A default `datalab-educates` runtime that launches **VS Code Server**, terminals, a storage browser, and common tools such as `awscli` and `rclone`.
 - Optional **Keycloak-managed access**, including confidential clients, runtime OAuth2 credential Secrets, groups, roles, role scope mappings, role bindings, service-account API access, and memberships.
 - Support for delegated authentication through the surrounding platform, for example NGINX external auth or APISIX OIDC protection at the ingress layer.
 - Optional platform-managed services from the same `Datalab` claim: PostgreSQL databases, MongoDB document stores, Redis key-value/cache stores, Qdrant vector stores, and a Docker registry.
 
 For end users, this means a simple workspace experience: they can open a familiar online IDE, access storage and credentials that have already been wired in, and work with higher-level services without understanding every underlying Kubernetes resource. For software engineers, it means the platform contract is declarative and reviewable instead of a long checklist of manual setup steps.
-
 
 ---
 
@@ -48,9 +66,9 @@ For end users, this means a simple workspace experience: they can open a familia
 - **Operator-visible provisioning**
   Keep generated resources inspectable and governable instead of burying durable state inside user sessions.
 - **Multi-tenant runtime isolation**
-  Run each Datalab inside a namespace or, where useful, inside a dedicated virtual cluster (vcluster).
+  Run each Datalab inside a namespace or, where useful, with a dedicated virtual Kubernetes control plane (vCluster).
 - **Integrated or delegated identity**
-  Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the platform ingress layer. Generated Datalab clients are confidential, include a service-account-only `ws_api` role for automation, and can add configured platform API audiences to access tokens.
+  Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the ingress layer. Generated Datalab clients are confidential, include a service-account-only `ws_api` role for automation, and can add configured service audiences to access tokens.
 - **Storage integration**
   Consume object-storage credentials from Provider Storage or another storage process, and mount them into the lab.
 - **Extensible by design**
@@ -91,7 +109,7 @@ spec:
   vcluster: true
 ```
 
-This provisions a vcluster within a dedicated Kubernetes namespace and starts the Educates tooling stack (including VS Code Server and a terminal), together with bundled utilities. The declared session also gets a durable workspace PVC that remains available if the session is later set to `state: stopped`. A storage browser is available with storage automatically mounted, and additional tools such as `awscli` and `rclone` are preinstalled to support typical data lab tasks like coding, data exploration, and wrangling.
+This provisions a vCluster within a dedicated Kubernetes namespace and starts the Educates tooling stack (including VS Code Server and a terminal), together with bundled utilities. The declared session also gets a durable workspace PVC that remains available if the session is later set to `state: stopped`. A storage browser is available with storage automatically mounted, and additional tools such as `awscli` and `rclone` are preinstalled to support typical data lab tasks like coding, data exploration, and wrangling.
 
 Access to the datalab is intended for Alice, since she currently is the only user associated with this lab. Depending on the platform configuration, access can be enforced by Keycloak-managed resources or by delegated ingress authentication.
 
@@ -123,13 +141,14 @@ spec:
 
 Those resources are provisioned through the platform's installed operators and stay visible as managed infrastructure. That is what lets the operator decide how they are backed up, monitored, upgraded, and retired.
 
-
 !!! note
 
     The `datalab-educates` configuration package uses the shared `Datalab` Composite Resource Definition.
 
 ### More Examples
+
 Check the [examples folder](https://github.com/versioneer-tech/provider-datalab/tree/main/examples/base) in the GitHub repository for complete scenarios, including:
+
 - Datalabs with multiple users
 - Datalabs with integrated storage
 - Identity-aware environments

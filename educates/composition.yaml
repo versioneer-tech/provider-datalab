@@ -545,7 +545,7 @@ spec:
 
               key = f"secret-{xr_name}-datalab"
               rsp.desired.resources[key].resource.update(manifest)
-              rsp.desired.resources[key].ready = True
+              rsp.desired.resources[key].ready = fnv1.READY_TRUE
 
     - step: update-secret-oauth2-client
       functionRef:

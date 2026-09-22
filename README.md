@@ -2,9 +2,9 @@
 
 **Provider Datalab packages a Crossplane API for platform-operated cloud workspaces.** A platform operator defines the guardrails once: ingress, identity, storage credentials, quotas, sandbox policy, network egress, and optional service classes. Teams then request a `Datalab` claim and get workspace sessions with VS Code Server, terminals, storage access, optional vclusters, and managed data services.
 
-The package ships the **Datalab** Composite Resource Definition (XRD) and ready-to-use Crossplane v2 **Compositions**. The API is meant to be useful to software engineers and data teams, but the ownership model is operator-first: durable state, security posture, backup, capacity, and lifecycle stay visible to the platform team.
+The package ships the **Datalab** Composite Resource Definition (XRD) and ready-to-use **Compositions** for Crossplane v2 or later. The API is meant to be useful to software engineers and data teams, but the ownership model is operator-first: durable state, security posture, backup, capacity, and lifecycle stay visible to the platform team.
 
-For the operating model, start with the [welcome guide](https://provider-datalab.versioneer.at/). The documentation also covers [usage concepts](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/), [sandbox security](https://provider-datalab.versioneer.at/latest/security/), and [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional_services/) such as Dask and MLflow.
+For the operating model, start with the [welcome guide](https://provider-datalab.versioneer.at/). The documentation also covers [usage concepts](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/), [sandbox security](https://provider-datalab.versioneer.at/latest/security/), the [Datalab public contract](https://provider-datalab.versioneer.at/latest/architecture/0001-use-the-datalab-crd-as-the-workspace-contract/), and [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional_services/) such as Dask and MLflow.
 
 <div align="left">
   <a href="https://github.com/versioneer-tech/provider-datalab/raw/refs/heads/main/docs/imgs/datalab-vs-code-server.png" target="_blank">
@@ -33,8 +33,7 @@ The published XRD with all fields is documented here:
 
 ## Install the Configuration Package
 
-You need Crossplane and the runtime prerequisites [installed](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/) in your Kubernetes cluster first. Operators should manage providers, functions, Educates, Kyverno, CNI enforcement, and optional data-service operators through GitOps, then apply the configuration package.
-
+You need Crossplane and the runtime prerequisites [installed](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/) in your Kubernetes cluster first. Operators should manage providers, functions, Educates, CNI enforcement, optional admission policy, and optional data-service operators through GitOps, then apply the configuration package.
 
 ```yaml
 apiVersion: pkg.crossplane.io/v1
@@ -197,8 +196,9 @@ These services stay visible to the operator, so they can be monitored, backed up
 ### More examples
 
 See these [`example manifests`](examples/base) for complete scenarios, including:
+
 - Datalabs without declared sessions (no session PVC or runtime started by default).
-- Datalabs with sessions and optional vcluster isolation.
+- Datalabs with sessions and optional vCluster API isolation.
 - Registry-enabled and registry-disabled runtime examples.
 - Datalabs with managed PostgreSQL databases, document stores, cache stores, and vector stores.
 - Datalabs with workshop files fetched from Git, OCI images, or HTTP archives.

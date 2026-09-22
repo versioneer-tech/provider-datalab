@@ -7,6 +7,7 @@
 #
 # Adapt namespaces, issuer names, storage settings, and the OIDC discovery URL
 # for your cluster. The important Datalab-side setting is auth.type: delegated.
+# These CEL policies require Kyverno v1.19.1 or later.
 #
 # The generated <datalab>-oauth2-client Secret remains the Datalab-scoped
 # machine credential for client-credentials automation and services owned by
@@ -68,47 +69,63 @@ rules:
       - patch
       - delete
 ---
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
+apiVersion: policies.kyverno.io/v1
+kind: GeneratingPolicy
 metadata:
-  name: protect-workshop-sessions-apisix
+  name: generate-workshop-session-apisix-pluginconfigs
 spec:
-  admission: true
-  background: false
-  rules:
-    - name: generate-apisix-oidc-plugin-config
-      match:
-        any:
-          - resources:
-              kinds:
-                - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: workshop
-                  training.educates.dev/component: session
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: apisix
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
-            operator: NotEquals
-            value: ""
-      generate:
-        apiVersion: apisix.apache.org/v2
-        kind: ApisixPluginConfig
-        name: "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-        namespace: "{{ request.namespace }}"
-        synchronize: false
-        data:
+  evaluation:
+    synchronize:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - networking.k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - ingresses
+  matchConditions:
+    - name: is-workshop-session
+      expression: >-
+        has(object.metadata.labels) &&
+        'training.educates.dev/application' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+        'training.educates.dev/component' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/component'] == 'session'
+    - name: uses-apisix
+      expression: >-
+        has(object.spec.ingressClassName) &&
+        object.spec.ingressClassName == 'apisix'
+    - name: uses-datalab-domain
+      expression: >-
+        has(object.spec.rules) &&
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+    - name: has-datalab-name
+      expression: >-
+        'training.educates.dev/environment.name' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/environment.name'] != ''
+  variables:
+    - name: environmentName
+      expression: object.metadata.labels['training.educates.dev/environment.name']
+    - name: targetNamespace
+      expression: object.metadata.namespace
+  generate:
+    - template:
+        interpolate: cel
+        value: |
+          apiVersion: apisix.apache.org/v2
+          kind: ApisixPluginConfig
           metadata:
+            name: datalab-session-oidc-(( variables.environmentName ))
+            namespace: (( variables.targetNamespace ))
             labels:
               training.educates.dev/application: workshop
               training.educates.dev/component: session
-              training.educates.dev/environment.name: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+              training.educates.dev/environment.name: (( variables.environmentName ))
           spec:
             plugins:
               - name: openid-connect
@@ -121,7 +138,7 @@ spec:
                   client_id: datalab-sessions
                   client_secret: ""
                   session:
-                    secret: "{{ random('[A-Za-z0-9]{32}') }}"
+                    secret: (( random.random('[A-Za-z0-9]{32}') ))
                   access_token_in_authorization_header: true
                   set_access_token_header: true
                   set_id_token_header: false
@@ -132,51 +149,108 @@ spec:
                 config:
                   host: http://opa.iam:8181
                   policy: example/datalab/session
-    - name: add-apisix-oidc-plugin-config
-      match:
-        any:
-          - resources:
-              kinds:
-                - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: workshop
-                  training.educates.dev/component: session
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: apisix
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
-            operator: NotEquals
-            value: ""
-      mutate:
-        patchStrategicMerge:
-          metadata:
-            annotations:
-              +(k8s.apisix.apache.org/plugin-config-name): "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-    - name: set-apisix-class-for-workspace-registry-ingresses
-      match:
-        any:
-          - resources:
-              kinds:
-                - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: registry
-                  training.educates.dev/component: session
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: NotEquals
-            value: apisix
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-      mutate:
-        patchStrategicMerge:
-          spec:
-            ingressClassName: apisix
+---
+apiVersion: policies.kyverno.io/v1
+kind: MutatingPolicy
+metadata:
+  name: annotate-workshop-sessions-for-apisix
+spec:
+  failurePolicy: Fail
+  evaluation:
+    admission:
+      enabled: true
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - networking.k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - ingresses
+  matchConditions:
+    - name: is-workshop-session
+      expression: >-
+        has(object.metadata.labels) &&
+        'training.educates.dev/application' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+        'training.educates.dev/component' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/component'] == 'session'
+    - name: uses-apisix
+      expression: >-
+        has(object.spec.ingressClassName) &&
+        object.spec.ingressClassName == 'apisix'
+    - name: uses-datalab-domain
+      expression: >-
+        has(object.spec.rules) &&
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+    - name: has-datalab-name
+      expression: >-
+        'training.educates.dev/environment.name' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/environment.name'] != ''
+  variables:
+    - name: environmentName
+      expression: object.metadata.labels['training.educates.dev/environment.name']
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          Object{
+            metadata: Object.metadata{
+              annotations: {
+                "k8s.apisix.apache.org/plugin-config-name": "datalab-session-oidc-" + variables.environmentName
+              }
+            }
+          }
+---
+apiVersion: policies.kyverno.io/v1
+kind: MutatingPolicy
+metadata:
+  name: set-apisix-class-for-workspace-registries
+spec:
+  failurePolicy: Fail
+  evaluation:
+    admission:
+      enabled: true
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - networking.k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - ingresses
+  matchConditions:
+    - name: is-registry-session
+      expression: >-
+        has(object.metadata.labels) &&
+        'training.educates.dev/application' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/application'] == 'registry' &&
+        'training.educates.dev/component' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/component'] == 'session'
+    - name: needs-apisix-class
+      expression: >-
+        !has(object.spec.ingressClassName) ||
+        object.spec.ingressClassName != 'apisix'
+    - name: uses-datalab-domain
+      expression: >-
+        has(object.spec.rules) &&
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          Object{
+            spec: Object.spec{
+              ingressClassName: "apisix"
+            }
+          }

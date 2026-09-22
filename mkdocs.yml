@@ -18,6 +18,8 @@ nav:
     - Sandbox Security Measures: security/sandbox-controls.md
   - Reference guides:
     - API: reference-guides/api.md
+    - Architecture:
+      - ADR-001 Datalab as the Public Contract: architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md
 plugins:
   - search
   - mike

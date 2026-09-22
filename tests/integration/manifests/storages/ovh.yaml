@@ -1,0 +1,21 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta1
+kind: Storage
+metadata:
+  name: s-john
+  namespace: workspace
+  annotations:
+    storages.pkg.internal/environment: storage-ovh
+spec:
+  principal: s-john
+  providerIdentity: s-john
+  buckets:
+    - bucketName: ovh-__OVH_PROJECT_PREFIX__-s-john
+      discoverable: true
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: ovh
+

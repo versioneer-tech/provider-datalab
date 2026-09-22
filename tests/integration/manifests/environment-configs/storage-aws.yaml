@@ -1,0 +1,16 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: storage-aws
+data:
+  storage:
+    iam:
+      policyPath: /provider-storage/managed/
+      userPath: /provider-storage/managed/
+    provider: AWS
+    region: __AWS_REGION__
+    type: s3
+

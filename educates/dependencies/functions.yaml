@@ -1,20 +1,20 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: crossplane-contrib-function-python
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-python:v0.2.0
+  package: xpkg.crossplane.io/crossplane-contrib/function-python:v0.5.0
   runtimeConfigRef:
     name: function-python
 ---
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: crossplane-contrib-function-auto-ready
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.5.0
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.8
   runtimeConfigRef:
     name: function-auto-ready

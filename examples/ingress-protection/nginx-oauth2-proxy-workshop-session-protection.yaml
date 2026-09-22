@@ -7,6 +7,7 @@
 #
 # Adapt namespaces, issuer names, storage settings, and oauth2-proxy endpoints
 # for your cluster. The important Datalab-side setting is auth.type: delegated.
+# This CEL policy requires Kyverno v1.19.1 or later.
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
@@ -42,36 +43,54 @@ spec:
     name: letsencrypt-dns-prod
   secretName: workspace-tls
 ---
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
+apiVersion: policies.kyverno.io/v1
+kind: MutatingPolicy
 metadata:
   name: protect-workshop-sessions-nginx
 spec:
-  admission: true
-  background: false
-  rules:
-    - name: add-oauth2-proxy-annotations
-      match:
-        any:
-          - resources:
-              kinds:
-                - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: workshop
-                  training.educates.dev/component: session
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: nginx
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-      mutate:
-        patchStrategicMerge:
-          metadata:
-            annotations:
-              +(nginx.ingress.kubernetes.io/auth-url): "https://auth.lab.acme.org/oauth2/auth"
-              +(nginx.ingress.kubernetes.io/auth-signin): "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri"
-              +(nginx.ingress.kubernetes.io/auth-response-headers): "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
+  failurePolicy: Fail
+  evaluation:
+    admission:
+      enabled: true
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - networking.k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - ingresses
+  matchConditions:
+    - name: is-workshop-session
+      expression: >-
+        has(object.metadata.labels) &&
+        'training.educates.dev/application' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+        'training.educates.dev/component' in object.metadata.labels &&
+        object.metadata.labels['training.educates.dev/component'] == 'session'
+    - name: uses-nginx
+      expression: >-
+        has(object.spec.ingressClassName) &&
+        object.spec.ingressClassName == 'nginx'
+    - name: uses-datalab-domain
+      expression: >-
+        has(object.spec.rules) &&
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          Object{
+            metadata: Object.metadata{
+              annotations: {
+                "nginx.ingress.kubernetes.io/auth-url": "https://auth.lab.acme.org/oauth2/auth",
+                "nginx.ingress.kubernetes.io/auth-signin": "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri",
+                "nginx.ingress.kubernetes.io/auth-response-headers": "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
+              }
+            }
+          }

@@ -13,7 +13,7 @@ When reviewing a `Datalab`, start with these questions:
 - Who is allowed to access the workspace, and which identity layer enforces it?
 - What state will persist after a session stops or the lab is deleted?
 - Which credentials and managed services are exposed to workspace code?
-- Is Kubernetes API access needed, and should it be namespace-scoped or vcluster-scoped?
+- Is Kubernetes API access needed, and should it be namespace-scoped or vCluster-scoped?
 - Is external egress broad, blocked, or routed through another control?
 - Which parts are backed up, monitored, upgraded, and retired by platform processes?
 
@@ -22,22 +22,40 @@ The sections below map those governance questions to the fields users and engine
 ## Concepts
 
 ### Sessions
-A `Datalab` claim may declare one or more `spec.sessions`. A session is the named workspace identity for a user or workflow. It owns a durable home PVC and may also have a live Educates runtime.
+
+A `Datalab` claim may declare one or more `spec.sessions`. In the current API,
+a Datalab session is a named, durable workspace such as `default` or
+`analysis`. It owns a home PVC and may have a live Educates runtime.
 
 !!! note "Multiple started sessions"
 
-    A single `Datalab` can have multiple sessions started at the same time. This supports patterns such as a default human workspace plus a separate analysis, automation, or agent workspace. Each started session gets its own runtime and durable workspace PVC, while shared Datalab-level credentials and managed services remain operator-visible.
+    A single `Datalab` can have multiple sessions started at the same time.
+    This supports patterns such as `default` and `analysis`. Each started
+    session gets its own workspace Pod and durable workspace PVC, while shared
+    Datalab-level credentials and managed services remain operator-visible.
 
 - Each `spec.sessions` entry declares a session by `name`. `state` defaults to `started`.
-- `state: started` creates the **WorkshopSession** runtime for that session and mounts the session PVC as the home workspace.
-- `state: stopped` keeps the declared session and its PVC, but does not create the **WorkshopSession** runtime. Switching back to `started` reuses the same workspace PVC.
+- `state: started` creates the Educates `WorkshopSession` for that Datalab
+  session. Educates creates the replaceable workspace Pod and mounts the
+  session PVC as its home workspace.
+- `state: stopped` keeps the declared session and its PVC, but does not create
+  the `WorkshopSession`. Switching back to `started` selects the same
+  workspace PVC.
 - If no sessions are given, no declared session PVC or runtime is pre-created. The shared runtime namespace and non-session resources can still be reconciled and tested without a `WorkshopSession`.
 
 Sessions can also be patched into the spec later if needed.
 
 ### Persistence
 
-Each declared `Datalab` session is equipped with a **persistent volume** for storing files, in addition to the connected object storage. This ensures that user data and session state are preserved even if the workshop pod is restarted, rescheduled by Kubernetes, or intentionally stopped through `state: stopped`. Installing code libraries, handling metadata, or working with Git repositories often generates many small files that may be updated frequently. A storage class providing **NFS-like capabilities** is usually a good fit for these kinds of workloads, **object storage** abstractions are not.
+Each declared `Datalab` session is equipped with a **persistent volume** for
+storing files, in addition to the connected object storage. The workspace Pod
+is replaceable and mounts that volume at `/home/eduk8s`. The PVC remains
+declared when the session uses `state: stopped`, although live lifecycle tests
+are still needed for the complete stop, start, and recovery path. Installing
+code libraries, handling metadata, or working with Git repositories often
+generates many small files that may be updated frequently. A storage class
+providing **NFS-like capabilities** is usually a good fit for these kinds of
+workloads; **object storage** is not.
 
 Provider Datalab creates a stable PVC per declared session, including sessions with `state: stopped`, in the Educates workshop namespace and configures Educates to use that claim as the `/home/eduk8s` workspace volume. The size comes from `spec.quota.storage`, and `spec.persistence.storageClassName` may select a StorageClass subject to the operator allowlist in `EnvironmentConfig.data.storageClasses.allowed`.
 
@@ -141,6 +159,10 @@ Delegating authentication is often more flexible because users accessing a works
 
 Those controller-specific settings should be added by platform policy instead of being repeated in every Datalab. Kyverno is one option, but the same result can be achieved with a mutating admission webhook, GitOps post-processing, or any other automation that consistently targets the generated Educates Ingress resources. In all examples below, the Datalab environment keeps `auth.type: delegated`; the protection is established externally at the ingress layer.
 
+The CEL policies in this section require Kyverno `v1.19.1` or later. Kyverno
+is required only when you use these policy examples. Provider Datalab itself
+does not require Kyverno.
+
 ??? info "Generated workshop session resources"
 
     For a Datalab named `s-jane` with a `default` session and `ingress.domain: lab.acme.org`, Educates creates session ingress hosts such as:
@@ -175,7 +197,7 @@ Those controller-specific settings should be added by platform policy instead of
 
     This allows services intentionally owned by `s-jane` to reuse the Datalab-owned Keycloak client without an extra Keycloak mutation policy. Provider Datalab publishes the credentials for direct per-Datalab OIDC consumers and client-credentials automation as runtime Secret `s-jane-oauth2-client` with data keys `client_id` and `client_secret`. Shared browser ingress for many Datalabs can instead use a central platform OAuth client. The generated client keeps human and machine authority separate. Human users receive `ws_access` or `ws_admin` through Datalab groups. Client-credentials automation uses the same confidential client but receives only the service-account role `ws_api`.
 
-    To call a platform API that accepts Datalab-scoped machine tokens, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to the API. The API policy should require `ws_api` and any configured audience.
+    To call a Datalab-owned service with a machine token, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to the service. Its policy should require `ws_api` and any configured audience.
 
 ??? example "Shared delegated-auth environment configuration"
 
@@ -244,39 +266,52 @@ Those controller-specific settings should be added by platform policy instead of
     The Datalab-generated Keycloak clients are still useful for Datalab-owned services or direct per-Datalab OIDC integrations, but a central `oauth2-proxy` does not need one client per Datalab unless you intentionally deploy it that way.
 
     ```yaml
-    apiVersion: kyverno.io/v1
-    kind: ClusterPolicy
+    apiVersion: policies.kyverno.io/v1
+    kind: MutatingPolicy
     metadata:
       name: protect-workshop-sessions-nginx
     spec:
-      admission: true
-      background: false
-      rules:
-      - name: add-oauth2-proxy-annotations
-        match:
-          any:
-          - resources:
-              kinds:
-              - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: workshop
-                  training.educates.dev/component: session
-        preconditions:
-          all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: nginx
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-        mutate:
-          patchStrategicMerge:
-            metadata:
-              annotations:
-                +(nginx.ingress.kubernetes.io/auth-url): "https://auth.lab.acme.org/oauth2/auth"
-                +(nginx.ingress.kubernetes.io/auth-signin): "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri"
-                +(nginx.ingress.kubernetes.io/auth-response-headers): "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
+      failurePolicy: Fail
+      evaluation:
+        admission:
+          enabled: true
+        background:
+          enabled: false
+      matchConstraints:
+        resourceRules:
+          - apiGroups: [networking.k8s.io]
+            apiVersions: [v1]
+            operations: [CREATE, UPDATE]
+            resources: [ingresses]
+      matchConditions:
+        - name: is-workshop-session
+          expression: >-
+            has(object.metadata.labels) &&
+            'training.educates.dev/application' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+            'training.educates.dev/component' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/component'] == 'session'
+        - name: uses-nginx
+          expression: >-
+            has(object.spec.ingressClassName) &&
+            object.spec.ingressClassName == 'nginx'
+        - name: uses-datalab-domain
+          expression: >-
+            has(object.spec.rules) && object.spec.rules.exists(rule,
+              has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+      mutations:
+        - patchType: ApplyConfiguration
+          applyConfiguration:
+            expression: |
+              Object{
+                metadata: Object.metadata{
+                  annotations: {
+                    "nginx.ingress.kubernetes.io/auth-url": "https://auth.lab.acme.org/oauth2/auth",
+                    "nginx.ingress.kubernetes.io/auth-signin": "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri",
+                    "nginx.ingress.kubernetes.io/auth-response-headers": "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
+                  }
+                }
+              }
     ```
 
     Configure `oauth2-proxy` with a cookie domain that covers the workshop hosts, for example `.lab.acme.org`, and restrict allowed redirect domains to the same boundary.
@@ -314,106 +349,153 @@ Those controller-specific settings should be added by platform policy instead of
       - delete
     ```
 
-    The Kyverno policy below does not need Secret read access because it uses a central public OAuth client. If your platform uses a confidential central client, inject that platform-managed credential using your ingress-controller's supported Secret mechanism instead of the generated per-Datalab runtime Secret.
+    The Kyverno policies below do not need Secret read access because they use
+    a central public OAuth client. If your platform uses a confidential central
+    client, inject that platform-managed credential with the ingress
+    controller's supported Secret mechanism instead of the generated
+    per-Datalab runtime Secret.
 
-    The policy generates one APISIX plugin config per session namespace and annotates the matching workshop ingress to use it:
+    The CEL policies generate one APISIX plugin config per session namespace
+    and annotate the matching workshop ingress to use it:
 
     ```yaml
-    apiVersion: kyverno.io/v1
-    kind: ClusterPolicy
+    apiVersion: policies.kyverno.io/v1
+    kind: GeneratingPolicy
     metadata:
-      name: protect-workshop-sessions-apisix
+      name: generate-workshop-session-apisix-pluginconfigs
     spec:
-      admission: true
-      background: false
-      rules:
-      - name: generate-apisix-oidc-plugin-config
-        match:
-          any:
-          - resources:
-              kinds:
-              - Ingress
-              selector:
-                matchLabels:
+      evaluation:
+        synchronize:
+          enabled: false
+      matchConstraints:
+        resourceRules:
+          - apiGroups: [networking.k8s.io]
+            apiVersions: [v1]
+            operations: [CREATE, UPDATE]
+            resources: [ingresses]
+      matchConditions:
+        - name: is-workshop-session
+          expression: >-
+            has(object.metadata.labels) &&
+            'training.educates.dev/application' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+            'training.educates.dev/component' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/component'] == 'session'
+        - name: uses-apisix
+          expression: >-
+            has(object.spec.ingressClassName) &&
+            object.spec.ingressClassName == 'apisix'
+        - name: uses-datalab-domain
+          expression: >-
+            has(object.spec.rules) && object.spec.rules.exists(rule,
+              has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        - name: has-datalab-name
+          expression: >-
+            'training.educates.dev/environment.name' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/environment.name'] != ''
+      variables:
+        - name: environmentName
+          expression: object.metadata.labels['training.educates.dev/environment.name']
+        - name: targetNamespace
+          expression: object.metadata.namespace
+      generate:
+        - template:
+            interpolate: cel
+            value: |
+              apiVersion: apisix.apache.org/v2
+              kind: ApisixPluginConfig
+              metadata:
+                name: datalab-session-oidc-(( variables.environmentName ))
+                namespace: (( variables.targetNamespace ))
+                labels:
                   training.educates.dev/application: workshop
                   training.educates.dev/component: session
-        preconditions:
-          all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: apisix
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
-            operator: NotEquals
-            value: ""
-        generate:
-          apiVersion: apisix.apache.org/v2
-          kind: ApisixPluginConfig
-          name: "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-          namespace: "{{ request.namespace }}"
-          synchronize: false
-          data:
-            metadata:
-              labels:
-                training.educates.dev/application: workshop
-                training.educates.dev/component: session
-                training.educates.dev/environment.name: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
-            spec:
-              plugins:
-              - name: openid-connect
-                enable: true
-                config:
-                  discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
-                  use_jwks: true
-                  bearer_only: false
-                  scope: openid profile email roles
-                  client_id: datalab-sessions
-                  client_secret: ""
-                  session:
-                    secret: "{{ random('[A-Za-z0-9]{32}') }}"
-                  access_token_in_authorization_header: true
-                  set_access_token_header: true
-                  set_id_token_header: false
-                  set_userinfo_header: false
-                  set_refresh_token_header: false
-              - name: opa
-                enable: true
-                config:
-                  host: http://opa.iam:8181
-                  policy: example/datalab/session
-      - name: add-apisix-oidc-plugin-config
-        match:
-          any:
-          - resources:
-              kinds:
-              - Ingress
-              selector:
-                matchLabels:
-                  training.educates.dev/application: workshop
-                  training.educates.dev/component: session
-        preconditions:
-          all:
-          - key: "{{ request.object.spec.ingressClassName || '' }}"
-            operator: Equals
-            value: apisix
-          - key: "{{ (request.object.spec.rules || [])[?host != null && ends_with(host, '.lab.acme.org')] | length(@) }}"
-            operator: GreaterThan
-            value: 0
-          - key: "{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" || '' }}"
-            operator: NotEquals
-            value: ""
-        mutate:
-          patchStrategicMerge:
-            metadata:
-              annotations:
-                +(k8s.apisix.apache.org/plugin-config-name): "datalab-session-oidc-{{ request.object.metadata.labels.\"training.educates.dev/environment.name\" }}"
+                  training.educates.dev/environment.name: (( variables.environmentName ))
+              spec:
+                plugins:
+                  - name: openid-connect
+                    enable: true
+                    config:
+                      discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
+                      use_jwks: true
+                      bearer_only: false
+                      scope: openid profile email roles
+                      client_id: datalab-sessions
+                      client_secret: ""
+                      session:
+                        secret: (( random.random('[A-Za-z0-9]{32}') ))
+                      access_token_in_authorization_header: true
+                      set_access_token_header: true
+                      set_id_token_header: false
+                      set_userinfo_header: false
+                      set_refresh_token_header: false
+                  - name: opa
+                    enable: true
+                    config:
+                      host: http://opa.iam:8181
+                      policy: example/datalab/session
+    ---
+    apiVersion: policies.kyverno.io/v1
+    kind: MutatingPolicy
+    metadata:
+      name: annotate-workshop-sessions-for-apisix
+    spec:
+      failurePolicy: Fail
+      evaluation:
+        admission:
+          enabled: true
+        background:
+          enabled: false
+      matchConstraints:
+        resourceRules:
+          - apiGroups: [networking.k8s.io]
+            apiVersions: [v1]
+            operations: [CREATE, UPDATE]
+            resources: [ingresses]
+      matchConditions:
+        - name: is-workshop-session
+          expression: >-
+            has(object.metadata.labels) &&
+            'training.educates.dev/application' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
+            'training.educates.dev/component' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/component'] == 'session'
+        - name: uses-apisix
+          expression: >-
+            has(object.spec.ingressClassName) &&
+            object.spec.ingressClassName == 'apisix'
+        - name: uses-datalab-domain
+          expression: >-
+            has(object.spec.rules) && object.spec.rules.exists(rule,
+              has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        - name: has-datalab-name
+          expression: >-
+            'training.educates.dev/environment.name' in object.metadata.labels &&
+            object.metadata.labels['training.educates.dev/environment.name'] != ''
+      variables:
+        - name: environmentName
+          expression: object.metadata.labels['training.educates.dev/environment.name']
+      mutations:
+        - patchType: ApplyConfiguration
+          applyConfiguration:
+            expression: |
+              Object{
+                metadata: Object.metadata{
+                  annotations: {
+                    "k8s.apisix.apache.org/plugin-config-name":
+                      "datalab-session-oidc-" + variables.environmentName
+                  }
+                }
+              }
     ```
 
     The `opa` plugin should use a policy that derives the Datalab from the requested host and allows browser requests only for users with generated Datalab roles such as `ws_access` or `ws_admin`. Client-credentials tokens minted from the generated `<datalab>-oauth2-client` Secret should be handled as machine/API tokens and accepted only where the generated `ws_api` role is intended.
 
-    The session secret is generated when Kyverno creates the `ApisixPluginConfig`. `synchronize: false` keeps the generated object stable; if you intentionally change the plugin template for existing sessions, recreate the generated plugin config or restart the session so Kyverno can generate a fresh one.
+    The session secret is generated when Kyverno creates the
+    `ApisixPluginConfig`. Disabled synchronization keeps the generated object
+    stable. If you change the plugin template for an existing session, recreate
+    the generated plugin config or restart the session so Kyverno can generate
+    a new one.
 
     The ID token, userinfo, and refresh token forwarding flags are disabled by default. The access token is placed in the `Authorization` header for the APISIX OPA plugin, matching the common APISIX plugin chain where `openid-connect` runs before `opa`. If you do not want the upstream workspace application to receive that header, add an APISIX header-rewrite or equivalent platform policy after authorization to strip it before proxying upstream.
 
@@ -440,9 +522,12 @@ Supported sources:
 
 Filters (`includePaths`, `excludePaths`, `newRootPath`, `path`) control what ends up visible.
 
-### vcluster toggle
+### vCluster toggle
+
 `spec.vcluster` is a boolean flag.
-- `true` → the datalab provisions a vcluster for runtime isolation.
+
+- `true` → the current Educates Composition enables a vCluster application for
+  each started session.
 - `false` → workloads run directly in the namespace.
 
 ### Storage Secret
@@ -504,10 +589,10 @@ When a Datalab is created for that pattern, the composition automatically provis
 - A runtime **Secret** named `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`, generated by Provider Datalab in the runtime workshop namespace for client-credentials automation and direct per-Datalab service protection.
 - User, admin, and machine/API **roles**: `ws_access`, `ws_admin`, and `ws_api`.
 - Role scope mappings for the generated client because `fullScopeAllowed` is disabled. Tokens only get the generated Datalab client roles that are explicitly mapped.
-- Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. Any central platform OAuth client also needs to emit the same audience when that audience is required, but it is managed by the realm or platform identity setup rather than by Provider Datalab.
+- Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. Other OAuth clients must emit the same audience when a service requires it.
 - Group role bindings for `ws_access` and `ws_admin`, plus a service-account role binding for `ws_api`.
 
-This ensures that authentication and authorization can be enforced consistently across the runtime and Datalab-owned services. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. Platform APIs should treat those client-credentials tokens as machine tokens and require the configured audience when an audience is used; API authorization should require the `ws_api` client role, not user group membership.
+This ensures that authentication and authorization can be enforced consistently across the runtime and Datalab-owned services. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. Services should treat those client-credentials tokens as machine tokens and require the configured audience when one is used; authorization should require the `ws_api` client role, not user group membership.
 
 The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported consumer contract for Datalab-scoped M2M credentials and direct per-Datalab service protection. Shared browser ingress can use a separate central platform OAuth client.
 
@@ -518,7 +603,7 @@ The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported
 ```yaml
 # Joe gets a personal datalab s-joe with no pre-created session.
 # He must explicitly declare and start a session himself; nothing is running by default.
-# No vcluster is provisioned and no workshop files are attached.
+# No vCluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
 apiVersion: pkg.internal/v1beta2
@@ -543,7 +628,7 @@ spec:
 ```yaml
 # Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with no pre-created session.
 # This is the canonical shared store-validation example: the lab stays sessionless by default.
-# The lab does not use a vcluster and has no workshop files.
+# The lab does not use a vCluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
 # A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
 # This configuration keeps the default baseline security policy:
@@ -616,12 +701,12 @@ spec:
 
 ---
 
-## Example: Jane (isolated vcluster with admin role and higher quota)
+## Example: Jane (vCluster with admin role and higher quota)
 
 ```yaml
 # Jane runs a datalab s-jane with a default session automatically created.
 # That session will run permanently until stopped by the operator,
-# and a dedicated vcluster is provisioned for runtime isolation.
+# and a dedicated vCluster is provisioned for Kubernetes API isolation.
 # No workshop files are attached. Credentials to storage are expected
 # to exist in a secret "s-jane" in the same namespace.
 # A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
@@ -667,10 +752,10 @@ spec:
       backupStorage: 3Gi
 ```
 
-- Jane’s workloads run inside an **isolated virtual cluster** (`vcluster: true`).
+- Jane's session has a **separate virtual Kubernetes control plane** (`vcluster: true`).
 - The lab also runs in **privileged** mode, which enables Docker with 20 Gi of session-local workspace storage.
 - The Datalab environment namespace accepts at most 200 Gi of aggregate PVC requests.
-- The **admin role** grants full control within her namespace/vcluster.
+- The **admin role** grants full control within her namespace or vCluster.
 - This is the registry-enabled example, so session-backed registry behavior can be validated here.
 - Suitable for trusted advanced development or testing that really needs full Kubernetes control.
 - Treat this as an operator-approved exception because it combines privileged runtime, registry writes, and elevated Kubernetes authority.
@@ -683,7 +768,7 @@ spec:
 ```yaml
 # John has a datalab s-john with a default session automatically created.
 # That session will run permanently until stopped by the operator.
-# No vcluster is provisioned. Workshop and data files are pulled from Git,
+# No vCluster is provisioned. Workshop and data files are pulled from Git,
 # enabling the workshop tab in the Educates UI.
 # The analysis session is declared but stopped, so it keeps its workspace PVC
 # without creating a runtime.
@@ -776,7 +861,7 @@ Database credentials are managed by the PostgreSQL operator and stored as Kubern
 
 ## Summary
 
-- A `Datalab` defines users, sessions, optional vcluster, quotas, and security policies.
+- A `Datalab` defines users, sessions, an optional vCluster, quotas, and security policies.
 - A `Datalab` can also define platform-managed databases, document stores, key-value/cache stores, vector stores, and registry storage.
 - Security controls combine **Pod Security Standards**, **Kubernetes roles**, **NetworkPolicies**, and **Docker privilege** toggles.
 - Each Datalab requires a storage credential Secret.

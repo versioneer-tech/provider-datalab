@@ -1,0 +1,49 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: __POLICY_NAME__
+spec:
+  failurePolicy: Fail
+  validationActions:
+    - Deny
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+  matchConditions:
+    - name: is-verification-namespace
+      expression: >-
+        request.namespace in [
+          '__OPEN_NAMESPACE__',
+          '__CLOSED_NAMESPACE__',
+          '__PEER_NAMESPACE__',
+          '__VCLUSTER_NAMESPACE__'
+        ]
+  validations:
+    - expression: >-
+        !object.spec.?hostNetwork.orValue(false) &&
+        !object.spec.?hostPID.orValue(false) &&
+        !object.spec.?hostIPC.orValue(false) &&
+        !object.spec.?volumes.orValue([]).exists(volume, has(volume.hostPath)) &&
+        object.spec.containers.all(container,
+          !container.?securityContext.?privileged.orValue(false)) &&
+        object.spec.?initContainers.orValue([]).all(container,
+          !container.?securityContext.?privileged.orValue(false)) &&
+        object.spec.?ephemeralContainers.orValue([]).all(container,
+          !container.?securityContext.?privileged.orValue(false))
+      message: >-
+        Datalab verification namespaces must not use host namespaces,
+        hostPath volumes, or privileged containers.

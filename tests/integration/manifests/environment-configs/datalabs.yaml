@@ -1,0 +1,120 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-minio
+data:
+  auth:
+    type: delegated
+  iam:
+    realm: integration
+  ingress:
+    class: nginx
+    domain: lab.local
+    secret: wildcard-tls
+  storage:
+    endpoint: http://default-hl.minio:9000
+    force_path_style: "true"
+    provider: Minio
+    region: us-east-1
+    secretNamespace: workspace
+    type: s3
+  storageClasses:
+    allowed:
+      - standard
+  network:
+    externalEgressCIDRs:
+      - 0.0.0.0/0
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+      - 10.244.0.0/16
+    blacklistIPs:
+      - 169.254.169.254/32
+    internalEgress:
+      - namespace: minio
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: provider-datalab-minio-it
+        ports:
+          - protocol: TCP
+            port: 9000
+  defaults:
+    overallQuota:
+      storage: 100Gi
+    security:
+      externalEgress: true
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-aws
+data:
+  auth:
+    type: delegated
+  iam:
+    realm: integration
+  ingress:
+    class: nginx
+    domain: lab.local
+    secret: wildcard-tls
+  storage:
+    force_path_style: "false"
+    provider: AWS
+    region: eu-central-1
+    secretNamespace: workspace
+    type: s3
+  storageClasses:
+    allowed:
+      - standard
+  network:
+    externalEgressCIDRs:
+      - 0.0.0.0/0
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+      - 10.244.0.0/16
+    blacklistIPs:
+      - 169.254.169.254/32
+  defaults:
+    overallQuota:
+      storage: 100Gi
+    security:
+      externalEgress: true
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-ovh
+data:
+  auth:
+    type: delegated
+  iam:
+    realm: integration
+  ingress:
+    class: nginx
+    domain: lab.local
+    secret: wildcard-tls
+  storage:
+    force_path_style: "true"
+    provider: Other
+    region: de
+    secretNamespace: workspace
+    type: s3
+  storageClasses:
+    allowed:
+      - standard
+  network:
+    externalEgressCIDRs:
+      - 0.0.0.0/0
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+      - 10.244.0.0/16
+    blacklistIPs:
+      - 169.254.169.254/32
+  defaults:
+    overallQuota:
+      storage: 100Gi
+    security:
+      externalEgress: true
+

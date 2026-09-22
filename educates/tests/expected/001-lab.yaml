@@ -9,11 +9,105 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
   name: s-joe
 spec:
+  crossplane:
+    resourceRefs:
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-joe-datalab-service-custom-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-joe-ws-access
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-joe-ws-admin
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-joe-ws-api
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Group
+      name: s-joe-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Group
+      name: s-joe
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Memberships
+      name: s-joe-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Memberships
+      name: s-joe
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Roles
+      name: s-joe-admin
+      namespace: default
+    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+      kind: Roles
+      name: s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-oauth-client-secret-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-storage-secret-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: resourcequota-s-joe-overall-storage
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: workshop-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: workshopenvironment-s-joe
+      namespace: default
+    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+      kind: ClientServiceAccountRole
+      name: s-joe-ws-api
+      namespace: default
+    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+      kind: Client
+      name: s-joe
+      namespace: default
+    - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
+      kind: GroupMembershipProtocolMapper
+      name: s-joe
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-joe-ws-access
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-joe-ws-admin
+      namespace: default
+    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+      kind: Role
+      name: s-joe-ws-api
+      namespace: default
   secretName: s-joe
   users:
   - joe
 status:
   conditions:
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: WatchCircuitClosed
+    status: "True"
+    type: Responsive
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: ReconcileSuccess
+    status: "True"
+    type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-joe, keycloak-extra-audience-datalab-service-custom-s-joe-datalab-service-custom-audience,
       keycloak-group-admin-s-joe-admin, and 18 more'
@@ -38,7 +132,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     accessType: CONFIDENTIAL
@@ -80,7 +174,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -114,7 +208,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     name: s-joe-admin
@@ -138,7 +232,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     name: s-joe
@@ -162,7 +256,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     addToAccessToken: false
@@ -194,7 +288,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -223,7 +317,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -252,7 +346,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -280,7 +374,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -308,7 +402,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -339,7 +433,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -370,7 +464,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -401,7 +495,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -429,7 +523,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -460,7 +554,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -491,7 +585,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -526,7 +620,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -557,7 +651,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -588,7 +682,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -622,7 +716,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -924,7 +1018,7 @@ metadata:
     controller: true
     kind: Datalab
     name: s-joe
-    uid: ""
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
