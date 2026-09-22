@@ -18,4 +18,7 @@ tests/unit.bash
 ```
 
 Live NetworkPolicy and Kyverno checks are part of the `verify-network`
-integration profile documented in `tests/integration/README.md`.
+integration profile. The `verify-registry` profile verifies a session registry.
+The `verify-postgres` profile applies a Datalab with PostgreSQL enabled and
+verifies internal database access through the generated Datalab Secret. The
+profiles are documented in `tests/integration/README.md`.

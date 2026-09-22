@@ -15,8 +15,8 @@ readonly WORKSPACE_NAMESPACE=workspace
 : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
 : "${CROSSPLANE_VERSION:=2.4.1}"
-: "${PROVIDER_STORAGE_VERSION:=0.3.0}"
-: "${PROVIDER_STORAGE_REPO:=${REPO_ROOT}/../provider-storage}"
+: "${KYVERNO_VERSION:=1.19.1}"
+: "${KYVERNO_CHART_VERSION:=3.9.1}"
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -73,27 +73,6 @@ require_cluster() {
       "${KUBECTL_CONTEXT}" "${PROVIDER_DATALAB_KUBECONFIG}" >&2
     exit 2
   fi
-}
-
-require_provider_storage_tag() {
-  require_command git
-  if ! git -C "${PROVIDER_STORAGE_REPO}" cat-file -e \
-    "${PROVIDER_STORAGE_VERSION}^{commit}" 2>/dev/null; then
-    printf 'Provider Storage tag %s is not available in %s.\n' \
-      "${PROVIDER_STORAGE_VERSION}" "${PROVIDER_STORAGE_REPO}" >&2
-    exit 1
-  fi
-}
-
-storage_manifest() {
-  local path="$1"
-  git -C "${PROVIDER_STORAGE_REPO}" show \
-    "${PROVIDER_STORAGE_VERSION}:${path}"
-}
-
-apply_storage_manifest() {
-  local path="$1"
-  storage_manifest "${path}" | kube apply -f -
 }
 
 render_template() {
@@ -160,80 +139,36 @@ wait_for_crd_established() {
     --for=condition=Established --timeout=2m
 }
 
-wait_for_storage_secret() {
-  local name="$1"
-  local deadline=$((SECONDS + 900))
-
-  kube wait "storage.pkg.internal/${name}" \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    --for=condition=Ready --timeout=15m
-  until kube get "secret/${name}" --namespace "${WORKSPACE_NAMESPACE}" \
-    >/dev/null 2>&1; do
-    if ((SECONDS >= deadline)); then
-      printf 'Storage Secret %s/%s was not created within 15 minutes.\n' \
-        "${WORKSPACE_NAMESPACE}" "${name}" >&2
-      exit 1
-    fi
-    sleep 5
-  done
-}
-
-selected_backend() {
-  local value="${1:-}"
-  case "${value}" in
-    minio|aws|ovh)
-      printf '%s\n' "${value}"
-      ;;
-    *)
-      printf 'Usage: %s <minio|aws|ovh>\n' "$2" >&2
-      exit 1
-      ;;
-  esac
-}
-
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    simple|complex|verify-network)
+    verify-network|verify-registry|verify-postgres)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <simple|complex|verify-network>\n' "$2" >&2
+      printf 'Usage: %s <verify-network|verify-registry|verify-postgres>\n' "$2" >&2
       exit 1
       ;;
   esac
 }
 
-validate_region() {
-  local name="$1"
-  local value="$2"
-  if [[ ! "${value}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
-    printf '%s contains unsupported characters: %s\n' "${name}" "${value}" >&2
-    exit 1
-  fi
-}
+install_kyverno() {
+  require_command helm
+  log "Installing Kyverno ${KYVERNO_VERSION} with chart ${KYVERNO_CHART_VERSION}"
+  helm_it repo add kyverno https://kyverno.github.io/kyverno/ --force-update
+  helm_it repo update kyverno
+  helm_it upgrade --install kyverno kyverno/kyverno \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+    --kube-context "${KUBECTL_CONTEXT}" \
+    --namespace kyverno \
+    --create-namespace \
+    --version "${KYVERNO_CHART_VERSION}" \
+    --wait \
+    --timeout 10m
 
-aws_bucket_name() {
-  local value="${CROSSPLANE_AWS_RESOURCE_PREFIX:-}"
-  if [[ -z "${value}" ]]; then
-    if [[ ! "${CROSSPLANE_AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
-      printf 'Set CROSSPLANE_AWS_ACCOUNT_ID or CROSSPLANE_AWS_RESOURCE_PREFIX.\n' >&2
-      exit 1
-    fi
-    value="datalab-${CROSSPLANE_AWS_ACCOUNT_ID}"
-  fi
-  if [[ ! "${value}" =~ ^[a-z0-9][a-z0-9-]{1,50}[a-z0-9]$ ]]; then
-    printf 'CROSSPLANE_AWS_RESOURCE_PREFIX must be 3-52 lowercase letters, digits, or hyphens.\n' >&2
-    exit 1
-  fi
-  printf '%s-s-joe\n' "${value}"
-}
-
-ovh_project_prefix() {
-  local value="${CROSSPLANE_OVH_PROJECT_ID:-}"
-  if [[ ! "${value}" =~ ^[0-9a-f]{32}$ ]]; then
-    printf 'CROSSPLANE_OVH_PROJECT_ID must be a 32-character lowercase hexadecimal ID.\n' >&2
-    exit 1
-  fi
-  printf '%s\n' "${value:0:12}"
+  kube wait deployment \
+    --namespace kyverno \
+    --selector app.kubernetes.io/instance=kyverno \
+    --for=condition=Available \
+    --timeout=5m
 }

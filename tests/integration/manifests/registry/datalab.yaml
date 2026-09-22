@@ -1,0 +1,25 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: verify-registry
+  namespace: workspace
+  annotations:
+    datalabs.pkg.internal/environment: datalab-minio
+spec:
+  users: []
+  secretName: verify-registry
+  sessions:
+    - name: default
+      state: started
+  vcluster: false
+  data:
+    enabled: false
+  registry:
+    enabled: true
+    storage: 1Gi
+  security:
+    kubernetesAccess: false
+    externalEgress: false

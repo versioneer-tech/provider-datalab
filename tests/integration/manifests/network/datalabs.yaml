@@ -1,0 +1,42 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: __OPEN_DATALAB__
+  namespace: __WORKSPACE_NAMESPACE__
+  annotations:
+    datalabs.pkg.internal/environment: datalab-minio
+spec:
+  users: []
+  secretName: __OPEN_STORAGE_SECRET__
+  sessions: []
+  vcluster: true
+  data:
+    enabled: false
+  registry:
+    enabled: false
+  security:
+    kubernetesAccess: false
+    externalEgress: true
+---
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: __CLOSED_DATALAB__
+  namespace: __WORKSPACE_NAMESPACE__
+  annotations:
+    datalabs.pkg.internal/environment: datalab-minio
+spec:
+  users: []
+  secretName: __CLOSED_STORAGE_SECRET__
+  sessions: []
+  vcluster: false
+  data:
+    enabled: false
+  registry:
+    enabled: false
+  security:
+    kubernetesAccess: false
+    externalEgress: false

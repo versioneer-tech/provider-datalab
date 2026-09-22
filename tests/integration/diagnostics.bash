@@ -18,8 +18,11 @@ fi
 
 require_cluster
 
-kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io,configurations.pkg.crossplane.io || true
-kube get storages.pkg.internal --all-namespaces || true
+kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io || true
+kube get datalabs.pkg.internal --all-namespaces || true
+kube get objects.kubernetes.m.crossplane.io --all-namespaces || true
+kube get postgresclusters.postgres-operator.crunchydata.com --all-namespaces || true
+kube get workshops,workshopenvironments,workshopsessions --all-namespaces || true
 kube get networkpolicies.networking.k8s.io --all-namespaces || true
 kube get validatingpolicies.policies.kyverno.io || true
 kube get pods --all-namespaces -o wide || true

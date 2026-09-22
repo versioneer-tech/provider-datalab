@@ -1,0 +1,37 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  containers:
+    - name: postgres-check
+      image: __CLIENT_IMAGE__
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: POSTGRES_URL
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: __POSTGRES_URL_KEY__
+        - name: PGCONNECT_TIMEOUT
+          value: "10"
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          export PGSSLMODE="${PGSSLMODE:-require}"
+          expected="$(date +%s)"
+          psql "${POSTGRES_URL}" -v ON_ERROR_STOP=1 -tAc \
+            'create table if not exists provider_datalab_verify (id text primary key, value text not null);'
+          psql "${POSTGRES_URL}" -v ON_ERROR_STOP=1 -tAc \
+            "insert into provider_datalab_verify (id, value) values ('probe', '${expected}') on conflict (id) do update set value = excluded.value;"
+          actual="$(psql "${POSTGRES_URL}" -v ON_ERROR_STOP=1 -tAc \
+            "select value from provider_datalab_verify where id = 'probe';" | tr -d '[:space:]')"
+          test "${actual}" = "${expected}"
+          printf 'PASS Datalab PostgreSQL internal write/read verification\n'

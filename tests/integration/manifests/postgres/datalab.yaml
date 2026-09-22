@@ -1,0 +1,24 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: __DATALAB_NAME__
+  namespace: __WORKSPACE_NAMESPACE__
+  annotations:
+    datalabs.pkg.internal/environment: datalab-minio
+spec:
+  users: []
+  secretName: __STORAGE_SECRET__
+  sessions: []
+  data:
+    enabled: false
+  registry:
+    enabled: false
+  databases:
+    pg0:
+      names:
+        - verify
+      storage: 1Gi
+      backupStorage: 1Gi

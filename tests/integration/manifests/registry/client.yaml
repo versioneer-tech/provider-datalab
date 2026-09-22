@@ -1,0 +1,77 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: registry-check
+      image: __CLIENT_IMAGE__
+      env:
+        - name: REGISTRY_URL
+          value: __REGISTRY_URL__
+        - name: REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: __SESSION_SECRET__
+              key: registry_username
+        - name: REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: __SESSION_SECRET__
+              key: registry_password
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          repository=provider-datalab-verification
+          digest=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+          unauthenticated_code="$(curl --silent --output /dev/null \
+            --write-out '%{http_code}' "${REGISTRY_URL}/v2/")"
+          test "${unauthenticated_code}" = 401
+
+          authenticated_code="$(curl --silent --output /dev/null \
+            --write-out '%{http_code}' \
+            --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
+            "${REGISTRY_URL}/v2/")"
+          test "${authenticated_code}" = 200
+
+          headers=/tmp/registry-upload-headers
+          upload_code="$(curl --silent --dump-header "${headers}" \
+            --output /dev/null --write-out '%{http_code}' \
+            --request POST \
+            --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
+            "${REGISTRY_URL}/v2/${repository}/blobs/uploads/")"
+          test "${upload_code}" = 202
+          location="$(awk 'BEGIN {IGNORECASE=1} /^Location:/ {print $2}' \
+            "${headers}" | tr -d '\r' | tail -n 1)"
+          test -n "${location}"
+          location_path="$(printf '%s' "${location}" | \
+            sed -E 's#^https?://[^/]+##')"
+          case "${location_path}" in
+            *\?*) separator='&' ;;
+            *) separator='?' ;;
+          esac
+
+          write_code="$(curl --silent --output /dev/null \
+            --write-out '%{http_code}' --request PUT \
+            --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
+            --header 'Content-Type: application/octet-stream' \
+            --data-binary '' \
+            "${REGISTRY_URL}${location_path}${separator}digest=${digest}")"
+          test "${write_code}" = 201
+
+          read_code="$(curl --silent --output /dev/null \
+            --write-out '%{http_code}' \
+            --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
+            "${REGISTRY_URL}/v2/${repository}/blobs/${digest}")"
+          test "${read_code}" = 200
+
+          printf 'PASS registry authentication and blob write/read verification\n'

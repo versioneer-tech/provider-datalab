@@ -4,34 +4,29 @@
 name: PR
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
   pull_request:
     types: [opened, reopened, synchronize]
     branches:
       - main
 
 concurrency:
-  group: pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  unit_and_simple_integration:
+  unit_and_datalab_integration:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
       PROVIDER_DATALAB_KUBECONFIG: /tmp/provider-datalab-it.kubeconfig
-      PROVIDER_STORAGE_REPO: ${{ github.workspace }}/.integration/provider-storage
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-
-      - name: Checkout Provider Storage
-        uses: actions/checkout@v5
-        with:
-          repository: versioneer-tech/provider-storage
-          ref: 0.3.0
-          path: .integration/provider-storage
 
       - name: Install test CLIs
         run: |
@@ -53,8 +48,17 @@ jobs:
           cluster_name: provider-datalab-it
           config: tests/integration/manifests/kind.yaml
 
-      - name: Run simple integration test
-        run: tests/integration/run.bash simple
+      - name: Deploy integration platform
+        run: tests/integration/deploy-platform.bash
+
+      - name: Verify Datalab network policy
+        run: tests/integration/verify-network.bash
+
+      - name: Verify Datalab registry
+        run: tests/integration/verify-registry.bash
+
+      - name: Verify Datalab PostgreSQL
+        run: tests/integration/verify-postgres.bash
 
       - name: Collect integration diagnostics
         if: failure()

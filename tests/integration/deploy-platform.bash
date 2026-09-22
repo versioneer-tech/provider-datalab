@@ -24,28 +24,6 @@ install_crossplane() {
     --timeout 10m
 }
 
-install_storage_dependencies() {
-  local profile="$1"
-  local backend manifest
-  local -a backends=(minio)
-
-  if [[ "${profile}" == complex ]]; then
-    backends+=(aws ovh)
-  fi
-
-  log "Installing Provider Storage ${PROVIDER_STORAGE_VERSION} dependencies"
-  for backend in "${backends[@]}"; do
-    for manifest in \
-      dependencies/00-mrap.yaml \
-      dependencies/01-deploymentRuntimeConfigs.yaml \
-      dependencies/02-providers.yaml \
-      dependencies/functions.yaml \
-      dependencies/rbac.yaml; do
-      apply_storage_manifest "${backend}/${manifest}"
-    done
-  done
-}
-
 install_datalab() {
   log 'Installing Provider Datalab dependencies and source manifests'
   kube apply -f "${REPO_ROOT}/educates/dependencies/00-mrap.yaml"
@@ -63,45 +41,13 @@ install_datalab() {
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
 }
 
-install_storage_configurations() {
-  local profile="$1"
-
-  log "Installing Provider Storage configuration ${PROVIDER_STORAGE_VERSION}"
-  apply_template \
-    "${MANIFEST_DIR}/provider-storage-configurations.yaml" \
-    PROVIDER_STORAGE_VERSION "${PROVIDER_STORAGE_VERSION}"
-  kube wait configuration.pkg.crossplane.io/provider-storage-minio \
-    --for=condition=Healthy --timeout=10m
-  wait_for_crd_established storages.pkg.internal
-
-  if [[ "${profile}" == complex ]]; then
-    # Each backend package contains the same Storage XRD. Install MinIO as the
-    # single API owner, then add the AWS and OVHcloud compositions from the
-    # same immutable Git tag. Separate backend packages cannot own the XRD
-    # together.
-    apply_storage_manifest aws/composition.yaml
-    apply_storage_manifest ovh/composition.yaml
-  fi
-}
-
 wait_for_packages() {
-  local profile="$1"
   local name
   local -a providers=(
-    provider-minio
     provider-kubernetes
     provider-keycloak
     provider-helm
   )
-
-  if [[ "${profile}" == complex ]]; then
-    providers+=(
-      provider-aws-s3
-      provider-aws-iam
-      upbound-provider-family-aws
-      provider-ovh
-    )
-  fi
 
   for name in "${providers[@]}"; do
     wait_for_provider_runtime "${name}"
@@ -115,22 +61,18 @@ wait_for_packages() {
 }
 
 main() {
-  local profile
-  profile="$(selected_profile "${1:-}" "$0")"
-
   require_cluster
-  require_provider_storage_tag
 
   kube apply -f "${MANIFEST_DIR}/namespaces.yaml"
   install_crossplane
-  install_storage_dependencies "${profile}"
   install_datalab
-  install_storage_configurations "${profile}"
+  kube apply -f "${MANIFEST_DIR}/provider-configs/kubernetes.yaml"
 
   kube apply -f "${MANIFEST_DIR}/minio.yaml"
+  kube apply -f "${MANIFEST_DIR}/storage-secrets.yaml"
   kube rollout status deployment/default --namespace minio --timeout=5m
-  wait_for_packages "${profile}"
-  kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io,configurations.pkg.crossplane.io
+  wait_for_packages
+  kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io
 }
 
 main "$@"

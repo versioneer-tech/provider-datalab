@@ -1,155 +1,74 @@
 # Dedicated Kind integration environment
 
-This harness uses only the `provider-datalab-it` Kind cluster and the
-`kind-provider-datalab-it` context. It stores that context in
-`/tmp/provider-datalab-it.kubeconfig` by default. The scripts do not use the
-default kubeconfig or another local cluster.
+The integration tests use only the `provider-datalab-it` Kind cluster and the
+`kind-provider-datalab-it` context. The default kubeconfig is
+`/tmp/provider-datalab-it.kubeconfig`. The scripts do not use another local
+cluster or the default kubeconfig.
 
-The setup follows the Provider Storage integration strategy:
+The harness tests Provider Datalab behavior. It does not install or test
+Provider Storage. It creates fixed profile-named Secrets for the disposable
+in-cluster MinIO service because the Datalab composition needs object-storage
+credentials.
 
-- create or reuse one repository-specific Kind cluster;
-- pass the kubeconfig and context to every cluster command;
-- install Crossplane with automatic provider activation disabled;
-- install explicit provider and function versions;
-- wait for package health before creating test resources;
-- keep cloud credentials outside this repository.
+Crossplane `2.4.1` is the reproducible test pin. Provider Datalab supports
+Crossplane v2 or later.
 
-The harness tests with Crossplane `2.4.1` and Provider Storage `0.3.0`.
-Crossplane `2.4.1` is a reproducible test pin, not the package's minimum
-supported version. The harness reads the Provider Storage dependency manifests
-from that Git tag in the adjacent `provider-storage` checkout. Set
-`PROVIDER_STORAGE_REPO` if the checkout is elsewhere. The storage profiles do
-not install Kyverno. The `verify-network` profile installs Kyverno because it
-applies CEL policies.
-
-Run the local render tests before cluster integration:
+Run the render tests before cluster integration:
 
 ```bash
 tests/unit.bash
 ```
 
-The integration harness has three profiles. The `simple` profile installs only
-the MinIO Provider Storage dependencies and creates storage for Jeff and Jane:
+## Datalab manifests by profile
 
-```bash
-tests/integration/run.bash simple
-```
+| Profile | Datalabs | What the test verifies |
+| --- | --- | --- |
+| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, DNS, MinIO, metadata, vCluster, and external access. |
+| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session with a 1 GiB registry. The test authenticates to the session registry and writes and reads a blob. |
+| `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | The Datalab requests PostgreSQL `pg0` with database `verify`, 1 GiB primary storage, and 1 GiB backup storage. The test uses the generated connection Secret for an internal SQL write and read. |
 
-The `complex` profile adds the AWS and OVHcloud dependencies, compositions,
-and storage resources for Joe and John:
+All Datalabs use a matching profile-named prerequisite Secret. They disable the
+data component. Network and PostgreSQL Datalabs have no sessions. Each profile
+removes its successful test resources. A failed profile keeps its resources
+for diagnosis.
 
-```bash
-tests/integration/run.bash complex
-```
+## Run profiles locally
 
-The `verify-network` profile uses the same `provider-datalab-it` cluster and
-runs the simple profile before it verifies NetworkPolicy and Kyverno behavior:
+Each command creates or reuses the dedicated cluster, deploys the common
+platform, and runs one profile:
 
 ```bash
 tests/integration/run.bash verify-network
+tests/integration/run.bash verify-registry
+tests/integration/run.bash verify-postgres
 ```
 
-This profile installs Kyverno `v1.19.1` with Helm chart `3.9.1`. Kind `v0.24.0`
-or later provides NetworkPolicy enforcement through its default network
-implementation, so the shared cluster does not need a second CNI. Successful
-verification removes its temporary namespaces and policy. Failed verification
-keeps them for diagnosis. Set `KEEP_NETWORK_RESOURCES=1` to keep successful
-test resources. Each network check runs three times and writes timing results
-to `/tmp/provider-datalab-network-verification.tsv`. Set `NETWORK_ITERATIONS`
-or `NETWORK_RESULTS_FILE` to change these benchmark settings.
+The network profile installs Kyverno `1.19.1` with chart `3.9.1` because it
+tests a CEL admission policy. Kind `0.24.0` or later provides NetworkPolicy
+enforcement through its default network implementation. Set
+`KEEP_NETWORK_RESOURCES=1` to retain successful resources. Each network check
+runs three times and writes timings to
+`/tmp/verify-network.tsv`.
 
-The complex profile requires the AWS and OVHcloud credentials and settings
-described below. All profiles use the published MinIO package as the single
-owner of the shared Storage API.
+The registry profile installs Kyverno because the Educates runtime applies
+Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
+`2.2.1`, which contains Educates `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
+retain successful resources.
 
-The platform phase installs the published MinIO Provider Storage configuration.
-That package owns the shared `Storage` API. The AWS and OVHcloud packages are
-also published, but each backend package contains the same `Storage` XRD.
-Crossplane does not let more than one `ConfigurationRevision` control that
-XRD. Installing the AWS or OVHcloud package beside MinIO makes the new revision
-unhealthy with a `cannot establish control of object` error.
+The PostgreSQL profile installs Crunchy PGO `6.0.1`, which is the version
+pinned by EOEPCA+. Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
+resources. PGO remains installed after the profile finishes.
 
-The harness therefore keeps MinIO as the single API owner. The complex profile
-applies the AWS and OVHcloud compositions from the same immutable Git tag in
-the adjacent checkout. This gives all three backends the exact `0.3.0`
-source without conflicting XRD ownership. All profiles deploy the isolated
-test MinIO instance. The fixed MinIO credentials are only for this disposable
-cluster.
+## GitHub Actions
 
-## Storage assignment
+Pull requests to `main`, pushes to `main`, and manual workflow runs execute the
+unit suite and all three integration profiles. The profiles share one Kind
+cluster in the job. Tag publication does not run the tests again. A release tag
+must point to a commit that passed the main-branch workflow.
 
-The test storage resources use this assignment:
+## Cleanup
 
-| Datalab | Backend | EnvironmentConfig |
-| --- | --- | --- |
-| `s-joe` | AWS | `storage-aws` |
-| `s-john` | OVHcloud | `storage-ovh` |
-| `s-jeff` | MinIO | `storage-minio` |
-| `s-jane` | MinIO | `storage-minio` |
-
-Create the MinIO resources for Jeff and Jane:
-
-```bash
-tests/integration/deploy-storages.bash minio
-```
-
-Provider Storage writes the generated `s-jeff` and `s-jane` Secrets to the
-`workspace` namespace. Provider Datalab reads the storage Secrets from that
-same namespace.
-
-## AWS for Joe
-
-Create `workspace/aws-provider-creds` through your approved secret-management
-path. The Secret must contain the `credentials` key expected by Provider
-Storage. Do not commit the Secret.
-
-Set the non-secret account settings and deploy Joe's storage:
-
-```bash
-export CROSSPLANE_AWS_ACCOUNT_ID=123456789012
-export CROSSPLANE_AWS_REGION=eu-central-1
-export CROSSPLANE_AWS_RUNTIME_ROLE_ARN=arn:aws:iam::123456789012:role/provider-storage/crossplane
-tests/integration/deploy-storages.bash aws
-```
-
-The bucket name defaults to `datalab-<account-id>-s-joe`. Set
-`CROSSPLANE_AWS_RESOURCE_PREFIX` when the account needs a different globally
-unique prefix.
-
-## OVHcloud for John
-
-Create `workspace/ovh-provider-creds` through your approved secret-management
-path. The Secret must contain the `credentials` key expected by Provider
-Storage. Do not commit the Secret.
-
-Set the non-secret project settings and deploy John's storage:
-
-```bash
-export CROSSPLANE_OVH_PROJECT_ID=0123456789abcdef0123456789abcdef
-export CROSSPLANE_OVH_STORAGE_REGION=de
-tests/integration/deploy-storages.bash ovh
-```
-
-Use `de` or `gra` for `CROSSPLANE_OVH_STORAGE_REGION`.
-
-## Profile behavior
-
-The simple profile is safe for pull-request automation because it uses only the
-MinIO instance in the dedicated Kind cluster. The complex profile is for an
-approved local run or a protected manual workflow because it creates external
-cloud resources. The verify-network profile is a local security check. GitHub
-Actions runs only the simple profile.
-
-For a new local environment, run the simple profile first. Then add the AWS and
-OVHcloud credential Secrets to its `workspace` namespace, set the non-secret
-cloud values described above, and run the complex profile. The complex run is
-idempotent and reuses the same dedicated cluster.
-
-The harness reads Provider Storage dependency manifests from the exact Git tag
-configured by `PROVIDER_STORAGE_VERSION`. In CI, check out that tag separately
-and set `PROVIDER_STORAGE_REPO` to its path.
-
-Delete only this dedicated cluster when the validation cycle is complete:
+Delete only the dedicated cluster when the validation cycle is complete:
 
 ```bash
 KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
