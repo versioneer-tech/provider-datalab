@@ -1,16 +1,32 @@
 # Welcome to Provider Datalab
 
-**Provider Datalab is a PaaS-style building block for platform operators.** It turns one `Datalab` claim into an operator-governed cloud workspace with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry.
+**Provider Datalab is a PaaS-style building block for shared data and compute
+environments.** It provides a Crossplane API that lets teams request the
+resources they need through one `Datalab` claim, while platform operators keep
+control of policy, capacity, and lifecycle.
 
-The primary reader for these docs is the platform operator. The operator decides which teams may run which workloads, which services are available, how egress is controlled, which state is backed up, and how lifecycle is governed. Engineers and data users should still be able to read the examples and understand the contract they are asking the platform to fulfill. Sponsors and governance stakeholders should be able to see where accountability lives: policy, capacity, audit, and durable data are platform responsibilities, not hidden inside a user terminal.
+A Datalab gives a team tools to browse, share, and work with object-storage
+data. The storage itself can be provisioned through
+[Provider Storage](https://provider-storage.versioneer.at/) or another storage
+service. Provider Datalab uses the resulting endpoint and credentials; it does
+not create buckets.
 
-A named Datalab session gives users a browser editor, terminal, persistent
-workspace, and approved service access. A session runs in a dedicated
-Kubernetes namespace and may include a vCluster when it needs a separate
-Kubernetes API. Users receive only the workspace access, credentials, and
-permissions assigned to that session. Platform operators continue to manage
-RBAC, Pod Security, NetworkPolicies, quotas, backups, ingress, and lifecycle
-controls.
+The same claim can request managed services, including PostgreSQL databases,
+MongoDB document stores, Redis caches, Qdrant vector databases, and a Docker
+registry. These services remain visible to the platform team, which can manage
+their security, backup, capacity, and lifecycle.
+
+Compute is optional. A named Datalab session provides a hosted VS Code
+instance, a terminal, a persistent workspace, and common command-line tools.
+It is preconfigured to use the approved object storage. When Kubernetes access
+is allowed, users can deploy workloads and supporting components to their
+assigned namespace or to an optional vCluster with a separate Kubernetes API.
+
+These docs are written mainly for platform operators. Operators define the
+available services and control identity, ingress, RBAC, Pod Security,
+NetworkPolicies, quotas, network access, backups, and lifecycle. Engineers and
+data users can use the examples to understand what a `Datalab` request creates
+and which responsibilities remain with the platform team.
 
 ## Architecture
 
@@ -21,8 +37,6 @@ defines the `Datalab` resource as the public contract and keeps runtime
 resources as internal implementation details.
 
 Provider Datalab requires [Crossplane v2 or later](https://crossplane.io). It provides a tenant-facing `Datalab` API and compositions that connect systems you already operate: Kubernetes namespaces, ingress, identity, object-storage credentials, persistent volumes, database operators, cache and vector-store operators, and the Educates runtime.
-
-Provider Datalab does **not** create object-storage buckets. Use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process to create buckets and credentials. Provider Datalab consumes those credentials and wires storage access into the lab.
 
 ## Operator Contract
 
@@ -46,16 +60,20 @@ For governance, this gives sponsors a concrete review surface: a Datalab can be 
 
 ## What It Provides
 
-At its core, Provider Datalab provides:
+Provider Datalab provides:
 
 - A **Datalab Composite Resource Definition (XRD)**.
 - **Compositions for Crossplane v2 or later** that create environments with sessions, storage access, vClusters, identity wiring, and optional managed backends.
-- A default `datalab-educates` runtime that launches **VS Code Server**, terminals, a storage browser, and common tools such as `awscli` and `rclone`.
+- A default `datalab-educates` runtime that launches **VS Code Server**,
+  terminals, and common tools such as `awscli` and `rclone`, with a shared
+  `package-r` Data service.
 - Optional **Keycloak-managed access**, including confidential clients, runtime OAuth2 credential Secrets, groups, roles, role scope mappings, role bindings, service-account API access, and memberships.
 - Support for delegated authentication through the surrounding platform, for example NGINX external auth or APISIX OIDC protection at the ingress layer.
 - Optional platform-managed services from the same `Datalab` claim: PostgreSQL databases, MongoDB document stores, Redis key-value/cache stores, Qdrant vector stores, and a Docker registry.
 
-For end users, this means a simple workspace experience: they can open a familiar online IDE, access storage and credentials that have already been wired in, and work with higher-level services without understanding every underlying Kubernetes resource. For software engineers, it means the platform contract is declarative and reviewable instead of a long checklist of manual setup steps.
+Users get an online IDE with configured storage, credentials, and managed
+services. Software engineers get a declarative platform contract that they can
+review.
 
 ---
 
@@ -70,9 +88,10 @@ For end users, this means a simple workspace experience: they can open a familia
 - **Integrated or delegated identity**
   Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the ingress layer. Generated Datalab clients are confidential, include a service-account-only `ws_api` role for automation, and can add configured service audiences to access tokens.
 - **Storage integration**
-  Consume object-storage credentials from Provider Storage or another storage process, and mount them into the lab.
-- **Extensible by design**
-  Built on Crossplane, ready to connect additional operator-owned services without changing the user-facing API.
+  Consume object-storage credentials from Provider Storage or another storage
+  process, and make them available to session tools and the shared Data service.
+- **Additional services**
+  Connect other operator-owned services without changing the user-facing API.
 
 ---
 
@@ -109,11 +128,18 @@ spec:
   vcluster: true
 ```
 
-This provisions a vCluster within a dedicated Kubernetes namespace and starts the Educates tooling stack (including VS Code Server and a terminal), together with bundled utilities. The declared session also gets a durable workspace PVC that remains available if the session is later set to `state: stopped`. A storage browser is available with storage automatically mounted, and additional tools such as `awscli` and `rclone` are preinstalled to support typical data lab tasks like coding, data exploration, and wrangling.
+This provisions a vCluster in a dedicated Kubernetes namespace and starts VS
+Code Server, a terminal, and the bundled tools. The declared session gets a
+workspace PVC that remains available when the session is stopped. Its Data tab
+uses the shared `package-r` service to access S3.
 
 Access to the datalab is intended for Alice, since she currently is the only user associated with this lab. Depending on the platform configuration, access can be enforced by Keycloak-managed resources or by delegated ingress authentication.
 
-Combined with a small, cluster-specific `EnvironmentConfig` (realm, ingress domain/class, storage secret), the platform handles the rest—provisioning the chosen runtime, mounting credentials, and preloading content.
+The cluster-specific `EnvironmentConfig` defines the realm, ingress, and
+storage settings. The provider then creates the runtime, supplies credentials,
+and loads the requested content.
+
+The ingress controller is selected by `ingress.class`.
 
 The same claim can also request stateful platform services:
 

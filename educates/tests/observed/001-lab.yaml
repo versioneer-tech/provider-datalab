@@ -1,0 +1,65 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: workshopenvironment-s-joe
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: workshopenvironment-s-joe
+status:
+  atProvider:
+    manifest:
+      apiVersion: training.educates.dev/v1beta1
+      kind: WorkshopEnvironment
+      metadata:
+        name: s-joe
+      status:
+        educates:
+          namespace: s-joe
+          phase: Running
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-storage-secret-s-joe
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-storage-secret-s-joe
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-joe
+        namespace: datalab
+      data:
+        AWS_ACCESS_KEY_ID: am9lLWFjY2Vzcy1rZXk=
+        AWS_SECRET_ACCESS_KEY: am9lLXNlY3JldC1rZXk=
+        AWS_SESSION_TOKEN: ZmFsbGJhY2stc2Vzc2lvbi10b2tlbg==
+        AWS_ENDPOINT_URL: aHR0cHM6Ly9zZWNyZXQtczMuY3VzdG9t
+        AWS_REGION: Y3VzdG9tLXNlY3JldC1yZWdpb24=
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-runtime-storage-secret-s-joe
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-joe
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-joe-datalab
+        namespace: s-joe
+      data:
+        AWS_ACCESS_KEY_ID: am9lLWFjY2Vzcy1rZXk=
+        AWS_SECRET_ACCESS_KEY: am9lLXNlY3JldC1rZXk=
+        AWS_SESSION_TOKEN: ZmFsbGJhY2stc2Vzc2lvbi10b2tlbg==
+        AWS_ENDPOINT_URL: aHR0cHM6Ly9zZWNyZXQtczMuY3VzdG9t
+        AWS_REGION: Y3VzdG9tLXNlY3JldC1yZWdpb24=

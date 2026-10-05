@@ -1,0 +1,58 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: qdrant-check
+      image: __CLIENT_IMAGE__
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: QDRANT_URL
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: QDRANT_VERIFY_URL
+        - name: QDRANT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: QDRANT_VERIFY_API_KEY
+        - name: QDRANT_READ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: QDRANT_VERIFY_READ_API_KEY
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          expected="$(date +%s)"
+          create_code="$(curl --silent --show-error --output /tmp/create-response \
+            --write-out '%{http_code}' \
+            --request PUT --header "api-key: ${QDRANT_API_KEY}" \
+            --header 'Content-Type: application/json' \
+            --data '{"vectors":{"size":1,"distance":"Dot"}}' \
+            "${QDRANT_URL}/collections/verify")"
+          case "${create_code}" in
+            200|201|409) ;;
+            *) cat /tmp/create-response; exit 1 ;;
+          esac
+          curl --fail-with-body --silent --show-error \
+            --request PUT --header "api-key: ${QDRANT_API_KEY}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"points\":[{\"id\":1,\"vector\":[0.1],\"payload\":{\"value\":\"${expected}\"}}]}" \
+            "${QDRANT_URL}/collections/verify/points?wait=true" >/dev/null
+          response="$(curl --fail-with-body --silent --show-error \
+            --header "api-key: ${QDRANT_READ_API_KEY}" \
+            "${QDRANT_URL}/collections/verify/points/1?with_payload=true")"
+          compact="$(printf '%s' "${response}" | tr -d '[:space:]')"
+          printf '%s' "${compact}" | grep -Fq "\"value\":\"${expected}\""
+          printf 'PASS Datalab Qdrant internal write/read verification\n'

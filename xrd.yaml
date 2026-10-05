@@ -19,6 +19,25 @@ spec:
         openAPIV3Schema:
           type: object
           x-kubernetes-preserve-unknown-fields: true
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                data:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    enabled:
+                      type: boolean
+              x-kubernetes-validations:
+                - rule: >-
+                    (!has(oldSelf.data) || !has(oldSelf.data.enabled) ? true : oldSelf.data.enabled)
+                    ==
+                    (!has(self.data) || !has(self.data.enabled) ? true : self.data.enabled)
+                  message: >-
+                    spec.data.enabled cannot change after the Datalab is created because
+                    Educates saves the Workshop specification for the environment.
     - name: v1beta2
       served: true
       referenceable: true
@@ -32,6 +51,14 @@ spec:
             spec:
               type: object
               description: Desired configuration of the datalab.
+              x-kubernetes-validations:
+                - rule: >-
+                    (!has(oldSelf.data) || !has(oldSelf.data.enabled) ? true : oldSelf.data.enabled)
+                    ==
+                    (!has(self.data) || !has(self.data.enabled) ? true : self.data.enabled)
+                  message: >-
+                    spec.data.enabled cannot change after the Datalab is created because
+                    Educates saves the Workshop specification for the environment.
               required:
                 - users
               properties:
@@ -177,22 +204,31 @@ spec:
                 data:
                   type: object
                   description: >-
-                    Optional settings for the Data component. When enabled, each started
-                    session gets a Data service UI backed by package-r and the workspace
-                    storage mount.
+                    Optional settings for the shared Data component. When enabled, one
+                    package-r service runs in the Datalab runtime namespace. When the
+                    environment enables Data ingress, started sessions link to its
+                    permanent authenticated endpoint.
                   default: {}
                   properties:
                     enabled:
                       type: boolean
                       description: >-
-                        Whether to provision the Data component for each started Datalab session.
-                        Effective default: true.
+                        Whether to provision the shared package-r service. When the
+                        EnvironmentConfig also enables Data ingress, Data tabs for
+                        started sessions link to its permanent authenticated endpoint.
+                        Set this field when you create the Datalab. Its effective value
+                        cannot change after creation because Educates saves the Workshop
+                        specification for the environment. A false value omits the shared
+                        service and related tabs or ingress. Effective default: true.
                       default: true
                     readOnlyMount:
                       type: boolean
                       description: >-
-                        Whether the workspace storage should be mounted read-only in the Data
-                        component. Effective default: false.
+                        Controls package-r application permissions. When true, the package-r
+                        user keeps its default read-only permissions. When false, package-r
+                        grants create, delete, modify, and rename permissions. This field does
+                        not configure a filesystem mount, and the S3 IAM policy remains
+                        authoritative. Effective default: false.
                       default: false
                 registry:
                   type: object

@@ -61,12 +61,18 @@ The supplied dependency manifests and tests use the following tested pins:
 - **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.gateway`.
   Use a Layer-4 capable controller such as Envoy Gateway, or your cluster-validated equivalent. The bundled Gateway API `v1.5.1` CRDs serve `TLSRoute` as `gateway.networking.k8s.io/v1`.
 - **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).
-  Suggested tested line: MongoDB Operator `v1.7.x` (or your cluster-validated equivalent).
+  Tested baseline: MongoDB Kubernetes Operator chart `1.12.0`, which serves
+  `MongoDBCommunity` as `mongodbcommunity.mongodb.com/v1` and accepts the CR
+  fields emitted by this composition.
   The operator installation must provide its own controller RBAC; `provider-datalab` only creates namespace-local Mongo prerequisites such as service accounts, a Role, and an appdb RoleBinding inside the tenant namespace.
 - **Redis Kubernetes Operator installed** if you plan to use `spec.cacheStores` (cache store feature).
-  Suggested tested line: Redis Operator `v0.21.x` (or your cluster-validated equivalent).
+  Tested baseline: Redis Operator chart `0.26.1`, with operator `0.26.0`. It
+  serves `Redis` as `redis.redis.opstreelabs.in/v1beta2` and accepts the CR
+  fields emitted by this composition.
 - **Qdrant Kubernetes Operator installed** if you plan to use `spec.vectorStores` (vector store feature).
-  Suggested tested line: Qdrant Operator `v1.15.x` (or your cluster-validated equivalent).
+  Tested baseline: Qdrant Operator `0.0.3`, which serves `QdrantCluster` as
+  `qdrant.io/v1alpha1`. Do not use the newer development line without changing
+  the composition because that line uses a different API group.
 
 Without the corresponding optional database operators installed, `spec.databases`, `spec.documentStores`, `spec.cacheStores`, and/or `spec.vectorStores` cannot reconcile.
 
@@ -127,7 +133,10 @@ Each generated Datalab client is confidential. Provider Datalab publishes creden
 
 The generated roles are intentionally separated. Users get `ws_access` through the Datalab group, selected administrators get `ws_admin` through the admin group, and the generated client service account gets only `ws_api`. Extra token audiences are opt-in: when `EnvironmentConfig.data.iam.extraAudiences` is set, tokens issued by generated Datalab clients include those audience values. Any service or gateway that requires such an audience must use the same configured value and its OAuth client must emit it. Client-credentials tokens therefore identify machine automation and must not be accepted as browser-user tokens by ingress or application policy.
 
-When installed, a Datalab will provision a vcluster (if enabled), launch the Educates tooling stack (VS Code Server, terminal, storage browser, plus tools like `awscli` and `rclone`), wire in object-storage credentials, and reconcile any requested platform-managed data services.
+A Datalab creates the selected runtime, one shared `package-r` Data service,
+and any requested managed services. It also supplies object-storage
+credentials to the runtime. Complete IAM and ingress settings add a permanent
+OAuth-protected Data endpoint.
 
 ## Step 2 – Install the Configuration Package (after dependencies)
 
@@ -165,14 +174,18 @@ metadata:
 data:
   iam:
     realm: demo
+    issuerURL: https://identity.acme.org/realms/demo
+    internalURL: http://identity.identity-system.svc/realms/demo
   auth:
     # Use "credentials" to reuse storage credentials, or "delegated" when
     # the ingress/platform layer handles authentication.
     type: delegated
   ingress:
+    enabled: true
     class: nginx
     domain: datalab.acme.org
     secret: wildcard-tls
+    annotations: {}
   storage:
     endpoint: https://s3.demo
     provider: Other
@@ -205,6 +218,17 @@ data:
 ```
 
 The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
+
+`ingress.enabled` defaults to `false`, which gives each session an
+Educates-authenticated Data ingress. Set it to `true` for one permanent
+OAuth-protected ingress per Datalab. This requires `iam.issuerURL`,
+`iam.internalURL`, `ingress.class`, `ingress.domain`, and `ingress.secret`.
+Missing values stop reconciliation and appear in the Datalab status. Use
+`ingress.annotations` for controller-specific settings.
+
+`storage.endpoint` identifies the S3 endpoint for session tools, cluster tools,
+and `package-r`. The browser uses the permanent Data ingress and does not need
+direct access to the S3 endpoint.
 
 `storageClasses.allowed` is an optional allowlist for durable session PVCs. If it is set, Provider Datalab uses a requested StorageClass only when it is listed there; otherwise it falls back to the first entry. If the list is omitted or empty, any requested StorageClass is allowed.
 
@@ -243,6 +267,12 @@ network:
 That renders an operator-owned `allow-internal-egress` NetworkPolicy alongside
 `allow-namespace-egress` and the external egress policy path.
 
+Direct S3 requests from `package-r` follow the same Datalab network policy. Use
+`internalEgress` for an object-store Pod in another namespace. For an external
+S3 address, enable external egress and include the required destination CIDR.
+Browser requests go to the OAuth-protected Data ingress. They do not connect
+to S3 directly.
+
 If you only have `kubectl`, you can usually read `podCIDRs` from the nodes:
 
 ```bash
@@ -273,12 +303,15 @@ egress, such as cloud metadata endpoints. Provider Datalab always renders
 `network.excludePolicies`. When a Datalab enables a vCluster, it also renders
 `allow-vcluster-egress`. This policy permits TCP ports 443 and 8443 only to
 that Datalab's vCluster control-plane Pods. Provider Datalab renders
-`allow-dns-egress` when `externalEgress` or the vCluster is enabled. It renders
+`allow-dns-egress` when `externalEgress`, the vCluster, or Data is enabled. It
+renders
 `allow-external-egress` only when `externalEgress` is true. Use
 `excludePolicies` only as an operator escape hatch when another policy system
-supplies equivalent controls.
+supplies equivalent controls. Excluding `allow-dns-egress` also suppresses the
+Datalab-owned `package-r-dns` policy. This policy supplies the DNS rule needed
+while older Workshop snapshots are migrated.
 
-If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes broad external egress while retaining namespace-local and vCluster API access. DNS remains enabled only when a vCluster needs service-name resolution.
+If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes broad external egress while retaining namespace-local and vCluster API access. DNS remains enabled when a vCluster or Data needs service-name resolution.
 
 Apply dependency manifests in order so that later objects can reference earlier ones cleanly: MRAP first, then deployment runtime configs, providers, namespaced provider configs, functions, and finally RBAC. After each dependency stage, wait for the corresponding `ProviderRevision` or `FunctionRevision` to become healthy before moving on.
 
@@ -295,6 +328,13 @@ The `storage` section in the `EnvironmentConfig` tells Provider Datalab where to
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
+The S3 identity must permit bucket listing with AWS `s3:ListAllMyBuckets`.
+
+`package-r` uses these credentials for direct S3 access. The configured
+`storage.endpoint` must be reachable from the `package-r` Pod. The pinned vnext
+release uses path-style S3 addresses, so the endpoint must support that address
+style.
+
 Create it manually, for example:
 
 ```bash
@@ -302,8 +342,6 @@ kubectl -n datalab create secret generic demo \
   --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID> \
   --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
 ```
-
----
 
 ## Step 5 – Create a Datalab
 
@@ -313,6 +351,12 @@ The minimal example creates a user-scoped lab with one session. From an operator
 - No sessions -> no declared session PVC or runtime is pre-created.
 - Files present -> workshop tab enabled; none -> no workshop tab.
 - `spec.vcluster: true` -> vcluster provisioned; `false` -> namespace-scoped runtime.
+- `spec.data.enabled` creates or omits the shared service, Data tabs, and Data
+  ingress.
+- The effective `spec.data.enabled` value cannot change after creation. Use the
+  migration procedure above for an existing environment.
+- `spec.data.readOnlyMount` selects read-only or write application permissions.
+  S3 IAM takes precedence.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2

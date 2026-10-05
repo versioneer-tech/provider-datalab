@@ -24,13 +24,13 @@ separate Pod launcher.
 
 ## Current NetworkPolicy Baseline
 
-Provider Datalab injects generated `NetworkPolicy` objects into the Educates
-environment objects. They select all Pods in the runtime namespace.
+Provider Datalab creates namespace-wide egress policies through the Educates
+environment and creates package-r policies directly in the runtime namespace.
 
 - `deny-egress` and `allow-namespace-egress` are rendered by default.
   Together they deny egress first, then allow traffic to Pods in the same
   runtime namespace.
-- `allow-dns-egress` is rendered when `externalEgress` is true or a vCluster is
+- `allow-dns-egress` is rendered when `externalEgress`, a vCluster, or Data is
   enabled. `allow-external-egress` is rendered only when `externalEgress` is
   true.
 - `allow-vcluster-egress` is rendered when `spec.vcluster` is true. It allows
@@ -53,6 +53,9 @@ environment objects. They select all Pods in the runtime namespace.
 - `EnvironmentConfig.data.network.podCIDRs` and `serviceCIDR` are also excluded
   from broad external egress. This keeps other runtime namespaces unreachable
   by PodIP or ServiceIP unless an operator adds an explicit allow policy.
+- Session access allows port 8888 only from Educates workshop Pods. Permanent
+  access allows port 4180 from any source; OAuth protects the application.
+  The proxy can reach the configured IAM namespace.
 
 `deny-egress` is the default-deny base policy, so it blocks all egress unless
 another selected policy also allows it.
@@ -66,8 +69,8 @@ The namespace and Pod selectors prevent the rule from granting access to
 another Datalab or to unrelated Pods in a vCluster host namespace.
 
 `allow-dns-egress` allows DNS lookups to `kube-system` on TCP and UDP port 53.
-An enabled vCluster retains this rule because its kubeconfig uses the
-`my-vcluster` Service name.
+Data retains this rule for its S3 endpoint, and an enabled vCluster retains it
+because its kubeconfig uses the `my-vcluster` Service name.
 
 `allow-external-egress` allows outbound traffic to the CIDRs in
 `externalEgressCIDRs`, minus the excluded ranges from `blacklistIPs`,
@@ -94,7 +97,7 @@ specific namespace by name. Kubernetes does not define a standard label such as
 scheme is an operator convention, not a Kubernetes one.
 
 With `externalEgress: false`, the generated policies do not allow external
-network access. DNS remains enabled only when a vCluster needs service-name
+network access. DNS remains enabled when a vCluster or Data needs service-name
 resolution. The Datalab's vCluster API remains reachable when it is enabled.
 Other cross-namespace traffic is not allowed by default; operators must
 configure `internalEgress` for explicit cross-namespace dependencies.

@@ -1,0 +1,32 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: mongo-check
+      image: __CLIENT_IMAGE__
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: MONGO_VERIFY_URI
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          expected="$(date +%s)"
+          actual="$(mongosh "${MONGO_URI}" --quiet --eval \
+            "const dbh=db.getSiblingDB('verify'); dbh.probe_checks.updateOne({_id:'probe'},{\$set:{value:'${expected}'}},{upsert:true}); const doc=dbh.probe_checks.findOne({_id:'probe'}); if (!doc) quit(2); print(doc.value);" \
+            | tail -n 1 | tr -d '[:space:]')"
+          test "${actual}" = "${expected}"
+          printf 'PASS Datalab MongoDB internal write/read verification\n'

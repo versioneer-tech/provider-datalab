@@ -120,7 +120,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecdata">data</a></b></td>
         <td>object</td>
         <td>
-          Optional settings for the Data component. When enabled, each started session gets a Data service UI backed by package-r and the workspace storage mount.<br/>
+          Optional settings for the shared Data component. When enabled, one package-r service runs in the Datalab runtime namespace. When the environment enables Data ingress, started sessions link to its permanent authenticated endpoint.<br/>
           <br/>
             <i>Default</i>: map[]<br/>
         </td>
@@ -271,7 +271,7 @@ Desired configuration of the datalab.
 
 
 
-Optional settings for the Data component. When enabled, each started session gets a Data service UI backed by package-r and the workspace storage mount.
+Optional settings for the shared Data component. When enabled, one package-r service runs in the Datalab runtime namespace. When the environment enables Data ingress, started sessions link to its permanent authenticated endpoint.
 
 <table>
     <thead>
@@ -286,7 +286,7 @@ Optional settings for the Data component. When enabled, each started session get
         <td><b>enabled</b></td>
         <td>boolean</td>
         <td>
-          Whether to provision the Data component for each started Datalab session. Effective default: true.<br/>
+          Whether to provision the shared package-r service. When the EnvironmentConfig also enables Data ingress, Data tabs for started sessions link to its permanent authenticated endpoint. Set this field when you create the Datalab. Its effective value cannot change after creation because Educates saves the Workshop specification for the environment. A false value omits the shared service and related tabs or ingress. Effective default: true.<br/>
           <br/>
             <i>Default</i>: true<br/>
         </td>
@@ -295,7 +295,7 @@ Optional settings for the Data component. When enabled, each started session get
         <td><b>readOnlyMount</b></td>
         <td>boolean</td>
         <td>
-          Whether the workspace storage should be mounted read-only in the Data component. Effective default: false.<br/>
+          Controls package-r application permissions. When true, the package-r user keeps its default read-only permissions. When false, package-r grants create, delete, modify, and rename permissions. This field does not configure a filesystem mount, and the S3 IAM policy remains authoritative. Effective default: false.<br/>
           <br/>
             <i>Default</i>: false<br/>
         </td>

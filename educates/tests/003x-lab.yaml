@@ -47,6 +47,22 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
+      name: data-deployment-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-dns-networkpolicy-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-networkpolicy-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-service-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
       name: db-configmap-s-jane-pg0
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -68,6 +84,10 @@ spec:
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
       name: observe-oauth-client-secret-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: observe-runtime-storage-secret-s-jane
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
@@ -155,14 +175,365 @@ status:
     status: "True"
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
-      db-tlsroute-s-jane-pg0, and 24 more'
+    message: 'Unready resources: data-deployment-s-jane, data-dns-networkpolicy-s-jane,
+      data-networkpolicy-s-jane, and 29 more'
     reason: Creating
     status: "False"
     type: Ready
   sessions:
     default:
       state: started
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-deployment-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-deployment-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: package-r
+        name: package-r
+        namespace: s-jane
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 2
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: s-jane
+            app.kubernetes.io/name: package-r
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            annotations:
+              datalabs.pkg.internal/storage-secret-checksum: d8e9c156c11397da59c77ba1582bd7fe0ece612458adc2f1bca6fbed005c226d
+            labels:
+              app.kubernetes.io/instance: s-jane
+              app.kubernetes.io/name: package-r
+          spec:
+            automountServiceAccountToken: false
+            containers:
+            - env:
+              - name: HOME
+                value: /tmp
+              - name: PACKAGE_R_DATABASE
+                value: /state/package-r.db
+              - name: PACKAGE_R_ADDRESS
+                value: 0.0.0.0
+              - name: PACKAGE_R_PORT
+                value: "8888"
+              - name: PACKAGE_R_ROOT
+                value: /
+              - name: PACKAGE_R_BUCKETS
+                value: ""
+              - name: XDG_CACHE_HOME
+                value: /cache
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_ACCESS_KEY_ID
+                    name: s-jane-datalab
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_SECRET_ACCESS_KEY
+                    name: s-jane-datalab
+              - name: AWS_SESSION_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_SESSION_TOKEN
+                    name: s-jane-datalab
+                    optional: true
+              - name: AWS_ENDPOINT_URL
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_ENDPOINT_URL
+                    name: s-jane-datalab
+              - name: AWS_REGION
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_REGION
+                    name: s-jane-datalab
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: package-r
+                periodSeconds: 20
+              name: package-r
+              ports:
+              - containerPort: 8888
+                name: package-r
+                protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: package-r
+                periodSeconds: 10
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 1Gi
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 100
+                runAsUser: 1000
+              startupProbe:
+                failureThreshold: 30
+                httpGet:
+                  path: /health
+                  port: package-r
+                periodSeconds: 5
+              volumeMounts:
+              - mountPath: /state
+                name: state
+              - mountPath: /cache
+                name: cache
+              - mountPath: /tmp
+                name: tmp
+            initContainers:
+            - args:
+              - |
+                set -eu
+
+                database=/state/package-r.db
+                work_database=/state/package-r.db.new
+
+                rm -f "$work_database"
+                export PACKAGE_R_DATABASE="$work_database"
+
+                /package-r config init   --address=0.0.0.0   --port=8888   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
+
+                /package-r users add default ""
+                /package-r users add datalab ''
+                /package-r users add jane ''
+                /package-r shares add default public /s-jane/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
+
+                mv "$work_database" "$database"
+              command:
+              - /bin/sh
+              - -ec
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+              imagePullPolicy: IfNotPresent
+              name: prepare-database
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 100
+                runAsUser: 1000
+              volumeMounts:
+              - mountPath: /state
+                name: state
+              - mountPath: /tmp
+                name: tmp
+            nodeSelector:
+              kubernetes.io/arch: amd64
+            securityContext:
+              fsGroup: 100
+              fsGroupChangePolicy: OnRootMismatch
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+            terminationGracePeriodSeconds: 30
+            volumes:
+            - emptyDir:
+                sizeLimit: 64Mi
+              name: state
+            - emptyDir:
+                sizeLimit: 10Gi
+              name: cache
+            - emptyDir:
+                sizeLimit: 256Mi
+              name: tmp
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration
+      >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas
+      >= 1
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-dns-networkpolicy-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-dns-networkpolicy-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: package-r
+        name: package-r-dns
+        namespace: s-jane
+      spec:
+        egress:
+        - ports:
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+          - ipBlock:
+              cidr: 10.43.0.0/16
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-networkpolicy-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-networkpolicy-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: package-r
+        name: package-r
+        namespace: s-jane
+      spec:
+        egress: []
+        ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                training.educates.dev/application: workshop
+          ports:
+          - port: 8888
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/instance: s-jane
+            app.kubernetes.io/name: package-r
+        policyTypes:
+        - Ingress
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-service-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-service-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: package-r
+        name: package-r
+        namespace: s-jane
+      spec:
+        ports:
+        - name: http
+          port: 8888
+          protocol: TCP
+          targetPort: package-r
+        selector:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: package-r
+        type: ClusterIP
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -810,6 +1181,7 @@ spec:
       stringData:
         client_id: s-jane
         client_secret: sample-oauth2-client-secret
+        cookie_secret: 26eca712832c3e62dedb9c72fe8332dd
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -884,6 +1256,37 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: observe-runtime-storage-secret-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jane-datalab
+        namespace: s-jane
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: observe-storage-secret-s-jane
   labels:
     crossplane.io/composite: s-jane
@@ -909,7 +1312,7 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -1115,17 +1518,6 @@ spec:
               podSelector: {}
               policyTypes:
               - Egress
-          - apiVersion: v1
-            kind: PersistentVolumeClaim
-            metadata:
-              name: s-jane-datalab
-            spec:
-              accessModes:
-              - ReadOnlyMany
-              resources:
-                requests:
-                  storage: 1Mi
-              storageClassName: csi-rclone
           secrets:
           - name: s-jane-datalab
             namespace: default
@@ -1161,7 +1553,12 @@ spec:
           - secretRef:
               name: s-jane-datalab
           ingresses:
-          - host: data-$(session_name).$(workshop_namespace).svc.$(cluster_domain)
+          - authentication:
+              type: session
+            headers:
+            - name: X-Package-R-User
+              value: datalab
+            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
             name: data
             port: 8888
             protocol: http
@@ -1173,147 +1570,6 @@ spec:
               token:
                 enabled: true
           objects:
-          - apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              labels:
-                app.kubernetes.io/instance: data-$(session_name)
-                app.kubernetes.io/name: data
-              name: data-$(session_name)
-              namespace: $(workshop_namespace)
-            spec:
-              replicas: 1
-              selector:
-                matchLabels:
-                  app.kubernetes.io/instance: data-$(session_name)
-                  app.kubernetes.io/name: data
-              template:
-                metadata:
-                  labels:
-                    app.kubernetes.io/instance: data-$(session_name)
-                    app.kubernetes.io/name: data
-                spec:
-                  containers:
-                  - env:
-                    - name: FB_AUTH_MAPPER
-                      value: reader-noshare
-                    - name: FB_ALLOW_CHANGING
-                      value: "false"
-                    - name: FB_ALLOW_SHARING
-                      value: "false"
-                    - name: FB_CREATE_USER_DIR
-                      value: "false"
-                    - name: FB_DATABASE
-                      value: /db/bolt.db
-                    - name: FB_SERVER_PORT
-                      value: "8888"
-                    - name: WORKSPACE
-                      valueFrom:
-                        fieldRef:
-                          fieldPath: metadata.namespace
-                    - name: FB_ROOT
-                      value: /workspace
-                    - name: FB_BRANDING_NAME
-                      valueFrom:
-                        fieldRef:
-                          fieldPath: metadata.namespace
-                    - name: FB_AUTH_HEADER
-                      value: Accept
-                    - name: AWS_ACCESS_KEY_ID
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_ACCESS_KEY_ID
-                          name: s-jane-datalab
-                    - name: AWS_SECRET_ACCESS_KEY
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_SECRET_ACCESS_KEY
-                          name: s-jane-datalab
-                    - name: AWS_REGION
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_REGION
-                          name: s-jane-datalab
-                    - name: AWS_ENDPOINT_URL
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_ENDPOINT_URL
-                          name: s-jane-datalab
-                    - name: AWS_S3_FORCE_PATH_STYLE
-                      valueFrom:
-                        secretKeyRef:
-                          key: AWS_S3_FORCE_PATH_STYLE
-                          name: s-jane-datalab
-                    image: ghcr.io/versioneer-tech/package-r:v2026.6.5
-                    imagePullPolicy: Always
-                    livenessProbe:
-                      exec:
-                        command:
-                        - /bin/sh
-                        - -lc
-                        - out="$( (stat /workspace >/dev/null) 2>&1 || true )"; if
-                          echo "$out" | grep -qi "Transport endpoint is not connected";
-                          then exit 1; fi; exit 0
-                      periodSeconds: 20
-                    name: data
-                    ports:
-                    - containerPort: 8888
-                      name: http
-                    readinessProbe:
-                      exec:
-                        command:
-                        - /bin/sh
-                        - -lc
-                        - stat /workspace >/dev/null
-                      periodSeconds: 10
-                    resources:
-                      limits:
-                        cpu: "1"
-                        memory: 512Mi
-                      requests:
-                        cpu: 100m
-                        memory: 128Mi
-                    securityContext:
-                      allowPrivilegeEscalation: false
-                      capabilities:
-                        drop:
-                        - ALL
-                    volumeMounts:
-                    - mountPath: /workspace
-                      name: data
-                      readOnly: true
-                    - mountPath: /db
-                      name: db
-                  securityContext:
-                    fsGroup: 100
-                    fsGroupChangePolicy: OnRootMismatch
-                    runAsGroup: 100
-                    runAsNonRoot: true
-                    runAsUser: 1000
-                    seccompProfile:
-                      type: RuntimeDefault
-                  serviceAccountName: $(service_account)
-                  volumes:
-                  - name: data
-                    persistentVolumeClaim:
-                      claimName: s-jane-datalab
-                  - emptyDir: {}
-                    name: db
-          - apiVersion: v1
-            kind: Service
-            metadata:
-              name: data-$(session_name)
-              namespace: $(workshop_namespace)
-            spec:
-              ports:
-              - name: http
-                port: 8888
-                protocol: TCP
-                targetPort: http
-              selector:
-                app.kubernetes.io/instance: data-$(session_name)
-                app.kubernetes.io/name: data
-              type: ClusterIP
           - apiVersion: v1
             data:
               cidr: 10.43.0.0/16
@@ -1434,8 +1690,6 @@ spec:
           ingress:
             domain: lab.acme.com
             secret: wildcard-tls
-          password: ""
-          username: '*'
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

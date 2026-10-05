@@ -1,10 +1,16 @@
-# Datalab Provider
+# Provider Datalab
 
-**Provider Datalab packages a Crossplane API for platform-operated cloud workspaces.** A platform operator defines the guardrails once: ingress, identity, storage credentials, quotas, sandbox policy, network egress, and optional service classes. Teams then request a `Datalab` claim and get workspace sessions with VS Code Server, terminals, storage access, optional vclusters, and managed data services.
+**Provider Datalab provides a Crossplane API for shared data environments.**
+Teams can collaborate on object-storage data, request managed services such as
+PostgreSQL and Redis, and optionally start compute sessions with a hosted VS
+Code instance and Kubernetes access. Object storage can be provisioned through
+[Provider Storage](https://provider-storage.versioneer.at/) or another storage
+service.
 
-The package ships the **Datalab** Composite Resource Definition (XRD) and ready-to-use **Compositions** for Crossplane v2 or later. The API is meant to be useful to software engineers and data teams, but the ownership model is operator-first: durable state, security posture, backup, capacity, and lifecycle stay visible to the platform team.
-
-For the operating model, start with the [welcome guide](https://provider-datalab.versioneer.at/). The documentation also covers [usage concepts](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/), [sandbox security](https://provider-datalab.versioneer.at/latest/security/), the [Datalab public contract](https://provider-datalab.versioneer.at/latest/architecture/0001-use-the-datalab-crd-as-the-workspace-contract/), and [additional services](https://provider-datalab.versioneer.at/latest/how-to-guides/additional_services/) such as Dask and MLflow.
+Platform operators define the available services and set the rules for
+identity, ingress, storage, quotas, network access, security, backup, and
+lifecycle. See the [Provider Datalab documentation](https://provider-datalab.versioneer.at/)
+for the operating model, configuration, and examples.
 
 <div align="left">
   <a href="https://github.com/versioneer-tech/provider-datalab/raw/refs/heads/main/docs/imgs/datalab-vs-code-server.png" target="_blank">
@@ -57,12 +63,16 @@ metadata:
 data:
   iam:
     realm: acme
+    issuerURL: https://identity.acme.com/realms/acme
+    internalURL: http://identity.identity-system.svc/realms/acme
   auth:
     type: delegated
   ingress:
+    enabled: true
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
+    annotations: {} # optional controller-specific Ingress annotations
   storage:
     endpoint: https://s3.acme.com
     force_path_style: "true"
@@ -102,8 +112,8 @@ data:
   database:
     gateway: # optional (only needed if database should be externally accessible)
       parentName: default
-      parentNamespace: projectcontour
-      sectionName: postgres-passthrough
+      parentNamespace: gateway-system
+      sectionName: database-tls
     storageClassName: ""
     backupStorageClassName: ""
 
@@ -165,6 +175,19 @@ uses the first allowed class. If the list is omitted or empty, any requested
 StorageClass is allowed and an omitted `storageClassName` lets Kubernetes use
 the cluster default.
 
+`spec.data.enabled` enables one shared `package-r` service. Its UI can browse S3,
+create temporary download URLs, and share object prefixes with optional
+passwords.
+
+`EnvironmentConfig.data.ingress.enabled` enables one permanent OAuth-protected
+ingress per Datalab. It requires `iam.issuerURL`, `iam.internalURL`,
+`ingress.class`, `ingress.domain`, and `ingress.secret`. Missing values stop
+reconciliation and appear in the Datalab status.
+
+`spec.data.readOnlyMount: true` keeps the default read-only permissions. A
+`false` value grants create, delete, modify, and rename permissions. The S3 IAM
+policy takes precedence.
+
 ### Optional managed services
 
 The same claim can request durable platform services:
@@ -212,7 +235,9 @@ The `storage` section in the `EnvironmentConfig` tells Provider Datalab where to
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
-The values must provide access to the storage endpoint listed in `EnvironmentConfig.data.storage` (e.g. `endpoint`, `region`, `provider`).
+The values must provide access to the storage endpoint listed in
+`EnvironmentConfig.data.storage` (for example, `endpoint`, `region`, and
+`provider`). `package-r` uses `endpoint` for direct S3 requests.
 
 You can create this secret manually, for example:
 

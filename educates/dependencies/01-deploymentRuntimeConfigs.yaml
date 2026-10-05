@@ -64,13 +64,13 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            args:
+            - --enable-watches
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
                 - ALL
-            # args:
-            # - --debug
             resources:
               requests:
                 cpu: 100m

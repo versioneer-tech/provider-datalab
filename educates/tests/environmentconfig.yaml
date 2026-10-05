@@ -14,6 +14,7 @@ data:
     secret: wildcard-tls
   storage:
     endpoint: https://s3.acme
+    publicEndpoint: https://s3-public.acme
     force_path_style: "true"
     provider: Other
     region: acme
