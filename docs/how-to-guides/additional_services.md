@@ -7,7 +7,12 @@ While this already covers many data exploration and transformation needs, users 
 
 Although many of these tools can be started directly from the integrated terminal and exposed via VS Code’s port forwarding feature, that approach tends to be **fragile and transient** - you must carefully manage Python environments, avoid breaking dependencies during upgrades, and remember that the terminal session lifetime is temporary.
 
-A more robust approach is to deploy such services **as native Kubernetes applications** - directly from within the Datalab when the operator has allowed Kubernetes API access. Users can deploy workloads within their assigned namespace, or, when running in **vCluster** mode, inside a virtual control plane with its own CRDs, RBAC rules, and controllers. This enables running frameworks that typically require cluster-wide resources, for example a Dask Gateway, without handing users the host cluster.
+Deploy these services **as native Kubernetes applications** when the operator
+has allowed Kubernetes API access. Users can deploy workloads in their assigned
+namespace or, in **vCluster** mode, in a virtual control plane with its own
+CRDs, RBAC rules, and controllers. This supports frameworks that need
+cluster-wide resources, such as Dask Gateway, without giving users access to
+the host cluster.
 
 For production-like state, prefer the declarative `Datalab` service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. For object-storage buckets, use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process, then pass the credentials to Provider Datalab. This keeps the durable parts visible to the operator and gives governance reviewers a named service to inspect instead of unmanaged state inside a session.
 

@@ -1,0 +1,45 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: redis-check
+      image: __CLIENT_IMAGE__
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: REDIS_VERIFY_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: REDIS_VERIFY_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: REDIS_VERIFY_PASSWORD
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          expected="$(date +%s)"
+          REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
+            SET provider-datalab:verify "${expected}" >/dev/null
+          actual="$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw \
+            GET provider-datalab:verify)"
+          test "${actual}" = "${expected}"
+          printf 'PASS Datalab Redis internal write/read verification\n'

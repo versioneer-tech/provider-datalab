@@ -535,7 +535,10 @@ A Datalab requires credentials to an S3-compatible storage system. Provider Data
 
 Provider Datalab reads the credentials from a Kubernetes Secret named via `spec.secretName`, or by the `Datalab` name when `spec.secretName` is omitted. The Secret lives in `EnvironmentConfig.data.storage.secretNamespace`, which is usually the same namespace as the `Datalab` claim.
 
-This secret must include at least `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The endpoint and provider are defined in `EnvironmentConfig.data.storage`.
+This secret must include at least `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+The endpoint and provider are defined in `EnvironmentConfig.data.storage`.
+For the Data service, `storage.endpoint` must be reachable from the `package-r`
+Pod. Browsers use the authenticated Data ingress and do not access S3 directly.
 
 ### Security and Access Policy
 The `spec.security` section controls access permissions and runtime privilege level for sessions.
@@ -551,6 +554,11 @@ Key fields:
   platform level in `EnvironmentConfig` or per workspace in `spec.security`;
   see [Sandbox Security Measures](../security/sandbox-controls.md) for the
   policy details.
+
+Direct S3 requests from `package-r` follow the same Datalab egress policy. Use
+`EnvironmentConfig.data.network.internalEgress` for an endpoint in another
+runtime namespace, or allow its external address through the external egress
+policy.
 
 For the full policy model, see [Sandbox Security Measures](../security/sandbox-controls.md).
 
@@ -602,7 +610,7 @@ The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported
 
 ```yaml
 # Joe gets a personal datalab s-joe with no pre-created session.
-# He must explicitly declare and start a session himself; nothing is running by default.
+# He must declare and start a session; none runs by default.
 # No vCluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
 # A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
@@ -616,8 +624,8 @@ spec:
   secretName: s-joe
 ```
 
-- Joe’s Datalab exists but is idle until he launches a session; the Data tab's
-  `package-r` runtime starts with the session when `spec.data.enabled` is true.
+- Joe's Datalab has no session runtime until he starts one. The shared
+  `package-r` service still runs when Data is enabled.
 - Useful for lightweight, on-demand environments.
 - Keycloak ensures Joe is authorized to access his workspace.
 
@@ -635,7 +643,7 @@ spec:
 # - Docker registry is disabled for this shared example.
 # - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
-# The data component for the object storage mount and browser UI is disabled.
+# The shared package-r service and all per-session Data tabs are disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
 # Additionally, one MongoDB-backed document store is provisioned:
 # - prod with 1 Gi storage
@@ -716,7 +724,7 @@ spec:
 # - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
 # - Overall environment PVC storage quota: increased to 200 Gi.
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
-# The data component for the object storage mount and browser UI is configured as readonly.
+# The Data service disallows create, rename, modify, and delete operations.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
@@ -756,6 +764,7 @@ spec:
 - The lab also runs in **privileged** mode, which enables Docker with 20 Gi of session-local workspace storage.
 - The Datalab environment namespace accepts at most 200 Gi of aggregate PVC requests.
 - The **admin role** grants full control within her namespace or vCluster.
+- The Data service is read-only.
 - This is the registry-enabled example, so session-backed registry behavior can be validated here.
 - Suitable for trusted advanced development or testing that really needs full Kubernetes control.
 - Treat this as an operator-approved exception because it combines privileged runtime, registry writes, and elevated Kubernetes authority.

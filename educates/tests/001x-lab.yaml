@@ -5,141 +5,123 @@
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
-  name: s-john
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
+  name: s-joe
 spec:
   crossplane:
     resourceRefs:
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-john-ws-access
+      kind: ProtocolMapper
+      name: s-joe-datalab-service-custom-audience
       namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
-      name: s-john-ws-admin
+      name: s-joe-ws-access
       namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
-      name: s-john-ws-api
+      name: s-joe-ws-admin
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: RoleMapper
+      name: s-joe-ws-api
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Group
-      name: s-john-admin
+      name: s-joe-admin
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Group
-      name: s-john
+      name: s-joe
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Memberships
-      name: s-john-admin
+      name: s-joe-admin
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Memberships
-      name: s-john
+      name: s-joe
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Roles
-      name: s-john-admin
+      name: s-joe-admin
       namespace: default
     - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
       kind: Roles
-      name: s-john
+      name: s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: data-deployment-s-john
+      name: data-deployment-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: data-dns-networkpolicy-s-john
+      name: data-dns-networkpolicy-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: data-networkpolicy-s-john
+      name: data-networkpolicy-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: data-service-s-john
+      name: data-service-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: observe-oauth-client-secret-s-john
+      name: observe-oauth-client-secret-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: observe-runtime-storage-secret-s-john
+      name: observe-runtime-storage-secret-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: observe-storage-secret-s-john
+      name: observe-storage-secret-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: persistentvolumeclaim-s-john-analysis-persistent
+      name: resourcequota-s-joe-overall-storage
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: persistentvolumeclaim-s-john-default-persistent
+      name: workshop-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: resourcequota-s-john-overall-storage
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshop-s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopenvironment-s-john
-      namespace: datalab
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopsession-s-john-default
+      name: workshopenvironment-s-joe
       namespace: default
     - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
       kind: ClientServiceAccountRole
-      name: s-john-ws-api
+      name: s-joe-ws-api
       namespace: default
     - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
       kind: Client
-      name: s-john
+      name: s-joe
       namespace: default
     - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
       kind: GroupMembershipProtocolMapper
-      name: s-john
+      name: s-joe
       namespace: default
     - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
       kind: Role
-      name: s-john-ws-access
+      name: s-joe-ws-access
       namespace: default
     - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
       kind: Role
-      name: s-john-ws-admin
+      name: s-joe-ws-admin
       namespace: default
     - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
       kind: Role
-      name: s-john-ws-api
+      name: s-joe-ws-api
       namespace: default
-  files:
-  - git:
-      ref: origin/main
-      url: https://github.com/versioneer-tech/datalab-example
-    includePaths:
-    - /workshop/**
-    - /data/**
-    - /README.md
-    path: .
-  persistence:
-    storageClassName: sbs-default-retain
-  secretName: s-john
-  sessions:
-  - name: default
-  - name: analysis
-    state: stopped
+    - apiVersion: v1
+      kind: Secret
+      name: s-joe-datalab
+      namespace: default
+  secretName: s-joe
   users:
-  - john
-  vcluster: false
+  - joe
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -151,33 +133,28 @@ status:
     status: "True"
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: data-deployment-s-john, data-dns-networkpolicy-s-john,
-      data-networkpolicy-s-john, and 25 more'
+    message: 'Unready resources: data-deployment-s-joe, data-dns-networkpolicy-s-joe,
+      data-networkpolicy-s-joe, and 23 more'
     reason: Creating
     status: "False"
     type: Ready
-  sessions:
-    analysis:
-      state: stopped
-    default:
-      state: started
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: data-deployment-s-john
+    crossplane.io/composition-resource-name: data-deployment-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: data-deployment-s-john
+    crossplane.io/composite: s-joe
+  name: data-deployment-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -185,25 +162,25 @@ spec:
       kind: Deployment
       metadata:
         labels:
-          app.kubernetes.io/instance: s-john
+          app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
         name: package-r
-        namespace: s-john
+        namespace: s-joe
       spec:
         replicas: 1
         revisionHistoryLimit: 2
         selector:
           matchLabels:
-            app.kubernetes.io/instance: s-john
+            app.kubernetes.io/instance: s-joe
             app.kubernetes.io/name: package-r
         strategy:
           type: Recreate
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/storage-secret-checksum: 7c21af0ce164252960c22e7ea6aba8992d11e70d137a8c9a0ead0a8a76face50
+              datalabs.pkg.internal/storage-secret-checksum: a6b43718053137759cfac7ac735946144d6daaa0f17b55d8ad726788f3f31ebf
             labels:
-              app.kubernetes.io/instance: s-john
+              app.kubernetes.io/instance: s-joe
               app.kubernetes.io/name: package-r
           spec:
             automountServiceAccountToken: false
@@ -227,28 +204,28 @@ spec:
                 valueFrom:
                   secretKeyRef:
                     key: AWS_ACCESS_KEY_ID
-                    name: s-john-datalab
+                    name: s-joe-datalab
               - name: AWS_SECRET_ACCESS_KEY
                 valueFrom:
                   secretKeyRef:
                     key: AWS_SECRET_ACCESS_KEY
-                    name: s-john-datalab
+                    name: s-joe-datalab
               - name: AWS_SESSION_TOKEN
                 valueFrom:
                   secretKeyRef:
                     key: AWS_SESSION_TOKEN
-                    name: s-john-datalab
+                    name: s-joe-datalab
                     optional: true
               - name: AWS_ENDPOINT_URL
                 valueFrom:
                   secretKeyRef:
                     key: AWS_ENDPOINT_URL
-                    name: s-john-datalab
+                    name: s-joe-datalab
               - name: AWS_REGION
                 valueFrom:
                   secretKeyRef:
                     key: AWS_REGION
-                    name: s-john-datalab
+                    name: s-joe-datalab
               image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
               imagePullPolicy: IfNotPresent
               livenessProbe:
@@ -309,8 +286,8 @@ spec:
 
                 /package-r users add default ""
                 /package-r users add datalab '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
-                /package-r users add john '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
-                /package-r shares add default public /s-john/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
+                /package-r users add joe '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
+                /package-r shares add default public /s-joe/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
 
                 mv "$work_database" "$database"
               command:
@@ -372,18 +349,18 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: data-dns-networkpolicy-s-john
+    crossplane.io/composition-resource-name: data-dns-networkpolicy-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: data-dns-networkpolicy-s-john
+    crossplane.io/composite: s-joe
+  name: data-dns-networkpolicy-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -391,10 +368,10 @@ spec:
       kind: NetworkPolicy
       metadata:
         labels:
-          app.kubernetes.io/instance: s-john
+          app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
         name: package-r-dns
-        namespace: s-john
+        namespace: s-joe
       spec:
         egress:
         - ports:
@@ -422,18 +399,18 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: data-networkpolicy-s-john
+    crossplane.io/composition-resource-name: data-networkpolicy-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: data-networkpolicy-s-john
+    crossplane.io/composite: s-joe
+  name: data-networkpolicy-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -441,10 +418,10 @@ spec:
       kind: NetworkPolicy
       metadata:
         labels:
-          app.kubernetes.io/instance: s-john
+          app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
         name: package-r
-        namespace: s-john
+        namespace: s-joe
       spec:
         egress: []
         ingress:
@@ -457,7 +434,7 @@ spec:
             protocol: TCP
         podSelector:
           matchLabels:
-            app.kubernetes.io/instance: s-john
+            app.kubernetes.io/instance: s-joe
             app.kubernetes.io/name: package-r
         policyTypes:
         - Ingress
@@ -473,18 +450,18 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: data-service-s-john
+    crossplane.io/composition-resource-name: data-service-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: data-service-s-john
+    crossplane.io/composite: s-joe
+  name: data-service-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -492,10 +469,10 @@ spec:
       kind: Service
       metadata:
         labels:
-          app.kubernetes.io/instance: s-john
+          app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
         name: package-r
-        namespace: s-john
+        namespace: s-joe
       spec:
         ports:
         - name: http
@@ -503,7 +480,7 @@ spec:
           protocol: TCP
           targetPort: package-r
         selector:
-          app.kubernetes.io/instance: s-john
+          app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
         type: ClusterIP
   providerConfigRef:
@@ -517,84 +494,74 @@ apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-client-s-john
+    crossplane.io/composition-resource-name: keycloak-client-s-joe
   labels:
-    crossplane.io/claim-name: s-john
-    crossplane.io/composite: s-john
-  name: s-john
+    crossplane.io/claim-name: s-joe
+    crossplane.io/composite: s-joe
+  name: s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     accessType: CONFIDENTIAL
-    adminUrl: https://s-john.lab.acme.com
-    clientId: s-john
+    adminUrl: https://s-joe.lab.acme.com
+    clientId: s-joe
     directAccessGrantsEnabled: false
     fullScopeAllowed: false
     implicitFlowEnabled: false
-    name: s-john
+    name: s-joe
     oauth2DeviceAuthorizationGrantEnabled: false
     realmId: acme
-    rootUrl: https://s-john.lab.acme.com
+    rootUrl: https://s-joe.lab.acme.com
     serviceAccountsEnabled: true
     standardFlowEnabled: true
     validRedirectUris:
-    - https://s-john.lab.acme.com/*
-    - https://s-john-default.lab.acme.com/*
-    - https://editor-s-john-default.lab.acme.com/*
-    - https://s-john-default-editor.lab.acme.com/*
-    - https://data-s-john-default.lab.acme.com/*
-    - https://s-john-default-data.lab.acme.com/*
-    - https://s-john-analysis.lab.acme.com/*
-    - https://editor-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-editor.lab.acme.com/*
-    - https://data-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-data.lab.acme.com/*
+    - https://s-joe.lab.acme.com/*
     - http://localhost:*
     webOrigins:
-    - https://s-john.lab.acme.com/*
-    - https://s-john-default.lab.acme.com/*
-    - https://editor-s-john-default.lab.acme.com/*
-    - https://s-john-default-editor.lab.acme.com/*
-    - https://data-s-john-default.lab.acme.com/*
-    - https://s-john-default-data.lab.acme.com/*
-    - https://s-john-analysis.lab.acme.com/*
-    - https://editor-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-editor.lab.acme.com/*
-    - https://data-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-data.lab.acme.com/*
+    - https://s-joe.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
   writeConnectionSecretToRef:
-    name: s-john-oauth-client
+    name: s-joe-oauth-client
 ---
-apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-kind: Group
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-group-admin-s-john-admin
+    crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-joe-datalab-service-custom-audience
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-admin
+    crossplane.io/composite: s-joe
+  name: s-joe-datalab-service-custom-audience
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
-    name: s-john-admin
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: datalab-service-custom
+    name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -604,21 +571,45 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-group-s-john
+    crossplane.io/composition-resource-name: keycloak-group-admin-s-joe-admin
   labels:
-    crossplane.io/composite: s-john
-  name: s-john
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
-    name: s-john
+    name: s-joe-admin
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+kind: Group
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-group-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    name: s-joe
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -628,18 +619,18 @@ apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
 kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-mapper-s-john
+    crossplane.io/composition-resource-name: keycloak-mapper-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: s-john
+    crossplane.io/composite: s-joe
+  name: s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     addToAccessToken: false
@@ -648,9 +639,9 @@ spec:
     claimName: groups
     clientIdSelector:
       matchLabels:
-        crossplane.io/claim-name: s-john
+        crossplane.io/claim-name: s-joe
     fullPath: false
-    name: s-john
+    name: s-joe
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -660,26 +651,26 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-admins-s-john-admin
+    crossplane.io/composition-resource-name: keycloak-memberships-admins-s-joe-admin
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-admin
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
-      name: s-john-admin
+      name: s-joe-admin
       policy:
         resolution: Required
     members:
-    - john
+    - joe
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -689,26 +680,26 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Memberships
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-memberships-users-s-john
+    crossplane.io/composition-resource-name: keycloak-memberships-users-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: s-john
+    crossplane.io/composite: s-joe
+  name: s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     members:
-    - john
+    - joe
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -718,22 +709,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-admin-s-john-ws-admin
+    crossplane.io/composition-resource-name: keycloak-role-admin-s-joe-ws-admin
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-admin
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-admin
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     name: ws_admin
@@ -746,22 +737,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-api-s-john-ws-api
+    crossplane.io/composition-resource-name: keycloak-role-api-s-joe-ws-api
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-api
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-api
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     name: ws_api
@@ -774,27 +765,27 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-john-ws-admin
+    crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-joe-ws-admin
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-admin
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-admin
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     realmId: acme
     roleIdRef:
-      name: s-john-ws-admin
+      name: s-joe-ws-admin
       policy:
         resolution: Required
   providerConfigRef:
@@ -805,27 +796,27 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-john-ws-api
+    crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-joe-ws-api
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-api
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-api
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     realmId: acme
     roleIdRef:
-      name: s-john-ws-api
+      name: s-joe-ws-api
       policy:
         resolution: Required
   providerConfigRef:
@@ -836,27 +827,27 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-john-ws-access
+    crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-joe-ws-access
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-access
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-access
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     realmId: acme
     roleIdRef:
-      name: s-john-ws-access
+      name: s-joe-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -867,22 +858,22 @@ apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-user-s-john-ws-access
+    crossplane.io/composition-resource-name: keycloak-role-user-s-joe-ws-access
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-access
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-access
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     name: ws_access
@@ -895,27 +886,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-admin-s-john-admin
+    crossplane.io/composition-resource-name: keycloak-roles-admin-s-joe-admin
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-admin
+    crossplane.io/composite: s-joe
+  name: s-joe-admin
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
-      name: s-john-admin
+      name: s-joe-admin
       policy:
         resolution: Required
     realmId: acme
     roleIdsRefs:
-    - name: s-john-ws-admin
+    - name: s-joe-ws-admin
       policy:
         resolution: Required
   providerConfigRef:
@@ -926,27 +917,27 @@ apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Roles
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-roles-user-s-john
+    crossplane.io/composition-resource-name: keycloak-roles-user-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: s-john
+    crossplane.io/composite: s-joe
+  name: s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     realmId: acme
     roleIdsRefs:
-    - name: s-john-ws-access
+    - name: s-joe-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -957,31 +948,31 @@ apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: ClientServiceAccountRole
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-service-account-role-api-s-john-ws-api
+    crossplane.io/composition-resource-name: keycloak-service-account-role-api-s-joe-ws-api
   labels:
-    crossplane.io/composite: s-john
-  name: s-john-ws-api
+    crossplane.io/composite: s-joe
+  name: s-joe-ws-api
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
     realmId: acme
     roleRef:
-      name: s-john-ws-api
+      name: s-joe-ws-api
       policy:
         resolution: Required
     serviceAccountUserClientIdRef:
-      name: s-john
+      name: s-joe
       policy:
         resolution: Required
   providerConfigRef:
@@ -992,25 +983,25 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-john
+    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: observe-oauth-client-secret-s-john
+    crossplane.io/composite: s-joe
+  name: observe-oauth-client-secret-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-john-oauth-client
+        name: s-joe-oauth-client
         namespace: default
   managementPolicies:
   - Observe
@@ -1023,26 +1014,26 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-john
+    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: observe-runtime-storage-secret-s-john
+    crossplane.io/composite: s-joe
+  name: observe-runtime-storage-secret-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-john-datalab
-        namespace: s-john
+        name: s-joe-datalab
+        namespace: s-joe
   managementPolicies:
   - Observe
   providerConfigRef:
@@ -1054,25 +1045,25 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-storage-secret-s-john
+    crossplane.io/composition-resource-name: observe-storage-secret-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: observe-storage-secret-s-john
+    crossplane.io/composite: s-joe
+  name: observe-storage-secret-s-joe
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-john
+        name: s-joe
         namespace: datalab
   managementPolicies:
   - Observe
@@ -1085,94 +1076,18 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-analysis-persistent
+    crossplane.io/composition-resource-name: resourcequota-s-joe-overall-storage
   labels:
-    crossplane.io/composite: s-john
-  name: persistentvolumeclaim-s-john-analysis-persistent
+    crossplane.io/composite: s-joe
+  name: resourcequota-s-joe-overall-storage
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: s-john-analysis-persistent
-        namespace: s-john
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-        storageClassName: sbs-default-retain
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-default-persistent
-  labels:
-    crossplane.io/composite: s-john
-  name: persistentvolumeclaim-s-john-default-persistent
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: s-john-default-persistent
-        namespace: s-john
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-        storageClassName: sbs-default-retain
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: resourcequota-s-john-overall-storage
-  labels:
-    crossplane.io/composite: s-john
-  name: resourcequota-s-john-overall-storage
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1180,10 +1095,10 @@ spec:
       kind: ResourceQuota
       metadata:
         name: overall-storage
-        namespace: s-john
+        namespace: s-joe
       spec:
         hard:
-          requests.storage: 100Gi
+          requests.storage: 80Gi
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -1191,29 +1106,65 @@ spec:
     policy: SuccessfulCreate
   watch: true
 ---
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
+apiVersion: v1
+kind: Secret
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshop-s-john
+    crossplane.io/composition-resource-name: secret-s-joe-datalab
   labels:
-    crossplane.io/composite: s-john
-  name: workshop-s-john
+    crossplane.io/composite: s-joe
+  name: s-joe-datalab
   namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+stringData:
+  AWS_ACCESS_KEY_ID: joe-access-key
+  AWS_ENDPOINT_URL: https://secret-s3.custom
+  AWS_REGION: custom-secret-region
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  AWS_SECRET_ACCESS_KEY: joe-secret-key
+  AWS_SESSION_TOKEN: fallback-session-token
+  configData: |
+    [joe-access-key]
+    type = s3
+    provider = Other
+    endpoint = https://secret-s3.custom
+    region = custom-secret-region
+    access_key_id = joe-access-key
+    secret_access_key = joe-secret-key
+    force_path_style = true
+  remote: joe-access-key
+  remotePath: /
+type: Opaque
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: workshop-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: workshop-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: Workshop
       metadata:
-        name: s-john
+        name: s-joe
       spec:
         description: A default DataLab environment.
         environment:
@@ -1279,29 +1230,8 @@ spec:
               podSelector: {}
               policyTypes:
               - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-internal-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 9000
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: minio
-                  podSelector:
-                    matchLabels:
-                      v1.min.io/tenant: default
-              podSelector: {}
-              policyTypes:
-              - Egress
           secrets:
-          - name: s-john-datalab
+          - name: s-joe-datalab
             namespace: default
         session:
           applications:
@@ -1319,13 +1249,13 @@ spec:
                 fromHost: []
               version: "1.34"
             workshop:
-              enabled: true
+              enabled: false
           dashboards:
           - name: Data
             url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
-              name: s-john-datalab
+              name: s-joe-datalab
           ingresses:
           - authentication:
               type: session
@@ -1346,20 +1276,11 @@ spec:
           objects: []
           resources:
             memory: 2Gi
-            volume:
-              name: $(session_name)-persistent
+            storage: 1Gi
         title: Default DataLab
         version: "1.0"
         workshop:
-          files:
-          - git:
-              ref: origin/main
-              url: https://github.com/versioneer-tech/datalab-example
-            includePaths:
-            - /workshop/**
-            - /data/**
-            - /README.md
-            path: .
+          files: []
           packages:
           - files:
             - image:
@@ -1380,25 +1301,25 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-john
+    crossplane.io/composition-resource-name: workshopenvironment-s-joe
   labels:
-    crossplane.io/composite: s-john
-  name: workshopenvironment-s-john
-  namespace: datalab
+    crossplane.io/composite: s-joe
+  name: workshopenvironment-s-joe
+  namespace: default
   ownerReferences:
   - apiVersion: pkg.internal/v1beta2
     blockOwnerDeletion: true
     controller: true
     kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
       apiVersion: training.educates.dev/v1beta1
       kind: WorkshopEnvironment
       metadata:
-        name: s-john
+        name: s-joe
       spec:
         analytics:
           amplitude:
@@ -1417,52 +1338,7 @@ spec:
         theme:
           name: default-website-theme
         workshop:
-          name: s-john
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
-    policy: DeriveFromCelQuery
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-s-john-default
-  labels:
-    crossplane.io/composite: s-john
-  name: workshopsession-s-john-default
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopSession
-      metadata:
-        name: s-john-default
-      spec:
-        environment:
-          name: s-john
-        session:
-          env:
-          - name: SESSION_NAME
-            value: s-john-default
-          - name: FRAME_ANCESTORS
-            value: ""
-          id: default
-          ingress:
-            domain: lab.acme.com
-            secret: wildcard-tls
+          name: s-joe
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

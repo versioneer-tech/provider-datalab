@@ -10,7 +10,7 @@
 # - Docker registry is disabled for this shared example.
 # - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
 # - Kubernetes API access is disabled (kubernetesAccess=false).
-# The data component for the object storage mount and browser UI is disabled.
+# The shared object storage browser and its per-session Data tabs are disabled.
 # Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
 # Additionally, one MongoDB-backed key-value/document store is provisioned:
 # - prod with 1 Gi storage

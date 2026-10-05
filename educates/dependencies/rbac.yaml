@@ -68,6 +68,70 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: provider-kubernetes-data
+rules:
+- apiGroups:
+  - "apps"
+  resources:
+  - "deployments"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+- apiGroups:
+  - ""
+  resources:
+  - "services"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+- apiGroups:
+  - ""
+  resources:
+  - "secrets"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+- apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - "ingresses"
+  - "networkpolicies"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provider-kubernetes-data
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: provider-kubernetes-data
+subjects:
+- kind: ServiceAccount
+  name: provider-kubernetes
+  namespace: crossplane
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: provider-kubernetes-database
 rules:
 - apiGroups:

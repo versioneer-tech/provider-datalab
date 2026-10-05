@@ -142,11 +142,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-registry|verify-postgres)
+    verify-network|verify-registry|verify-data|verify-postgres|verify-mongo|verify-redis|verify-qdrant)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <verify-network|verify-registry|verify-postgres>\n' "$2" >&2
+      printf 'Usage: %s <verify-network|verify-registry|verify-data|verify-postgres|verify-mongo|verify-redis|verify-qdrant>\n' "$2" >&2
       exit 1
       ;;
   esac

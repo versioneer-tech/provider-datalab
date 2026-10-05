@@ -57,12 +57,16 @@ metadata:
 data:
   iam:
     realm: acme
+    issuerURL: https://identity.acme.com/realms/acme
+    internalURL: http://identity.identity-system.svc/realms/acme
   auth:
     type: delegated
   ingress:
+    enabled: true
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
+    annotations: {} # optional controller-specific Ingress annotations
   storage:
     endpoint: https://s3.acme.com
     force_path_style: "true"
@@ -102,8 +106,8 @@ data:
   database:
     gateway: # optional (only needed if database should be externally accessible)
       parentName: default
-      parentNamespace: projectcontour
-      sectionName: postgres-passthrough
+      parentNamespace: gateway-system
+      sectionName: database-tls
     storageClassName: ""
     backupStorageClassName: ""
 
@@ -165,6 +169,19 @@ uses the first allowed class. If the list is omitted or empty, any requested
 StorageClass is allowed and an omitted `storageClassName` lets Kubernetes use
 the cluster default.
 
+`spec.data.enabled` enables one shared `package-r` service. Its UI can browse S3,
+create temporary download URLs, and share object prefixes with optional
+passwords.
+
+`EnvironmentConfig.data.ingress.enabled` enables one permanent OAuth-protected
+ingress per Datalab. It requires `iam.issuerURL`, `iam.internalURL`,
+`ingress.class`, `ingress.domain`, and `ingress.secret`. Missing values stop
+reconciliation and appear in the Datalab status.
+
+`spec.data.readOnlyMount: true` keeps the default read-only permissions. A
+`false` value grants create, delete, modify, and rename permissions. The S3 IAM
+policy takes precedence.
+
 ### Optional managed services
 
 The same claim can request durable platform services:
@@ -212,7 +229,9 @@ The `storage` section in the `EnvironmentConfig` tells Provider Datalab where to
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
-The values must provide access to the storage endpoint listed in `EnvironmentConfig.data.storage` (e.g. `endpoint`, `region`, `provider`).
+The values must provide access to the storage endpoint listed in
+`EnvironmentConfig.data.storage` (for example, `endpoint`, `region`, and
+`provider`). `package-r` uses `endpoint` for direct S3 requests.
 
 You can create this secret manually, for example:
 

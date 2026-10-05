@@ -13,7 +13,7 @@
 # - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
 # - Overall environment PVC storage quota: increased to 200 Gi.
 # - Kubernetes role: elevated to "admin" for full namespace permissions.
-# The data component for the object storage mount and browser UI is configured as readonly.
+# The shared object storage browser disallows data changes from its Data tabs.
 # The session workspace uses a durable Datalab-owned PVC with the default allowed StorageClass.
 # Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
 apiVersion: pkg.internal/v1beta2

@@ -46,16 +46,20 @@ For governance, this gives sponsors a concrete review surface: a Datalab can be 
 
 ## What It Provides
 
-At its core, Provider Datalab provides:
+Provider Datalab provides:
 
 - A **Datalab Composite Resource Definition (XRD)**.
 - **Compositions for Crossplane v2 or later** that create environments with sessions, storage access, vClusters, identity wiring, and optional managed backends.
-- A default `datalab-educates` runtime that launches **VS Code Server**, terminals, a storage browser, and common tools such as `awscli` and `rclone`.
+- A default `datalab-educates` runtime that launches **VS Code Server**,
+  terminals, and common tools such as `awscli` and `rclone`, with a shared
+  `package-r` Data service.
 - Optional **Keycloak-managed access**, including confidential clients, runtime OAuth2 credential Secrets, groups, roles, role scope mappings, role bindings, service-account API access, and memberships.
 - Support for delegated authentication through the surrounding platform, for example NGINX external auth or APISIX OIDC protection at the ingress layer.
 - Optional platform-managed services from the same `Datalab` claim: PostgreSQL databases, MongoDB document stores, Redis key-value/cache stores, Qdrant vector stores, and a Docker registry.
 
-For end users, this means a simple workspace experience: they can open a familiar online IDE, access storage and credentials that have already been wired in, and work with higher-level services without understanding every underlying Kubernetes resource. For software engineers, it means the platform contract is declarative and reviewable instead of a long checklist of manual setup steps.
+Users get an online IDE with configured storage, credentials, and managed
+services. Software engineers get a declarative platform contract that they can
+review.
 
 ---
 
@@ -70,9 +74,10 @@ For end users, this means a simple workspace experience: they can open a familia
 - **Integrated or delegated identity**
   Use Keycloak-managed workspace access where appropriate, or set `auth.type: delegated` and delegate authentication to the ingress layer. Generated Datalab clients are confidential, include a service-account-only `ws_api` role for automation, and can add configured service audiences to access tokens.
 - **Storage integration**
-  Consume object-storage credentials from Provider Storage or another storage process, and mount them into the lab.
-- **Extensible by design**
-  Built on Crossplane, ready to connect additional operator-owned services without changing the user-facing API.
+  Consume object-storage credentials from Provider Storage or another storage
+  process, and make them available to session tools and the shared Data service.
+- **Additional services**
+  Connect other operator-owned services without changing the user-facing API.
 
 ---
 
@@ -109,11 +114,18 @@ spec:
   vcluster: true
 ```
 
-This provisions a vCluster within a dedicated Kubernetes namespace and starts the Educates tooling stack (including VS Code Server and a terminal), together with bundled utilities. The declared session also gets a durable workspace PVC that remains available if the session is later set to `state: stopped`. A storage browser is available with storage automatically mounted, and additional tools such as `awscli` and `rclone` are preinstalled to support typical data lab tasks like coding, data exploration, and wrangling.
+This provisions a vCluster in a dedicated Kubernetes namespace and starts VS
+Code Server, a terminal, and the bundled tools. The declared session gets a
+workspace PVC that remains available when the session is stopped. Its Data tab
+uses the shared `package-r` service to access S3.
 
 Access to the datalab is intended for Alice, since she currently is the only user associated with this lab. Depending on the platform configuration, access can be enforced by Keycloak-managed resources or by delegated ingress authentication.
 
-Combined with a small, cluster-specific `EnvironmentConfig` (realm, ingress domain/class, storage secret), the platform handles the rest—provisioning the chosen runtime, mounting credentials, and preloading content.
+The cluster-specific `EnvironmentConfig` defines the realm, ingress, and
+storage settings. The provider then creates the runtime, supplies credentials,
+and loads the requested content.
+
+The ingress controller is selected by `ingress.class`.
 
 The same claim can also request stateful platform services:
 

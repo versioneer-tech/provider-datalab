@@ -61,3 +61,25 @@ status:
                   vcluster:
                     services:
                       fromHost: []
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-runtime-storage-secret-s-jane
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-jane
+status:
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jane-datalab
+        namespace: s-jane
+      data:
+        AWS_ACCESS_KEY_ID: amFuZS1hY2Nlc3Mta2V5
+        AWS_SECRET_ACCESS_KEY: amFuZS1zZWNyZXQta2V5
+        AWS_SESSION_TOKEN: cnVudGltZS1zZXNzaW9uLXRva2Vu
+        AWS_ENDPOINT_URL: aHR0cHM6Ly9ydW50aW1lLXNlY3JldC1zMy5hY21l
+        AWS_REGION: cnVudGltZS1zZWNyZXQtcmVnaW9u

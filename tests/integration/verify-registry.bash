@@ -78,6 +78,12 @@ wait_for_registry_session() {
   if ! kube wait \
     "object.kubernetes.m.crossplane.io/workshopenvironment-${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" \
+    --for=create --timeout=5m; then
+    return 1
+  fi
+  if ! kube wait \
+    "object.kubernetes.m.crossplane.io/workshopenvironment-${DATALAB_NAME}" \
+    --namespace "${WORKSPACE_NAMESPACE}" \
     --for=condition=Ready --timeout=15m; then
     return 1
   fi
@@ -118,8 +124,7 @@ find_registry_service() {
         [
           .items[]
           | select(
-              .metadata.labels["training.educates.dev/application"] == "registry" or
-              (.metadata.name | contains("registry"))
+              .metadata.labels["training.educates.dev/application"] == "registry"
             )
           | [
               .metadata.name,

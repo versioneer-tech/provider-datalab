@@ -57,8 +57,20 @@ jobs:
       - name: Verify Datalab registry
         run: tests/integration/verify-registry.bash
 
+      - name: Verify Datalab Data service
+        run: tests/integration/verify-data.bash
+
       - name: Verify Datalab PostgreSQL
         run: tests/integration/verify-postgres.bash
+
+      - name: Verify Datalab MongoDB
+        run: tests/integration/verify-mongo.bash
+
+      - name: Verify Datalab Redis
+        run: tests/integration/verify-redis.bash
+
+      - name: Verify Datalab Qdrant
+        run: tests/integration/verify-qdrant.bash
 
       - name: Collect integration diagnostics
         if: failure()

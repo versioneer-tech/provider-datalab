@@ -52,6 +52,61 @@ spec:
               environment_data = (environment.get("data") or {})
               rsp.context.MergeFrom(resource.dict_to_struct({ENVIRONMENT_KEY: environment_data}))
 
+    - step: validate-datalab-environment
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function import response
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(struct):
+              return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
+
+          def _boolish(value):
+              if isinstance(value, bool):
+                  return value
+              return str(value).lower() in ("true", "1", "yes", "on")
+
+          def _safe_str(value):
+              return str(value).strip() if value is not None else ""
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              spec = xr.get("spec", {}) or {}
+              data = spec.get("data") or {}
+              data_enabled = data.get("enabled")
+              if data_enabled is None:
+                  data_enabled = True
+              if not _boolish(data_enabled):
+                  return
+
+              context = _to_dict(req.context)
+              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+              iam = environment.get("iam") or {}
+              ingress = environment.get("ingress") or {}
+              if not _boolish(ingress.get("enabled")):
+                  return
+
+              required = {
+                  "iam.issuerURL": iam.get("issuerURL"),
+                  "iam.internalURL": iam.get("internalURL"),
+                  "ingress.class": ingress.get("class"),
+                  "ingress.domain": ingress.get("domain"),
+                  "ingress.secret": ingress.get("secret"),
+              }
+              missing = [name for name, value in required.items() if not _safe_str(value)]
+              if missing:
+                  response.fatal(
+                      rsp,
+                      "EnvironmentConfig enables the Data ingress but is missing: "
+                      + ", ".join(missing)
+                      + ".",
+                  )
+
     - step: observe-storage-secret
       functionRef:
         name: crossplane-contrib-function-python
@@ -101,7 +156,7 @@ spec:
                           }
                       },
                       "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                      "watch": False,
+                      "watch": True,
                   },
               })
 
@@ -389,6 +444,7 @@ spec:
 
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
+              session_token = _b64get_any(data_b64, ["AWS_SESSION_TOKEN","sessionToken"])
               endpoint = _b64get_any(data_b64, ["AWS_ENDPOINT_URL"]) or storage_env.get("endpoint", "")
               region = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
               rtype = storage_env.get("type", "")
@@ -398,6 +454,8 @@ spec:
               if not access_key or not secret_key:
                   return
 
+              # Keep the legacy rclone keys until all existing Educates
+              # snapshots and CSI-backed Data Pods have been migrated.
               config_data = (
                   f"[{access_key}]\n"
                   f"type = {rtype}\n"
@@ -425,6 +483,9 @@ spec:
                       "AWS_S3_FORCE_PATH_STYLE": force_path_style,
                   },
               }
+
+              if session_token:
+                  manifest["stringData"]["AWS_SESSION_TOKEN"] = session_token
 
               doc_stores = spec.get("documentStores") or {}
               if isinstance(doc_stores, dict):
@@ -555,6 +616,7 @@ spec:
         kind: Script
         script: |
           import base64 as _base64
+          import hashlib as _hashlib
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
 
@@ -608,6 +670,7 @@ spec:
               if not client_secret:
                   return
               client_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"]) or xr_name
+              cookie_secret = _hashlib.sha256(client_secret.encode("utf-8")).hexdigest()[:32]
 
               env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
               educates_status = (env_manifest.get("status") or {}).get("educates") or {}
@@ -623,6 +686,7 @@ spec:
                   "stringData": {
                       "client_id": client_id,
                       "client_secret": client_secret,
+                      "cookie_secret": cookie_secret,
                   },
               }
               rsp.desired.resources[key].resource.update({
@@ -1007,7 +1071,7 @@ spec:
               xr = _to_dict(req.observed.composite.resource)
               meta = xr.get("metadata", {}) or {}
               spec = xr.get("spec", {}) or {}
-              
+
               xr_name = meta.get("name")
               xr_namespace = meta.get("namespace") or "default"
 
@@ -1091,11 +1155,6 @@ spec:
                   data_enabled = True
               data_enabled = _boolish(data_enabled)
 
-              data_readonly = data_cfg.get("readOnlyMount")
-              if data_readonly is None:
-                  data_readonly = False
-              data_readonly = _boolish(data_readonly)
-
               registry_cfg = spec.get("registry") or {}
               registry_enabled = registry_cfg.get("enabled")
               if registry_enabled is None:
@@ -1120,8 +1179,9 @@ spec:
               ingress_class = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
+              ingress_enabled = _boolish(ingress_env.get("enabled"))
 
-              auth_type = (auth_env.get("type") or "credentials").strip().lower()
+              auth_type = (auth_env.get("type") or "none").strip().lower()
 
               storage_secret_name = f"{xr_name}-datalab"
               persistent_storage_class = ""
@@ -1140,12 +1200,12 @@ spec:
               access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
               secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
 
-              session_username = "*"
-              session_password = ""
-
+              session_credentials = {}
               if auth_type == "credentials" and access_key:
-                  session_username = access_key
-                  session_password = secret_key
+                  session_credentials = {
+                      "username": access_key,
+                      "password": secret_key,
+                  }
 
               external_egress = security.get("externalEgress")
               if external_egress is None:
@@ -1301,7 +1361,7 @@ spec:
                       }
                   ])
 
-              if external_egress or vcluster:
+              if external_egress or vcluster or data_enabled:
                   _add_policy(network_policies, "allow-dns-egress", [
                       {
                           "to": [
@@ -1390,153 +1450,26 @@ spec:
                   }
 
               if data_enabled:
-                  data_service_name = "data-$(session_name)"
-                  workshop["spec"]["session"]["dashboards"].append(
-                      {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
-                  )
-                  workshop["spec"]["session"]["ingresses"].append(
-                      {
-                          "name": "data",
-                          "protocol": "http",
-                          "host": f"{data_service_name}.$(workshop_namespace).svc.$(cluster_domain)",
-                          "port": 8888
-                      }
-                  )
-
-                  data_deploy = {
-                      "apiVersion": "apps/v1",
-                      "kind": "Deployment",
-                      "metadata": {
-                          "name": data_service_name,
-                          "namespace": "$(workshop_namespace)",
-                          "labels": {
-                              "app.kubernetes.io/instance": data_service_name,
-                              "app.kubernetes.io/name": "data"
+                  if ingress_enabled:
+                      workshop["spec"]["session"]["dashboards"].append(
+                          {"name": "Data", "url": f"https://{xr_name}.{ingress_domain}/"}
+                      )
+                  else:
+                      workshop["spec"]["session"]["dashboards"].append(
+                          {"name": "Data", "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/"}
+                      )
+                      workshop["spec"]["session"]["ingresses"].append(
+                          {
+                              "name": "data",
+                              "authentication": {"type": "session"},
+                              "protocol": "http",
+                              "host": "package-r.$(workshop_namespace).svc.$(cluster_domain)",
+                              "port": 8888,
+                              "headers": [
+                                  {"name": "X-Package-R-User", "value": "datalab"}
+                              ],
                           }
-                      },
-                      "spec": {
-                          "replicas": 1,
-                          "selector": {
-                              "matchLabels": {
-                                  "app.kubernetes.io/instance": data_service_name,
-                                  "app.kubernetes.io/name": "data"
-                              }
-                          },
-                          "template": {
-                              "metadata": {
-                                  "labels": {
-                                      "app.kubernetes.io/instance": data_service_name,
-                                      "app.kubernetes.io/name": "data"
-                                  }
-                              },
-                              "spec": {
-                                  "securityContext": {
-                                      "runAsNonRoot": True,
-                                      "runAsUser": 1000,
-                                      "runAsGroup": 100,
-                                      "fsGroup": 100,
-                                      "fsGroupChangePolicy": "OnRootMismatch",
-                                      "seccompProfile": {"type": "RuntimeDefault"},
-                                  },
-                                  "serviceAccountName": "$(service_account)",
-                                  "containers": [{
-                                      "name": "data",
-                                      "image": "ghcr.io/versioneer-tech/package-r:v2026.6.5",
-                                      "imagePullPolicy": "Always",
-                                      "securityContext": {
-                                          "allowPrivilegeEscalation": False,
-                                          "capabilities": {"drop": ["ALL"]},
-                                      },
-                                      "ports": [{"name": "http", "containerPort": 8888}],
-                                      "env": [
-                                          {"name": "FB_AUTH_MAPPER", "value": "reader-noshare" if data_readonly else "writer-noshare"},
-                                          {"name": "FB_ALLOW_CHANGING", "value": "false" if data_readonly else "true"},
-                                          {"name": "FB_ALLOW_SHARING", "value": "false"},
-                                          {"name": "FB_CREATE_USER_DIR", "value": "false"},
-                                          {"name": "FB_DATABASE", "value": "/db/bolt.db"},
-                                          {"name": "FB_SERVER_PORT", "value": "8888"},
-                                          {"name": "WORKSPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                          {"name": "FB_ROOT", "value": "/workspace"},
-                                          {"name": "FB_BRANDING_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
-                                          {"name": "FB_AUTH_HEADER", "value": "Accept"},
-                                          {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ACCESS_KEY_ID"}}},
-                                          {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_SECRET_ACCESS_KEY"}}},
-                                          {"name": "AWS_REGION", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_REGION"}}},
-                                          {"name": "AWS_ENDPOINT_URL", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_ENDPOINT_URL"}}},
-                                          {"name": "AWS_S3_FORCE_PATH_STYLE", "valueFrom": {"secretKeyRef": {"name": storage_secret_name, "key": "AWS_S3_FORCE_PATH_STYLE"}}}
-                                      ],
-                                      "resources": {
-                                          "requests": {"cpu": "100m", "memory": "128Mi"},
-                                          "limits": {"cpu": "1", "memory": "512Mi"}
-                                      },
-                                      "readinessProbe": {
-                                          "exec": {
-                                              "command": [
-                                                  "/bin/sh",
-                                                  "-lc",
-                                                  "stat /workspace >/dev/null",
-                                              ],
-                                          },
-                                          "periodSeconds": 10,
-                                      },
-                                      "livenessProbe": {
-                                          "exec": {
-                                              "command": [
-                                                  "/bin/sh",
-                                                  "-lc",
-                                                  "out=\"$( (stat /workspace >/dev/null) 2>&1 || true )\"; if echo \"$out\" | grep -qi \"Transport endpoint is not connected\"; then exit 1; fi; exit 0",
-                                              ],
-                                          },
-                                          "periodSeconds": 20,
-                                      },
-                                      "volumeMounts": [{
-                                          "name": "data",
-                                          "mountPath": "/workspace",
-                                          "readOnly": True if data_readonly else False
-                                      }, {
-                                          "name": "db",
-                                          "mountPath": "/db"
-                                      }]
-                                  }],
-                                  "volumes": [
-                                      {"name": "data", "persistentVolumeClaim": {"claimName": storage_secret_name}},
-                                      {"name": "db", "emptyDir": {}},
-                                  ]
-                              }
-                          }
-                      }
-                  }
-
-                  workshop["spec"]["environment"]["objects"].extend([
-                      {
-                          "apiVersion": "v1",
-                          "kind": "PersistentVolumeClaim",
-                          "metadata": {"name": storage_secret_name},
-                          "spec": {
-                              "accessModes": ["ReadOnlyMany"],
-                              "resources": {"requests": {"storage": "1Mi"}},
-                              "storageClassName": "csi-rclone"
-                          }
-                      }
-                  ])
-                  workshop["spec"]["session"]["objects"].extend([
-                      data_deploy,
-                      {
-                          "apiVersion": "v1",
-                          "kind": "Service",
-                          "metadata": {"name": data_service_name, "namespace": "$(workshop_namespace)"},
-                          "spec": {
-                              "type": "ClusterIP",
-                              "selector": {
-                                  "app.kubernetes.io/instance": data_service_name,
-                                  "app.kubernetes.io/name": "data"
-                              },
-                              "ports": [
-                                  {"name": "http", "port": 8888, "targetPort": "http", "protocol": "TCP"}
-                              ]
-                          }
-                      }
-                  ])
+                      )
 
               if policy == "privileged":
                   workshop["spec"]["session"]["applications"]["docker"] = {
@@ -1654,8 +1587,7 @@ spec:
                                   [{"name": "KUBECONFIG", "value": "/opt/kubeconfig/config"}]
                                   if vcluster else []
                               ),
-                              "username": session_username,
-                              "password": session_password
+                              **session_credentials,
                           }
                       }
                   }
@@ -1668,6 +1600,674 @@ spec:
                           "celQuery": "has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'",
                       },
                   )
+
+    - step: observe-runtime-storage-secret
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(struct):
+              return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
+
+          def _boolish(value):
+              if isinstance(value, bool):
+                  return value
+              return str(value).lower() in ("true", "1", "yes", "on")
+
+          def _safe_str(value):
+              return str(value).strip() if value is not None else ""
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              obj = _to_dict(objres.resource)
+              at_provider = (obj.get("status") or {}).get("atProvider") or {}
+              return (at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}) or {}
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              metadata = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+
+              xr_name = metadata.get("name")
+              xr_namespace = metadata.get("namespace") or "default"
+
+              data_config = spec.get("data") or {}
+              data_enabled = data_config.get("enabled")
+              if data_enabled is None:
+                  data_enabled = True
+              if not _boolish(data_enabled):
+                  return
+
+              observed = getattr(req.observed, "resources", {}) or {}
+              environment_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
+              educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+              workshop_namespace = _safe_str(educates_status.get("namespace"))
+              if not workshop_namespace:
+                  return
+
+              key = f"observe-runtime-storage-secret-{xr_name}"
+              rsp.desired.resources[key].resource.update({
+                  "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                  "kind": "Object",
+                  "metadata": {
+                      "name": key,
+                      "namespace": xr_namespace,
+                      "annotations": {"crossplane.io/composition-resource-name": key},
+                  },
+                  "spec": {
+                      "managementPolicies": ["Observe"],
+                      "forProvider": {
+                          "manifest": {
+                              "apiVersion": "v1",
+                              "kind": "Secret",
+                              "metadata": {
+                                  "name": f"{xr_name}-datalab",
+                                  "namespace": workshop_namespace,
+                              },
+                          }
+                      },
+                      "providerConfigRef": {
+                          "name": "provider-kubernetes",
+                          "kind": "ProviderConfig",
+                      },
+                      "watch": True,
+                  },
+              })
+
+    - step: update-data-objects
+      functionRef:
+        name: crossplane-contrib-function-python
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        script: |
+          import hashlib as _hashlib
+          import shlex as _shlex
+          from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+          from google.protobuf import json_format as _json_format
+
+          def _to_dict(struct):
+              return {} if struct is None else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
+
+          def _boolish(value):
+              if isinstance(value, bool):
+                  return value
+              return str(value).lower() in ("true", "1", "yes", "on")
+
+          def _safe_str(value):
+              return str(value).strip() if value is not None else ""
+
+          def _extract_manifest(objres):
+              if not objres or not getattr(objres, "resource", None):
+                  return {}
+              obj = _to_dict(objres.resource)
+              at_provider = (obj.get("status") or {}).get("atProvider") or {}
+              return (at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}) or {}
+
+          def _extract_secret_data(objres):
+              manifest = _extract_manifest(objres)
+              data = manifest.get("data") or {}
+              return data if isinstance(data, dict) else {}
+
+          def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+              xr = _to_dict(req.observed.composite.resource)
+              metadata = xr.get("metadata", {}) or {}
+              spec = xr.get("spec", {}) or {}
+
+              xr_name = metadata.get("name")
+              xr_namespace = metadata.get("namespace") or "default"
+
+              data_config = spec.get("data") or {}
+              data_enabled = data_config.get("enabled")
+              if data_enabled is None:
+                  data_enabled = True
+              if not _boolish(data_enabled):
+                  return
+
+              read_only = data_config.get("readOnlyMount")
+              if read_only is None:
+                  read_only = False
+              write_permission_args = []
+              if not _boolish(read_only):
+                  write_permission_args = [
+                      "--perm.create=true",
+                      "--perm.delete=true",
+                      "--perm.modify=true",
+                      "--perm.rename=true",
+                  ]
+
+              observed = getattr(req.observed, "resources", {}) or {}
+              environment_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
+              educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+              workshop_namespace = _safe_str(educates_status.get("namespace"))
+              if not workshop_namespace:
+                  return
+
+              storage_secret_name = f"{xr_name}-datalab"
+              runtime_secret_key = f"observe-runtime-storage-secret-{xr_name}"
+              runtime_secret_data = _extract_secret_data(observed.get(runtime_secret_key))
+              if not runtime_secret_data:
+                  return
+
+              checksum_keys = (
+                  "AWS_ACCESS_KEY_ID",
+                  "AWS_SECRET_ACCESS_KEY",
+                  "AWS_SESSION_TOKEN",
+                  "AWS_ENDPOINT_URL",
+                  "AWS_REGION",
+              )
+              checksum_input = "\n".join(
+                  f"{key}={_safe_str(runtime_secret_data.get(key))}"
+                  for key in checksum_keys
+              )
+              storage_secret_checksum = _hashlib.sha256(checksum_input.encode("utf-8")).hexdigest()
+
+              context = _to_dict(req.context)
+              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+              iam = environment.get("iam") or {}
+              ingress = environment.get("ingress") or {}
+              storage = environment.get("storage") or {}
+              network = environment.get("network") or {}
+              excluded_network_policies = {
+                  _safe_str(name)
+                  for name in (network.get("excludePolicies") or [])
+                  if _safe_str(name)
+              }
+              service_cidr = _safe_str(network.get("serviceCIDR"))
+              pod_cidrs = [
+                  _safe_str(cidr)
+                  for cidr in (network.get("podCIDRs") or [])
+                  if _safe_str(cidr)
+              ]
+              realm = _safe_str(iam.get("realm") or "default")
+              issuer_url = _safe_str(iam.get("issuerURL"))
+              internal_iam_url = _safe_str(iam.get("internalURL"))
+              iam_namespace = _safe_str(iam.get("namespace") or "keycloak")
+              ingress_class = _safe_str(ingress.get("class"))
+              ingress_domain = _safe_str(ingress.get("domain"))
+              ingress_secret = _safe_str(ingress.get("secret"))
+              ingress_enabled = _boolish(ingress.get("enabled"))
+              ingress_annotations = ingress.get("annotations") or {}
+              if not isinstance(ingress_annotations, dict):
+                  ingress_annotations = {}
+              permanent_access = ingress_enabled
+
+              endpoint_env = {
+                  "name": "AWS_ENDPOINT_URL",
+                  "valueFrom": {
+                      "secretKeyRef": {
+                          "name": storage_secret_name,
+                          "key": "AWS_ENDPOINT_URL",
+                      }
+                  }
+              }
+
+              labels = {
+                  "app.kubernetes.io/name": "package-r",
+                  "app.kubernetes.io/instance": xr_name,
+              }
+              package_r_users = list(dict.fromkeys([
+                  *([] if permanent_access else ["datalab"]),
+                  *[
+                      _safe_str(user)
+                      for user in (spec.get("users") or [])
+                      if _safe_str(user)
+                  ],
+              ]))
+              user_commands = "\n".join(
+                  " ".join(
+                      _shlex.quote(arg)
+                      for arg in ["/package-r", "users", "add", user, "", *write_permission_args]
+                  )
+                  for user in package_r_users
+              )
+
+              public_share_path = _shlex.quote(f"/{xr_name}/public")
+
+              init_script = f"""set -eu
+
+          database=/state/package-r.db
+          work_database=/state/package-r.db.new
+
+          rm -f "$work_database"
+          export PACKAGE_R_DATABASE="$work_database"
+
+          /package-r config init \
+            --address=0.0.0.0 \
+            --port=8888 \
+            --auth.method=proxy \
+            --auth.header=X-Forwarded-Preferred-Username \
+            --auth.mapper=
+
+          /package-r users add default ""
+          {user_commands}
+          /package-r shares add default public {public_share_path} \
+            --password="" \
+            --description="default public share" \
+            --catalog-name=catalog.parquet
+
+          mv "$work_database" "$database"
+          """
+
+              deployment = {
+                  "apiVersion": "apps/v1",
+                  "kind": "Deployment",
+                  "metadata": {
+                      "name": "package-r",
+                      "namespace": workshop_namespace,
+                      "labels": labels,
+                  },
+                  "spec": {
+                      "replicas": 1,
+                      "revisionHistoryLimit": 2,
+                      "strategy": {"type": "Recreate"},
+                      "selector": {"matchLabels": labels},
+                      "template": {
+                          "metadata": {
+                              "labels": labels,
+                              "annotations": {
+                                  "datalabs.pkg.internal/storage-secret-checksum": storage_secret_checksum,
+                              },
+                          },
+                          "spec": {
+                              "automountServiceAccountToken": False,
+                              "terminationGracePeriodSeconds": 30,
+                              "nodeSelector": {"kubernetes.io/arch": "amd64"},
+                              "securityContext": {
+                                  "runAsNonRoot": True,
+                                  "fsGroup": 100,
+                                  "fsGroupChangePolicy": "OnRootMismatch",
+                                  "seccompProfile": {"type": "RuntimeDefault"},
+                              },
+                              "initContainers": [{
+                                  "name": "prepare-database",
+                                  "image": "ghcr.io/versioneer-tech/package-r:vnext.1.1.0",
+                                  "imagePullPolicy": "IfNotPresent",
+                                  "command": ["/bin/sh", "-ec"],
+                                  "args": [init_script],
+                                  "securityContext": {
+                                      "allowPrivilegeEscalation": False,
+                                      "readOnlyRootFilesystem": True,
+                                      "runAsUser": 1000,
+                                      "runAsGroup": 100,
+                                      "capabilities": {"drop": ["ALL"]},
+                                  },
+                                  "resources": {
+                                      "requests": {"cpu": "50m", "memory": "128Mi"},
+                                      "limits": {"cpu": "500m", "memory": "256Mi"},
+                                  },
+                                  "volumeMounts": [
+                                      {"name": "state", "mountPath": "/state"},
+                                      {"name": "tmp", "mountPath": "/tmp"},
+                                  ],
+                              }],
+                              "containers": [{
+                                  "name": "package-r",
+                                  "image": "ghcr.io/versioneer-tech/package-r:vnext.1.1.0",
+                                  "imagePullPolicy": "IfNotPresent",
+                                  "securityContext": {
+                                      "allowPrivilegeEscalation": False,
+                                      "readOnlyRootFilesystem": True,
+                                      "runAsUser": 1000,
+                                      "runAsGroup": 100,
+                                      "capabilities": {"drop": ["ALL"]},
+                                  },
+                                  "ports": [{
+                                      "name": "package-r",
+                                      "containerPort": 8888,
+                                      "protocol": "TCP",
+                                  }],
+                                  "env": [
+                                      {"name": "HOME", "value": "/tmp"},
+                                      {"name": "PACKAGE_R_DATABASE", "value": "/state/package-r.db"},
+                                      {"name": "PACKAGE_R_ADDRESS", "value": "0.0.0.0"},
+                                      {"name": "PACKAGE_R_PORT", "value": "8888"},
+                                      {"name": "PACKAGE_R_ROOT", "value": "/"},
+                                      {"name": "PACKAGE_R_BUCKETS", "value": ""},
+                                      {"name": "XDG_CACHE_HOME", "value": "/cache"},
+                                      {
+                                          "name": "AWS_ACCESS_KEY_ID",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": storage_secret_name,
+                                                  "key": "AWS_ACCESS_KEY_ID",
+                                              }
+                                          },
+                                      },
+                                      {
+                                          "name": "AWS_SECRET_ACCESS_KEY",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": storage_secret_name,
+                                                  "key": "AWS_SECRET_ACCESS_KEY",
+                                              }
+                                          },
+                                      },
+                                      {
+                                          "name": "AWS_SESSION_TOKEN",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": storage_secret_name,
+                                                  "key": "AWS_SESSION_TOKEN",
+                                                  "optional": True,
+                                              }
+                                          },
+                                      },
+                                      endpoint_env,
+                                      {
+                                          "name": "AWS_REGION",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": storage_secret_name,
+                                                  "key": "AWS_REGION",
+                                              }
+                                          },
+                                      },
+                                  ],
+                                  "resources": {
+                                      "requests": {"cpu": "100m", "memory": "256Mi"},
+                                      "limits": {"cpu": "2", "memory": "1Gi"},
+                                  },
+                                  "startupProbe": {
+                                      "httpGet": {"path": "/health", "port": "package-r"},
+                                      "failureThreshold": 30,
+                                      "periodSeconds": 5,
+                                  },
+                                  "readinessProbe": {
+                                      "httpGet": {"path": "/health", "port": "package-r"},
+                                      "periodSeconds": 10,
+                                  },
+                                  "livenessProbe": {
+                                      "httpGet": {"path": "/health", "port": "package-r"},
+                                      "periodSeconds": 20,
+                                  },
+                                  "volumeMounts": [
+                                      {"name": "state", "mountPath": "/state"},
+                                      {"name": "cache", "mountPath": "/cache"},
+                                      {"name": "tmp", "mountPath": "/tmp"},
+                                  ],
+                              }] + ([{
+                                  "name": "oauth2-proxy",
+                                  "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded",
+                                  "imagePullPolicy": "IfNotPresent",
+                                  "args": [
+                                      "--http-address=0.0.0.0:4180",
+                                      "--metrics-address=127.0.0.1:44180",
+                                      "--provider=keycloak-oidc",
+                                      f"--provider-display-name={realm} realm",
+                                      f"--oidc-issuer-url={issuer_url}",
+                                      "--skip-oidc-discovery=true",
+                                      f"--login-url={issuer_url}/protocol/openid-connect/auth",
+                                      f"--redeem-url={internal_iam_url}/protocol/openid-connect/token",
+                                      f"--oidc-jwks-url={internal_iam_url}/protocol/openid-connect/certs",
+                                      f"--profile-url={internal_iam_url}/protocol/openid-connect/userinfo",
+                                      "--insecure-oidc-skip-nonce=false",
+                                      "--scope=openid email profile",
+                                      "--code-challenge-method=S256",
+                                      f"--redirect-url=https://{xr_name}.{ingress_domain}/oauth2/callback",
+                                      "--upstream=http://127.0.0.1:8888/",
+                                      "--email-domain=*",
+                                      f"--allowed-group={xr_name}",
+                                      "--reverse-proxy=true",
+                                      *[
+                                          f"--trusted-proxy-ip={cidr}"
+                                          for cidr in pod_cidrs
+                                      ],
+                                      f"--whitelist-domain={xr_name}.{ingress_domain}",
+                                      "--pass-basic-auth=false",
+                                      "--pass-access-token=false",
+                                      "--pass-authorization-header=false",
+                                      "--pass-user-headers=true",
+                                      "--skip-provider-button=true",
+                                      f"--cookie-name=__Host-{xr_name}",
+                                      "--cookie-secure=true",
+                                      "--cookie-httponly=true",
+                                      "--cookie-samesite=lax",
+                                      "--cookie-refresh=1h",
+                                      "--cookie-expire=8h",
+                                      "--cookie-csrf-per-request=true",
+                                      "--cookie-csrf-per-request-limit=5",
+                                      "--skip-auth-route=GET=^/api/public(/|$)",
+                                      "--skip-auth-route=HEAD=^/api/public(/|$)",
+                                      "--skip-auth-route=GET=^/public(/|$)",
+                                      "--skip-auth-route=HEAD=^/public(/|$)",
+                                      "--skip-auth-route=GET=^/share(/|$)",
+                                      "--skip-auth-route=HEAD=^/share(/|$)",
+                                      "--skip-auth-route=GET=^/static(/|$)",
+                                      "--skip-auth-route=HEAD=^/static(/|$)",
+                                      "--silence-ping-logging=true",
+                                  ],
+                                  "securityContext": {
+                                      "allowPrivilegeEscalation": False,
+                                      "readOnlyRootFilesystem": True,
+                                      "runAsUser": 65532,
+                                      "runAsGroup": 65532,
+                                      "capabilities": {"drop": ["ALL"]},
+                                  },
+                                  "ports": [{
+                                      "name": "auth-proxy",
+                                      "containerPort": 4180,
+                                      "protocol": "TCP",
+                                  }],
+                                  "env": [
+                                      {
+                                          "name": "OAUTH2_PROXY_CLIENT_ID",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": f"{xr_name}-oauth2-client",
+                                                  "key": "client_id",
+                                              }
+                                          },
+                                      },
+                                      {
+                                          "name": "OAUTH2_PROXY_CLIENT_SECRET",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": f"{xr_name}-oauth2-client",
+                                                  "key": "client_secret",
+                                              }
+                                          },
+                                      },
+                                      {
+                                          "name": "OAUTH2_PROXY_COOKIE_SECRET",
+                                          "valueFrom": {
+                                              "secretKeyRef": {
+                                                  "name": f"{xr_name}-oauth2-client",
+                                                  "key": "cookie_secret",
+                                              }
+                                          },
+                                      },
+                                  ],
+                                  "resources": {
+                                      "requests": {"cpu": "20m", "memory": "64Mi"},
+                                      "limits": {"cpu": "250m", "memory": "128Mi"},
+                                  },
+                                  "readinessProbe": {
+                                      "httpGet": {"path": "/ready", "port": "auth-proxy"},
+                                      "periodSeconds": 10,
+                                  },
+                                  "livenessProbe": {
+                                      "httpGet": {"path": "/ping", "port": "auth-proxy"},
+                                      "periodSeconds": 20,
+                                  },
+                                  "volumeMounts": [{"name": "tmp", "mountPath": "/tmp"}],
+                              }] if permanent_access else []),
+                              "volumes": [
+                                  {"name": "state", "emptyDir": {"sizeLimit": "64Mi"}},
+                                  {"name": "cache", "emptyDir": {"sizeLimit": "10Gi"}},
+                                  {"name": "tmp", "emptyDir": {"sizeLimit": "256Mi"}},
+                              ],
+                          },
+                      },
+                  },
+              }
+
+              service = {
+                  "apiVersion": "v1",
+                  "kind": "Service",
+                  "metadata": {
+                      "name": "package-r",
+                      "namespace": workshop_namespace,
+                      "labels": labels,
+                  },
+                  "spec": {
+                      "type": "ClusterIP",
+                      "selector": labels,
+                      "ports": ([{
+                          "name": "http",
+                          "port": 8888,
+                          "targetPort": "package-r",
+                          "protocol": "TCP",
+                      }] if not permanent_access else []) + ([{
+                          "name": "auth-proxy",
+                          "port": 4180,
+                          "targetPort": "auth-proxy",
+                          "protocol": "TCP",
+                      }] if permanent_access else []),
+                  },
+              }
+
+              network_policy = {
+                  "apiVersion": "networking.k8s.io/v1",
+                  "kind": "NetworkPolicy",
+                  "metadata": {
+                      "name": "package-r",
+                      "namespace": workshop_namespace,
+                      "labels": labels,
+                  },
+                  "spec": {
+                      "podSelector": {"matchLabels": labels},
+                      "policyTypes": ["Ingress", "Egress"],
+                      "ingress": ([{
+                          "from": [{
+                              "podSelector": {
+                                  "matchLabels": {
+                                      "training.educates.dev/application": "workshop",
+                                  }
+                              }
+                          }],
+                          "ports": [{"protocol": "TCP", "port": 8888}],
+                      }] if not permanent_access else []) + ([{
+                          "ports": [{"protocol": "TCP", "port": 4180}],
+                      }] if permanent_access else []),
+                      "egress": ([{
+                          "to": [{
+                              "namespaceSelector": {
+                                  "matchLabels": {
+                                      "kubernetes.io/metadata.name": iam_namespace,
+                                  }
+                              }
+                          }],
+                          "ports": [{"protocol": "TCP", "port": 8080}],
+                      }] if permanent_access else []),
+                  },
+              }
+
+              permanent_ingress = {
+                  "apiVersion": "networking.k8s.io/v1",
+                  "kind": "Ingress",
+                  "metadata": {
+                      "name": "package-r",
+                      "namespace": workshop_namespace,
+                      "labels": labels,
+                      "annotations": ingress_annotations,
+                  },
+                  "spec": {
+                      "ingressClassName": ingress_class,
+                      "rules": [{
+                          "host": f"{xr_name}.{ingress_domain}",
+                          "http": {
+                              "paths": [{
+                                  "path": "/",
+                                  "pathType": "Prefix",
+                                  "backend": {
+                                      "service": {
+                                          "name": "package-r",
+                                          "port": {"number": 4180},
+                                      }
+                                  },
+                              }]
+                          },
+                      }],
+                      "tls": [{
+                          "hosts": [f"{xr_name}.{ingress_domain}"],
+                          "secretName": ingress_secret,
+                      }],
+                  },
+              }
+
+              dns_targets = [{
+                  "namespaceSelector": {
+                      "matchLabels": {
+                          "kubernetes.io/metadata.name": "kube-system",
+                      }
+                  }
+              }]
+              if service_cidr:
+                  dns_targets.append({"ipBlock": {"cidr": service_cidr}})
+
+              dns_network_policy = {
+                  "apiVersion": "networking.k8s.io/v1",
+                  "kind": "NetworkPolicy",
+                  "metadata": {
+                      "name": "package-r-dns",
+                      "namespace": workshop_namespace,
+                      "labels": labels,
+                  },
+                  "spec": {
+                      "podSelector": {},
+                      "policyTypes": ["Egress"],
+                      "egress": [{
+                          "to": dns_targets,
+                          "ports": [
+                              {"protocol": "UDP", "port": 53},
+                              {"protocol": "TCP", "port": 53},
+                          ],
+                      }],
+                  },
+              }
+
+              def emit(key, manifest, readiness=None):
+                  body = {
+                      "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+                      "kind": "Object",
+                      "metadata": {
+                          "name": key,
+                          "namespace": xr_namespace,
+                          "annotations": {"crossplane.io/composition-resource-name": key},
+                      },
+                      "spec": {
+                          "providerConfigRef": {
+                              "name": "provider-kubernetes",
+                              "kind": "ProviderConfig",
+                          },
+                          "forProvider": {"manifest": manifest},
+                          "readiness": readiness or {"policy": "SuccessfulCreate"},
+                          "watch": True,
+                      },
+                  }
+                  rsp.desired.resources[key].resource.update(body)
+
+              emit(
+                  f"data-deployment-{xr_name}",
+                  deployment,
+                  readiness={
+                      "policy": "DeriveFromCelQuery",
+                      "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1",
+                  },
+              )
+              emit(f"data-service-{xr_name}", service)
+              emit(f"data-networkpolicy-{xr_name}", network_policy)
+              if permanent_access:
+                  emit(f"data-ingress-{xr_name}", permanent_ingress)
+              if "allow-dns-egress" not in excluded_network_policies:
+                  emit(f"data-dns-networkpolicy-{xr_name}", dns_network_policy)
 
     - step: update-database-objects
       functionRef:
@@ -2568,7 +3168,7 @@ spec:
               xr_obs = _to_dict(req.observed.composite.resource)
               meta = xr_obs.get("metadata", {}) or {}
               spec = xr_obs.get("spec", {}) or {}
-              
+
               xr_name = meta.get("name")
 
               sessions_map = {}
@@ -2605,7 +3205,10 @@ spec:
                       sessions_map[ws_id]["url"] = url
 
               cur_status = (xr_obs.get("status") or {}).copy()
-              cur_status["sessions"] = sessions_map
+              if sessions_map:
+                  cur_status["sessions"] = sessions_map
+              else:
+                  cur_status.pop("sessions", None)
 
               v = st.Value()
               jf.ParseDict(cur_status, v)

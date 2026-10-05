@@ -39,6 +39,7 @@ status:
       data:
         AWS_ACCESS_KEY_ID: amVmZi1hY2Nlc3Mta2V5
         AWS_SECRET_ACCESS_KEY: amVmZi1zZWNyZXQta2V5
+        AWS_SESSION_TOKEN: aW50ZWdyYXRpb24tc2Vzc2lvbi10b2tlbg==
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
