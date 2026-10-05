@@ -1,16 +1,32 @@
 # Welcome to Provider Datalab
 
-**Provider Datalab is a PaaS-style building block for platform operators.** It turns one `Datalab` claim into an operator-governed cloud workspace with an online IDE, object-storage access, managed databases, document stores, key-value/cache stores, vector databases, and an optional Docker registry.
+**Provider Datalab is a PaaS-style building block for shared data and compute
+environments.** It provides a Crossplane API that lets teams request the
+resources they need through one `Datalab` claim, while platform operators keep
+control of policy, capacity, and lifecycle.
 
-The primary reader for these docs is the platform operator. The operator decides which teams may run which workloads, which services are available, how egress is controlled, which state is backed up, and how lifecycle is governed. Engineers and data users should still be able to read the examples and understand the contract they are asking the platform to fulfill. Sponsors and governance stakeholders should be able to see where accountability lives: policy, capacity, audit, and durable data are platform responsibilities, not hidden inside a user terminal.
+A Datalab gives a team tools to browse, share, and work with object-storage
+data. The storage itself can be provisioned through
+[Provider Storage](https://provider-storage.versioneer.at/) or another storage
+service. Provider Datalab uses the resulting endpoint and credentials; it does
+not create buckets.
 
-A named Datalab session gives users a browser editor, terminal, persistent
-workspace, and approved service access. A session runs in a dedicated
-Kubernetes namespace and may include a vCluster when it needs a separate
-Kubernetes API. Users receive only the workspace access, credentials, and
-permissions assigned to that session. Platform operators continue to manage
-RBAC, Pod Security, NetworkPolicies, quotas, backups, ingress, and lifecycle
-controls.
+The same claim can request managed services, including PostgreSQL databases,
+MongoDB document stores, Redis caches, Qdrant vector databases, and a Docker
+registry. These services remain visible to the platform team, which can manage
+their security, backup, capacity, and lifecycle.
+
+Compute is optional. A named Datalab session provides a hosted VS Code
+instance, a terminal, a persistent workspace, and common command-line tools.
+It is preconfigured to use the approved object storage. When Kubernetes access
+is allowed, users can deploy workloads and supporting components to their
+assigned namespace or to an optional vCluster with a separate Kubernetes API.
+
+These docs are written mainly for platform operators. Operators define the
+available services and control identity, ingress, RBAC, Pod Security,
+NetworkPolicies, quotas, network access, backups, and lifecycle. Engineers and
+data users can use the examples to understand what a `Datalab` request creates
+and which responsibilities remain with the platform team.
 
 ## Architecture
 
@@ -21,8 +37,6 @@ defines the `Datalab` resource as the public contract and keeps runtime
 resources as internal implementation details.
 
 Provider Datalab requires [Crossplane v2 or later](https://crossplane.io). It provides a tenant-facing `Datalab` API and compositions that connect systems you already operate: Kubernetes namespaces, ingress, identity, object-storage credentials, persistent volumes, database operators, cache and vector-store operators, and the Educates runtime.
-
-Provider Datalab does **not** create object-storage buckets. Use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process to create buckets and credentials. Provider Datalab consumes those credentials and wires storage access into the lab.
 
 ## Operator Contract
 
