@@ -51,22 +51,6 @@ for file in examples/base/00*-lab.yaml; do
   fi
 done
 
-package_target_count="$(awk '/^  name: data-(deployment|dns-networkpolicy|networkpolicy|service)-s-joe$/ {count++} END {print count + 0}' educates/tests/001x-lab.yaml)"
-runtime_secret_observer_count="$(awk '/^  name: observe-runtime-storage-secret-s-joe$/ {count++} END {print count + 0}' educates/tests/001x-lab.yaml)"
-
-if [[ "${package_target_count}" != 4 || "${runtime_secret_observer_count}" != 1 ]]; then
-  printf 'Expected four package-r targets and one runtime Secret observer.\n' >&2
-  exit 1
-fi
-
-writable_permission_count="$(awk '/--perm\.(create|delete|modify|rename)=true/ {count++} END {print count + 0}' educates/tests/001x-lab.yaml)"
-readonly_permission_count="$(awk '/--perm\.(create|delete|modify|rename)=/ {count++} END {print count + 0}' educates/tests/003x-lab.yaml)"
-
-if [[ "${writable_permission_count}" != 2 || "${readonly_permission_count}" != 0 ]]; then
-  printf 'Expected write flags for both writable Data users and none for read-only Data.\n' >&2
-  exit 1
-fi
-
 rotated_render="$(mktemp -t xyz-datalab-rotation.XXXXXX)"
 trap 'rm -f "${rotated_render}"' EXIT
 

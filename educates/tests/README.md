@@ -16,7 +16,7 @@ You can unit-test the Composition for Crossplane v2 or later with `crossplane re
 tests/unit.bash
 ```
 
-Live NetworkPolicy and Kyverno checks are part of the `verify-network`
+Live NetworkPolicy checks are part of the `verify-network`
 integration profile. The `verify-registry` profile verifies a session registry.
 The `verify-data` profile verifies the shared package-r ownership and runtime
 contract, and confirms that a Data-disabled Datalab emits no package-r

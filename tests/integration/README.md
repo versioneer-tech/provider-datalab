@@ -23,9 +23,9 @@ tests/unit.bash
 
 | Profile | Datalabs | What the test verifies |
 | --- | --- | --- |
-| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, DNS, MinIO, metadata, vCluster, and external access. |
+| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, MinIO, a controlled target with vCluster labels, and external access. |
 | `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session with a 1 GiB registry. The test authenticates to the session registry and writes and reads a blob. |
-| `verify-data` | `verify-data-enabled` and `verify-data-disabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | The test verifies one provider-owned package-r Deployment and Service, restricted ingress and DNS NetworkPolicies, the vnext runtime contract, credential rotation, S3 bucket discovery, no CSI-backed Data PVC, stable Data ingress configuration, and complete omission when Data is disabled. |
+| `verify-data` | `verify-data-enabled` and `verify-data-disabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | The test verifies one provider-owned package-r Deployment and Service, restricted ingress and DNS NetworkPolicies, credential rotation, S3 bucket discovery, file write/read, read-only write denial, no CSI-backed Data PVC, stable Data ingress configuration, and complete omission when Data is disabled. |
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | The Datalab requests PostgreSQL `pg0` with database `verify`, 1 GiB primary storage, and 1 GiB backup storage. The test uses the generated connection Secret for an internal SQL write and read. |
 | `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | The Datalab requests the `verify` MongoDB document store. The test uses the generated connection Secret for an internal document write and read. |
 | `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | The Datalab requests the `verify` Redis cache store. The test uses the generated connection Secret for an internal key write and read. |
@@ -51,19 +51,18 @@ tests/integration/run.bash verify-redis
 tests/integration/run.bash verify-qdrant
 ```
 
-The network profile installs Kyverno `1.19.1` with chart `3.9.1` because it
-tests a CEL admission policy. Kind `0.24.0` or later provides NetworkPolicy
-enforcement through its default network implementation. Set
-`KEEP_NETWORK_RESOURCES=1` to retain successful resources. Each network check
-runs three times and writes timings to
-`/tmp/verify-network.tsv`.
+The network profile uses controlled HTTP targets to test generated policies.
+It does not start a real vCluster or test admission policy. Each connection
+check runs once after the policies have converged. Set
+`KEEP_NETWORK_RESOURCES=1` to retain successful resources.
 
 The registry profile installs Kyverno because the Educates runtime applies
 Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
 `2.2.1`, which contains Educates `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
 retain successful resources.
 
-The Data profile reuses the same Educates installation. It checks both the
+The Data profile reuses the same Educates installation and seeds one disposable
+MinIO bucket for file operations. It checks both the
 provider-kubernetes wrapper objects and the target resources in the runtime
 namespace. Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 

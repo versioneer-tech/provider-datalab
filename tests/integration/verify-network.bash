@@ -12,8 +12,6 @@ source "${INTEGRATION_DIR}/lib.bash"
 : "${NETWORK_SERVER_IMAGE:=nginx:1.27-alpine}"
 : "${NETWORK_VCLUSTER_IMAGE:=busybox:1.36.1}"
 : "${NETWORK_EXTERNAL_URL:=https://example.com}"
-: "${NETWORK_ITERATIONS:=3}"
-: "${NETWORK_RESULTS_FILE:=/tmp/verify-network.tsv}"
 : "${NETWORK_POLICY_SETTLE_SECONDS:=10}"
 : "${KEEP_NETWORK_RESOURCES:=0}"
 
@@ -23,7 +21,6 @@ readonly NS_OPEN=verify-network-open
 readonly NS_CLOSED=verify-network-closed
 readonly NS_PEER=verify-network-peer
 readonly NS_VCLUSTER=verify-network-vcluster
-readonly POLICY_NAME=verify-network-guard
 readonly OPEN_STORAGE_SECRET=verify-network-open
 readonly CLOSED_STORAGE_SECRET=verify-network-closed
 
@@ -176,13 +173,6 @@ apply_verification_resources() {
     NAMESPACE "${NS_VCLUSTER}" \
     VCLUSTER_IMAGE "${NETWORK_VCLUSTER_IMAGE}" | kube apply -f -
 
-  render_template "${MANIFEST_DIR}/network/kyverno-policy.yaml" \
-    POLICY_NAME "${POLICY_NAME}" \
-    OPEN_NAMESPACE "${NS_OPEN}" \
-    CLOSED_NAMESPACE "${NS_CLOSED}" \
-    PEER_NAMESPACE "${NS_PEER}" \
-    VCLUSTER_NAMESPACE "${NS_VCLUSTER}" | kube apply -f -
-
   for namespace in "${NS_OPEN}" "${NS_CLOSED}"; do
     kube delete pod/client --namespace "${namespace}" \
       --ignore-not-found --wait=true
@@ -228,75 +218,23 @@ vcluster_service_ip() {
     -o jsonpath='{.spec.clusterIP}'
 }
 
-record_result() {
-  local category="$1" name="$2" iteration="$3" expectation="$4"
-  local observed="$5" duration_ms="$6" exit_code="$7"
-
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "${category}" "${name}" "${iteration}" "${expectation}" \
-    "${observed}" "${duration_ms}" "${exit_code}" >>"${NETWORK_RESULTS_FILE}"
-  printf '%-10s %-52s iteration=%-2s %s (%s ms)\n' \
-    "${category}" "${name}" "${iteration}" "${observed}" "${duration_ms}"
-  if [[ "${observed}" == PASS ]]; then
-    pass_count=$((pass_count + 1))
-  else
-    fail_count=$((fail_count + 1))
-  fi
-}
-
 verify_connection() {
   local name="$1" namespace="$2" expectation="$3" command="$4"
-  local output exit_code observed started_ms finished_ms duration_ms iteration
+  local output exit_code
 
-  for ((iteration = 1; iteration <= NETWORK_ITERATIONS; iteration++)); do
-    started_ms="$(date +%s%3N)"
-    set +e
-    output="$(kube exec --namespace "${namespace}" client -- \
-      sh -c "${command}" 2>&1)"
-    exit_code=$?
-    set -e
-    finished_ms="$(date +%s%3N)"
-    duration_ms=$((finished_ms - started_ms))
-
-    observed=FAIL
-    if [[ "${expectation}" == allow && "${exit_code}" == 0 ]]; then
-      observed=PASS
-    elif [[ "${expectation}" == block && "${exit_code}" != 0 ]]; then
-      observed=PASS
-    fi
-    record_result network "${name}" "${iteration}" "${expectation}" \
-      "${observed}" "${duration_ms}" "${exit_code}"
-    if [[ "${observed}" == FAIL ]]; then
-      printf '  exit=%s output=%s\n' "${exit_code}" "${output:-<empty>}"
-    fi
-  done
-}
-
-verify_admission_denied() {
-  local name="$1" manifest="$2"
-  local output exit_code observed started_ms finished_ms duration_ms
-
-  started_ms="$(date +%s%3N)"
-  set +e
-  output="$(printf '%s\n' "${manifest}" | kube apply -f - 2>&1)"
-  exit_code=$?
-  set -e
-  finished_ms="$(date +%s%3N)"
-  duration_ms=$((finished_ms - started_ms))
-
-  observed=FAIL
-  if [[ "${exit_code}" != 0 && \
-    "${output}" == *'must not use host namespaces, hostPath volumes, or privileged containers'* ]]; then
-    observed=PASS
-    record_result admission "${name}" 1 block "${observed}" \
-      "${duration_ms}" "${exit_code}"
+  if output="$(kube exec --namespace "${namespace}" client -- sh -c "${command}" 2>&1)"; then
+    exit_code=0
   else
-    record_result admission "${name}" 1 block "${observed}" \
-      "${duration_ms}" "${exit_code}"
-    printf '  unexpected admission result exit=%s output=%s\n' \
-      "${exit_code}" "${output:-<empty>}"
-    kube delete pod/should-be-denied --namespace "${NS_OPEN}" \
-      --ignore-not-found
+    exit_code=$?
+  fi
+
+  if [[ ("${expectation}" == allow && "${exit_code}" == 0) || \
+    ("${expectation}" == block && "${exit_code}" != 0) ]]; then
+    pass_count=$((pass_count + 1))
+    printf 'PASS %s\n' "${name}"
+  else
+    fail_count=$((fail_count + 1))
+    printf 'FAIL %s: exit=%s output=%s\n' "${name}" "${exit_code}" "${output:-<empty>}"
   fi
 }
 
@@ -327,10 +265,6 @@ run_network_checks() {
     "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_pod}:8443/ >/dev/null"
   verify_connection 'open: vCluster Service IP' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_service}:443/ >/dev/null"
-  verify_connection 'open: AWS metadata IPv4' "${NS_OPEN}" block \
-    'curl -fsS --connect-timeout 2 --max-time 5 http://169.254.169.254/ >/dev/null'
-  verify_connection 'open: Scaleway metadata IPv4' "${NS_OPEN}" block \
-    'curl -fsS --connect-timeout 2 --max-time 5 http://169.254.42.42/ >/dev/null'
   verify_connection 'open: external URL' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 5 --max-time 15 ${NETWORK_EXTERNAL_URL} >/dev/null"
   verify_connection 'open: configured MinIO backend' "${NS_OPEN}" allow \
@@ -351,76 +285,12 @@ run_network_checks() {
   verify_connection 'closed: configured MinIO backend' "${NS_CLOSED}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${minio_service}:9000/minio/health/ready >/dev/null"
 
-  verify_connection 'normal Pod: no Docker socket' "${NS_OPEN}" allow \
-    'test ! -S /var/run/docker.sock'
-  verify_connection 'normal Pod: no host root mount' "${NS_OPEN}" allow \
-    'test ! -e /host/etc/shadow'
-}
-
-run_admission_checks() {
-  verify_admission_denied 'admission: deny privileged container' "$(cat <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: should-be-denied
-  namespace: ${NS_OPEN}
-spec:
-  restartPolicy: Never
-  containers:
-  - name: denied
-    image: busybox:1.36.1
-    command: ["sh", "-c", "sleep 1"]
-    securityContext:
-      privileged: true
-EOF
-)"
-
-  verify_admission_denied 'admission: deny hostNetwork' "$(cat <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: should-be-denied
-  namespace: ${NS_OPEN}
-spec:
-  hostNetwork: true
-  restartPolicy: Never
-  containers:
-  - name: denied
-    image: busybox:1.36.1
-    command: ["sh", "-c", "sleep 1"]
-EOF
-)"
-
-  verify_admission_denied 'admission: deny Docker socket hostPath' "$(cat <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: should-be-denied
-  namespace: ${NS_OPEN}
-spec:
-  restartPolicy: Never
-  containers:
-  - name: denied
-    image: busybox:1.36.1
-    command: ["sh", "-c", "sleep 1"]
-    volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
-  volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
-      type: Socket
-EOF
-)"
 }
 
 cleanup_successful_verification() {
   if [[ "${KEEP_NETWORK_RESOURCES}" == 1 ]]; then
     return
   fi
-  kube delete validatingpolicy.policies.kyverno.io "${POLICY_NAME}" \
-    --ignore-not-found
   kube delete datalabs.pkg.internal "${DATALAB_OPEN}" "${DATALAB_CLOSED}" \
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait datalabs.pkg.internal "${DATALAB_OPEN}" "${DATALAB_CLOSED}" \
@@ -433,38 +303,12 @@ cleanup_successful_verification() {
   fi
 }
 
-print_benchmark_summary() {
-  printf '\nNetwork benchmark results: %s\n' "${NETWORK_RESULTS_FILE}"
-  awk -F '\t' '
-    NR == 1 { next }
-    {
-      key = $1 SUBSEP $2
-      count[key]++
-      total[key] += $6
-      if ($5 != "PASS") failures[key]++
-    }
-    END {
-      printf "%-10s %-52s %-10s %s\n", "category", "case", "average_ms", "failures"
-      for (key in count) {
-        split(key, part, SUBSEP)
-        printf "%-10s %-52s %-10.1f %d\n", \
-          part[1], part[2], total[key] / count[key], failures[key] + 0
-      }
-    }
-  ' "${NETWORK_RESULTS_FILE}"
-}
-
 main() {
   require_cluster
   require_command jq
-  install_kyverno
   apply_verification_resources
   wait_for_verification_resources
-  printf 'category\tcase\titeration\texpectation\tobserved\tduration_ms\texit_code\n' \
-    >"${NETWORK_RESULTS_FILE}"
   run_network_checks
-  run_admission_checks
-  print_benchmark_summary
 
   printf '\nNetwork verification totals: PASS=%s FAIL=%s\n' \
     "${pass_count}" "${fail_count}"

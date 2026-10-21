@@ -1,11 +1,11 @@
 # Additional Services
 
-This section explains how a `Datalab` can be extended with more services and tools. Users can deploy helpful session-adjacent applications for daily work. Operators should keep durable services - databases, stores, registries, and backup-worthy data - explicit in the platform model, where they can be reviewed, costed, monitored, and retired.
+You can add services to a Datalab for tasks such as distributed computing or experiment tracking. This guide shows how to deploy Dask and MLflow from your workspace.
 
 A `Datalab` environment provides a preconfigured **VS Code Server** with a persistent file system and access to the connected object storage, along with essential CLI tools such as `git`, `curl`, `aws`, or `rclone`.
-While this already covers many data exploration and transformation needs, users often require more specialized tooling — for example, dashboards for visualization, services for experiment tracking, or out-of-process compute backends for scalable data processing.
+You can add dashboards, experiment tracking, or separate compute workloads as needed.
 
-Although many of these tools can be started directly from the integrated terminal and exposed via VS Code’s port forwarding feature, that approach tends to be **fragile and transient** - you must carefully manage Python environments, avoid breaking dependencies during upgrades, and remember that the terminal session lifetime is temporary.
+For a short experiment, start a tool in the terminal and use VS Code port forwarding to open it. For services that must keep running, use Kubernetes workloads with their own dependencies and storage.
 
 Deploy these services **as native Kubernetes applications** when the operator
 has allowed Kubernetes API access. Users can deploy workloads in their assigned
@@ -14,7 +14,7 @@ CRDs, RBAC rules, and controllers. This supports frameworks that need
 cluster-wide resources, such as Dask Gateway, without giving users access to
 the host cluster.
 
-For production-like state, prefer the declarative `Datalab` service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. For object-storage buckets, use [Provider Storage](https://provider-storage.versioneer.at/) or another storage process, then pass the credentials to Provider Datalab. This keeps the durable parts visible to the operator and gives governance reviewers a named service to inspect instead of unmanaged state inside a session.
+For data that needs backups and maintenance, use the managed service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. Create object-storage buckets through [Provider Storage](https://provider-storage.versioneer.at/) or your platform's storage process, then pass their credentials to Provider Datalab.
 
 > **Note:** The `kubectl` and `helm` CLIs are preinstalled as well. You can apply manifests, install Helm charts, and inspect Kubernetes resources directly from the terminal.
 
@@ -307,11 +307,11 @@ SELECT * FROM demo;
 
 ---
 
-## Summary
+## Keeping Services and Data
 
-Additional services fall into two operational categories:
+Choose how to manage a service based on how long you need it:
 
-- **User-deployed, session-adjacent services** such as the Dask and MLflow examples above. These are useful for exploration and can be cleaned up with the workspace lifecycle.
-- **Platform-managed services** requested through the `Datalab` spec, such as PostgreSQL databases, document stores, Redis key-value/cache stores, Qdrant vector stores, and Docker registries. These should be treated as operator-owned resources with explicit backup, monitoring, upgrade, and retirement policies. Object-storage buckets are the exception here: create them through Provider Storage or another storage process, then wire their credentials into the Datalab.
+- **Temporary services**, such as the Dask and MLflow examples above, are useful for experiments. Remove them when the work is complete.
+- **Managed services** requested through the `Datalab` spec need backup, monitoring, upgrade, and deletion policies. Agree on these with the platform team before you store data that must be kept.
 
-The goal is not to prevent users from experimenting. The goal is to make sure that durable state does not become invisible. If a service matters beyond the current session, promote it into the declarative platform model so the operator knows it exists and can take responsibility for it.
+If you need a service after the experiment ends, agree with the platform team on how to maintain it and recover its data.

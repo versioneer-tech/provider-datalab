@@ -1,24 +1,24 @@
 # Provider Datalab – Installation Guide
 
-The `provider-datalab` configuration package lets platform operators expose **collaborative data labs** on Kubernetes as a PaaS-style building block. Labs, sessions, storage access, identity, and optional managed services are declared through one namespaced `Datalab` spec. The operator still owns the backing services, policies, and backup model.
+Provider Datalab creates shared data workspaces on Kubernetes. Users request sessions, storage access, and optional managed services through a namespaced `Datalab` spec. This guide covers the platform setup, dependencies, and shared settings.
 
 ---
 
-## Namespacing Model (Important)
+## Namespaces
 
-Everything in this guide is **namespaced**:
+Choose a namespace for Datalab claims and their supporting configuration:
 
 - You **apply** `Datalab` claims **to a namespace** (e.g., `workspace`).
 - The **referenced Secret for storage** lives in the namespace configured by `EnvironmentConfig.data.storage.secretNamespace`, normally the same namespace as the `Datalab` claim. The Secret name is `spec.secretName`, or the `Datalab` name when `spec.secretName` is omitted.
 - Any **namespaced ProviderConfigs** or supporting objects that the compositions depend on **must exist in that same target namespace** (e.g., `workspace`).
 
-> In short: choose your target namespace (e.g., `workspace`), apply the provider configs there, create or provision the referenced object-storage credentials there, and create your `Datalab` claims in that namespace.
+Apply the ProviderConfigs in the chosen namespace. Create storage credentials in the configured storage Secret namespace before you create the Datalab claims.
 
 ---
 
 ## Prerequisites
 
-Before installing Provider Datalab, decide which parts of the service catalogue the platform will offer. The base runtime needs Crossplane, Educates, an enforcing CNI, and the platform ingress/identity/storage path. Optional database and store fields should only be enabled when the corresponding operators, backup model, and lifecycle ownership are ready.
+Before installation, choose which services to offer. The workspace runtime needs Crossplane, Educates, a CNI that enforces network policy, ingress, identity, and object storage. Enable optional databases and stores after their operators, backups, and maintenance procedures are ready.
 
 - A running Kubernetes cluster (e.g., `kind`, managed K8s).
 - `kubectl` access.
@@ -76,7 +76,7 @@ The supplied dependency manifests and tests use the following tested pins:
 
 Without the corresponding optional database operators installed, `spec.databases`, `spec.documentStores`, `spec.cacheStores`, and/or `spec.vectorStores` cannot reconcile.
 
-Treat these optional operators as platform service classes. If you enable a field in the `Datalab` API, make sure the operations model is ready too: storage classes, backup and restore, monitoring, upgrades, tenant lifecycle, and who may request the service.
+For each optional service, configure storage classes, backup and restore, monitoring, upgrades, deletion, and who may request it.
 
 > To reduce control-plane load, we use a `ManagedResourceActivationPolicy` (MRAP) per backend so only the needed Managed Resources are active.
 
@@ -102,7 +102,7 @@ Repository root: <https://github.com/versioneer-tech/provider-datalab/>
 
 > You operate the Educates training platform in your cluster. Ensure **Educates is installed with all CRDs** before proceeding.
 
-Provider dependencies activate Helm, Kubernetes, and Keycloak resources as needed:
+Provider dependencies enable management of Helm, Kubernetes, and Keycloak resources:
 
 - [00-mrap.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/00-mrap.yaml) – Activate Educates-specific Managed Resources.
 - [01-deploymentRuntimeConfigs.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/dependencies/01-deploymentRuntimeConfigs.yaml) – Runtime configs for providers/functions.
@@ -125,9 +125,9 @@ Recommended Crossplane dependency set for `datalab-educates`:
 
 Pin exact provider and function versions or digests in your GitOps source and upgrade them intentionally after validation.
 
-Keycloak-managed access is supported: the composition automatically provisions the workspace client, groups, roles, role bindings, service-account role binding, and memberships. At the same time, the provider is intentionally only a workspace provisioning building block. In many production deployments it is better to delegate authentication to the platform, for example to NGINX Ingress with `oauth2-proxy` or APISIX with the `openid-connect` plugin, while keeping `auth.type = delegated` in the Datalab environment configuration.
+For each Datalab, the composition provisions the workspace client, groups, roles, role bindings, service-account role binding, and memberships.
 
-When Keycloak-managed access is used, the target realm is configured with `EnvironmentConfig.data.iam.realm`, and the `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, client service-account roles, groups, group memberships, roles, role mappers, and protocol mappers in that realm. Users accessing a workspace do not necessarily have to exist in Keycloak when authentication is delegated to another platform component. Shared browser ingress can use a central platform OAuth client, while direct OIDC integrations for a service owned by one Datalab can reuse the generated Datalab client because the composition includes redirect and web-origin entries for declared session hosts.
+Set the target Keycloak realm with `EnvironmentConfig.data.iam.realm`. The `provider-keycloak` `ProviderConfig` must point at a reachable Keycloak instance with permissions to manage clients, client service-account roles, groups, group memberships, roles, role mappers, and protocol mappers in that realm. Users listed in `spec.users` must already exist in that realm. Shared browser ingress can use a central platform OAuth client, while direct OIDC integrations for a service owned by one Datalab can reuse the generated Datalab client because the composition includes redirect and web-origin entries for declared session hosts.
 
 Each generated Datalab client is confidential. Provider Datalab publishes credentials in the runtime workshop namespace as `<datalab>-oauth2-client`, with data keys `client_id` and `client_secret`. Treat that runtime Secret as a workspace machine credential: namespace users who may create automation tokens can read it, and operators should rotate or revoke it when that trust boundary changes. Use it for client-credentials automation or for direct per-Datalab service protection, not as a default shared browser-ingress credential.
 
@@ -164,7 +164,7 @@ kubectl apply -f configuration.yaml
 
 ## Step 3 – Environment configuration
 
-Provide cluster-specific settings through an `EnvironmentConfig`. This is the operator-owned policy surface for an environment: it defines where ingress terminates, how authentication is handled, which storage endpoint is trusted, which storage classes may be used, and what the default security posture is.
+Provide cluster-specific settings through an `EnvironmentConfig`. This is the operator-owned policy surface for an environment: it defines where ingress terminates, which storage endpoint is trusted, which storage classes may be used, and what the default security posture is.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -176,10 +176,6 @@ data:
     realm: demo
     issuerURL: https://identity.acme.org/realms/demo
     internalURL: http://identity.identity-system.svc/realms/demo
-  auth:
-    # Use "credentials" to reuse storage credentials, or "delegated" when
-    # the ingress/platform layer handles authentication.
-    type: delegated
   ingress:
     enabled: true
     class: nginx
@@ -306,10 +302,9 @@ that Datalab's vCluster control-plane Pods. Provider Datalab renders
 `allow-dns-egress` when `externalEgress`, the vCluster, or Data is enabled. It
 renders
 `allow-external-egress` only when `externalEgress` is true. Use
-`excludePolicies` only as an operator escape hatch when another policy system
+`excludePolicies` only when another policy system
 supplies equivalent controls. Excluding `allow-dns-egress` also suppresses the
-Datalab-owned `package-r-dns` policy. This policy supplies the DNS rule needed
-while older Workshop snapshots are migrated.
+Datalab-owned `package-r-dns` policy.
 
 If external access is generally granted at the platform level, you can still restrict it for specific teams or workspaces. See [Sandbox Security Measures](../security/sandbox-controls.md) for the policy details, including how `externalEgress: false` removes broad external egress while retaining namespace-local and vCluster API access. DNS remains enabled when a vCluster or Data needs service-name resolution.
 
@@ -331,9 +326,8 @@ The `storage` section in the `EnvironmentConfig` tells Provider Datalab where to
 The S3 identity must permit bucket listing with AWS `s3:ListAllMyBuckets`.
 
 `package-r` uses these credentials for direct S3 access. The configured
-`storage.endpoint` must be reachable from the `package-r` Pod. The pinned vnext
-release uses path-style S3 addresses, so the endpoint must support that address
-style.
+`storage.endpoint` must be reachable from the `package-r` Pod and support
+path-style S3 addresses.
 
 Create it manually, for example:
 
@@ -345,7 +339,8 @@ kubectl -n datalab create secret generic demo \
 
 ## Step 5 – Create a Datalab
 
-The minimal example creates a user-scoped lab with one session. From an operator view, this is the tenant request; whether it is allowed, which defaults apply, and which backing services exist are controlled by the installed package and `EnvironmentConfig`.
+The example below creates a lab for one user with one session. The installed package and `EnvironmentConfig` supply the shared settings.
+
 - Sessions present -> each declared session gets a workspace PVC; sessions default to `state: started`.
 - `state: started` -> runtime created; `state: stopped` -> PVC retained without runtime.
 - No sessions -> no declared session PVC or runtime is pre-created.
@@ -353,10 +348,14 @@ The minimal example creates a user-scoped lab with one session. From an operator
 - `spec.vcluster: true` -> vcluster provisioned; `false` -> namespace-scoped runtime.
 - `spec.data.enabled` creates or omits the shared service, Data tabs, and Data
   ingress.
-- The effective `spec.data.enabled` value cannot change after creation. Use the
-  migration procedure above for an existing environment.
+- The effective `spec.data.enabled` value cannot change after creation.
 - `spec.data.readOnlyMount` selects read-only or write application permissions.
   S3 IAM takes precedence.
+
+With the permanent Data address enabled, users can share files with anyone by
+putting them in the Datalab's `public` folder. Readers do not need to sign in.
+See [Sharing Data with the World](usage_concepts.md#sharing-data-with-the-world)
+for the folder location and an example.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2

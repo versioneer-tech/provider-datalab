@@ -6,7 +6,7 @@
 # and a central platform OAuth client for shared browser session ingress.
 #
 # Adapt namespaces, issuer names, storage settings, and the OIDC discovery URL
-# for your cluster. The important Datalab-side setting is auth.type: delegated.
+# for your cluster.
 # These CEL policies require Kyverno v1.19.1 or later.
 #
 # The generated <datalab>-oauth2-client Secret remains the Datalab-scoped
@@ -21,8 +21,6 @@ metadata:
 data:
   iam:
     realm: acme
-  auth:
-    type: delegated
   ingress:
     class: apisix
     domain: lab.acme.org

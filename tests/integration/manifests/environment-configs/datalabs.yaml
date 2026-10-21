@@ -6,8 +6,6 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-minio
 data:
-  auth:
-    type: delegated
   iam:
     realm: integration
   ingress:

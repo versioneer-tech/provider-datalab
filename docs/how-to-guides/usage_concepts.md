@@ -1,8 +1,8 @@
 # Provider Datalab – Usage & Concepts
 
-This section explains how to use the `provider-datalab` configuration packages once they are installed. Read it as an operator-facing contract that software engineers and workspace users can also understand.
+This guide explains how to configure and use a Datalab after installation.
 
-A `Datalab` gives users a smooth workspace, but durable state should stay visible to the platform team: object-storage credentials, persistent volumes, databases, key-value/cache stores, vector stores, registries, identity resources, and network policy. That visibility lets operators own lifecycle, monitoring, backups, quota, audit, and decommissioning.
+Users request sessions and data services through the `Datalab` spec. The platform team configures shared services, access rules, resource limits, and backups.
 
 ---
 
@@ -17,7 +17,7 @@ When reviewing a `Datalab`, start with these questions:
 - Is external egress broad, blocked, or routed through another control?
 - Which parts are backed up, monitored, upgraded, and retired by platform processes?
 
-The sections below map those governance questions to the fields users and engineers see in the `Datalab` spec.
+The sections below explain the related fields in the `Datalab` spec.
 
 ## Concepts
 
@@ -31,8 +31,8 @@ a Datalab session is a named, durable workspace such as `default` or
 
     A single `Datalab` can have multiple sessions started at the same time.
     This supports patterns such as `default` and `analysis`. Each started
-    session gets its own workspace Pod and durable workspace PVC, while shared
-    Datalab-level credentials and managed services remain operator-visible.
+    session gets its own workspace Pod and persistent workspace PVC. Sessions
+    share the Datalab's credentials and managed services.
 
 - Each `spec.sessions` entry declares a session by `name`. `state` defaults to `started`.
 - `state: started` creates the Educates `WorkshopSession` for that Datalab
@@ -61,7 +61,7 @@ Provider Datalab creates a stable PVC per declared session, including sessions w
 
 When `EnvironmentConfig.data.storageClasses.allowed` is non-empty, a requested `storageClassName` is used only if it appears in that list; otherwise Provider Datalab uses the first allowed class. If the list is omitted or empty, any requested class is allowed and an omitted `storageClassName` lets Kubernetes use the cluster default.
 
-For operators, this is the responsibility boundary. Session PVCs are useful for workspace state and many-small-file workloads, but they are not a replacement for managed data services. If data must survive upgrades, disaster recovery events, or independent service lifecycles, use a managed database, a bucket provisioned outside Provider Datalab, or another store with a clear backup policy.
+Use session PVCs for workspace files. For data that needs separate backups, recovery, or maintenance, use a managed database, an object-storage bucket, or another store with a defined backup policy.
 
 ### Database
 
@@ -93,7 +93,7 @@ The platform automatically:
 - configures backups according to the operator-managed database setup
 - keeps data independent from session lifecycle
 
-This keeps **compute ephemeral** while **database state remains durable** and reviewable by the platform team.
+Database data remains available when a session stops or its workspace Pod is replaced.
 
 If a Kubernetes gateway service is running in the cluster and enabled in the global configuration, the database **can also be exposed externally**. In that case, corresponding environment variables such as the external hostname or external URL are injected into the session as well.
 
@@ -128,7 +128,7 @@ spec:
 
 Provider Datalab also exposes connection details through the generated `<datalab>-datalab` Secret, which sessions import as environment variables. For a store key such as `prod`, the session receives variables such as `MONGO_PROD_URI`, `REDIS_PROD_URL`, and `QDRANT_PROD_URL`, plus split fields for host, port, user, database, and credentials where applicable.
 
-These stores should be visible platform resources, not ad-hoc services hidden inside a user terminal. The `Datalab` claim records that they exist. The underlying operators handle persistence, upgrades, monitoring, and backups. Before enabling them in production, check the backup and restore guarantees of your MongoDB, Redis, or Qdrant operator setup.
+The `Datalab` claim records which stores to create. The installed operators manage them. Before enabling a store in production, check how your operator setup handles storage, upgrades, monitoring, backups, and restore.
 
 ### Docker Registry
 
@@ -143,21 +143,47 @@ spec:
 
 This is useful when users need to push and pull images inside the lab. Treat it as workspace-scoped registry storage and an operator-approved capability. If registry contents need backup, retention, scanning, or promotion into a central registry, define that in platform policy before enabling it.
 
+### Data and Sharing
+
+The Data service (`package-r`) gives you access to your Datalab's object-storage
+buckets without a compute session. When the platform enables a permanent Data
+address, you can browse and share data without declaring or starting a
+session. A running session's Data tab opens the same service. The file browser
+requires sign-in.
+
+Use the Data service to share data with other teams on the same platform.
+To reach people outside the platform, including the wider public, send
+presigned download URLs for individual files or public share links for
+folders. Recipients do not need a Datalab account. The public share is
+described below.
+
+#### Sharing Data with the World
+
+Use the public share to publish datasets, example files, or results that
+others can use. Put the files in your Datalab's `public` folder and share the
+public link. Anyone can browse and download them without a Datalab account or
+sign-in.
+
+In the Data browser, this folder is at `<datalab>/public`: the `public` folder
+in the bucket named after your Datalab. For example, a file at
+`s-jane/public/results.csv` is part of the public share for `s-jane`.
+This is the folder connected to the default public share; a folder named
+`public` elsewhere is not automatically shared.
+
+Public sharing uses the permanent Data address, which the platform operator
+must enable. You can place files in the folder through the Data browser when
+write access is allowed, or through your usual storage tools.
+
 ### Authentication
 
-Provider Datalab is a workspace building block. It can wire authentication into the runtime, but the cleaner production pattern is often to delegate authentication to the surrounding platform, especially at ingress.
+The platform ingress layer handles session authentication and authorization. Configure it to protect access to each Datalab with components such as NGINX Ingress and `oauth2-proxy` or APISIX and the `openid-connect` plugin.
 
 For the ownership boundary around workspace access, see the
 [Security overview](../security/index.md#access-to-a-datalab).
 
-Multiple options are possible:
+Users listed in `spec.users` must exist in the configured Keycloak realm. APISIX can combine `openid-connect` with `keycloak-authz` or the OPA plugin for authorization.
 
-- Enable built-in runtime authentication. By default, `auth.type = credentials` uses the same credentials that are used to access the connected object-storage buckets for session login. This is a simple basic-auth style option, but it ties workspace users to the credentials known by the Datalab runtime.
-- Set `auth.type = delegated` and let another platform component protect access before requests reach the workspace. This does not mean that unauthenticated access is required; it means authentication is delegated to another layer, such as the Kubernetes ingress controller.
-
-Delegating authentication is often more flexible because users accessing a workspace do not necessarily have to exist in the same identity model used by the Datalab composition. For example, NGINX Ingress can call a shared `oauth2-proxy`, while APISIX can enforce OIDC directly with its `openid-connect` plugin, optionally combined with `keycloak-authz` or the OPA plugin for authorization.
-
-Those controller-specific settings should be added by platform policy instead of being repeated in every Datalab. Kyverno is one option, but the same result can be achieved with a mutating admission webhook, GitOps post-processing, or any other automation that consistently targets the generated Educates Ingress resources. In all examples below, the Datalab environment keeps `auth.type: delegated`; the protection is established externally at the ingress layer.
+Those controller-specific settings should be added by platform policy instead of being repeated in every Datalab. Kyverno is one option, but the same result can be achieved with a mutating admission webhook, GitOps post-processing, or any other automation that consistently targets the generated Educates Ingress resources. In all examples below, protection is established externally at the ingress layer.
 
 The CEL policies in this section require Kyverno `v1.19.1` or later. Kyverno
 is required only when you use these policy examples. Provider Datalab itself
@@ -199,9 +225,9 @@ does not require Kyverno.
 
     To call a Datalab-owned service with a machine token, read `client_id` and `client_secret` from `<datalab>-oauth2-client`, request a token with `grant_type=client_credentials`, then send that access token to the service. Its policy should require `ws_api` and any configured audience.
 
-??? example "Shared delegated-auth environment configuration"
+??? example "Shared environment configuration"
 
-    Both nginx and APISIX examples use delegated auth at the Datalab layer. Change `ingress.class` to match the ingress controller you operate.
+    Change `ingress.class` to match the ingress controller you operate.
 
     ```yaml
     apiVersion: apiextensions.crossplane.io/v1beta1
@@ -211,8 +237,6 @@ does not require Kyverno.
     data:
       iam:
         realm: acme
-      auth:
-        type: delegated
       ingress:
         class: apisix # use "nginx" for the nginx example
         domain: lab.acme.org
@@ -499,14 +523,14 @@ does not require Kyverno.
 
     The ID token, userinfo, and refresh token forwarding flags are disabled by default. The access token is placed in the `Authorization` header for the APISIX OPA plugin, matching the common APISIX plugin chain where `openid-connect` runs before `opa`. If you do not want the upstream workspace application to receive that header, add an APISIX header-rewrite or equivalent platform policy after authorization to strip it before proxying upstream.
 
-Other ingress controllers follow the same delegated pattern: set `auth.type: delegated`, match the generated workshop session ingresses by label and domain, and attach the controller-specific authentication policy.
+For other ingress controllers: match the generated workshop session ingresses by label and domain, and attach the controller-specific authentication policy.
 
 Full example manifests are available in the repository:
 
 - [examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
 - [examples/ingress-protection/apisix-workshop-session-protection.yaml](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
 
-Keycloak-managed access is supported. When it is used, the composition automatically provisions the confidential Keycloak client, runtime OAuth2 credential Secret, groups, roles, role scope mappings, group role bindings, service-account role binding, and memberships needed for the workspace.
+For each Datalab, the composition provisions the confidential Keycloak client, runtime OAuth2 credential Secret, groups, roles, role scope mappings, group role bindings, service-account role binding, and memberships needed for the workspace.
 
 ### Files and the Workshop Tab
 The `spec.files` array is optional.
@@ -538,7 +562,8 @@ Provider Datalab reads the credentials from a Kubernetes Secret named via `spec.
 This secret must include at least `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 The endpoint and provider are defined in `EnvironmentConfig.data.storage`.
 For the Data service, `storage.endpoint` must be reachable from the `package-r`
-Pod. Browsers use the authenticated Data ingress and do not access S3 directly.
+Pod. Browsers use the Data service to access storage. The file browser
+requires sign-in, while public shares can be read without signing in.
 
 ### Security and Access Policy
 The `spec.security` section controls access permissions and runtime privilege level for sessions.
@@ -588,8 +613,8 @@ limit does not include PVCs in other namespaces.
 | xxx-large | 8000m | 16Gi   |
 
 ### Identity and Keycloak Resources
-When Keycloak-managed access is used, users listed under `spec.users` must already exist in Keycloak.
-When a Datalab is created for that pattern, the composition automatically provisions the required **Keycloak resources**:
+Users listed under `spec.users` must already exist in the configured Keycloak realm.
+For each Datalab, the composition provisions these **Keycloak resources**:
 
 - **Groups** for the Datalab and Datalab administrators. The regular group is named after the Datalab, and the administrator group uses `<datalab>-admin`.
 - **Group memberships** for the listed users. Users listed in `spec.users` join the regular group; selected administrators also join the admin group.
@@ -600,9 +625,9 @@ When a Datalab is created for that pattern, the composition automatically provis
 - Optional access-token audience mappers. Provider Datalab adds one mapper for each value in `EnvironmentConfig.data.iam.extraAudiences`; when the field is omitted or empty, no extra audience mapper is created. Other OAuth clients must emit the same audience when a service requires it.
 - Group role bindings for `ws_access` and `ws_admin`, plus a service-account role binding for `ws_api`.
 
-This ensures that authentication and authorization can be enforced consistently across the runtime and Datalab-owned services. If authentication is delegated to the ingress or another platform component, the identities allowed through that outer layer are managed by that component and do not necessarily have to be users in the Datalab Keycloak realm. The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. Services should treat those client-credentials tokens as machine tokens and require the configured audience when one is used; authorization should require the `ws_api` client role, not user group membership.
+The generated runtime OAuth2 client Secret is still a workspace machine credential and should be readable only by users or automation that may mint client-credentials tokens for that Datalab. Services should treat those client-credentials tokens as machine tokens and require the configured audience when one is used; authorization should require the `ws_api` client role, not user group membership.
 
-The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported consumer contract for Datalab-scoped M2M credentials and direct per-Datalab service protection. Shared browser ingress can use a separate central platform OAuth client.
+Use the runtime `<datalab>-oauth2-client` Secret for machine credentials and services owned by that Datalab. Shared browser ingress can use a separate central platform OAuth client.
 
 ---
 
@@ -613,7 +638,7 @@ The runtime workshop namespace `<datalab>-oauth2-client` Secret is the supported
 # He must declare and start a session; none runs by default.
 # No vCluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
-# A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "joe" must exist in the configured Keycloak realm.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
@@ -627,7 +652,6 @@ spec:
 - Joe's Datalab has no session runtime until he starts one. The shared
   `package-r` service still runs when Data is enabled.
 - Useful for lightweight, on-demand environments.
-- Keycloak ensures Joe is authorized to access his workspace.
 
 ---
 
@@ -638,7 +662,7 @@ spec:
 # This is the canonical shared store-validation example: the lab stays sessionless by default.
 # The lab does not use a vCluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
-# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
+# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in the configured Keycloak realm.
 # This configuration keeps the default baseline security policy:
 # - Docker registry is disabled for this shared example.
 # - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
@@ -705,7 +729,6 @@ spec:
 - No `WorkshopSession` is pre-created for this shared example. The runtime namespace and backing services can be validated without a session pod.
 - Runs with the default **baseline** security policy.
 - **No Kubernetes API access** is granted inside the environment. The shared example leaves the registry disabled.
-- Access is secured through the corresponding Keycloak group and role.
 
 ---
 
@@ -717,7 +740,7 @@ spec:
 # and a dedicated vCluster is provisioned for Kubernetes API isolation.
 # No workshop files are attached. Credentials to storage are expected
 # to exist in a secret "s-jane" in the same namespace.
-# A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "jane" must exist in the configured Keycloak realm.
 # This configuration explicitly overrides default resource quotas and security settings:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Docker registry is enabled with 3 Gi storage.
@@ -768,7 +791,6 @@ spec:
 - This is the registry-enabled example, so session-backed registry behavior can be validated here.
 - Suitable for trusted advanced development or testing that really needs full Kubernetes control.
 - Treat this as an operator-approved exception because it combines privileged runtime, registry writes, and elevated Kubernetes authority.
-- Keycloak enforces role-based access protection for this lab when Keycloak-managed access is used.
 
 ---
 
@@ -782,7 +804,7 @@ spec:
 # The analysis session is declared but stopped, so it keeps its workspace PVC
 # without creating a runtime.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
-# A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "john" must exist in the configured Keycloak realm.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
@@ -809,7 +831,6 @@ spec:
 
 - Preloads workshop materials from Git.
 - Activates the workshop tab in the UI for guided exercises.
-- Keycloak ensures only John has access to this environment and tooling.
 
 ---
 
@@ -859,25 +880,9 @@ kubectl get secret s-jeff -n workspace -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY
 
 ### Connect to Databases
 
-Starting with version 0.3.0, databases can be provisioned on a dedicated PostgreSQL host. The current baseline expects Crunchy PostgreSQL Operator `v6.0.x` and renders `PostgresCluster` as `postgres-operator.crunchydata.com/v1`. Optionally, these databases can also be exposed externally using a Gateway API `TLSRoute`, enabling secure access from outside the cluster. External exposure requires a Layer-4 capable Gateway implementation, such as Envoy Gateway or your cluster-validated equivalent, with `TLSRoute` served as `gateway.networking.k8s.io/v1`. The bundled Gateway API `v1.5.1` CRDs serve `TLSRoute` as `v1`.
+Databases run on a dedicated PostgreSQL host managed by Crunchy PostgreSQL Operator. The composition creates `PostgresCluster` resources. To connect from outside the cluster, configure a Gateway API `TLSRoute` and a compatible gateway controller. See the [installation prerequisites](installation.md#prerequisites) for the required operators and APIs.
 
 All additional users are created as regular database roles with limited privileges. Full administrative access is provided through the built-in `postgres` superuser account. This account can create extensions, manage schemas, and grant permissions to other users as needed.
 
 Database credentials are managed by the PostgreSQL operator and stored as Kubernetes Secrets. To locate the credentials for database users, look for Secrets matching:
 `*-pguser-*`. These Secrets contain the connection details required to authenticate against the corresponding PostgreSQL roles.
-
----
-
-## Summary
-
-- A `Datalab` defines users, sessions, an optional vCluster, quotas, and security policies.
-- A `Datalab` can also define platform-managed databases, document stores, key-value/cache stores, vector stores, and registry storage.
-- Security controls combine **Pod Security Standards**, **Kubernetes roles**, **NetworkPolicies**, and **Docker privilege** toggles.
-- Each Datalab requires a storage credential Secret.
-- Durable data services remain visible to operators, which is the basis for backup, restore, monitoring, and lifecycle responsibility.
-- Object-storage buckets are created outside Provider Datalab, for example with Provider Storage; Provider Datalab consumes the resulting credentials.
-- For Keycloak-managed access, users must already exist in Keycloak; the Datalab provisions groups, memberships, a client, roles, and role bindings.
-- For delegated access, `auth.type = delegated` leaves authentication to the ingress layer or another platform component.
-- Sessions may be started for live work or stopped while keeping their workspace PVC.
-- Workshop files enable the Educates UI workshop tab.
-- Check `kubectl get datalabs` for readiness and confirm Secret and Keycloak resource creation where applicable.

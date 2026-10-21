@@ -1,11 +1,9 @@
 # Sandbox Security Measures
 
-Provider Datalab should describe the controls it actually creates, then point
-to planned hardening separately. Today the main shipped controls are Educates
-namespace security settings, Kubernetes RBAC/token settings, and a generated
-namespace-level NetworkPolicy set. Operators should treat these as the default
-baseline to validate, not as a substitute for platform admission policy,
-backup policy, identity governance, and audit.
+Provider Datalab configures Educates namespace security, Kubernetes roles and
+tokens, and namespace NetworkPolicies. Operators must check that the cluster
+enforces these controls and configure admission policy, backups, identity,
+and audit.
 
 ## Current Educates Integration
 
@@ -19,8 +17,7 @@ configuration:
 - `policy: privileged` -> enables the Educates Docker application with extra
   local storage
 
-This keeps Provider Datalab aligned with Educates instead of duplicating a
-separate Pod launcher.
+Educates applies these settings when it creates session resources.
 
 ## Current NetworkPolicy Baseline
 
@@ -54,7 +51,8 @@ environment and creates package-r policies directly in the runtime namespace.
   from broad external egress. This keeps other runtime namespaces unreachable
   by PodIP or ServiceIP unless an operator adds an explicit allow policy.
 - Session access allows port 8888 only from Educates workshop Pods. Permanent
-  access allows port 4180 from any source; OAuth protects the application.
+  access allows port 4180 from any source. The file browser requires sign-in;
+  public shares allow browsing and downloads without sign-in.
   The proxy can reach the configured IAM namespace.
 
 `deny-egress` is the default-deny base policy, so it blocks all egress unless
@@ -105,7 +103,7 @@ configure `internalEgress` for explicit cross-namespace dependencies.
 NetworkPolicies are additive: if any selected egress policy allows traffic, the
 traffic is allowed. Generated policies can be skipped with
 `EnvironmentConfig.data.network.excludePolicies`, but this is an exceptional
-operator escape hatch for clusters that replace the generated baseline with
+operator option for clusters that replace the generated baseline with
 their own policy set.
 
 ## Operator Checks
@@ -125,9 +123,7 @@ For the current baseline, operators should verify and be able to explain:
 
 ## Hardening Direction
 
-The next implementation step is not to publish a long policy catalogue in user
-docs. It is to turn the current compatibility baseline into small, testable
-implementation steps:
+Further hardening work includes:
 
 - decide whether a future stricter profile should replace the current
   `externalEgress: true` compatibility default

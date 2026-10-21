@@ -6,7 +6,7 @@
 # and a dedicated vcluster is provisioned for runtime isolation.
 # No workshop files are attached. Credentials to storage are expected
 # to exist in a secret "s-jane" in the same namespace.
-# A Keycloak group, role, and client are created; user "jane" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "jane" must exist in the configured Keycloak realm.
 # This configuration explicitly overrides default resource quotas and security settings:
 # - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
 # - Docker registry is enabled with 3 Gi storage.

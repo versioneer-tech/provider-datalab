@@ -19,6 +19,24 @@ spec:
   containers:
     - name: curl
       image: __CLIENT_IMAGE__
+      env:
+        - name: DATA_READ_ONLY
+          value: "__DATA_READ_ONLY__"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: __DATALAB_SECRET__
+              key: AWS_ENDPOINT_URL
       command:
         - /bin/sh
         - -ec
@@ -31,9 +49,42 @@ spec:
             --header 'X-Forwarded-Preferred-Username: datalab' \
             "${endpoint}/api/login")"
           test -n "${token}"
-          curl --fail --silent --show-error \
+          bucket=xyz-datalab-verify
+          payload=xyz-datalab-probe
+          if [ "${DATA_READ_ONLY}" = false ]; then
+            # Object-storage buckets are a prerequisite supplied outside Datalab.
+            status="$(curl --silent --show-error --output /tmp/xyz-bucket-response \
+              --write-out '%{http_code}' --request PUT --data '' \
+              --aws-sigv4 'aws:amz:us-east-1:s3' \
+              --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+              "${AWS_ENDPOINT_URL}/${bucket}")"
+            case "${status}" in
+              200|409) ;;
+              *) cat /tmp/xyz-bucket-response; exit 1 ;;
+            esac
+            curl --fail --silent --show-error --head \
+              --aws-sigv4 'aws:amz:us-east-1:s3' \
+              --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+              "${AWS_ENDPOINT_URL}/${bucket}" >/dev/null
+            curl --fail --silent --show-error --request POST \
+              --header "X-Auth: ${token}" --data-binary "${payload}" \
+              "${endpoint}/api/resources/${bucket}/probe.txt?override=true"
+          fi
+          listing="$(curl --fail --silent --show-error \
+            --header "X-Auth: ${token}" "${endpoint}/api/resources/")"
+          printf '%s' "${listing}" | grep -Fq "${bucket}"
+          resource="$(curl --fail --silent --show-error \
             --header "X-Auth: ${token}" \
-            "${endpoint}/api/resources/"
+            "${endpoint}/api/resources/${bucket}/probe.txt")"
+          printf '%s' "${resource}" | grep -Fq "${payload}"
+          if [ "${DATA_READ_ONLY}" = true ]; then
+            status="$(curl --silent --show-error --output /tmp/xyz-write-response \
+              --write-out '%{http_code}' --request POST \
+              --header "X-Auth: ${token}" --data-binary "${payload}" \
+              "${endpoint}/api/resources/${bucket}/denied.txt")"
+            test "${status}" = 403
+          fi
+          printf 'PASS Data bucket discovery, file read, and read-only=%s permissions\n' "${DATA_READ_ONLY}"
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

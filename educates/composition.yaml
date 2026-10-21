@@ -454,8 +454,7 @@ spec:
               if not access_key or not secret_key:
                   return
 
-              # Keep the legacy rclone keys until all existing Educates
-              # snapshots and CSI-backed Data Pods have been migrated.
+              # Build the rclone configuration for the runtime Secret.
               config_data = (
                   f"[{access_key}]\n"
                   f"type = {rtype}\n"
@@ -1174,14 +1173,11 @@ spec:
                   if _safe_str(sc)
               ]
               packages = env.get("packages") or []
-              auth_env = env.get("auth") or {}
 
               ingress_class = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
               ingress_enabled = _boolish(ingress_env.get("enabled"))
-
-              auth_type = (auth_env.get("type") or "none").strip().lower()
 
               storage_secret_name = f"{xr_name}-datalab"
               persistent_storage_class = ""
@@ -1193,19 +1189,6 @@ spec:
                   )
               else:
                   persistent_storage_class = requested_storage_class
-
-              obs = (getattr(req.observed, "resources", {}) or {}).get(f"observe-storage-secret-{xr_name}")
-              data_b64 = _extract_data(obs)
-
-              access_key = _b64get_any(data_b64, ["AWS_ACCESS_KEY_ID","accessKey","username","CONSOLE_ACCESS_KEY","attribute.access"])
-              secret_key = _b64get_any(data_b64, ["AWS_SECRET_ACCESS_KEY","secretKey","password","CONSOLE_SECRET_KEY","attribute.secret"])
-
-              session_credentials = {}
-              if auth_type == "credentials" and access_key:
-                  session_credentials = {
-                      "username": access_key,
-                      "password": secret_key,
-                  }
 
               external_egress = security.get("externalEgress")
               if external_egress is None:
@@ -1587,7 +1570,6 @@ spec:
                                   [{"name": "KUBECONFIG", "value": "/opt/kubeconfig/config"}]
                                   if vcluster else []
                               ),
-                              **session_credentials,
                           }
                       }
                   }

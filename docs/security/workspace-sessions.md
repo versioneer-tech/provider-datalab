@@ -1,10 +1,8 @@
 # Workspace Sessions as Sandboxes
 
-A Datalab session is a sandbox made from several boundaries at once: a
-container, a Kubernetes namespace, optional vcluster API access, RBAC, mounted
-credentials, persistent volumes, NetworkPolicy, and ingress policy. Operators
-should describe that combined boundary clearly, because users experience one
-workspace while the platform governs many controls behind it.
+A Datalab session runs in a container and a Kubernetes namespace. Its access
+depends on RBAC, mounted credentials, persistent volumes, NetworkPolicy,
+ingress policy, and optional vCluster API access.
 
 A Pod is a useful starting point, but it is not a VM. Privileged containers,
 host namespaces, broad capabilities, hostPath mounts, runtime sockets, broad
@@ -21,7 +19,7 @@ The effective authority of a Datalab session is the combination of:
 - writable PVCs and object-storage prefixes
 - Docker or registry access
 - network ingress and egress policy
-- delegated ingress authentication and authorization
+- ingress authentication and authorization
 - the per-Datalab OAuth client secret when namespace users or automation can
   read the runtime namespace `<datalab>-oauth2-client` Secret
 
@@ -45,10 +43,9 @@ generated Datalab roles.
 | `s-joe` / `s-john` | Host namespace | Default `baseline`, default token with `edit` | Convenient for trusted automation. Stricter installs should override token defaults when API access is unnecessary. |
 | `s-jane` (`003-lab.yaml`) | vcluster plus host namespace policy | `privileged`, registry enabled, vcluster `admin` | Useful for trusted build-heavy workflows. Treat privileged mode and registry writes as explicit operator exceptions. |
 
-## User-Facing Contract
+## What Users Need to Know
 
-Users do not need to understand every generated resource, but the platform
-should make these boundaries clear before the workspace is used:
+Before users start a workspace, explain:
 
 - what the workspace can read and write
 - whether Kubernetes API access is available

@@ -19,9 +19,7 @@ Educates is the core runtime used by the current implementation. Its resources
 are created and managed internally; users and client tools do not need to know
 about them.
 
-Educates also provides the browser editor and terminal. Platform ingress can
-delegate authentication to Keycloak before a request reaches the Educates
-session.
+Educates also provides the browser editor and terminal.
 
 ## Context
 
@@ -71,7 +69,7 @@ API.
 
 The Datalab spec contains choices that a user is allowed to make. The
 operator-owned `EnvironmentConfig` contains platform settings such as ingress,
-authentication, storage classes, security defaults, and extension packages.
+Keycloak realm, storage classes, security defaults, and extension packages.
 
 Crossplane combines both sets of input. Users therefore get a small API, while
 operators keep control of security and infrastructure policy.

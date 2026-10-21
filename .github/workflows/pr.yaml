@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-name: PR
+name: Tests
 on:
   workflow_dispatch:
   push:
@@ -26,7 +26,7 @@ jobs:
       PROVIDER_DATALAB_KUBECONFIG: /tmp/provider-datalab-it.kubeconfig
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install test CLIs
         run: |

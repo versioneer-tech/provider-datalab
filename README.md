@@ -18,19 +18,19 @@ for the operating model, configuration, and examples.
   </a>
 </div>
 
-Provider Datalab does not replace the tools you already operate. In the default `datalab-educates` package, most runtime features come from the excellent [Educates Training Platform](https://educates.dev/) and are packaged with Kubernetes and [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/). The same principle applies to storage, identity, databases, and backups: Provider Datalab exposes them through a tenant-facing API, while the operator keeps policy and accountability.
+The default `datalab-educates` package uses the [Educates Training Platform](https://educates.dev/) for workspace sessions. [Crossplane Compositions](https://docs.crossplane.io/latest/composition/compositions/) connect it to the platform's storage, identity, and data services. Operators configure and maintain those services.
 
-For Keycloak-managed access, Provider Datalab can create a confidential OAuth client, workspace roles, and machine/API credentials per Datalab. The generated client is useful for Datalab-scoped automation and for protecting services owned by that Datalab; shared browser ingress can also use a central platform OAuth client. See the [installation guide](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/#crossplane-providers-and-functions) and [authentication usage guide](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/#authentication) for ingress and client-credentials details.
+The platform ingress layer handles session authentication and authorization. Provider Datalab creates a confidential Keycloak OAuth client, workspace roles, and machine/API credentials for each Datalab. The generated client is useful for Datalab-scoped automation and for protecting services owned by that Datalab; shared browser ingress can also use a central platform OAuth client. See the [installation guide](https://provider-datalab.versioneer.at/latest/how-to-guides/installation/#crossplane-providers-and-functions) and [authentication usage guide](https://provider-datalab.versioneer.at/latest/how-to-guides/usage_concepts/#authentication) for ingress and client-credentials details.
 
 ## Who It Is For
 
-- **Platform operators** get a governable self-service API for workspace runtimes, security defaults, data-service classes, and lifecycle controls.
-- **Software engineers and data users** get a concise `Datalab` spec instead of hand-wiring namespaces, ingress, credentials, IDE pods, databases, and registries.
-- **Sponsors and governance stakeholders** get a clearer control plane: who can run code, what can persist, which services are backed up, and where policy is enforced.
+- **Platform operators** configure available services, access rules, resource limits, and backups.
+- **Software engineers and data users** request workspaces and data services through one `Datalab` spec.
+- **Service owners** can review who has access, what data is stored, and how it is backed up.
 
-## Operator Contract
+## Platform Setup
 
-A `Datalab` claim should be treated as a service contract, not only as a pod launcher. The operator decides the platform boundary in `EnvironmentConfig`, installs the required controllers, pins package versions through GitOps, and verifies that the CNI, admission policy, storage classes, backup jobs, identity system, and ingress controls match the trust model. The user-facing claim stays small because those decisions are centralized.
+The operator sets shared defaults in `EnvironmentConfig`, installs the required controllers, and manages package versions through GitOps. Before users create Datalabs, check network policy, storage, backups, identity, and ingress access against the platform's requirements.
 
 ## API Reference
 
@@ -53,7 +53,7 @@ spec:
 
 ## Environment Configuration
 
-Cluster-specific operator decisions are supplied via an `EnvironmentConfig`. This is where the platform sets the trust boundary for all teams using that environment.
+Use an `EnvironmentConfig` to set shared platform settings for all teams in an environment.
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -65,8 +65,6 @@ data:
     realm: acme
     issuerURL: https://identity.acme.com/realms/acme
     internalURL: http://identity.identity-system.svc/realms/acme
-  auth:
-    type: delegated
   ingress:
     enabled: true
     class: nginx
@@ -184,6 +182,11 @@ ingress per Datalab. It requires `iam.issuerURL`, `iam.internalURL`,
 `ingress.class`, `ingress.domain`, and `ingress.secret`. Missing values stop
 reconciliation and appear in the Datalab status.
 
+Share data with the world by putting it in your Datalab's `public` folder
+and sending the public link. Anyone can browse and download those files without
+signing in. See [Sharing Data with the World](docs/how-to-guides/usage_concepts.md#sharing-data-with-the-world)
+for the folder location and an example.
+
 `spec.data.readOnlyMount: true` keeps the default read-only permissions. A
 `false` value grants create, delete, modify, and rename permissions. The S3 IAM
 policy takes precedence.
@@ -214,7 +217,7 @@ spec:
     storage: 3Gi
 ```
 
-These services stay visible to the operator, so they can be monitored, backed up, upgraded, and retired intentionally.
+The platform's installed operators manage these services. Configure monitoring, backups, upgrades, and deletion for each service you offer.
 
 ### More examples
 

@@ -8,7 +8,7 @@
 # Session workspaces use durable Datalab-owned PVCs. The default session starts,
 # while the analysis session is stopped and keeps only its PVC.
 # Credentials to storage are expected in a secret "s-john" in the same namespace.
-# A Keycloak group, role, and client are created; user "john" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "john" must exist in the configured Keycloak realm.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:

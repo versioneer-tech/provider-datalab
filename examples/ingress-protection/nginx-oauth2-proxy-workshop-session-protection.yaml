@@ -6,7 +6,7 @@
 # separately operated oauth2-proxy deployment.
 #
 # Adapt namespaces, issuer names, storage settings, and oauth2-proxy endpoints
-# for your cluster. The important Datalab-side setting is auth.type: delegated.
+# for your cluster.
 # This CEL policy requires Kyverno v1.19.1 or later.
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -16,8 +16,6 @@ metadata:
 data:
   iam:
     realm: acme
-  auth:
-    type: delegated
   ingress:
     class: nginx
     domain: lab.acme.org

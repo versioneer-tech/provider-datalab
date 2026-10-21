@@ -6,7 +6,7 @@
 # still runs because the Data component is enabled by default.
 # No vcluster is provisioned and no workshop files are attached.
 # Credentials to storage are expected to exist in a secret "s-joe" in the same namespace.
-# A Keycloak group, role, and client are created; user "joe" must exist in Keycloak.
+# A Keycloak group, role, and client are created; user "joe" must exist in the configured Keycloak realm.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:

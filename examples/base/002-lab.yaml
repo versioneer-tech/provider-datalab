@@ -5,7 +5,7 @@
 # This is the canonical shared store-validation example: the lab stays sessionless by default.
 # The lab does not use a vcluster and has no workshop files.
 # Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
-# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in Keycloak.
+# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in the configured Keycloak realm.
 # This configuration keeps the default baseline security policy:
 # - Docker registry is disabled for this shared example.
 # - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".

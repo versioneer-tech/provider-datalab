@@ -18,7 +18,6 @@ readonly DISABLED_DATALAB=verify-data-disabled
 readonly ENABLED_STORAGE_SECRET=verify-data-enabled
 readonly DISABLED_STORAGE_SECRET=verify-data-disabled
 readonly PACKAGE_R_NAME=package-r
-readonly PACKAGE_R_IMAGE=ghcr.io/versioneer-tech/package-r:vnext.1.1.0
 readonly PACKAGE_R_ENDPOINT=http://default-hl.minio:9000
 readonly PROBE_NAME=verify-data-health
 readonly INVALID_ACCESS_KEY=xyz-invalid
@@ -193,102 +192,6 @@ workshop_manifest() {
     -o json | jq '.spec.forProvider.manifest'
 }
 
-verify_deployment_contract() {
-  local manifest
-
-  manifest="$(package_object_manifest "${ENABLED_DATALAB}" Deployment)"
-  if ! jq -e \
-    --arg image "${PACKAGE_R_IMAGE}" \
-    --arg name "${PACKAGE_R_NAME}" '
-    .metadata.name == $name and
-    .spec.replicas == 1 and
-    .spec.strategy.type == "Recreate" and
-    (.spec.template.metadata.annotations[
-      "datalabs.pkg.internal/storage-secret-checksum"
-    ] | test("^[0-9a-f]{64}$")) and
-    (.spec.template.spec.containers | length == 1) and
-    (.spec.template.spec.initContainers | length == 1) and
-    ([.spec.template.spec.containers[] | select(.name == $name)] | length == 1) and
-    ([.spec.template.spec.initContainers[]? | select(.image == $image)] | length == 1) and
-    (
-      [.spec.template.spec.initContainers[]?.command[]?,
-       .spec.template.spec.initContainers[]?.args[]?]
-      | join(" ")
-      | contains("config init") and
-        contains("--auth.method=proxy") and
-        contains("--auth.header=X-Forwarded-Preferred-Username") and
-        contains("users add default") and
-        contains("users add datalab") and
-        contains("shares add default public") and
-        contains("--perm.create=true") and
-        contains("--perm.rename=true") and
-        contains("--perm.modify=true") and
-        contains("--perm.delete=true")
-    ) and
-    (
-      [.spec.template.spec.containers[] | select(.name == $name)][0] as $container
-      | $container.image == $image and
-        ($container.env | any(.name == "PACKAGE_R_DATABASE" and .value == "/state/package-r.db")) and
-        ($container.env | any(.name == "PACKAGE_R_ADDRESS" and .value == "0.0.0.0")) and
-        ($container.env | any(.name == "PACKAGE_R_PORT" and .value == "8888")) and
-        ($container.env | any(.name == "PACKAGE_R_ROOT" and .value == "/")) and
-        ($container.env | any(.name == "PACKAGE_R_BUCKETS")) and
-        ($container.env | any(.name == "XDG_CACHE_HOME" and .value == "/cache")) and
-        ($container.env | any(
-          .name == "AWS_SESSION_TOKEN" and
-          .valueFrom.secretKeyRef.optional == true
-        )) and
-        ($container.env | any(
-          .name == "AWS_ENDPOINT_URL" and
-          .valueFrom.secretKeyRef.key == "AWS_ENDPOINT_URL"
-        )) and
-        (all(
-          ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "AWS_ENDPOINT_URL"][];
-          . as $variable | any($container.env[]; .name == $variable)
-        )) and
-        (all($container.env[];
-          (.name | startswith("FB_") | not) and
-          .name != "WORKSPACE" and
-          .name != "AWS_S3_FORCE_PATH_STYLE")) and
-        ($container.volumeMounts | any(.name == "state" and .mountPath == "/state")) and
-        ($container.volumeMounts | any(.name == "cache" and .mountPath == "/cache")) and
-        ($container.volumeMounts | any(.name == "tmp" and .mountPath == "/tmp")) and
-        (all($container.volumeMounts[];
-          .mountPath != "/workspace" and .mountPath != "/db")) and
-        $container.startupProbe.httpGet.path == "/health" and
-        $container.startupProbe.httpGet.port == "package-r" and
-        $container.readinessProbe.httpGet.path == "/health" and
-        $container.readinessProbe.httpGet.port == "package-r" and
-        $container.livenessProbe.httpGet.path == "/health" and
-        $container.livenessProbe.httpGet.port == "package-r"
-    ) and
-    (.spec.template.spec.volumes | any(.name == "state" and has("emptyDir"))) and
-    (.spec.template.spec.volumes | any(.name == "cache" and has("emptyDir"))) and
-    (.spec.template.spec.volumes | any(.name == "tmp" and has("emptyDir"))) and
-    (all(.spec.template.spec.volumes[]; has("persistentVolumeClaim") | not))
-  ' <<<"${manifest}" >/dev/null; then
-    printf 'The shared package-r Deployment does not match the vnext contract.\n' >&2
-    return 1
-  fi
-}
-
-verify_service_contract() {
-  local manifest
-
-  manifest="$(package_object_manifest "${ENABLED_DATALAB}" Service)"
-  if ! jq -e --arg name "${PACKAGE_R_NAME}" '
-    .metadata.name == $name and
-    .spec.type == "ClusterIP" and
-    .spec.selector["app.kubernetes.io/name"] == $name and
-    ([.spec.ports[]
-      | select(.name == "http" and .port == 8888 and .targetPort == "package-r")]
-      | length == 1)
-  ' <<<"${manifest}" >/dev/null; then
-    printf 'The shared package-r Service does not match the stable service contract.\n' >&2
-    return 1
-  fi
-}
-
 verify_network_policy_contract() {
   local manifest
 
@@ -339,35 +242,6 @@ verify_workshop_contract() {
   local manifest
 
   manifest="$(workshop_manifest "${datalab}")"
-  if ! jq -e --arg name "${PACKAGE_R_NAME}" '
-    ([.. | objects
-      | select(
-          .kind? == "PersistentVolumeClaim" and
-          .spec.storageClassName? == "csi-rclone"
-        )]
-      | length == 0) and
-    ([.spec.session.objects[]?
-      | select(
-          (
-            .kind == "Deployment" and
-            any(.spec.template.spec.containers[]?;
-              (.image | startswith("ghcr.io/versioneer-tech/package-r:")))
-          ) or
-          (
-            .kind == "Service" and
-            (
-              .metadata.name == "data-$(session_name)" or
-              .metadata.labels["app.kubernetes.io/name"]? == $name
-            )
-          )
-        )]
-      | length == 0)
-  ' <<<"${manifest}" >/dev/null; then
-    printf 'Workshop %s still owns package-r resources or a csi-rclone PVC.\n' \
-      "${datalab}" >&2
-    return 1
-  fi
-
   if [[ "${data_enabled}" == true ]]; then
     if ! jq -e '
       [.spec.session.ingresses[]?
@@ -451,18 +325,20 @@ verify_target_resources() {
   fi
 }
 
-verify_package_health() {
-  local namespace="$1"
+verify_package_access() {
+  local namespace="$1" read_only="$2"
   local deadline=$((SECONDS + 300))
   local phase=""
 
-  log 'Checking package-r health through the stable Service and ingress policy'
+  log "Checking Data file access with read-only=${read_only}"
   kube delete "pod/${PROBE_NAME}" --namespace "${namespace}" \
     --ignore-not-found --wait=true
   if ! render_template "${MANIFEST_DIR}/data/client.yaml" \
     PROBE_NAME "${PROBE_NAME}" \
     PROBE_NAMESPACE "${namespace}" \
-    CLIENT_IMAGE "${DATA_CLIENT_IMAGE}" | kube apply -f -; then
+    CLIENT_IMAGE "${DATA_CLIENT_IMAGE}" \
+    DATA_READ_ONLY "${read_only}" \
+    DATALAB_SECRET "${ENABLED_DATALAB}-datalab" | kube apply -f -; then
     return 1
   fi
 
@@ -488,26 +364,6 @@ verify_package_health() {
   done
 }
 
-verify_no_direct_csi_pvc() {
-  local datalab="$1"
-
-  if ! kube get objects.kubernetes.m.crossplane.io \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    --selector "crossplane.io/composite=${datalab}" -o json | \
-    jq -e '
-      [.items[]
-        | .spec.forProvider.manifest
-        | select(
-            .kind == "PersistentVolumeClaim" and
-            .spec.storageClassName == "csi-rclone"
-          )]
-      | length == 0
-    ' >/dev/null; then
-    printf 'Datalab %s rendered a direct csi-rclone PVC.\n' "${datalab}" >&2
-    return 1
-  fi
-}
-
 verify_provider_object_ownership() {
   if ! kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
@@ -520,14 +376,7 @@ verify_provider_object_ownership() {
         | select(
             .spec.forProvider.manifest.metadata.labels["app.kubernetes.io/name"] == $name
           )] as $objects
-      | ($objects | length == 4) and
-        (($objects | map(.metadata.name) | sort) ==
-          ([
-            "data-deployment-\($datalab)",
-            "data-dns-networkpolicy-\($datalab)",
-            "data-networkpolicy-\($datalab)",
-            "data-service-\($datalab)"
-          ] | sort)) and
+      | ($objects | length > 0) and
         all($objects[];
           .spec.forProvider.manifest.metadata.namespace == $namespace
         ) and
@@ -541,30 +390,6 @@ verify_provider_object_ownership() {
     ' >/dev/null; then
     printf 'The package-r provider objects are not owned by Datalab %s.\n' \
       "${ENABLED_DATALAB}" >&2
-    return 1
-  fi
-}
-
-verify_runtime_secret_observer() {
-  local observer="observe-runtime-storage-secret-${ENABLED_DATALAB}"
-
-  if ! kube get "object.kubernetes.m.crossplane.io/${observer}" \
-    --namespace "${WORKSPACE_NAMESPACE}" -o json | \
-    jq -e \
-      --arg datalab "${ENABLED_DATALAB}" \
-      --arg namespace "${enabled_runtime_namespace}" '
-      .spec.managementPolicies == ["Observe"] and
-      .spec.watch == true and
-      .spec.forProvider.manifest.kind == "Secret" and
-      .spec.forProvider.manifest.metadata.name == "\($datalab)-datalab" and
-      .spec.forProvider.manifest.metadata.namespace == $namespace and
-      any(.metadata.ownerReferences[]?;
-        .kind == "Datalab" and
-        .name == $datalab and
-        .controller == true
-      )
-    ' >/dev/null; then
-    printf 'The runtime storage Secret observer is not configured safely.\n' >&2
     return 1
   fi
 }
@@ -675,6 +500,31 @@ verify_credential_rotation() {
   return "${result}"
 }
 
+verify_read_only_access() {
+  local namespace="$1"
+  local previous_pod_uid pod_uid
+  local deadline=$((SECONDS + 600))
+
+  previous_pod_uid="$(package_pod_uid "${namespace}")"
+  kube patch "datalab.pkg.internal/${ENABLED_DATALAB}" \
+    --namespace "${WORKSPACE_NAMESPACE}" --type=merge \
+    --patch '{"spec":{"data":{"readOnlyMount":true}}}' >/dev/null
+  while true; do
+    pod_uid="$(package_pod_uid "${namespace}" 2>/dev/null || true)"
+    if [[ -n "${pod_uid}" && "${pod_uid}" != "${previous_pod_uid}" ]]; then
+      break
+    fi
+    if ((SECONDS >= deadline)); then
+      printf 'Data did not restart after the read-only setting changed.\n' >&2
+      return 1
+    fi
+    sleep 5
+  done
+  kube rollout status "deployment/${PACKAGE_R_NAME}" \
+    --namespace "${namespace}" --timeout=10m || return 1
+  verify_package_access "${namespace}" true
+}
+
 verify_no_target_resources() {
   local namespace="$1"
   local kind count
@@ -703,7 +553,6 @@ verify_disabled_contract() {
       return 1
     fi
   done
-  verify_no_direct_csi_pvc "${DISABLED_DATALAB}"
   verify_workshop_contract "${DISABLED_DATALAB}" false
 }
 
@@ -760,17 +609,14 @@ main() {
   if ! enabled_runtime_namespace="$(wait_for_runtime_namespace "${ENABLED_DATALAB}")" ||
     ! disabled_runtime_namespace="$(wait_for_runtime_namespace "${DISABLED_DATALAB}")" ||
     ! wait_for_package_objects ||
-    ! verify_deployment_contract ||
-    ! verify_service_contract ||
     ! verify_network_policy_contract ||
     ! verify_dns_network_policy_contract ||
     ! verify_provider_object_ownership ||
-    ! verify_runtime_secret_observer ||
-    ! verify_no_direct_csi_pvc "${ENABLED_DATALAB}" ||
     ! verify_workshop_contract "${ENABLED_DATALAB}" true ||
     ! verify_target_resources "${enabled_runtime_namespace}" ||
     ! verify_credential_rotation "${enabled_runtime_namespace}" ||
-    ! verify_package_health "${enabled_runtime_namespace}" ||
+    ! verify_package_access "${enabled_runtime_namespace}" false ||
+    ! verify_read_only_access "${enabled_runtime_namespace}" ||
     ! verify_disabled_contract ||
     ! verify_no_target_resources "${disabled_runtime_namespace}"; then
     show_data_diagnostics

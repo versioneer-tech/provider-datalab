@@ -56,8 +56,6 @@ data:
       files:
         - image:
             url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-  auth:
-    type: credentials
   defaults:
     quota:
       memory: 2Gi
@@ -124,8 +122,6 @@ data:
       files:
         - image:
             url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-  auth:
-    type: credentials
   defaults:
     quota:
       memory: 2Gi

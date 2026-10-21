@@ -11,17 +11,56 @@ on:
       - "[0-9]+\\.[0-9]+\\.[0-9]+-rc\\.[0-9]+"     # 1.2.3-rc.1
 
 jobs:
+  verify_release_commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v7
+
+      - name: Verify successful main-branch tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_commit="$(git rev-parse HEAD)"
+          workflow_runs="$(
+            curl --fail --silent --show-error --location --get \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data-urlencode "branch=main" \
+              --data-urlencode "event=push" \
+              --data-urlencode "head_sha=${release_commit}" \
+              --data-urlencode "status=success" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/pr.yaml/runs"
+          )"
+
+          if ! jq -e --arg commit "${release_commit}" \
+            '.workflow_runs | any(.head_sha == $commit and .conclusion == "success")' \
+            <<<"${workflow_runs}" >/dev/null; then
+            printf 'Release commit %s has no successful main-branch Tests workflow run.\n' \
+              "${release_commit}" >&2
+            exit 1
+          fi
+
   build_and_publish_configuration_packages:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: verify_release_commit
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -29,8 +68,12 @@ jobs:
 
       - name: Install Crossplane CLI
         run: |
-          curl -sL "https://raw.githubusercontent.com/crossplane/crossplane/v2.4.1/install.sh" | XP_VERSION=v2.4.1 sh
-          sudo mv crossplane /usr/local/bin
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/crossplane/crossplane/v2.4.1/install.sh \
+            --output /tmp/crossplane-install.sh
+          XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
+          sudo install crossplane /usr/local/bin/crossplane
 
       - name: Build and publish datalab-educates Configuration Package
         shell: bash
@@ -56,24 +99,27 @@ jobs:
 
   build_docs:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: build_and_publish_configuration_packages
     permissions:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
 
       - name: Install mkdocs dependencies
         run: |
           pip install -r docs/requirements.txt
 
       - name: Set up Go (for crdoc)
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.23.x"
           cache: true
