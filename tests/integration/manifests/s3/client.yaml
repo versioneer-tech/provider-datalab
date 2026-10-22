@@ -1,0 +1,55 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: verify-s3-client
+  namespace: __RUNTIME_NAMESPACE__
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  hostAliases:
+  - ip: __GATEWAY_IP__
+    hostnames: [verify-s3.lab.local]
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: client
+    image: __S3_CLIENT_IMAGE__
+    imagePullPolicy: Never
+    env:
+    - name: CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: verify-s3-oauth2-client
+          key: client_secret
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    volumeMounts:
+    - name: work
+      mountPath: /tmp
+    - name: certificate
+      mountPath: /certs
+      readOnly: true
+  volumes:
+  - name: work
+    emptyDir: {}
+  - name: certificate
+    configMap:
+      name: verify-s3-ca

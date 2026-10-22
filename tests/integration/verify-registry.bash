@@ -19,52 +19,8 @@ readonly SESSION_SECRET="${DATALAB_NAME}-${SESSION_NAME}-session"
 readonly PROBE_NAME=verify-registry
 registry_runtime_namespace=""
 
-create_ingress_certificate() {
-  local certificate private_key
-  local result=0
-
-  require_command openssl
-  certificate="$(mktemp /tmp/provider-datalab-registry-cert.XXXXXX)"
-  private_key="$(mktemp /tmp/provider-datalab-registry-key.XXXXXX)"
-  openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-    -subj '/CN=*.lab.local' \
-    -addext 'subjectAltName=DNS:*.lab.local' \
-    -keyout "${private_key}" -out "${certificate}" >/dev/null 2>&1 || result=$?
-  if ((result == 0)); then
-    kube create secret tls wildcard-tls \
-      --namespace "${WORKSPACE_NAMESPACE}" \
-      --cert "${certificate}" --key "${private_key}" \
-      --dry-run=client -o yaml | kube apply -f - || result=$?
-  fi
-  rm -f "${certificate}" "${private_key}"
-  return "${result}"
-}
-
-install_educates() {
-  require_command helm
-  install_kyverno
-  create_ingress_certificate
-
-  log "Installing the EOEPCA+ Educates dependencies ${EDUCATES_DEPENDENCIES_VERSION}"
-  helm_it upgrade --install educates \
-    oci://ghcr.io/eoepca/workspace/workspace-dependencies-educates \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-    --kube-context "${KUBECTL_CONTEXT}" \
-    --namespace "${EDUCATES_NAMESPACE}" \
-    --create-namespace \
-    --version "${EDUCATES_DEPENDENCIES_VERSION}" \
-    --set clusterIngressDomain=lab.local \
-    --set clusterIngressClass=nginx \
-    --set tlsCertificateRef.name=wildcard-tls \
-    --set tlsCertificateRef.namespace="${WORKSPACE_NAMESPACE}" \
-    --wait \
-    --timeout 15m
-
-  kube rollout status deployment/secrets-manager \
-    --namespace "${EDUCATES_NAMESPACE}" --timeout=5m
-  kube rollout status deployment/session-manager \
-    --namespace "${EDUCATES_NAMESPACE}" --timeout=5m
-}
+# shellcheck source=educates.bash
+source "${INTEGRATION_DIR}/educates.bash"
 
 apply_registry_datalab() {
   log 'Applying the registry verification Datalab'
@@ -147,8 +103,7 @@ find_registry_service() {
 
 run_registry_probe() {
   local runtime_namespace="$1"
-  local service_data service_name service_ip service_port phase
-  local deadline=$((SECONDS + 300))
+  local service_data service_name service_ip service_port
 
   if ! service_data="$(find_registry_service "${runtime_namespace}")"; then
     return 1
@@ -175,26 +130,7 @@ run_registry_probe() {
     return 1
   fi
 
-  while true; do
-    phase="$(kube get "pod/${PROBE_NAME}" --namespace "${runtime_namespace}" \
-      -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-    case "${phase}" in
-      Succeeded)
-        kube logs "pod/${PROBE_NAME}" --namespace "${runtime_namespace}"
-        return 0
-        ;;
-      Failed)
-        kube logs "pod/${PROBE_NAME}" --namespace "${runtime_namespace}" || true
-        kube describe "pod/${PROBE_NAME}" --namespace "${runtime_namespace}" || true
-        return 1
-        ;;
-    esac
-    if ((SECONDS >= deadline)); then
-      printf 'Registry probe did not finish within five minutes.\n' >&2
-      return 1
-    fi
-    sleep 5
-  done
+  wait_for_probe "${runtime_namespace}" "${PROBE_NAME}"
 }
 
 show_registry_diagnostics() {

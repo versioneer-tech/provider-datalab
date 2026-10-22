@@ -24,7 +24,7 @@ data:
     endpoint: https://s3.acme.org
     provider: Other
     region: acme
-    force_path_style: "true"
+    forcePathStyle: "true"
     secretNamespace: workspace
     type: s3
 ---

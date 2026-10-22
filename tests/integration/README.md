@@ -25,26 +25,29 @@ tests/unit.bash
 | --- | --- | --- |
 | `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, MinIO, a controlled target with vCluster labels, and external access. |
 | `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session with a 1 GiB registry. The test authenticates to the session registry and writes and reads a blob. |
-| `verify-data` | `verify-data-enabled` and `verify-data-disabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | The test verifies one provider-owned package-r Deployment and Service, restricted ingress and DNS NetworkPolicies, credential rotation, S3 bucket discovery, file write/read, read-only write denial, no CSI-backed Data PVC, stable Data ingress configuration, and complete omission when Data is disabled. |
+| `verify-data` | `verify-data-enabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | File write/read, one credential update with workload restart, and read-only write rejection through the generated Secret. Render tests cover disabled Data and resource structure. |
+| `verify-s3` | `verify-s3` from [manifests/s3/datalab.yaml](manifests/s3/datalab.yaml) | Experimental S3 access with the generated Datalab client: TLS routing, list/HEAD/GET/range reads, write/delete rejection, shared browser hostname, and browser access after S3 is disabled. |
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | The Datalab requests PostgreSQL `pg0` with database `verify`, 1 GiB primary storage, and 1 GiB backup storage. The test uses the generated connection Secret for an internal SQL write and read. |
 | `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | The Datalab requests the `verify` MongoDB document store. The test uses the generated connection Secret for an internal document write and read. |
 | `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | The Datalab requests the `verify` Redis cache store. The test uses the generated connection Secret for an internal key write and read. |
 | `verify-qdrant` | `verify-qdrant` from [manifests/qdrant/datalab.yaml](manifests/qdrant/datalab.yaml) | The Datalab requests the `verify` Qdrant vector store. The test uses the generated connection Secret to create a collection and write and read a point. |
 
-All Datalabs use a matching profile-named prerequisite Secret. Only the enabled
-Data fixture enables the Data component, and only the registry fixture starts a
+All Datalabs use a matching profile-named prerequisite Secret. The Data
+fixture and the S3 fixture enable Data, and only the registry fixture starts a
 session. Each profile removes its successful test resources. A failed profile
 keeps its resources for diagnosis.
 
 ## Run profiles locally
 
-Each command creates or reuses the dedicated cluster, deploys the common
-platform, and runs one profile:
+Each command creates or reuses the dedicated cluster, applies the current
+source manifests, and runs one profile. Matching dependency releases are reused:
 
 ```bash
+tests/integration/run.bash all              # Full suite; one shared platform setup.
 tests/integration/run.bash verify-network
 tests/integration/run.bash verify-registry
 tests/integration/run.bash verify-data
+tests/integration/run.bash verify-s3
 tests/integration/run.bash verify-postgres
 tests/integration/run.bash verify-mongo
 tests/integration/run.bash verify-redis
@@ -61,10 +64,16 @@ Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
 `2.2.1`, which contains Educates `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
 retain successful resources.
 
-The Data profile reuses the same Educates installation and seeds one disposable
-MinIO bucket for file operations. It checks both the
-provider-kubernetes wrapper objects and the target resources in the runtime
-namespace. Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
+The Data profile reuses the Educates installation and seeds one disposable
+MinIO bucket for file operations. It tests access through the runtime Service.
+Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
+
+The S3 profile enables `httpRoute.enableS3` in its EnvironmentConfig.
+It adds Contour, Keycloak, and an SDK client to test
+[S3 client access](../../docs/how-to-guides/usage_concepts.md#s3-client-access).
+The boto3 client uses `s3-credentials.py` as its AWS `credential_process`.
+The test Pod receives `CLIENT_SECRET` from the generated Datalab OAuth Secret.
+Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
 The PostgreSQL profile installs Crunchy PGO `6.0.1`, which is the version
 pinned by EOEPCA+. Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
@@ -84,10 +93,22 @@ emitted by the composition:
 Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB, Redis, or Qdrant
 resources. Each operator remains installed after its profile finishes.
 
+Dependencies with matching pins are reused after readiness checks. Set
+`REUSE_DEPENDENCIES=0` to force Helm installation or upgrade, for example after
+changing chart values. The current Composition and XRD are applied on each run.
+The S3 client image is rebuilt when its source changes and loaded only when
+absent from Kind. Full runs start Keycloak before the network, registry, and
+Data profiles so that its startup can run at the same time. The S3 profile
+waits for it before making requests. The runner prints setup and profile durations.
+
+```bash
+REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
+```
+
 ## GitHub Actions
 
 Pull requests to `main`, pushes to `main`, and manual workflow runs execute the
-unit suite and all seven integration profiles. The profiles share one Kind
+unit suite and all eight integration profiles. The profiles share one Kind
 cluster in the job. Tag publication does not run the tests again. A release tag
 must point to a commit that passed the main-branch workflow.
 
@@ -99,3 +120,8 @@ Delete only the dedicated cluster when the validation cycle is complete:
 KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
   kind delete cluster --name provider-datalab-it
 ```
+
+The pinned Educates controllers receive read-only CRD discovery permissions
+from `manifests/educates-rbac.yaml` before startup. The harness checks both
+controller rollouts before it creates a Datalab runtime. Controllers request CPU and memory so they receive a CPU share under local
+load. Their health probes allow five minutes for cold starts.

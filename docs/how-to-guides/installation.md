@@ -56,9 +56,11 @@ The supplied dependency manifests and tests use the following tested pins:
   Install it through the upstream [Educates Installation Instructions](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html), [CLI flow](https://docs.educates.dev/en/stable/installation-guides/cli-based-installation.html), or [Carvel flow](https://docs.educates.dev/en/stable/installation-guides/carvel-based-installation.html). For Kustomize/Flux-based platform installs, Versioneer also publishes a vendored Educates base in [`versioneer-tech/bases`](https://github.com/versioneer-tech/bases), overlay [`educates/default`](https://github.com/versioneer-tech/bases/tree/main/educates/default), as `oci://ghcr.io/versioneer-tech/bases:educates-<sha12>`.
   Use the latest Versioneer Educates install from `versioneer-tech/bases` and
   follow the prerequisites of that installation.
+  Its controllers need `get`, `list`, and `watch` access to CRD definitions
+  for discovery at startup.
 - **Crunchy PostgreSQL Operator installed** if you plan to use `spec.databases` (Postgres feature).
   Baseline: PGO `v6.0.x`, which serves `PostgresCluster` as `postgres-operator.crunchydata.com/v1`.
-- **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.gateway`.
+- **A Gateway API implementation with `TLSRoute` v1 support** if PostgreSQL should be exposed externally through `EnvironmentConfig.data.database.tlsRoute`.
   Use a Layer-4 capable controller such as Envoy Gateway, or your cluster-validated equivalent. The bundled Gateway API `v1.5.1` CRDs serve `TLSRoute` as `gateway.networking.k8s.io/v1`.
 - **MongoDB Kubernetes Operator installed** if you plan to use `spec.documentStores` (document store feature).
   Tested baseline: MongoDB Kubernetes Operator chart `1.12.0`, which serves
@@ -186,7 +188,7 @@ data:
     endpoint: https://s3.demo
     provider: Other
     region: demo
-    force_path_style: "true"
+    forcePathStyle: "true"
     secretNamespace: datalab
     type: s3
   storageClasses:
@@ -215,12 +217,50 @@ data:
 
 The default `EnvironmentConfig` name is `datalab`. To use a different one for a specific `Datalab`, set `datalabs.pkg.internal/environment` as an annotation or label on that `Datalab`.
 
-`ingress.enabled` defaults to `false`, which gives each session an
-Educates-authenticated Data ingress. Set it to `true` for one permanent
-OAuth-protected ingress per Datalab. This requires `iam.issuerURL`,
-`iam.internalURL`, `ingress.class`, `ingress.domain`, and `ingress.secret`.
-Missing values stop reconciliation and appear in the Datalab status. Use
-`ingress.annotations` for controller-specific settings.
+`ingress.enabled` and `httpRoute.enabled` default to `false`, which gives each
+session an Educates-authenticated Data ingress. Enable one for a permanent
+OAuth-protected Data endpoint per Datalab. Enabling both stops reconciliation.
+Both require `iam.issuerURL`, `iam.internalURL`, and `ingress.domain`.
+
+- `ingress.enabled: true` creates a Kubernetes Ingress. It requires
+  `ingress.class` and `ingress.secret`. Use `ingress.annotations` for controller
+  settings.
+- `httpRoute.enabled: true` creates an HTTPS HTTPRoute and an HTTP-to-HTTPS
+  redirect HTTPRoute. It requires an installed Gateway API controller and an
+  existing Gateway with HTTP and TLS-terminating HTTPS listeners. The Gateway
+  manages the certificate and must accept routes from Datalab runtime namespaces.
+
+For HTTPRoute exposure, merge this block into the EnvironmentConfig:
+
+```yaml
+data:
+  ingress:
+    enabled: false
+    class: nginx
+    domain: lab.example.org
+    secret: wildcard-tls
+  httpRoute:
+    enabled: true
+    enableS3: true            # Experimental read-only S3 endpoint
+    parentName: default
+    parentNamespace: gateway-system
+    sectionName: workspaces-https
+    httpSectionName: workspaces-http
+```
+
+`httpRoute.enableS3` defaults to `false`. Set it to `true` to add the read-only
+S3 endpoint for every Data-enabled Datalab in the environment. It requires
+`httpRoute.enabled: true`. Browser and S3 requests use the same hostname.
+There is no per-Datalab override. A Datalab with `spec.data.enabled: false`
+creates neither service.
+
+Missing required values stop reconciliation and appear in the Datalab status.
+HTTPRoute exposure uses `ingress.domain` for the shared hostname. Keep
+`ingress.class`, `ingress.secret`, and `ingress.annotations` for Educates
+session Ingress objects; the permanent HTTPRoute uses Gateway-managed TLS.
+
+Use `storage.forcePathStyle` for S3 path-style access and `database.tlsRoute`
+for PostgreSQL Gateway listener references.
 
 `storage.endpoint` identifies the S3 endpoint for session tools, cluster tools,
 and `package-r`. The browser uses the permanent Data ingress and does not need
@@ -338,6 +378,9 @@ kubectl -n datalab create secret generic demo \
 ```
 
 ## Step 5 – Create a Datalab
+
+For optional S3 setup and client configuration, see
+[S3 client access](usage_concepts.md#s3-client-access).
 
 The example below creates a lab for one user with one session. The installed package and `EnvironmentConfig` supply the shared settings.
 

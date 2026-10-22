@@ -73,7 +73,7 @@ data:
     annotations: {} # optional controller-specific Ingress annotations
   storage:
     endpoint: https://s3.acme.com
-    force_path_style: "true"
+    forcePathStyle: "true"
     provider: Other
     region: acme
     secretNamespace: datalab
@@ -108,7 +108,7 @@ data:
       kubernetesRole: edit
       externalEgress: true
   database:
-    gateway: # optional (only needed if database should be externally accessible)
+    tlsRoute: # optional (only needed if database should be externally accessible)
       parentName: default
       parentNamespace: gateway-system
       sectionName: database-tls
@@ -177,9 +177,11 @@ the cluster default.
 create temporary download URLs, and share object prefixes with optional
 passwords.
 
-`EnvironmentConfig.data.ingress.enabled` enables one permanent OAuth-protected
-ingress per Datalab. It requires `iam.issuerURL`, `iam.internalURL`,
-`ingress.class`, `ingress.domain`, and `ingress.secret`. Missing values stop
+Enable `EnvironmentConfig.data.ingress.enabled` for a permanent Kubernetes
+Ingress, or `httpRoute.enabled` for Gateway API HTTPRoutes. Enable only one.
+Both require `iam.issuerURL`, `iam.internalURL`, and `ingress.domain`.
+Ingress requires `ingress.class` and `ingress.secret`; HTTPRoute requires
+listener references and Gateway-managed TLS. Missing values stop
 reconciliation and appear in the Datalab status.
 
 Share data with the world by putting it in your Datalab's `public` folder
@@ -190,6 +192,12 @@ for the folder location and an example.
 `spec.data.readOnlyMount: true` keeps the default read-only permissions. A
 `false` value grants create, delete, modify, and rename permissions. The S3 IAM
 policy takes precedence.
+
+**Experimental:** With `httpRoute.enabled: true`, set
+`httpRoute.enableS3: true` to enable
+the read-only S3 endpoint for all Data-enabled Datalabs in that environment.
+Browser and S3 requests use the same hostname. There is no per-Datalab S3
+setting. See [S3 client access](docs/how-to-guides/usage_concepts.md#s3-client-access).
 
 ### Optional managed services
 

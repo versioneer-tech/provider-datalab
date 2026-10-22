@@ -16,6 +16,10 @@ spec:
       name: s-joe-datalab-service-custom-audience
       namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-joe-s-joe-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
       name: s-joe-ws-access
       namespace: default
@@ -110,7 +114,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: keycloak-client-s-joe, keycloak-extra-audience-datalab-service-custom-s-joe-datalab-service-custom-audience,
-      keycloak-group-admin-s-joe-admin, and 18 more'
+      keycloak-extra-audience-s-joe-s-joe-s-joe-audience, and 19 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -185,6 +189,40 @@ spec:
       id.token.claim: "false"
       included.client.audience: datalab-service-custom
     name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-joe-s-joe-s-joe-audience
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-s-joe-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: s-joe
+    name: s-joe-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
     realmId: acme
@@ -810,20 +848,11 @@ spec:
               enabled: false
           dashboards:
           - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+            url: https://s-joe.lab.acme.com/
           envFrom:
           - secretRef:
               name: s-joe-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
+          ingresses: []
           namespaces:
             budget: medium
             role: edit

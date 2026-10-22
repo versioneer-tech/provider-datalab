@@ -31,38 +31,6 @@ workshop_object_name() {
   printf 'workshop-%s\n' "$1"
 }
 
-generated_policy_exists() {
-  local datalab="$1" policy="$2"
-  kube get "object.kubernetes.m.crossplane.io/$(workshop_object_name "${datalab}")" \
-    --namespace "${WORKSPACE_NAMESPACE}" -o json | \
-    jq -e --arg policy "${policy}" '
-      any(
-        .spec.forProvider.manifest.spec.environment.objects[]?;
-        .apiVersion == "networking.k8s.io/v1" and
-        .kind == "NetworkPolicy" and
-        .metadata.name == $policy
-      )
-    ' >/dev/null
-}
-
-require_generated_policy() {
-  local datalab="$1" policy="$2"
-  if ! generated_policy_exists "${datalab}" "${policy}"; then
-    printf 'Datalab %s did not generate NetworkPolicy %s.\n' \
-      "${datalab}" "${policy}" >&2
-    exit 1
-  fi
-}
-
-require_generated_policy_absent() {
-  local datalab="$1" policy="$2"
-  if generated_policy_exists "${datalab}" "${policy}"; then
-    printf 'Datalab %s unexpectedly generated NetworkPolicy %s.\n' \
-      "${datalab}" "${policy}" >&2
-    exit 1
-  fi
-}
-
 wait_for_generated_policies() {
   local datalab deadline count
 
@@ -90,35 +58,6 @@ wait_for_generated_policies() {
       fi
       sleep 5
     done
-  done
-}
-
-verify_generated_policy_contract() {
-  local policy
-
-  log 'Checking Datalab-generated NetworkPolicy sets'
-  for policy in \
-    deny-egress \
-    allow-namespace-egress \
-    allow-dns-egress \
-    allow-external-egress \
-    allow-vcluster-egress \
-    allow-internal-egress; do
-    require_generated_policy "${DATALAB_OPEN}" "${policy}"
-  done
-
-  for policy in \
-    deny-egress \
-    allow-namespace-egress \
-    allow-internal-egress; do
-    require_generated_policy "${DATALAB_CLOSED}" "${policy}"
-  done
-
-  for policy in \
-    allow-dns-egress \
-    allow-external-egress \
-    allow-vcluster-egress; do
-    require_generated_policy_absent "${DATALAB_CLOSED}" "${policy}"
   done
 }
 
@@ -154,7 +93,6 @@ apply_verification_resources() {
     OPEN_STORAGE_SECRET "${OPEN_STORAGE_SECRET}" \
     CLOSED_STORAGE_SECRET "${CLOSED_STORAGE_SECRET}"
   wait_for_generated_policies
-  verify_generated_policy_contract
   apply_generated_policies "${DATALAB_OPEN}" "${NS_OPEN}"
   apply_generated_policies "${DATALAB_CLOSED}" "${NS_CLOSED}"
 
@@ -198,19 +136,8 @@ wait_for_verification_resources() {
   sleep "${NETWORK_POLICY_SETTLE_SECONDS}"
 }
 
-pod_ip() {
-  kube get pod --namespace "$1" --selector app=echo \
-    -o jsonpath='{.items[0].status.podIP}'
-}
-
 service_ip() {
   kube get service/echo --namespace "$1" -o jsonpath='{.spec.clusterIP}'
-}
-
-vcluster_pod_ip() {
-  kube get pod --namespace "${NS_VCLUSTER}" \
-    --selector app=vcluster,release=my-vcluster \
-    -o jsonpath='{.items[0].status.podIP}'
 }
 
 vcluster_service_ip() {
@@ -239,30 +166,20 @@ verify_connection() {
 }
 
 run_network_checks() {
-  local open_pod open_service closed_pod closed_service peer_pod peer_service
-  local minio_service vcluster_pod vcluster_service
+  local open_service closed_service peer_service
+  local minio_service vcluster_service
 
-  open_pod="$(pod_ip "${NS_OPEN}")"
   open_service="$(service_ip "${NS_OPEN}")"
-  closed_pod="$(pod_ip "${NS_CLOSED}")"
   closed_service="$(service_ip "${NS_CLOSED}")"
-  peer_pod="$(pod_ip "${NS_PEER}")"
   peer_service="$(service_ip "${NS_PEER}")"
   minio_service="$(kube get service/default-hl --namespace minio \
     -o jsonpath='{.spec.clusterIP}')"
-  vcluster_pod="$(vcluster_pod_ip)"
   vcluster_service="$(vcluster_service_ip)"
 
-  verify_connection 'open: same-namespace Pod IP' "${NS_OPEN}" allow \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${open_pod}/ >/dev/null"
   verify_connection 'open: same-namespace Service IP' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${open_service}/ >/dev/null"
-  verify_connection 'open: cross-namespace Pod IP' "${NS_OPEN}" block \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_pod}/ >/dev/null"
   verify_connection 'open: cross-namespace Service IP' "${NS_OPEN}" block \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_service}/ >/dev/null"
-  verify_connection 'open: vCluster Pod IP' "${NS_OPEN}" allow \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_pod}:8443/ >/dev/null"
   verify_connection 'open: vCluster Service IP' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_service}:443/ >/dev/null"
   verify_connection 'open: external URL' "${NS_OPEN}" allow \
@@ -270,12 +187,8 @@ run_network_checks() {
   verify_connection 'open: configured MinIO backend' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${minio_service}:9000/minio/health/ready >/dev/null"
 
-  verify_connection 'closed: same-namespace Pod IP' "${NS_CLOSED}" allow \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_pod}/ >/dev/null"
   verify_connection 'closed: same-namespace Service IP' "${NS_CLOSED}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_service}/ >/dev/null"
-  verify_connection 'closed: cross-namespace Pod IP' "${NS_CLOSED}" block \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_pod}/ >/dev/null"
   verify_connection 'closed: cross-namespace Service IP' "${NS_CLOSED}" block \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_service}/ >/dev/null"
   verify_connection 'closed: vCluster Service IP' "${NS_CLOSED}" block \

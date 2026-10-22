@@ -18,6 +18,7 @@
 # - prod with 1 Gi storage
 # Additionally, one Qdrant-backed vector store is provisioned:
 # - prod with 1 Gi storage
+# Credential observers follow operator Secret replacements and updates.
 # Access credentials are generated as secrets in the runtime namespace:
 # - MongoDB: <store>-mongodb-auth
 # - Redis: <store>-redis-auth

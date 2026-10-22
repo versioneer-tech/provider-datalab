@@ -16,7 +16,6 @@ source "${INTEGRATION_DIR}/lib.bash"
 : "${QDRANT_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${KEEP_STORE_RESOURCES:=0}"
 
-readonly STORE_NAME=verify
 readonly store_type="${1:-}"
 
 case "${store_type}" in
@@ -25,7 +24,6 @@ case "${store_type}" in
     OPERATOR_NAMESPACE=mongodb-operator
     OPERATOR_RELEASE=mongodb-kubernetes
     OPERATOR_DEPLOYMENT=mongodb-kubernetes-operator
-    COMPOSED_OBJECT=mongodb-community-verify-mongo-verify
     RESOURCE_TYPE=mongodbcommunity.mongodbcommunity.mongodb.com
     RESOURCE_NAME=mongodb-verify
     POD_NAME=mongodb-verify-0
@@ -41,7 +39,6 @@ case "${store_type}" in
     OPERATOR_NAMESPACE=redis-operator
     OPERATOR_RELEASE=redis-operator
     OPERATOR_DEPLOYMENT=redis-operator
-    COMPOSED_OBJECT=redis-cache-verify-redis-verify
     RESOURCE_TYPE=redis.redis.redis.opstreelabs.in
     RESOURCE_NAME=verify
     POD_NAME=verify-0
@@ -57,7 +54,6 @@ case "${store_type}" in
     OPERATOR_NAMESPACE=qdrant-operator
     OPERATOR_RELEASE=qdrant-operator
     OPERATOR_DEPLOYMENT=qdrant-operator
-    COMPOSED_OBJECT=qdrant-vector-verify-qdrant-verify
     RESOURCE_TYPE=qdrantclusters.qdrant.io
     RESOURCE_NAME=verify
     POD_NAME=qdrant-verify-0
@@ -74,7 +70,7 @@ case "${store_type}" in
     ;;
 esac
 
-readonly DATALAB_NAME OPERATOR_NAMESPACE OPERATOR_RELEASE OPERATOR_DEPLOYMENT COMPOSED_OBJECT
+readonly DATALAB_NAME OPERATOR_NAMESPACE OPERATOR_RELEASE OPERATOR_DEPLOYMENT
 readonly RESOURCE_TYPE RESOURCE_NAME POD_NAME SERVICE_NAME CLIENT_IMAGE
 readonly STORAGE_SECRET="${DATALAB_NAME}"
 readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
@@ -82,6 +78,9 @@ readonly PROBE_NAME="${DATALAB_NAME}"
 readonly STORE_NAMESPACE="${DATALAB_NAME}"
 
 install_mongo_operator() {
+  if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" "mongodb-kubernetes-${MONGODB_OPERATOR_VERSION}"; then
+    return
+  fi
   log "Installing MongoDB Kubernetes Operator ${MONGODB_OPERATOR_VERSION}"
   helm_it repo add mongodb https://mongodb.github.io/helm-charts/ --force-update
   helm_it repo update mongodb
@@ -98,6 +97,9 @@ install_mongo_operator() {
 }
 
 install_redis_operator() {
+  if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" "redis-operator-${REDIS_OPERATOR_CHART_VERSION}"; then
+    return
+  fi
   log "Installing Redis Operator chart ${REDIS_OPERATOR_CHART_VERSION}"
   helm_it repo add opstree https://ot-container-kit.github.io/helm-charts/ \
     --force-update
@@ -117,6 +119,12 @@ install_qdrant_operator() {
   local archive chart_dir temp_dir
   local result=0
 
+  if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" qdrant-operator-0.1.0 &&
+    kube get deployment "${OPERATOR_DEPLOYMENT}" --namespace "${OPERATOR_NAMESPACE}" -o json |
+      jq -e --arg image "ghcr.io/qdrant-operator/qdrant-operator:${QDRANT_OPERATOR_VERSION}" \
+        'any(.spec.template.spec.containers[]; .image == $image)' >/dev/null; then
+    return
+  fi
   require_command curl
   require_command tar
   temp_dir="$(mktemp -d /tmp/provider-datalab-qdrant.XXXXXX)"
@@ -181,12 +189,9 @@ apply_store_datalab() {
 
 wait_for_store() {
   local deadline=$((SECONDS + 1200))
-  local key owner value
 
   log "Waiting for the Datalab composition to create ${store_type}"
-  until kube get "object.kubernetes.m.crossplane.io/${COMPOSED_OBJECT}" \
-    --namespace "${WORKSPACE_NAMESPACE}" >/dev/null 2>&1 && \
-    kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
+  until kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
       --namespace "${STORE_NAMESPACE}" >/dev/null 2>&1; do
     if ((SECONDS >= deadline)); then
       printf 'Datalab %s/%s did not create %s within 20 minutes.\n' \
@@ -209,33 +214,10 @@ wait_for_store() {
     return 1
   fi
 
-  log 'Waiting for the Datalab-generated connection Secret'
-  for key in "${SECRET_KEYS[@]}"; do
-    until value="$(kube get "secret/${DATALAB_SECRET}" \
-      --namespace "${WORKSPACE_NAMESPACE}" \
-      -o "jsonpath={.data.${key}}" 2>/dev/null)" && [[ -n "${value}" ]]; do
-      if ((SECONDS >= deadline)); then
-        printf 'Datalab Secret %s/%s did not contain %s within 20 minutes.\n' \
-          "${WORKSPACE_NAMESPACE}" "${DATALAB_SECRET}" "${key}" >&2
-        return 1
-      fi
-      sleep 5
-    done
-  done
-
-  owner="$(kube get "secret/${DATALAB_SECRET}" \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    -o 'jsonpath={.metadata.ownerReferences[?(@.kind=="Datalab")].name}')"
-  if [[ "${owner}" != "${DATALAB_NAME}" ]]; then
-    printf 'Secret %s/%s is not owned by Datalab %s.\n' \
-      "${WORKSPACE_NAMESPACE}" "${DATALAB_SECRET}" "${DATALAB_NAME}" >&2
-    return 1
-  fi
+  wait_for_connection_secret "${DATALAB_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
 }
 
 run_store_probe() {
-  local deadline=$((SECONDS + 300))
-  local phase
 
   log "Running an in-cluster ${store_type} write/read probe"
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
@@ -246,26 +228,7 @@ run_store_probe() {
     CLIENT_IMAGE "${CLIENT_IMAGE}" \
     DATALAB_SECRET "${DATALAB_SECRET}" | kube apply -f -
 
-  while true; do
-    phase="$(kube get "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
-      -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-    case "${phase}" in
-      Succeeded)
-        kube logs "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}"
-        return 0
-        ;;
-      Failed)
-        kube logs "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" || true
-        kube describe "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" || true
-        return 1
-        ;;
-    esac
-    if ((SECONDS >= deadline)); then
-      printf '%s probe did not finish within five minutes.\n' "${store_type}" >&2
-      return 1
-    fi
-    sleep 5
-  done
+  wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
 }
 
 show_store_diagnostics() {

@@ -88,21 +88,38 @@ spec:
               environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
               iam = environment.get("iam") or {}
               ingress = environment.get("ingress") or {}
-              if not _boolish(ingress.get("enabled")):
+              http_route = environment.get("httpRoute") or {}
+              ingress_enabled = _boolish(ingress.get("enabled"))
+              route_enabled = _boolish(http_route.get("enabled"))
+              s3_enabled = _boolish(http_route.get("enableS3"))
+              if ingress_enabled and route_enabled:
+                  response.fatal(rsp, "Enable only one of EnvironmentConfig data.ingress.enabled and data.httpRoute.enabled.")
+                  return
+              if s3_enabled and not route_enabled:
+                  response.fatal(rsp, "EnvironmentConfig data.httpRoute.enableS3 requires data.httpRoute.enabled.")
+                  return
+              if not (ingress_enabled or route_enabled):
                   return
 
               required = {
                   "iam.issuerURL": iam.get("issuerURL"),
                   "iam.internalURL": iam.get("internalURL"),
-                  "ingress.class": ingress.get("class"),
                   "ingress.domain": ingress.get("domain"),
-                  "ingress.secret": ingress.get("secret"),
               }
+              if route_enabled:
+                  required.update({f"httpRoute.{key}": http_route.get(key) for key in (
+                      "parentName", "parentNamespace", "sectionName", "httpSectionName",
+                  )})
+              else:
+                  required.update({
+                      "ingress.class": ingress.get("class"),
+                      "ingress.secret": ingress.get("secret"),
+                  })
               missing = [name for name, value in required.items() if not _safe_str(value)]
               if missing:
                   response.fatal(
                       rsp,
-                      "EnvironmentConfig enables the Data ingress but is missing: "
+                      "EnvironmentConfig enables a permanent Data endpoint but is missing: "
                       + ", ".join(missing)
                       + ".",
                   )
@@ -247,7 +264,7 @@ spec:
                               }
                           },
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                          "watch": False,
+                          "watch": True,
                       },
                   })
 
@@ -318,7 +335,7 @@ spec:
                               }
                           },
                           "providerConfigRef": {"name": "provider-kubernetes", "kind": "ProviderConfig"},
-                          "watch": False,
+                          "watch": True,
                       },
                   })
 
@@ -449,7 +466,7 @@ spec:
               region = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
               rtype = storage_env.get("type", "")
               provider = storage_env.get("provider", "")
-              force_path_style = str(storage_env.get("force_path_style", "true")).lower()
+              force_path_style = str(storage_env.get("forcePathStyle", "true")).lower()
 
               if not access_key or not secret_key:
                   return
@@ -548,7 +565,7 @@ spec:
               db_hosts = spec.get("databases") or {}
               if isinstance(db_hosts, dict):
                   db_env = env.get("database") or {}
-                  gateway_env = db_env.get("gateway") or {}
+                  gateway_env = db_env.get("tlsRoute") or {}
 
                   gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
                   gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
@@ -765,6 +782,10 @@ spec:
                   for audience in extra_audiences_raw
                   if _safe_str(audience)
               ])
+              data_enabled = (spec.get("data") or {}).get("enabled", True)
+              s3_enabled = (env.get("httpRoute") or {}).get("enableS3", False)
+              if (data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
+                  extra_audiences = _distinct([*extra_audiences, xr_name])
               domain = ingress_env.get("domain", "default")
               url = f"https://{xr_name}.{domain}"
               session_names = [
@@ -956,6 +977,19 @@ spec:
                   },
               }, f"{xr_name}-admin")
 
+              # Keep the resolved identity in desired state. Multiple provider
+              # reference updates can otherwise remove an earlier resolved field.
+              observed_client = (getattr(req.observed, "resources", {}) or {}).get(f"keycloak-client-{xr_name}")
+              client_state = _to_dict(observed_client.resource) if observed_client else {}
+              client_identity = (client_state.get("status") or {}).get("atProvider") or {}
+              service_account_inputs = {}
+              if _safe_str(client_identity.get("id")) and _safe_str(client_identity.get("serviceAccountUserId")):
+                  service_account_inputs = {
+                      "clientId": client_identity["id"],
+                      "serviceAccountUserId": client_identity["serviceAccountUserId"],
+                      "role": "ws_api",
+                  }
+
               put("keycloak-service-account-role-api", {
                   "apiVersion": "openidclient.keycloak.m.crossplane.io/v1alpha1",
                   "kind": "ClientServiceAccountRole",
@@ -966,6 +1000,7 @@ spec:
                           "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
                           "roleRef": {"name": f"{xr_name}-ws-api", "policy": {"resolution": "Required"}},
                           "serviceAccountUserClientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                          **service_account_inputs,
                       },
                   },
               }, f"{xr_name}-ws-api")
@@ -1177,7 +1212,7 @@ spec:
               ingress_class = ingress_env.get("class", "")
               ingress_domain = ingress_env.get("domain", "default")
               ingress_secret = ingress_env.get("secret", "wildcard-tls")
-              ingress_enabled = _boolish(ingress_env.get("enabled"))
+              permanent_access = _boolish(ingress_env.get("enabled")) or _boolish((env.get("httpRoute") or {}).get("enabled"))
 
               storage_secret_name = f"{xr_name}-datalab"
               persistent_storage_class = ""
@@ -1433,7 +1468,7 @@ spec:
                   }
 
               if data_enabled:
-                  if ingress_enabled:
+                  if permanent_access:
                       workshop["spec"]["session"]["dashboards"].append(
                           {"name": "Data", "url": f"https://{xr_name}.{ingress_domain}/"}
                       )
@@ -1669,6 +1704,8 @@ spec:
         apiVersion: python.fn.crossplane.io/v1beta1
         kind: Script
         script: |
+          import copy as _copy
+          import json as _json
           import hashlib as _hashlib
           import shlex as _shlex
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -1778,7 +1815,11 @@ spec:
               ingress_annotations = ingress.get("annotations") or {}
               if not isinstance(ingress_annotations, dict):
                   ingress_annotations = {}
-              permanent_access = ingress_enabled
+              gateway = environment.get("httpRoute") or {}
+              route_enabled = _boolish(gateway.get("enabled"))
+              permanent_access = ingress_enabled or route_enabled
+              s3_enabled = _boolish(gateway.get("enableS3"))
+              gateway_namespace = _safe_str(gateway.get("parentNamespace"))
 
               endpoint_env = {
                   "name": "AWS_ENDPOINT_URL",
@@ -2184,6 +2225,270 @@ spec:
                   },
               }
 
+              s3_labels = {
+                  "app.kubernetes.io/name": "data-s3",
+                  "app.kubernetes.io/instance": xr_name,
+              }
+              s3_deployment = {
+                  "apiVersion": "apps/v1",
+                  "kind": "Deployment",
+                  "metadata": {
+                      "name": "data-s3",
+                      "namespace": workshop_namespace,
+                      "labels": s3_labels,
+                  },
+                  "spec": {
+                      "replicas": 1,
+                      "revisionHistoryLimit": 2,
+                      "selector": {"matchLabels": s3_labels},
+                      "template": {
+                          "metadata": {
+                              "labels": s3_labels,
+                              "annotations": {
+                                  "datalabs.pkg.internal/storage-secret-checksum": storage_secret_checksum,
+                              },
+                          },
+                          "spec": {
+                              "automountServiceAccountToken": False,
+                              "securityContext": {
+                                  "runAsNonRoot": True,
+                                  "runAsUser": 1000,
+                                  "runAsGroup": 100,
+                                  "fsGroup": 100,
+                                  "seccompProfile": {"type": "RuntimeDefault"},
+                              },
+                              "containers": [{
+                                  "name": "s3",
+                                  "image": "rclone/rclone:1.71.0",
+                                  "imagePullPolicy": "IfNotPresent",
+                                  "args": [
+                                      "serve", "s3", "upstream:",
+                                      "--addr=127.0.0.1:8081",
+                                      f"--auth-key={xr_name},{xr_name}",
+                                      "--config=/dev/null",
+                                      "--cache-dir=/cache",
+                                      "--dir-cache-time=10s",
+                                      "--read-only",
+                                  ],
+                                  "securityContext": {
+                                      "allowPrivilegeEscalation": False,
+                                      "readOnlyRootFilesystem": True,
+                                      "capabilities": {"drop": ["ALL"]},
+                                  },
+
+                                  "env": [
+                                      {"name": "RCLONE_CONFIG_UPSTREAM_TYPE", "value": "s3"},
+                                      {"name": "RCLONE_CONFIG_UPSTREAM_ENV_AUTH", "value": "true"},
+                                      {
+                                          "name": "RCLONE_CONFIG_UPSTREAM_PROVIDER",
+                                          "value": _safe_str(storage.get("provider") or "Other"),
+                                      },
+                                      {
+                                          "name": "RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE",
+                                          "value": str(storage.get("forcePathStyle", "true")).lower(),
+                                      },
+                                      *[{
+                                          "name": name,
+                                          "valueFrom": {"secretKeyRef": {
+                                              "name": storage_secret_name,
+                                              "key": key,
+                                              **({"optional": True} if key == "AWS_SESSION_TOKEN" else {}),
+                                          }},
+                                      } for name, key in (
+                                          ("AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+                                          ("AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
+                                          ("AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"),
+                                          ("RCLONE_CONFIG_UPSTREAM_ENDPOINT", "AWS_ENDPOINT_URL"),
+                                          ("RCLONE_CONFIG_UPSTREAM_REGION", "AWS_REGION"),
+                                      )],
+                                  ],
+                                  "resources": {
+                                      "requests": {"cpu": "50m", "memory": "128Mi"},
+                                      "limits": {"cpu": "500m", "memory": "512Mi"},
+                                  },
+                                  "readinessProbe": {
+                                      "exec": {"command": [
+                                          "rclone", "lsf", ":s3:", "--config=/dev/null",
+                                          "--s3-provider=Other", "--s3-endpoint=http://127.0.0.1:8081",
+                                          f"--s3-access-key-id={xr_name}", f"--s3-secret-access-key={xr_name}",
+                                          "--s3-env-auth=false",
+                                      ]},
+                                      "periodSeconds": 30, "timeoutSeconds": 20,
+                                  },
+                                  "volumeMounts": [
+                                      {"name": "cache", "mountPath": "/cache"},
+                                      {"name": "tmp", "mountPath": "/tmp"},
+                                  ],
+                              }],
+                              "volumes": [
+                                  {"name": "cache", "emptyDir": {"sizeLimit": "256Mi"}},
+                                  {"name": "tmp", "emptyDir": {"sizeLimit": "128Mi"}},
+                              ],
+                          },
+                      },
+                  },
+              }
+              s3_service = {
+                  "apiVersion": "v1",
+                  "kind": "Service",
+                  "metadata": {
+                      "name": "data-s3",
+                      "namespace": workshop_namespace,
+                      "labels": s3_labels,
+                  },
+                  "spec": {
+                      "selector": s3_labels,
+                      "ports": [{"name": "s3", "port": 8080, "targetPort": "s3-gateway"}],
+                  },
+              }
+              s3_network_policy = {
+                  "apiVersion": "networking.k8s.io/v1",
+                  "kind": "NetworkPolicy",
+                  "metadata": {
+                      "name": "data-s3",
+                      "namespace": workshop_namespace,
+                      "labels": s3_labels,
+                  },
+                  "spec": {
+                      "podSelector": {"matchLabels": s3_labels},
+                      "policyTypes": ["Ingress"],
+                      "ingress": [{
+                          "from": [{"namespaceSelector": {"matchLabels": {
+                              "kubernetes.io/metadata.name": gateway_namespace,
+                          }}}],
+                          "ports": [{"protocol": "TCP", "port": 8080}],
+                      }] if permanent_access else [],
+                  },
+              }
+              if s3_enabled:
+                  auth_proxy = _copy.deepcopy(next(
+                      container for container in deployment["spec"]["template"]["spec"]["containers"]
+                      if container["name"] == "oauth2-proxy"
+                  ))
+                  auth_proxy["args"] = [arg for arg in auth_proxy["args"] if not arg.startswith((
+                      "--upstream=", "--allowed-group=", "--skip-auth-route=", "--http-address=",
+                  ))] + [
+                      "--http-address=127.0.0.1:4180", "--upstream=static://202",
+                      "--skip-jwt-bearer-tokens=true", "--bearer-token-login-fallback=false",
+                      "--insecure-oidc-allow-unverified-email=true",
+                      *[f"--allowed-role={xr_name}:{role}" for role in ("ws_access", "ws_admin", "ws_api")],
+                      "--request-logging=false", "--auth-logging=false",
+                  ]
+                  for key in ("readinessProbe", "livenessProbe", "ports"):
+                      auth_proxy.pop(key, None)
+                  # Keep both original SigV4 headers and the token unchanged for rclone.
+                  gateway_config = "\n".join([
+                      "pid /tmp/nginx.pid;",
+                      "error_log /dev/stderr warn;",
+                      "events { worker_connections 1024; }",
+                      "http {",
+                      "  access_log off;",
+                      "  client_body_temp_path /tmp/body; proxy_temp_path /tmp/proxy;",
+                      "  fastcgi_temp_path /tmp/fastcgi; uwsgi_temp_path /tmp/uwsgi; scgi_temp_path /tmp/scgi;",
+                      "  map $http_authorization $tenant_valid {",
+                      "    default 0;",
+                      f"    ~^AWS4-HMAC-SHA256\\s+Credential={xr_name}/ 1;",
+                      "  }",
+                      "  server {",
+                      "    listen 8080;",
+                      "    location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }",
+                      "    location / {",
+                      "      if ($tenant_valid = 0) { return 403; }",
+                      '      if ($http_x_amz_security_token = "") { return 403; }',
+                      "      limit_except GET { deny all; }",
+                      "      auth_request /_s3_auth;",
+                      "      proxy_set_header Host $http_host;",
+                      "      proxy_buffering off; proxy_read_timeout 3600s;",
+                      "      proxy_pass http://127.0.0.1:8081;",
+                      "    }",
+                      "    location = /_s3_auth {",
+                      "      internal; proxy_pass_request_body off;",
+                      '      proxy_set_header Content-Length "";',
+                      '      proxy_set_header Cookie "";',
+                      '      proxy_set_header Authorization "Bearer $http_x_amz_security_token";',
+                      "      proxy_pass http://127.0.0.1:4180/oauth2/auth?;",
+                      "    }",
+                      "  }",
+                      "}", "",
+                  ])
+                  s3_config = {
+                      "apiVersion": "v1", "kind": "ConfigMap",
+                      "metadata": {"name": "data-s3", "namespace": workshop_namespace},
+                      "data": {"nginx.conf": gateway_config},
+                  }
+                  pod = s3_deployment["spec"]["template"]
+                  pod["metadata"]["annotations"]["datalabs.pkg.internal/gateway-config-checksum"] = _hashlib.sha256(gateway_config.encode()).hexdigest()
+                  pod["spec"]["volumes"].append({"name": "gateway-config", "configMap": {"name": "data-s3"}})
+                  pod["spec"]["containers"].extend([auth_proxy, {
+                      "name": "gateway", "image": "nginxinc/nginx-unprivileged:1.28-alpine",
+                      "command": ["nginx"], "args": ["-g", "daemon off;"],
+                      "securityContext": {
+                          "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
+                          "capabilities": {"drop": ["ALL"]},
+                      },
+                      "ports": [{"name": "s3-gateway", "containerPort": 8080}],
+                      "resources": {"requests": {"cpu": "10m", "memory": "16Mi"}, "limits": {"cpu": "250m", "memory": "64Mi"}},
+                      "readinessProbe": {"httpGet": {"path": "/_ready", "port": "s3-gateway"}},
+                      "volumeMounts": [
+                          {"name": "tmp", "mountPath": "/tmp"},
+                          {"name": "gateway-config", "mountPath": "/etc/nginx/nginx.conf", "subPath": "nginx.conf", "readOnly": True},
+                      ],
+                  }])
+
+              data_route = {
+                  "apiVersion": "gateway.networking.k8s.io/v1",
+                  "kind": "HTTPRoute",
+                  "metadata": {"name": "data", "namespace": workshop_namespace},
+                  "spec": {
+                      "parentRefs": [{
+                          "name": _safe_str(gateway.get("parentName")),
+                          "namespace": gateway_namespace,
+                          "sectionName": _safe_str(gateway.get("sectionName")),
+                      }],
+                      "hostnames": [f"{xr_name}.{ingress_domain}"],
+                      "rules": ([{
+                          "matches": [
+                              {"headers": [{
+                                  "name": "User-Agent",
+                                  "type": "RegularExpression",
+                                  "value": "^aws-cli/.*",
+                              }]},
+                              {"headers": [{
+                                  "name": "Authorization",
+                                  "type": "RegularExpression",
+                                  "value": "^AWS4-HMAC-SHA256 .*",
+                              }]},
+                              {"queryParams": [{
+                                  "name": "X-Amz-Algorithm",
+                                  "value": "AWS4-HMAC-SHA256",
+                              }]},
+                          ],
+                          "backendRefs": [{"name": "data-s3", "port": 8080}],
+                          "timeouts": {"request": "3600s"},
+                      }] if s3_enabled else []) + [{
+                          "backendRefs": [{"name": "package-r", "port": 4180}],
+                          "timeouts": {"request": "3600s"},
+                      }],
+                  },
+              }
+              data_redirect = {
+                  "apiVersion": "gateway.networking.k8s.io/v1",
+                  "kind": "HTTPRoute",
+                  "metadata": {"name": "data-https-redirect", "namespace": workshop_namespace},
+                  "spec": {
+                      "parentRefs": [{
+                          "name": _safe_str(gateway.get("parentName")),
+                          "namespace": gateway_namespace,
+                          "sectionName": _safe_str(gateway.get("httpSectionName")),
+                      }],
+                      "hostnames": [f"{xr_name}.{ingress_domain}"],
+                      "rules": [{"filters": [{
+                          "type": "RequestRedirect",
+                          "requestRedirect": {"scheme": "https", "statusCode": 301},
+                      }]}],
+                  },
+              }
+
               dns_targets = [{
                   "namespaceSelector": {
                       "matchLabels": {
@@ -2247,7 +2552,37 @@ spec:
               emit(f"data-service-{xr_name}", service)
               emit(f"data-networkpolicy-{xr_name}", network_policy)
               if permanent_access:
-                  emit(f"data-ingress-{xr_name}", permanent_ingress)
+                  if route_enabled:
+                      route_readiness = {
+                          "policy": "DeriveFromCelQuery",
+                          "celQuery": (
+                              "has(object.status) && has(object.status.parents) && "
+                              f"object.status.parents.exists(p, p.parentRef.name == {_json.dumps(_safe_str(gateway.get('parentName')))} && "
+                              f"has(p.parentRef.namespace) && p.parentRef.namespace == {_json.dumps(gateway_namespace)} && "
+                              "has(p.parentRef.sectionName) && p.parentRef.sectionName == object.spec.parentRefs[0].sectionName && "
+                              "has(p.conditions) && "
+                              "p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' && "
+                              "c.observedGeneration == object.metadata.generation) && "
+                              "p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True' && "
+                              "c.observedGeneration == object.metadata.generation))"
+                          ),
+                      }
+                      emit(f"data-route-{xr_name}", data_route, readiness=route_readiness)
+                      emit(f"data-redirect-{xr_name}", data_redirect, readiness=route_readiness)
+                  else:
+                      emit(f"data-ingress-{xr_name}", permanent_ingress)
+              if s3_enabled:
+                  emit(f"data-s3-config-{xr_name}", s3_config)
+                  emit(
+                      f"data-s3-deployment-{xr_name}",
+                      s3_deployment,
+                      readiness={
+                          "policy": "DeriveFromCelQuery",
+                          "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1",
+                      },
+                  )
+                  emit(f"data-s3-service-{xr_name}", s3_service)
+                  emit(f"data-s3-networkpolicy-{xr_name}", s3_network_policy)
               if "allow-dns-egress" not in excluded_network_policies:
                   emit(f"data-dns-networkpolicy-{xr_name}", dns_network_policy)
 
@@ -2302,7 +2637,7 @@ spec:
               ingress_domain = ingress_env.get("domain", "default")
 
               db_env = env.get("database") or {}
-              gateway_env = db_env.get("gateway") or {}
+              gateway_env = db_env.get("tlsRoute") or {}
 
               gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
               gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")

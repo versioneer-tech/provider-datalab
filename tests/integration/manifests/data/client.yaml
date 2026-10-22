@@ -49,18 +49,18 @@ spec:
             --header 'X-Forwarded-Preferred-Username: datalab' \
             "${endpoint}/api/login")"
           test -n "${token}"
-          bucket=xyz-datalab-verify
-          payload=xyz-datalab-probe
+          bucket=verify-data-bucket
+          payload=verify-data-content
           if [ "${DATA_READ_ONLY}" = false ]; then
             # Object-storage buckets are a prerequisite supplied outside Datalab.
-            status="$(curl --silent --show-error --output /tmp/xyz-bucket-response \
+            status="$(curl --silent --show-error --output /tmp/data-bucket-response \
               --write-out '%{http_code}' --request PUT --data '' \
               --aws-sigv4 'aws:amz:us-east-1:s3' \
               --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
               "${AWS_ENDPOINT_URL}/${bucket}")"
             case "${status}" in
               200|409) ;;
-              *) cat /tmp/xyz-bucket-response; exit 1 ;;
+              *) cat /tmp/data-bucket-response; exit 1 ;;
             esac
             curl --fail --silent --show-error --head \
               --aws-sigv4 'aws:amz:us-east-1:s3' \
@@ -78,7 +78,7 @@ spec:
             "${endpoint}/api/resources/${bucket}/probe.txt")"
           printf '%s' "${resource}" | grep -Fq "${payload}"
           if [ "${DATA_READ_ONLY}" = true ]; then
-            status="$(curl --silent --show-error --output /tmp/xyz-write-response \
+            status="$(curl --silent --show-error --output /tmp/data-write-response \
               --write-out '%{http_code}' --request POST \
               --header "X-Auth: ${token}" --data-binary "${payload}" \
               "${endpoint}/api/resources/${bucket}/denied.txt")"

@@ -1,0 +1,73 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: projectcontour.io/v1alpha1
+kind: ContourDeployment
+metadata:
+  name: verify-s3
+  namespace: projectcontour
+spec:
+  contour:
+    deployment:
+      replicas: 1
+  envoy:
+    workloadType: Deployment
+    deployment:
+      replicas: 1
+    networkPublishing:
+      type: ClusterIPService
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: verify-s3
+spec:
+  controllerName: projectcontour.io/gateway-controller
+  parametersRef:
+    group: projectcontour.io
+    kind: ContourDeployment
+    name: verify-s3
+    namespace: projectcontour
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: verify-s3
+  namespace: projectcontour
+spec:
+  gatewayClassName: verify-s3
+  listeners:
+  - name: workspaces-http
+    hostname: '*.lab.local'
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+  - name: workspaces-https
+    hostname: '*.lab.local'
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: wildcard-tls
+        namespace: workspace
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: verify-s3-certificate
+  namespace: workspace
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: projectcontour
+  to:
+  - group: ''
+    kind: Secret
+    name: wildcard-tls

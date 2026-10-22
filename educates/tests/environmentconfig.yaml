@@ -15,7 +15,7 @@ data:
   storage:
     endpoint: https://s3.acme
     publicEndpoint: https://s3-public.acme
-    force_path_style: "true"
+    forcePathStyle: "true"
     provider: Other
     region: acme
     secretNamespace: datalab
@@ -68,8 +68,8 @@ data:
       kubernetesAccess: true
       kubernetesRole: edit
       externalEgress: true
-  database: 
-    gateway:
+  database:
+    tlsRoute:
       parentName: default
       parentNamespace: projectcontour
       sectionName: postgres-passthrough
@@ -83,15 +83,25 @@ metadata:
 data:
   iam:
     realm: acme
+    issuerURL: https://identity.acme.com/realms/acme
+    internalURL: http://keycloak.keycloak:8080/realms/acme
     extraAudiences:
     - datalab-service-custom
   ingress:
+    enabled: false
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
+  httpRoute:
+    enabled: true
+    enableS3: true
+    parentName: default
+    parentNamespace: contour
+    sectionName: workspaces-https
+    httpSectionName: workspaces-http
   storage:
     endpoint: https://s3.acme
-    force_path_style: "true"
+    forcePathStyle: "true"
     provider: Other
     region: acme
     secretNamespace: datalab
@@ -135,7 +145,7 @@ data:
       kubernetesRole: edit
       externalEgress: true
   database:
-    gateway:
+    tlsRoute:
       parentName: default
       parentNamespace: projectcontour
       sectionName: postgres-passthrough

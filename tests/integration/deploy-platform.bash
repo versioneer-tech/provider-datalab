@@ -10,6 +10,10 @@ source "${INTEGRATION_DIR}/lib.bash"
 
 install_crossplane() {
   require_command helm
+  if helm_release_matches crossplane "${CROSSPLANE_NAMESPACE}" "crossplane-${CROSSPLANE_VERSION}"; then
+    kube rollout status deployment/crossplane --namespace "${CROSSPLANE_NAMESPACE}" --timeout=5m
+    return
+  fi
   log "Installing Crossplane ${CROSSPLANE_VERSION}"
   helm_it repo add crossplane-stable https://charts.crossplane.io/stable --force-update
   helm_it repo update crossplane-stable
@@ -32,6 +36,7 @@ install_datalab() {
   kube apply -f "${REPO_ROOT}/educates/dependencies/functions.yaml"
   kube apply -f "${REPO_ROOT}/educates/dependencies/rbac.yaml"
   wait_for_provider_runtime provider-keycloak
+  wait_for_crd_established protocolmappers.client.keycloak.m.crossplane.io
   wait_for_provider_runtime provider-kubernetes
   wait_for_provider_runtime provider-helm
   kube apply -f "${REPO_ROOT}/educates/dependencies/03-providerConfigs.yaml"
@@ -43,15 +48,6 @@ install_datalab() {
 
 wait_for_packages() {
   local name
-  local -a providers=(
-    provider-kubernetes
-    provider-keycloak
-    provider-helm
-  )
-
-  for name in "${providers[@]}"; do
-    wait_for_provider_runtime "${name}"
-  done
   for name in \
     crossplane-contrib-function-python \
     crossplane-contrib-function-auto-ready; do

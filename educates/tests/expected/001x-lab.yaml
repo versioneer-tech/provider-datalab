@@ -16,6 +16,10 @@ spec:
       name: s-joe-datalab-service-custom-audience
       namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-joe-s-joe-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
       name: s-joe-ws-access
       namespace: default
@@ -62,6 +66,30 @@ spec:
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
       name: data-networkpolicy-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-redirect-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-route-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-config-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-deployment-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-networkpolicy-s-joe
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-service-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
@@ -134,7 +162,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: data-deployment-s-joe, data-dns-networkpolicy-s-joe,
-      data-networkpolicy-s-joe, and 23 more'
+      data-networkpolicy-s-joe, and 29 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -271,6 +299,100 @@ spec:
                 name: cache
               - mountPath: /tmp
                 name: tmp
+            - args:
+              - --http-address=0.0.0.0:4180
+              - --metrics-address=127.0.0.1:44180
+              - --provider=keycloak-oidc
+              - --provider-display-name=acme realm
+              - --oidc-issuer-url=https://identity.acme.com/realms/acme
+              - --skip-oidc-discovery=true
+              - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
+              - --redeem-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/token
+              - --oidc-jwks-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/certs
+              - --profile-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/userinfo
+              - --insecure-oidc-skip-nonce=false
+              - --scope=openid email profile
+              - --code-challenge-method=S256
+              - --redirect-url=https://s-joe.lab.acme.com/oauth2/callback
+              - --upstream=http://127.0.0.1:8888/
+              - --email-domain=*
+              - --allowed-group=s-joe
+              - --reverse-proxy=true
+              - --trusted-proxy-ip=10.42.0.0/16
+              - --whitelist-domain=s-joe.lab.acme.com
+              - --pass-basic-auth=false
+              - --pass-access-token=false
+              - --pass-authorization-header=false
+              - --pass-user-headers=true
+              - --skip-provider-button=true
+              - --cookie-name=__Host-s-joe
+              - --cookie-secure=true
+              - --cookie-httponly=true
+              - --cookie-samesite=lax
+              - --cookie-refresh=1h
+              - --cookie-expire=8h
+              - --cookie-csrf-per-request=true
+              - --cookie-csrf-per-request-limit=5
+              - --skip-auth-route=GET=^/api/public(/|$)
+              - --skip-auth-route=HEAD=^/api/public(/|$)
+              - --skip-auth-route=GET=^/public(/|$)
+              - --skip-auth-route=HEAD=^/public(/|$)
+              - --skip-auth-route=GET=^/share(/|$)
+              - --skip-auth-route=HEAD=^/share(/|$)
+              - --skip-auth-route=GET=^/static(/|$)
+              - --skip-auth-route=HEAD=^/static(/|$)
+              - --silence-ping-logging=true
+              env:
+              - name: OAUTH2_PROXY_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    key: client_id
+                    name: s-joe-oauth2-client
+              - name: OAUTH2_PROXY_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    key: client_secret
+                    name: s-joe-oauth2-client
+              - name: OAUTH2_PROXY_COOKIE_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    key: cookie_secret
+                    name: s-joe-oauth2-client
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                httpGet:
+                  path: /ping
+                  port: auth-proxy
+                periodSeconds: 20
+              name: oauth2-proxy
+              ports:
+              - containerPort: 4180
+                name: auth-proxy
+                protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /ready
+                  port: auth-proxy
+                periodSeconds: 10
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 65532
+                runAsUser: 65532
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
             initContainers:
             - args:
               - |
@@ -285,7 +407,6 @@ spec:
                 /package-r config init   --address=0.0.0.0   --port=8888   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
 
                 /package-r users add default ""
-                /package-r users add datalab '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
                 /package-r users add joe '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
                 /package-r shares add default public /s-joe/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
 
@@ -423,14 +544,17 @@ spec:
         name: package-r
         namespace: s-joe
       spec:
-        egress: []
-        ingress:
-        - from:
-          - podSelector:
+        egress:
+        - ports:
+          - port: 8080
+            protocol: TCP
+          to:
+          - namespaceSelector:
               matchLabels:
-                training.educates.dev/application: workshop
-          ports:
-          - port: 8888
+                kubernetes.io/metadata.name: keycloak
+        ingress:
+        - ports:
+          - port: 4180
             protocol: TCP
         podSelector:
           matchLabels:
@@ -439,6 +563,544 @@ spec:
         policyTypes:
         - Ingress
         - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-redirect-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-redirect-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: data-https-redirect
+        namespace: s-joe
+      spec:
+        hostnames:
+        - s-joe.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: contour
+          sectionName: workspaces-http
+        rules:
+        - filters:
+          - requestRedirect:
+              scheme: https
+              statusCode: 301
+            type: RequestRedirect
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
+      p.parentRef.name == "default" && has(p.parentRef.namespace) && p.parentRef.namespace
+      == "contour" && has(p.parentRef.sectionName) && p.parentRef.sectionName == object.spec.parentRefs[0].sectionName
+      && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
+      == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c,
+      c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-route-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-route-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: data
+        namespace: s-joe
+      spec:
+        hostnames:
+        - s-joe.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: contour
+          sectionName: workspaces-https
+        rules:
+        - backendRefs:
+          - name: data-s3
+            port: 8080
+          matches:
+          - headers:
+            - name: User-Agent
+              type: RegularExpression
+              value: ^aws-cli/.*
+          - headers:
+            - name: Authorization
+              type: RegularExpression
+              value: ^AWS4-HMAC-SHA256 .*
+          - queryParams:
+            - name: X-Amz-Algorithm
+              value: AWS4-HMAC-SHA256
+          timeouts:
+            request: 3600s
+        - backendRefs:
+          - name: package-r
+            port: 4180
+          timeouts:
+            request: 3600s
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
+      p.parentRef.name == "default" && has(p.parentRef.namespace) && p.parentRef.namespace
+      == "contour" && has(p.parentRef.sectionName) && p.parentRef.sectionName == object.spec.parentRefs[0].sectionName
+      && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
+      == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c,
+      c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-config-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-s3-config-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        nginx.conf: |
+          pid /tmp/nginx.pid;
+          error_log /dev/stderr warn;
+          events { worker_connections 1024; }
+          http {
+            access_log off;
+            client_body_temp_path /tmp/body; proxy_temp_path /tmp/proxy;
+            fastcgi_temp_path /tmp/fastcgi; uwsgi_temp_path /tmp/uwsgi; scgi_temp_path /tmp/scgi;
+            map $http_authorization $tenant_valid {
+              default 0;
+              ~^AWS4-HMAC-SHA256\s+Credential=s-joe/ 1;
+            }
+            server {
+              listen 8080;
+              location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }
+              location / {
+                if ($tenant_valid = 0) { return 403; }
+                if ($http_x_amz_security_token = "") { return 403; }
+                limit_except GET { deny all; }
+                auth_request /_s3_auth;
+                proxy_set_header Host $http_host;
+                proxy_buffering off; proxy_read_timeout 3600s;
+                proxy_pass http://127.0.0.1:8081;
+              }
+              location = /_s3_auth {
+                internal; proxy_pass_request_body off;
+                proxy_set_header Content-Length "";
+                proxy_set_header Cookie "";
+                proxy_set_header Authorization "Bearer $http_x_amz_security_token";
+                proxy_pass http://127.0.0.1:4180/oauth2/auth?;
+              }
+            }
+          }
+      kind: ConfigMap
+      metadata:
+        name: data-s3
+        namespace: s-joe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-deployment-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-s3-deployment-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-joe
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-joe
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 2
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: s-joe
+            app.kubernetes.io/name: data-s3
+        template:
+          metadata:
+            annotations:
+              datalabs.pkg.internal/gateway-config-checksum: 705f21862c2b149739de21b32053b1f48f2041be6f92d2716238c0ffcd80cbea
+              datalabs.pkg.internal/storage-secret-checksum: a6b43718053137759cfac7ac735946144d6daaa0f17b55d8ad726788f3f31ebf
+            labels:
+              app.kubernetes.io/instance: s-joe
+              app.kubernetes.io/name: data-s3
+          spec:
+            automountServiceAccountToken: false
+            containers:
+            - args:
+              - serve
+              - s3
+              - 'upstream:'
+              - --addr=127.0.0.1:8081
+              - --auth-key=s-joe,s-joe
+              - --config=/dev/null
+              - --cache-dir=/cache
+              - --dir-cache-time=10s
+              - --read-only
+              env:
+              - name: RCLONE_CONFIG_UPSTREAM_TYPE
+                value: s3
+              - name: RCLONE_CONFIG_UPSTREAM_ENV_AUTH
+                value: "true"
+              - name: RCLONE_CONFIG_UPSTREAM_PROVIDER
+                value: Other
+              - name: RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE
+                value: "true"
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_ACCESS_KEY_ID
+                    name: s-joe-datalab
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_SECRET_ACCESS_KEY
+                    name: s-joe-datalab
+              - name: AWS_SESSION_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_SESSION_TOKEN
+                    name: s-joe-datalab
+                    optional: true
+              - name: RCLONE_CONFIG_UPSTREAM_ENDPOINT
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_ENDPOINT_URL
+                    name: s-joe-datalab
+              - name: RCLONE_CONFIG_UPSTREAM_REGION
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_REGION
+                    name: s-joe-datalab
+              image: rclone/rclone:1.71.0
+              imagePullPolicy: IfNotPresent
+              name: s3
+              readinessProbe:
+                exec:
+                  command:
+                  - rclone
+                  - lsf
+                  - ':s3:'
+                  - --config=/dev/null
+                  - --s3-provider=Other
+                  - --s3-endpoint=http://127.0.0.1:8081
+                  - --s3-access-key-id=s-joe
+                  - --s3-secret-access-key=s-joe
+                  - --s3-env-auth=false
+                periodSeconds: 30
+                timeoutSeconds: 20
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+              - mountPath: /cache
+                name: cache
+              - mountPath: /tmp
+                name: tmp
+            - args:
+              - --metrics-address=127.0.0.1:44180
+              - --provider=keycloak-oidc
+              - --provider-display-name=acme realm
+              - --oidc-issuer-url=https://identity.acme.com/realms/acme
+              - --skip-oidc-discovery=true
+              - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
+              - --redeem-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/token
+              - --oidc-jwks-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/certs
+              - --profile-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/userinfo
+              - --insecure-oidc-skip-nonce=false
+              - --scope=openid email profile
+              - --code-challenge-method=S256
+              - --redirect-url=https://s-joe.lab.acme.com/oauth2/callback
+              - --email-domain=*
+              - --reverse-proxy=true
+              - --trusted-proxy-ip=10.42.0.0/16
+              - --whitelist-domain=s-joe.lab.acme.com
+              - --pass-basic-auth=false
+              - --pass-access-token=false
+              - --pass-authorization-header=false
+              - --pass-user-headers=true
+              - --skip-provider-button=true
+              - --cookie-name=__Host-s-joe
+              - --cookie-secure=true
+              - --cookie-httponly=true
+              - --cookie-samesite=lax
+              - --cookie-refresh=1h
+              - --cookie-expire=8h
+              - --cookie-csrf-per-request=true
+              - --cookie-csrf-per-request-limit=5
+              - --silence-ping-logging=true
+              - --http-address=127.0.0.1:4180
+              - --upstream=static://202
+              - --skip-jwt-bearer-tokens=true
+              - --bearer-token-login-fallback=false
+              - --insecure-oidc-allow-unverified-email=true
+              - --allowed-role=s-joe:ws_access
+              - --allowed-role=s-joe:ws_admin
+              - --allowed-role=s-joe:ws_api
+              - --request-logging=false
+              - --auth-logging=false
+              env:
+              - name: OAUTH2_PROXY_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    key: client_id
+                    name: s-joe-oauth2-client
+              - name: OAUTH2_PROXY_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    key: client_secret
+                    name: s-joe-oauth2-client
+              - name: OAUTH2_PROXY_COOKIE_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    key: cookie_secret
+                    name: s-joe-oauth2-client
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+              imagePullPolicy: IfNotPresent
+              name: oauth2-proxy
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 65532
+                runAsUser: 65532
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
+            - args:
+              - -g
+              - daemon off;
+              command:
+              - nginx
+              image: nginxinc/nginx-unprivileged:1.28-alpine
+              name: gateway
+              ports:
+              - containerPort: 8080
+                name: s3-gateway
+              readinessProbe:
+                httpGet:
+                  path: /_ready
+                  port: s3-gateway
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 64Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /etc/nginx/nginx.conf
+                name: gateway-config
+                readOnly: true
+                subPath: nginx.conf
+            securityContext:
+              fsGroup: 100
+              runAsGroup: 100
+              runAsNonRoot: true
+              runAsUser: 1000
+              seccompProfile:
+                type: RuntimeDefault
+            volumes:
+            - emptyDir:
+                sizeLimit: 256Mi
+              name: cache
+            - emptyDir:
+                sizeLimit: 128Mi
+              name: tmp
+            - configMap:
+                name: data-s3
+              name: gateway-config
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration
+      >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas
+      >= 1
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-networkpolicy-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-s3-networkpolicy-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-joe
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-joe
+      spec:
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: contour
+          ports:
+          - port: 8080
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/instance: s-joe
+            app.kubernetes.io/name: data-s3
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-service-s-joe
+  labels:
+    crossplane.io/composite: s-joe
+  name: data-s3-service-s-joe
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-joe
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-joe
+      spec:
+        ports:
+        - name: s3
+          port: 8080
+          targetPort: s3-gateway
+        selector:
+          app.kubernetes.io/instance: s-joe
+          app.kubernetes.io/name: data-s3
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -475,10 +1137,10 @@ spec:
         namespace: s-joe
       spec:
         ports:
-        - name: http
-          port: 8888
+        - name: auth-proxy
+          port: 4180
           protocol: TCP
-          targetPort: package-r
+          targetPort: auth-proxy
         selector:
           app.kubernetes.io/instance: s-joe
           app.kubernetes.io/name: package-r
@@ -560,6 +1222,40 @@ spec:
       id.token.claim: "false"
       included.client.audience: datalab-service-custom
     name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-joe-s-joe-s-joe-audience
+  labels:
+    crossplane.io/composite: s-joe
+  name: s-joe-s-joe-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: s-joe
+    name: s-joe-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
     realmId: acme
@@ -962,11 +1658,13 @@ metadata:
     uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
+    clientId: test-client-id
     clientIdRef:
       name: s-joe
       policy:
         resolution: Required
     realmId: acme
+    role: ws_api
     roleRef:
       name: s-joe-ws-api
       policy:
@@ -975,6 +1673,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+    serviceAccountUserId: test-service-account-id
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -1252,20 +1951,11 @@ spec:
               enabled: false
           dashboards:
           - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+            url: https://s-joe.lab.acme.com/
           envFrom:
           - secretRef:
               name: s-joe-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
+          ingresses: []
           namespaces:
             budget: medium
             role: edit

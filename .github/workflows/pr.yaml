@@ -49,7 +49,10 @@ jobs:
           config: tests/integration/manifests/kind.yaml
 
       - name: Deploy integration platform
-        run: tests/integration/deploy-platform.bash
+        run: |
+          tests/integration/deploy-platform.bash
+          source tests/integration/lib.bash
+          kube apply -f tests/integration/manifests/s3/keycloak.yaml
 
       - name: Verify Datalab network policy
         run: tests/integration/verify-network.bash
@@ -59,6 +62,9 @@ jobs:
 
       - name: Verify Datalab Data service
         run: tests/integration/verify-data.bash
+
+      - name: Verify Datalab S3 endpoint
+        run: tests/integration/verify-s3.bash
 
       - name: Verify Datalab PostgreSQL
         run: tests/integration/verify-postgres.bash

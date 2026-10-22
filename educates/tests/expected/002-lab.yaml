@@ -1151,7 +1151,7 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -1182,7 +1182,7 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -1244,7 +1244,7 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -1275,7 +1275,7 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
-  watch: false
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

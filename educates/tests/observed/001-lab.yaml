@@ -63,3 +63,18 @@ status:
         AWS_SESSION_TOKEN: ZmFsbGJhY2stc2Vzc2lvbi10b2tlbg==
         AWS_ENDPOINT_URL: aHR0cHM6Ly9zZWNyZXQtczMuY3VzdG9t
         AWS_REGION: Y3VzdG9tLXNlY3JldC1yZWdpb24=
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  name: s-joe
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-client-s-joe
+status:
+  atProvider:
+    id: test-client-id
+    serviceAccountUserId: test-service-account-id
+  conditions:
+  - type: Ready
+    status: "True"

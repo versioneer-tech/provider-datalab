@@ -14,6 +14,7 @@ readonly CROSSPLANE_NAMESPACE=crossplane
 readonly WORKSPACE_NAMESPACE=workspace
 : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
+: "${REUSE_DEPENDENCIES:=1}"
 : "${CROSSPLANE_VERSION:=2.4.1}"
 : "${KYVERNO_VERSION:=1.19.1}"
 : "${KYVERNO_CHART_VERSION:=3.9.1}"
@@ -49,7 +50,7 @@ helm_it() {
 
 kind_cluster_exists() {
   KUBECONFIG="${PROVIDER_DATALAB_KUBECONFIG}" \
-    kind get clusters 2>/dev/null | grep -Fxq "${KIND_CLUSTER_NAME}"
+    kind get clusters 2>/dev/null | grep -Fx "${KIND_CLUSTER_NAME}" >/dev/null
 }
 
 export_kind_kubeconfig() {
@@ -142,11 +143,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-registry|verify-data|verify-postgres|verify-mongo|verify-redis|verify-qdrant)
+    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-qdrant)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <verify-network|verify-registry|verify-data|verify-postgres|verify-mongo|verify-redis|verify-qdrant>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-qdrant>\n' "$2" >&2
       exit 1
       ;;
   esac
@@ -154,21 +155,66 @@ selected_profile() {
 
 install_kyverno() {
   require_command helm
-  log "Installing Kyverno ${KYVERNO_VERSION} with chart ${KYVERNO_CHART_VERSION}"
-  helm_it repo add kyverno https://kyverno.github.io/kyverno/ --force-update
-  helm_it repo update kyverno
-  helm_it upgrade --install kyverno kyverno/kyverno \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-    --kube-context "${KUBECTL_CONTEXT}" \
-    --namespace kyverno \
-    --create-namespace \
-    --version "${KYVERNO_CHART_VERSION}" \
-    --wait \
-    --timeout 10m
+  if ! helm_release_matches kyverno kyverno "kyverno-${KYVERNO_CHART_VERSION}"; then
+    log "Installing Kyverno ${KYVERNO_VERSION} with chart ${KYVERNO_CHART_VERSION}"
+    helm_it repo add kyverno https://kyverno.github.io/kyverno/ --force-update
+    helm_it repo update kyverno
+    helm_it upgrade --install kyverno kyverno/kyverno \
+      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+      --kube-context "${KUBECTL_CONTEXT}" \
+      --namespace kyverno \
+      --create-namespace \
+      --version "${KYVERNO_CHART_VERSION}" \
+      --wait \
+      --timeout 10m
+
+  fi
 
   kube wait deployment \
     --namespace kyverno \
     --selector app.kubernetes.io/instance=kyverno \
     --for=condition=Available \
     --timeout=5m
+}
+
+# Test-owned releases are reused only when the pinned chart is deployed.
+helm_release_matches() {
+  [[ "${REUSE_DEPENDENCIES}" == 1 ]] || return 1
+  helm_it list --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+    --kube-context "${KUBECTL_CONTEXT}" --namespace "$2" --output json | \
+    jq -e --arg release "$1" --arg chart "$3" \
+      'any(.[]; .name == $release and .chart == $chart and .status == "deployed")' >/dev/null
+}
+
+wait_for_connection_secret() {
+  local secret_name="$1" owner="$2" timeout="$3"
+  shift 3
+  local deadline=$((SECONDS + timeout))
+  until kube get "secret/${secret_name}" --namespace "${WORKSPACE_NAMESPACE}" -o json 2>/dev/null | \
+    jq -e --arg owner "${owner}" '
+      . as $secret |
+      any(.metadata.ownerReferences[]?; .kind == "Datalab" and .name == $owner) and
+      all($ARGS.positional[]; ($secret.data[.] // "") != "")
+    ' --args "$@" >/dev/null; do
+    if ((SECONDS >= deadline)); then
+      printf 'Datalab connection Secret %s is incomplete.\n' "${secret_name}" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+wait_for_probe() {
+  local namespace="$1" pod="$2" deadline=$((SECONDS + 300))
+  while true; do
+    case "$(kube get "pod/${pod}" --namespace "${namespace}" -o jsonpath='{.status.phase}' 2>/dev/null || true)" in
+      Succeeded) kube logs "pod/${pod}" --namespace "${namespace}"; return ;;
+      Failed) break ;;
+    esac
+    ((SECONDS < deadline)) || break
+    sleep 2
+  done
+  kube logs "pod/${pod}" --namespace "${namespace}" || true
+  kube describe "pod/${pod}" --namespace "${namespace}" || true
+  return 1
 }

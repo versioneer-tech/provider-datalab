@@ -1,0 +1,74 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-s3-it
+data:
+  iam:
+    realm: integration
+    namespace: keycloak
+    issuerURL: http://keycloak.keycloak:8080/realms/integration
+    internalURL: http://keycloak.keycloak:8080/realms/integration
+  ingress:
+    class: nginx
+    domain: lab.local
+    secret: wildcard-tls
+    enabled: false
+  httpRoute:
+    enabled: true
+    enableS3: true
+    parentName: verify-s3
+    parentNamespace: projectcontour
+    sectionName: workspaces-https
+    httpSectionName: workspaces-http
+  storage:
+    endpoint: http://default-hl.minio:9000
+    publicEndpoint: http://default-hl.minio:9000
+    forcePathStyle: "true"
+    provider: Minio
+    region: us-east-1
+    secretNamespace: workspace
+    type: s3
+  storageClasses:
+    allowed:
+      - standard
+  network:
+    externalEgressCIDRs:
+      - 0.0.0.0/0
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+      - 10.244.0.0/16
+    blacklistIPs:
+      - 169.254.169.254/32
+    internalEgress:
+      - namespace: minio
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: provider-datalab-minio-it
+        ports:
+          - protocol: TCP
+            port: 9000
+      - namespace: keycloak
+        podSelector:
+          matchLabels:
+            app: keycloak
+        ports:
+          - protocol: TCP
+            port: 8080
+      - namespace: projectcontour
+        ports:
+          - protocol: TCP
+            port: 80
+          - protocol: TCP
+            port: 443
+          - protocol: TCP
+            port: 8080
+          - protocol: TCP
+            port: 8443
+  defaults:
+    overallQuota:
+      storage: 100Gi
+    security:
+      externalEgress: true

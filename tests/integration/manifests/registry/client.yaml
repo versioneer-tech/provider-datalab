@@ -31,7 +31,8 @@ spec:
         - |
           set -eu
           repository=provider-datalab-verification
-          digest=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          payload=datalab-registry-check
+          digest="sha256:$(printf '%s' "${payload}" | sha256sum | cut -d ' ' -f 1)"
 
           unauthenticated_code="$(curl --silent --output /dev/null \
             --write-out '%{http_code}' "${REGISTRY_URL}/v2/")"
@@ -64,14 +65,13 @@ spec:
             --write-out '%{http_code}' --request PUT \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             --header 'Content-Type: application/octet-stream' \
-            --data-binary '' \
+            --data-binary "${payload}" \
             "${REGISTRY_URL}${location_path}${separator}digest=${digest}")"
           test "${write_code}" = 201
 
-          read_code="$(curl --silent --output /dev/null \
-            --write-out '%{http_code}' \
+          actual="$(curl --fail --silent --show-error \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             "${REGISTRY_URL}/v2/${repository}/blobs/${digest}")"
-          test "${read_code}" = 200
+          test "${actual}" = "${payload}"
 
           printf 'PASS registry authentication and blob write/read verification\n'
