@@ -5,6 +5,7 @@
 """Render endpoint configurations and check routing and prerequisite failures."""
 
 import argparse
+import base64
 from copy import deepcopy
 import json
 import re
@@ -96,9 +97,77 @@ def main():
                 assert ('name: data-s3' in route) == (exposure in ('gateway-s3',))
             for kind in ('config', 'deployment', 'service', 'networkpolicy'):
                 assert bool(resource(output, f'data-s3-{kind}-s-joe')) == (exposure in ('gateway-s3',))
+            if exposure == 'gateway-s3':
+                policy = resource(output, 'data-s3-networkpolicy-s-joe')
+                assert 'egress:' in policy and 'port: 8080' in policy
+                assert 'kubernetes.io/metadata.name: keycloak' in policy
             assert ('included.client.audience: s-joe' in output) == (exposure in ('gateway-s3',))
-            assert bool(resource(output, 'data-deployment-s-joe')) == (exposure != 'disabled-data')
+            deployment = resource(output, 'data-deployment-s-joe')
+            assert bool(deployment) == (exposure != 'disabled-data')
+            if deployment:
+                assert "--cors-allowed-origins='*'" in deployment
+                assert 'name: AWS_SHARED_CREDENTIALS_FILE' in deployment
+                assert '/var/run/datalab/storage/aws-credentials' in deployment
+                for key in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'):
+                    assert f'name: {key}' not in deployment
+            if exposure in ('default', 'gateway', 'gateway-s3'):
+                assert '--client-secret-file=/var/run/datalab/oauth2/client_secret' in deployment
+                assert '--cookie-secret-file=/var/run/datalab/oauth2/cookie_secret' in deployment
+                assert 'OAUTH2_PROXY_CLIENT_SECRET' not in deployment
+                assert 'OAUTH2_PROXY_COOKIE_SECRET' not in deployment
+                assert 'name: oauth2-credentials' in deployment
+                assert 'subPath:' not in deployment
+            if exposure == 'gateway-s3':
+                s3_deployment = resource(output, 'data-s3-deployment-s-joe')
+                assert '--client-secret-file=/var/run/datalab/oauth2/client_secret' in s3_deployment
+                assert 'name: oauth2-credentials' in s3_deployment
+                assert 'OAUTH2_PROXY_CLIENT_SECRET' not in s3_deployment
+                assert 'name: AWS_SHARED_CREDENTIALS_FILE' in s3_deployment
+                for key in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'):
+                    assert f'name: {key}' not in s3_deployment
             print(f'PASS endpoint configuration: {exposure}', flush=True)
+
+        env = deepcopy(ENVIRONMENT)
+        env['data']['iam']['namespace'] = 'identity'
+        output = render(env)
+        policy = resource(output, 'data-s3-networkpolicy-s-joe')
+        assert 'kubernetes.io/metadata.name: identity' in policy
+        assert 'kubernetes.io/metadata.name: keycloak' not in policy
+        assert 'port: 8080' in policy and '- Egress' in policy
+        print('PASS S3 IAM egress in custom namespace', flush=True)
+
+        def oauth_render(secret):
+            observer = {
+                'apiVersion': 'kubernetes.m.crossplane.io/v1alpha1',
+                'kind': 'Object',
+                'metadata': {
+                    'name': 'observe-oauth-client-secret-s-joe',
+                    'annotations': {'crossplane.io/composition-resource-name': 'observe-oauth-client-secret-s-joe'},
+                },
+                'status': {'atProvider': {'manifest': {'data': {
+                    'clientSecret': base64.b64encode(secret.encode()).decode(),
+                }}}},
+            }
+            fixture = work / 'oauth-observed.yaml'
+            fixture.write_text(Path('educates/tests/observed/001-lab.yaml').read_text()
+                               + '\n---\n' + json.dumps(observer))
+            return render(deepcopy(ENVIRONMENT), observed=str(fixture))
+
+        first = oauth_render('xyz-client-secret')
+        second = oauth_render('xyz-rotated-client-secret')
+        for output, secret in ((first, 'xyz-client-secret'), (second, 'xyz-rotated-client-secret')):
+            generated = resource(output, 's-joe-datalab')
+            assert 'OAUTH2_CLIENT_ID: s-joe' in generated
+            assert f'OAUTH2_CLIENT_SECRET: {secret}' in generated
+            assert 'aws-credentials: |' in generated
+            assert '[default]' in generated
+            assert 'aws_access_key_id = ' in generated
+            assert 'aws_secret_access_key = ' in generated
+        for name in ('data-deployment-s-joe', 'data-s3-deployment-s-joe'):
+            def checksum(output):
+                return re.search(r'oauth2-cookie-checksum: (\S+)', resource(output, name)).group(1)
+            assert checksum(first) != checksum(second)
+        print('PASS OAuth credentials and cookie rotation rollout', flush=True)
 
         cases = [
             ('both-endpoints', ('ingress', 'enabled'), True, 'Enable only one'),

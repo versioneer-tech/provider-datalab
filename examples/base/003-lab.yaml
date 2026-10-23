@@ -1,6 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+# The generated Datalab Secret includes the OAuth client ID and secret.
 # Jane runs a datalab s-jane with a default session automatically created.
 # That session will run permanently until stopped by the operator,
 # and a dedicated vcluster is provisioned for runtime isolation.

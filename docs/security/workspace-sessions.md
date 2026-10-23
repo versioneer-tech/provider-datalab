@@ -1,55 +1,46 @@
-# Workspace Sessions as Sandboxes
+# Session access
 
-A Datalab session runs in a container and a Kubernetes namespace. Its access
-depends on RBAC, mounted credentials, persistent volumes, NetworkPolicy,
-ingress policy, and optional vCluster API access.
+A Datalab session runs as a Pod in the host cluster. Its access comes from
+Kubernetes permissions, credentials, volumes, and network rules. Check these
+together when deciding which code a user may run.
 
-A Pod is a useful starting point, but it is not a VM. Privileged containers,
-host namespaces, broad capabilities, hostPath mounts, runtime sockets, broad
-PVCs, mounted secrets, and open networking can all widen the sandbox.
+## What a session can use
 
-## Session Authority
+The session can read and write the data allowed by its storage and service
+credentials. It can use the mounted workspace PVC and any other volumes made
+available to the Pod. Docker, registries, host mounts, or runtime sockets can
+add further access.
 
-The effective authority of a Datalab session is the combination of:
+`spec.security.kubernetesAccess` controls whether the session gets a Kubernetes
+token. `spec.security.kubernetesRole` sets its role. With
+`spec.vcluster: false`, workloads use the host namespace directly. With
+`true`, the session gets a virtual Kubernetes API, while its workloads still
+run on host Pods under the host's security and network rules.
 
-- `spec.security.policy`: `restricted`, `baseline`, or `privileged`
-- `spec.security.kubernetesAccess`: whether a Kubernetes token is mounted
-- `spec.security.kubernetesRole`: `view`, `edit`, or `admin`
-- exposed object-storage and service credentials
-- writable PVCs and object-storage prefixes
-- Docker or registry access
-- network ingress and egress policy
-- ingress authentication and authorization
-- the per-Datalab OAuth client secret when namespace users or automation can
-  read the runtime namespace `<datalab>-oauth2-client` Secret
+`spec.security.policy` selects `restricted`, `baseline`, or `privileged`.
+Privileged mode enables Docker. The operator decides who may enable it.
 
-With `spec.vcluster: false`, workloads run directly in the Datalab runtime
-namespace. With `spec.vcluster: true`, users also get a virtual Kubernetes API,
-but workloads still run as Pods in the host cluster and remain subject to host
-namespace policy.
+A user or service that can read `<datalab>-oauth2-client` in the runtime
+namespace can request machine tokens. Those tokens carry `ws_api`. Browser
+access uses the separate `ws_access` and `ws_admin` roles.
 
-The generated OAuth client separates human and machine authority. Human access
-is authorized through `ws_access` or `ws_admin`; the generated client service
-account receives only `ws_api` for client-credentials automation. The client is
-also a useful boundary for services that intentionally belong to one Datalab,
-but shared browser ingress can use a central platform client and still check the
-generated Datalab roles.
+## Example settings
 
-## Example Trust Levels
+| Example | Settings | Access |
+| --- | --- | --- |
+| `s-jeff` | No session, Data disabled, Kubernetes access disabled | Managed stores run without a workspace. A session added later can use the supplied service credentials. |
+| `s-joe` and `s-john` | Host namespace, baseline policy, default `edit` role | Session code can use its Kubernetes token unless the operator changes the default. |
+| `s-jane` | vCluster, privileged policy, admin role, registry enabled | Session code has broad permissions. Use only with operator approval. |
 
-| Example | Runtime boundary | Security signal | Assessment |
-| --- | --- | --- | --- |
-| `s-jeff` (`002-lab.yaml`) | Host namespace, no pre-created session | `kubernetesAccess: false`, registry disabled, default `baseline` | Good store-validation shape. A started session can use exposed service credentials but cannot call the Kubernetes API. |
-| `s-joe` / `s-john` | Host namespace | Default `baseline`, default token with `edit` | Convenient for trusted automation. Stricter installs should override token defaults when API access is unnecessary. |
-| `s-jane` (`003-lab.yaml`) | vcluster plus host namespace policy | `privileged`, registry enabled, vcluster `admin` | Useful for trusted build-heavy workflows. Treat privileged mode and registry writes as explicit operator exceptions. |
+The manifests are in `examples/base/`. Their settings are examples, not a
+required policy for other Datalabs.
 
-## What Users Need to Know
+## Explain access to users
 
-Before users start a workspace, explain:
+Before users start a session, tell them which data and services it can use,
+whether Kubernetes and internet access are available, and whether Docker or
+privileged workloads are allowed. Explain what survives a stop or deletion,
+what is backed up, and who can restore it.
 
-- what the workspace can read and write
-- whether Kubernetes API access is available
-- whether internet access is open or restricted
-- whether Docker, registry, or privileged mode is enabled
-- what persists after stop or delete
-- what the operator backs up or retains
+See [Security](index.md) for the platform's responsibilities and
+[Network policies](sandbox-controls.md) for egress rules.

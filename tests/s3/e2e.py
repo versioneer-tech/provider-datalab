@@ -45,6 +45,27 @@ def main():
             print(f'GET {url} -> {exc.code}; Location: {location.split("?")[0]}', flush=True)
         else:
             raise AssertionError('Expected redirect: ' + url)
+    cors_request = urllib.request.Request(endpoint + '/share/public/', headers={'Origin': 'https://viewer.example'})
+    with opener.open(cors_request, timeout=10) as response:
+        assert response.status == 200
+        assert response.headers.get('Access-Control-Allow-Origin') == '*'
+    preflight = urllib.request.Request(endpoint + '/share/public/', method='OPTIONS', headers={
+        'Origin': 'https://viewer.example',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Range',
+    })
+    with opener.open(preflight, timeout=10) as response:
+        assert response.status == 204
+        assert response.headers.get('Access-Control-Allow-Origin') == '*'
+        assert 'GET' in response.headers.get('Access-Control-Allow-Methods', '')
+        assert 'Range' in response.headers.get('Access-Control-Allow-Headers', '')
+    other_origin = urllib.request.Request(endpoint + '/share/public/', headers={
+        'Origin': 'https://other.example',
+    })
+    with opener.open(other_origin, timeout=10) as response:
+        assert response.status == 200
+        assert response.headers.get('Access-Control-Allow-Origin') == '*'
+    print('PASS public package wildcard CORS and preflight', flush=True)
     if args.browser_only:
         return
 

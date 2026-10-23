@@ -1686,6 +1686,11 @@ stringData:
   REDIS_PROD_PORT: "6379"
   REDIS_PROD_URL: redis://default:MqZoLXDLQrwPOuwgM1dj6LzOTOML@prod.s-jeff.svc:6379/0
   REDIS_PROD_USER: default
+  aws-credentials: |
+    [default]
+    aws_access_key_id = jeff-access-key
+    aws_secret_access_key = jeff-secret-key
+    aws_session_token = integration-session-token
   configData: |
     [jeff-access-key]
     type = s3

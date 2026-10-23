@@ -206,7 +206,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/storage-secret-checksum: a6b43718053137759cfac7ac735946144d6daaa0f17b55d8ad726788f3f31ebf
+              datalabs.pkg.internal/storage-secret-checksum: e01ad97cf43e8017f25e556499ab29692d8acb1be986597f0423485c3a4fe82f
             labels:
               app.kubernetes.io/instance: s-joe
               app.kubernetes.io/name: package-r
@@ -228,22 +228,8 @@ spec:
                 value: ""
               - name: XDG_CACHE_HOME
                 value: /cache
-              - name: AWS_ACCESS_KEY_ID
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_ACCESS_KEY_ID
-                    name: s-joe-datalab
-              - name: AWS_SECRET_ACCESS_KEY
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SECRET_ACCESS_KEY
-                    name: s-joe-datalab
-              - name: AWS_SESSION_TOKEN
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SESSION_TOKEN
-                    name: s-joe-datalab
-                    optional: true
+              - name: AWS_SHARED_CREDENTIALS_FILE
+                value: /var/run/datalab/storage/aws-credentials
               - name: AWS_ENDPOINT_URL
                 valueFrom:
                   secretKeyRef:
@@ -299,11 +285,17 @@ spec:
                 name: cache
               - mountPath: /tmp
                 name: tmp
+              - mountPath: /var/run/datalab/storage
+                name: storage-credentials
+                readOnly: true
             - args:
               - --http-address=0.0.0.0:4180
               - --metrics-address=127.0.0.1:44180
               - --provider=keycloak-oidc
               - --provider-display-name=acme realm
+              - --client-id=s-joe
+              - --client-secret-file=/var/run/datalab/oauth2/client_secret
+              - --cookie-secret-file=/var/run/datalab/oauth2/cookie_secret
               - --oidc-issuer-url=https://identity.acme.com/realms/acme
               - --skip-oidc-discovery=true
               - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
@@ -342,22 +334,6 @@ spec:
               - --skip-auth-route=GET=^/static(/|$)
               - --skip-auth-route=HEAD=^/static(/|$)
               - --silence-ping-logging=true
-              env:
-              - name: OAUTH2_PROXY_CLIENT_ID
-                valueFrom:
-                  secretKeyRef:
-                    key: client_id
-                    name: s-joe-oauth2-client
-              - name: OAUTH2_PROXY_CLIENT_SECRET
-                valueFrom:
-                  secretKeyRef:
-                    key: client_secret
-                    name: s-joe-oauth2-client
-              - name: OAUTH2_PROXY_COOKIE_SECRET
-                valueFrom:
-                  secretKeyRef:
-                    key: cookie_secret
-                    name: s-joe-oauth2-client
               image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
               imagePullPolicy: IfNotPresent
               livenessProbe:
@@ -393,6 +369,9 @@ spec:
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
+              - mountPath: /var/run/datalab/oauth2
+                name: oauth2-credentials
+                readOnly: true
             initContainers:
             - args:
               - |
@@ -404,7 +383,7 @@ spec:
                 rm -f "$work_database"
                 export PACKAGE_R_DATABASE="$work_database"
 
-                /package-r config init   --address=0.0.0.0   --port=8888   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
+                /package-r config init   --address=0.0.0.0   --port=8888   --cors-allowed-origins='*'   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
 
                 /package-r users add default ""
                 /package-r users add joe '' --perm.create=true --perm.delete=true --perm.modify=true --perm.rename=true
@@ -456,6 +435,22 @@ spec:
             - emptyDir:
                 sizeLimit: 256Mi
               name: tmp
+            - name: storage-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: aws-credentials
+                  path: aws-credentials
+                secretName: s-joe-datalab
+            - name: oauth2-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: client_secret
+                  path: client_secret
+                - key: cookie_secret
+                  path: cookie_secret
+                secretName: s-joe-oauth2-client
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -790,7 +785,7 @@ spec:
           metadata:
             annotations:
               datalabs.pkg.internal/gateway-config-checksum: 705f21862c2b149739de21b32053b1f48f2041be6f92d2716238c0ffcd80cbea
-              datalabs.pkg.internal/storage-secret-checksum: a6b43718053137759cfac7ac735946144d6daaa0f17b55d8ad726788f3f31ebf
+              datalabs.pkg.internal/storage-secret-checksum: e01ad97cf43e8017f25e556499ab29692d8acb1be986597f0423485c3a4fe82f
             labels:
               app.kubernetes.io/instance: s-joe
               app.kubernetes.io/name: data-s3
@@ -812,26 +807,12 @@ spec:
                 value: s3
               - name: RCLONE_CONFIG_UPSTREAM_ENV_AUTH
                 value: "true"
+              - name: AWS_SHARED_CREDENTIALS_FILE
+                value: /var/run/datalab/storage/aws-credentials
               - name: RCLONE_CONFIG_UPSTREAM_PROVIDER
                 value: Other
               - name: RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE
                 value: "true"
-              - name: AWS_ACCESS_KEY_ID
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_ACCESS_KEY_ID
-                    name: s-joe-datalab
-              - name: AWS_SECRET_ACCESS_KEY
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SECRET_ACCESS_KEY
-                    name: s-joe-datalab
-              - name: AWS_SESSION_TOKEN
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SESSION_TOKEN
-                    name: s-joe-datalab
-                    optional: true
               - name: RCLONE_CONFIG_UPSTREAM_ENDPOINT
                 valueFrom:
                   secretKeyRef:
@@ -877,10 +858,16 @@ spec:
                 name: cache
               - mountPath: /tmp
                 name: tmp
+              - mountPath: /var/run/datalab/storage
+                name: storage-credentials
+                readOnly: true
             - args:
               - --metrics-address=127.0.0.1:44180
               - --provider=keycloak-oidc
               - --provider-display-name=acme realm
+              - --client-id=s-joe
+              - --client-secret-file=/var/run/datalab/oauth2/client_secret
+              - --cookie-secret-file=/var/run/datalab/oauth2/cookie_secret
               - --oidc-issuer-url=https://identity.acme.com/realms/acme
               - --skip-oidc-discovery=true
               - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
@@ -919,22 +906,6 @@ spec:
               - --allowed-role=s-joe:ws_api
               - --request-logging=false
               - --auth-logging=false
-              env:
-              - name: OAUTH2_PROXY_CLIENT_ID
-                valueFrom:
-                  secretKeyRef:
-                    key: client_id
-                    name: s-joe-oauth2-client
-              - name: OAUTH2_PROXY_CLIENT_SECRET
-                valueFrom:
-                  secretKeyRef:
-                    key: client_secret
-                    name: s-joe-oauth2-client
-              - name: OAUTH2_PROXY_COOKIE_SECRET
-                valueFrom:
-                  secretKeyRef:
-                    key: cookie_secret
-                    name: s-joe-oauth2-client
               image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
               imagePullPolicy: IfNotPresent
               name: oauth2-proxy
@@ -956,6 +927,9 @@ spec:
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
+              - mountPath: /var/run/datalab/oauth2
+                name: oauth2-credentials
+                readOnly: true
             - args:
               - -g
               - daemon off;
@@ -1004,6 +978,22 @@ spec:
             - emptyDir:
                 sizeLimit: 128Mi
               name: tmp
+            - name: storage-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: aws-credentials
+                  path: aws-credentials
+                secretName: s-joe-datalab
+            - name: oauth2-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: client_secret
+                  path: client_secret
+                - key: cookie_secret
+                  path: cookie_secret
+                secretName: s-joe-oauth2-client
             - configMap:
                 name: data-s3
               name: gateway-config
@@ -1045,6 +1035,14 @@ spec:
         name: data-s3
         namespace: s-joe
       spec:
+        egress:
+        - ports:
+          - port: 8080
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: keycloak
         ingress:
         - from:
           - namespaceSelector:
@@ -1059,6 +1057,7 @@ spec:
             app.kubernetes.io/name: data-s3
         policyTypes:
         - Ingress
+        - Egress
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -1828,6 +1827,11 @@ stringData:
   AWS_S3_FORCE_PATH_STYLE: "true"
   AWS_SECRET_ACCESS_KEY: joe-secret-key
   AWS_SESSION_TOKEN: fallback-session-token
+  aws-credentials: |
+    [default]
+    aws_access_key_id = joe-access-key
+    aws_secret_access_key = joe-secret-key
+    aws_session_token = fallback-session-token
   configData: |
     [joe-access-key]
     type = s3

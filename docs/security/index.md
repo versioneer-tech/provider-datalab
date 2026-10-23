@@ -1,100 +1,67 @@
 # Security
 
-Sandbox controls limit what code in a workspace can access. Operators set
-who may run code, which resources it can use, and what data remains after a
-session stops.
+A session can use the credentials, volumes, Kubernetes permissions, and
+network access available to its Pod. The platform operator decides which
+users may start sessions and which resources they may use.
 
-The current package uses Kubernetes and Educates to run workspace sessions.
-
-- Educates creates the workshop runtime, session namespaces, optional vcluster,
-  IDE, terminal, Docker/registry applications, and workspace ingress.
-- Provider Datalab passes security intent into Educates through
-  `spec.security.policy`, `spec.security.kubernetesAccess`,
-  `spec.security.kubernetesRole`, and `spec.security.externalEgress`.
-- Provider Datalab also injects storage and service credentials, persistent
-  workspace volumes, and generated namespace-level NetworkPolicies.
-
-The session's credentials, Kubernetes role, network access, volumes, and
-enabled applications determine what it can do. The platform operator
-configures ingress authentication, RBAC, Pod Security, NetworkPolicy, quotas,
-storage policy, backup, retention, and audit.
-
-## Where Enforcement Lives
-
-Provider Datalab expresses workspace intent and renders the Educates resources,
-credentials, volumes, and generated NetworkPolicies for a `Datalab`. Educates
-runs the workspace runtime and applies its native namespace, token, role,
-vcluster, registry, Docker, and session controls.
-
-The platform still enforces the boundary around that runtime. The operator owns
-the enforcing CNI, admission policy such as Kyverno, ingress authentication and
-authorization, DNS, storage classes, cloud IAM, bucket policy, backup, retention,
-audit, and any node isolation for privileged workloads.
+Provider Datalab passes session security settings to Educates and creates
+network policies. Educates creates the workspace Pods and applies the
+namespace, role, and token settings. The cluster must enforce them through
+its CNI, admission rules, Pod security, and RBAC.
 
 ## Access to a Datalab
 
-Each Datalab gets a confidential Keycloak OAuth client named
-after the Datalab. Provider Datalab publishes the credentials consumers need in
-the runtime workshop namespace as `<datalab>-oauth2-client`, with keys
-`client_id` and `client_secret`.
-Treat the runtime Secret as a workspace machine credential: readers can mint
-client-credentials tokens for that Datalab. Human access uses `ws_access` or
-`ws_admin`; the generated client service account receives only `ws_api`.
-The same generated client can protect services that intentionally belong to one
-Datalab. Shared browser ingress for many Datalabs can instead use a central
-platform OAuth client and still authorize concrete Datalab access from the
-generated roles.
+The ingress controller must handle session sign-in and authorization.
+Provider Datalab creates Keycloak clients, groups, and roles for each Datalab.
+Users receive `ws_access` or `ws_admin`; the client service account receives
+`ws_api` for machine access.
 
-See the [Authentication](../how-to-guides/usage_concepts.md#authentication)
-guide for platform ingress protection with the generated Keycloak resources,
-including NGINX `oauth2-proxy` and APISIX `openid-connect` examples.
+Shared browser ingress can use one platform OAuth client and check the
+Datalab roles for each requested host. Services belonging to one Datalab can
+use its generated client. See [Authentication](../how-to-guides/authentication.md)
+for the client model and controller examples.
 
-The Data service also supports public sharing. Files in the Datalab's
-`public` folder can be browsed and downloaded without signing in. This lets
-users share datasets and results with people outside the Datalab. See
-[Sharing Data with the World](../how-to-guides/usage_concepts.md#sharing-data-with-the-world).
+Anyone who can read the runtime `<datalab>-oauth2-client` Secret can request
+machine tokens for that Datalab. Limit Secret access to the users and
+services that need it, and rotate credentials when access changes.
 
-## Current Baseline
+Public Data shares allow browsing and downloads without sign-in. Users
+should place only files they intend to publish in the Datalab's `public`
+folder. See [Public sharing](../how-to-guides/usage_concepts.md#sharing-data-with-the-world).
 
-| Area | Current behavior | Operator check |
+## Session defaults
+
+| Setting | Default | Effect |
 | --- | --- | --- |
-| Runtime isolation | One Educates runtime namespace per Datalab environment; optional vcluster API for Kubernetes-shaped workflows. | Treat vcluster as API isolation, not stronger Pod isolation. Host namespace policy still matters. |
-| Pod security | `spec.security.policy` maps to Educates namespace security policy: `restricted`, `baseline`, or `privileged`. Default is `baseline`. | Decide who may request `privileged`; it enables Docker support. |
-| Kubernetes API access | `kubernetesAccess` controls whether a token is mounted. Default is enabled with `kubernetesRole: edit`. | Use stricter environment defaults where workspace code should not call the API. A vcluster changes the API surface; it is not stronger Pod isolation. |
-| Network policy | Provider Datalab renders namespace-level egress policies for all runtime Pods. `externalEgress` defaults to `true`; when `false`, generated access is limited to namespace-local Pods, cluster DNS needed by an enabled vCluster or Data, that Datalab's vCluster API, and explicit internal targets. | Verify the CNI enforces NetworkPolicy. Put allowed external CIDRs in `EnvironmentConfig.data.network.externalEgressCIDRs`; use `0.0.0.0/0` and `::/0` for open external egress. Put pod/service CIDRs in `podCIDRs` and `serviceCIDR` so they are excluded from that broad external allow rule, put cloud metadata/control CIDRs in `blacklistIPs`, and use `EnvironmentConfig.data.network.internalEgress` for explicit backend Pods in other namespaces. |
-| Ingress auth | Shared browser ingress can use a central platform OAuth client, while direct per-Datalab OIDC integrations can use the runtime `<datalab>-oauth2-client` Secret. | A session is protected only when the operator attaches external authentication and authorization policy. Allow an ingress controller to read the runtime Secret only for direct per-Datalab integrations that need it. |
-| Data access | Object storage, service credentials, PVCs, databases, caches, vector stores, and registry state may be exposed to the session. | Scope credentials and define backup, retention, and deletion behavior outside the session. |
+| `spec.security.policy` | `baseline` | Selects the Educates namespace security policy. `privileged` also enables Docker. |
+| `spec.security.kubernetesAccess` | `true` | Makes a Kubernetes service account token available to the session. |
+| `spec.security.kubernetesRole` | `edit` | Sets the session's Kubernetes permissions. |
+| `spec.security.externalEgress` | `true` | Enables the external egress rule for the configured CIDRs. |
+| `spec.vcluster` | `false` | Uses the host namespace directly. When enabled, adds a virtual Kubernetes API. |
 
-## What Stays Outside
+Set shared security defaults in `EnvironmentConfig.data.defaults.security`.
+Use stricter values when workspace code does not need Kubernetes access,
+external traffic, or privileged containers. A vCluster changes the Kubernetes
+API available to users; its Pods still run on the host cluster.
 
-Some controls cannot be solved by Provider Datalab or Kubernetes
-NetworkPolicies alone:
+## Platform responsibilities
 
-- the CNI dataplane must actually enforce NetworkPolicy
-- cloud IAM, metadata service settings, bucket policy, backup, retention, and
-  audit remain platform responsibilities
-- standard NetworkPolicy does not provide ordered deny rules or FQDN-only egress
-  allowlists
-- privileged workloads need node, runtime, and cloud isolation outside namespace
-  policy
-- leaked credentials must be rotated and audited; policy does not revoke them
+The platform team manages ingress authentication, the CNI, admission rules,
+RBAC, DNS, storage classes, quotas, and node access. It also manages cloud
+IAM, bucket policy, backup, retention, and audit for the data and services
+available to a Datalab.
 
-## Operator Review
+NetworkPolicy rules are additive. Another policy can allow traffic that the
+generated policies do not allow. Standard NetworkPolicy also cannot express
+ordered deny rules or domain-name allowlists. Check the combined rules in
+the deployed cluster.
 
-Before offering Datalabs on a shared cluster, check:
+Privileged containers, host mounts, runtime sockets, and broad credentials
+can give workspace code access beyond its namespace. Approve those settings
+only for users and workloads that need them. Replacing a Pod or tightening a
+network rule does not revoke a leaked credential; rotate or revoke it at its
+source.
 
-- Which data and services can this workspace read or write?
-- Is Kubernetes API access disabled, `view`, `edit`, or `admin`?
-- Is network egress broad, allowlisted, internal-only, or offline?
-- Are Educates and Provider Datalab NetworkPolicies aligned, given that
-  Kubernetes NetworkPolicies are additive?
-- Are Pod Security, quotas, storage classes, and privileged/Docker use enforced
-  by policy instead of convention?
-- What persists after the session stops, what is backed up, and who can approve deletion?
-
-## Related Pages
-
-- [Workspace Sessions as Sandboxes](workspace-sessions.md) explains the session
-  authority model.
-- [Sandbox Security Measures](sandbox-controls.md) describes the current
-  NetworkPolicy baseline and the next hardening steps.
+[Session access](workspace-sessions.md) describes what workspace code can use.
+[Network policies](sandbox-controls.md) lists the generated policies and the
+settings that control them.

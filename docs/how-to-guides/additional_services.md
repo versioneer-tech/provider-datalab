@@ -1,32 +1,22 @@
-# Additional Services
+# Additional services
 
-You can add services to a Datalab for tasks such as distributed computing or experiment tracking. This guide shows how to deploy Dask and MLflow from your workspace.
+Run services such as Dask or MLflow as Kubernetes workloads from your Datalab
+terminal. These examples need Kubernetes API access and permission to create
+Pods, Deployments, Services, and PVCs in the target namespace.
 
-A `Datalab` environment provides a preconfigured **VS Code Server** with a persistent file system and access to the connected object storage, along with essential CLI tools such as `git`, `curl`, `aws`, or `rclone`.
-You can add dashboards, experiment tracking, or separate compute workloads as needed.
+Use a vCluster for tools that need their own CRDs, controllers, or cluster
+roles. For a short-lived process, you can run it in the terminal and use the
+editor's Ports tab to open its web interface.
 
-For a short experiment, start a tool in the terminal and use VS Code port forwarding to open it. For services that must keep running, use Kubernetes workloads with their own dependencies and storage.
+For PostgreSQL, MongoDB, Redis, Qdrant, and a registry, first check whether the
+[managed service fields](usage_concepts.md) meet your needs. The platform
+operator maintains those services and their backups.
 
-Deploy these services **as native Kubernetes applications** when the operator
-has allowed Kubernetes API access. Users can deploy workloads in their assigned
-namespace or, in **vCluster** mode, in a virtual control plane with its own
-CRDs, RBAC rules, and controllers. This supports frameworks that need
-cluster-wide resources, such as Dask Gateway, without giving users access to
-the host cluster.
+## Dask
 
-For data that needs backups and maintenance, use the managed service fields where possible: `spec.databases`, `spec.documentStores`, `spec.cacheStores`, `spec.vectorStores`, and `spec.registry`. Create object-storage buckets through [Provider Storage](https://provider-storage.versioneer.at/) or your platform's storage process, then pass their credentials to Provider Datalab.
-
-> **Note:** The `kubectl` and `helm` CLIs are preinstalled as well. You can apply manifests, install Helm charts, and inspect Kubernetes resources directly from the terminal.
-
----
-
-## Example: Deploying a Dask Cluster
-
-The following example shows how to start a simple Dask scheduler and worker deployment directly inside your Datalab namespace.
-This provides a minimal distributed compute backend that you can connect to from Python via `dask.distributed.Client`.
-
-<details>
-<summary><strong>Click to expand: Deploy Dask</strong></summary>
+Dask runs tasks across a scheduler and workers. This example creates one
+scheduler and one worker in the current namespace. Connect to the scheduler
+from Python with `dask.distributed.Client`.
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -94,32 +84,38 @@ spec:
             limits:   {cpu: "1",    memory: "2Gi"}
 EOF
 ```
-</details>
+Open the scheduler dashboard through the editor's Ports tab:
 
-Once running, you can port-forward and use the VS Code **Ports** tab to explore the Dask dashboard:
 ```bash
 kubectl port-forward svc/dask-scheduler 8787:8787
 ```
 
-You can also deploy **Dask Gateway** via Helm — this is only possible in **vCluster** mode, since it requires cluster-wide resources such as CRDs and RBAC cluster roles:
+Dask Gateway also needs cluster-wide resources. Use a vCluster or ask the
+operator to install it. With the `dask` Helm repository configured, run:
 
 ```bash
 helm repo update
-helm upgrade --install dask-gateway dask/dask-gateway   -n "${DEFAULT_NAMESPACE:-default}"   --create-namespace   --set gateway.auth.type=simple   --set gateway.auth.simple.password=''   --set traefik.service.type=ClusterIP   --set gateway.backend.image.name=ghcr.io/dask/dask-gateway   --set gateway.backend.image.tag=2025.4.0   --wait --atomic
+helm upgrade --install dask-gateway dask/dask-gateway \
+  -n "${DEFAULT_NAMESPACE:-default}" \
+  --create-namespace \
+  --set gateway.auth.type=simple \
+  --set gateway.auth.simple.password='' \
+  --set traefik.service.type=ClusterIP \
+  --set gateway.backend.image.name=ghcr.io/dask/dask-gateway \
+  --set gateway.backend.image.tag=2025.4.0 \
+  --wait --atomic
 ```
 
----
 
-## Example: Deploying MLflow with Persistent Storage
+## MLflow
 
-`MLflow` is a popular experiment-tracking platform that complements data exploration workflows.
-The following example deploys an MLflow server together with a simple SQLite backend and a `PersistentVolumeClaim` for artifact and metadata storage.
+MLflow records experiment runs and their artifacts. This example stores its
+SQLite database on a PVC and artifacts in an existing S3 bucket. Set `BUCKET`
+to a bucket your Datalab can write to.
 
-> **Note:** The PVC is bound to your Datalab session.
-> Once the Datalab is deleted, the PVC and stored data will also be removed unless your operator configures a persistent storage backend. For durable MLflow metadata or artifacts, use a managed database and an object-storage bucket provisioned outside Provider Datalab, for example with Provider Storage.
-
-<details>
-<summary><strong>Click to expand: Deploy MLflow</strong></summary>
+The PVC belongs to the current namespace. Check namespace deletion rules and
+the volume's reclaim policy before using it for records you need to keep. For a shared service,
+use a managed database and arrange artifact backups with the operator.
 
 ```bash
 export BUCKET=ws-frank # replace accordingly
@@ -230,22 +226,20 @@ spec:
             claimName: mlflow
 EOF
 ```
-</details>
+Open the MLflow interface through the editor's Ports tab:
 
-Once running, you can port-forward and use the VS Code **Ports** tab to explore the MLflow UI:
 ```bash
 kubectl port-forward svc/mlflow 5000:5000
 ```
 
-To use **MLflow** in your code, you need to connect to the tracking server running at `http://localhost:5000`. This can be done by setting the following environment variable:
+Point your code at the forwarded tracking server:
 
 ```bash
 export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 ```
 
----
 
-## Example: Using psql to access and work with a managed database
+## PostgreSQL with psql
 
 If your Datalab provides database credentials through
 `POSTGRES_<HOST>_<DATABASE>_URL_EXTERNAL` environment variables, you can
@@ -276,13 +270,13 @@ spec:
 EOF
 ```
 
-Now attach to the pod.
+Attach to the Pod after it starts:
 
 ```bash
 kubectl attach -it pgsql-debug
 ```
 
-And run your `psql` commands.
+Use psql to create and query a test table:
 
 ```sql
 \set ON_ERROR_STOP on
@@ -305,13 +299,9 @@ INSERT INTO demo (name, meta) VALUES
 SELECT * FROM demo;
 ```
 
----
 
-## Keeping Services and Data
+## Keep or remove a service
 
-Choose how to manage a service based on how long you need it:
-
-- **Temporary services**, such as the Dask and MLflow examples above, are useful for experiments. Remove them when the work is complete.
-- **Managed services** requested through the `Datalab` spec need backup, monitoring, upgrade, and deletion policies. Agree on these with the platform team before you store data that must be kept.
-
-If you need a service after the experiment ends, agree with the platform team on how to maintain it and recover its data.
+Remove test services when the experiment ends. Before keeping one, agree with
+the platform team on its storage, backups, monitoring, upgrades, and deletion.
+Back up the service data separately from the session volume.

@@ -223,7 +223,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/storage-secret-checksum: d8e9c156c11397da59c77ba1582bd7fe0ece612458adc2f1bca6fbed005c226d
+              datalabs.pkg.internal/storage-secret-checksum: 800e67d2821909a1bf41c8ad32f56395b41288df4801433c909a164e56f863df
             labels:
               app.kubernetes.io/instance: s-jane
               app.kubernetes.io/name: package-r
@@ -245,22 +245,8 @@ spec:
                 value: ""
               - name: XDG_CACHE_HOME
                 value: /cache
-              - name: AWS_ACCESS_KEY_ID
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_ACCESS_KEY_ID
-                    name: s-jane-datalab
-              - name: AWS_SECRET_ACCESS_KEY
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SECRET_ACCESS_KEY
-                    name: s-jane-datalab
-              - name: AWS_SESSION_TOKEN
-                valueFrom:
-                  secretKeyRef:
-                    key: AWS_SESSION_TOKEN
-                    name: s-jane-datalab
-                    optional: true
+              - name: AWS_SHARED_CREDENTIALS_FILE
+                value: /var/run/datalab/storage/aws-credentials
               - name: AWS_ENDPOINT_URL
                 valueFrom:
                   secretKeyRef:
@@ -316,6 +302,9 @@ spec:
                 name: cache
               - mountPath: /tmp
                 name: tmp
+              - mountPath: /var/run/datalab/storage
+                name: storage-credentials
+                readOnly: true
             initContainers:
             - args:
               - |
@@ -327,7 +316,7 @@ spec:
                 rm -f "$work_database"
                 export PACKAGE_R_DATABASE="$work_database"
 
-                /package-r config init   --address=0.0.0.0   --port=8888   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
+                /package-r config init   --address=0.0.0.0   --port=8888   --cors-allowed-origins='*'   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
 
                 /package-r users add default ""
                 /package-r users add datalab ''
@@ -380,6 +369,13 @@ spec:
             - emptyDir:
                 sizeLimit: 256Mi
               name: tmp
+            - name: storage-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: aws-credentials
+                  path: aws-credentials
+                secretName: s-jane-datalab
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

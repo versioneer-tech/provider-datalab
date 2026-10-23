@@ -1,136 +1,81 @@
-# Sandbox Security Measures
+# Network policies
 
-Provider Datalab configures Educates namespace security, Kubernetes roles and
-tokens, and namespace NetworkPolicies. Operators must check that the cluster
-enforces these controls and configure admission policy, backups, identity,
-and audit.
+Provider Datalab creates egress policies through the Educates environment and
+Data policies directly in the runtime namespace. The cluster CNI must enforce
+Kubernetes NetworkPolicy for these rules to take effect.
 
-## Current Educates Integration
+## Session security
 
-Provider Datalab renders an Educates `Workshop` and `WorkshopEnvironment`.
-The Datalab security fields are passed into the Educates session namespace
-configuration:
+Provider Datalab passes these fields to Educates:
 
-- `spec.security.policy` -> Educates namespace security policy
-- `spec.security.kubernetesAccess` -> token enabled or disabled
-- `spec.security.kubernetesRole` -> namespace or vcluster role
-- `policy: privileged` -> enables the Educates Docker application with extra
-  local storage
+| Datalab field | Educates setting |
+| --- | --- |
+| `spec.security.policy` | Namespace security policy |
+| `spec.security.kubernetesAccess` | Kubernetes token enabled or disabled |
+| `spec.security.kubernetesRole` | Namespace or vCluster role |
 
-Educates applies these settings when it creates session resources.
+The `privileged` policy also enables the Docker application with local
+storage. Educates applies these settings when it creates session resources.
 
-## Current NetworkPolicy Baseline
+## Generated egress policies
 
-Provider Datalab creates namespace-wide egress policies through the Educates
-environment and creates package-r policies directly in the runtime namespace.
+| Policy | Created when | Allows |
+| --- | --- | --- |
+| `deny-egress` | By default | No egress by itself; other policies can allow traffic. |
+| `allow-namespace-egress` | By default | Traffic to Pods in the same runtime namespace. |
+| `allow-dns-egress` | External egress, Data, or vCluster is enabled | DNS to `kube-system` on TCP and UDP port 53. |
+| `allow-vcluster-egress` | vCluster is enabled | TCP ports 443 and 8443 to the same Datalab's vCluster control-plane Pods. |
+| `allow-external-egress` | External egress is enabled | The configured external CIDRs, minus excluded ranges. |
+| `allow-internal-egress` | Internal targets are configured | The selected backend Pods and ports in other namespaces. |
 
-- `deny-egress` and `allow-namespace-egress` are rendered by default.
-  Together they deny egress first, then allow traffic to Pods in the same
-  runtime namespace.
-- `allow-dns-egress` is rendered when `externalEgress`, a vCluster, or Data is
-  enabled. `allow-external-egress` is rendered only when `externalEgress` is
-  true.
-- `allow-vcluster-egress` is rendered when `spec.vcluster` is true. It allows
-  TCP ports 443 and 8443 only to vCluster control-plane Pods in Educates
-  session-object namespaces for the same Datalab.
-- `allow-internal-egress` is rendered when `EnvironmentConfig.data.network.internalEgress`
-  contains explicit backend targets. It allows operator-approved Pods in other
-  namespaces through namespace and pod selectors.
-- `spec.security.externalEgress` falls back to
-  `EnvironmentConfig.data.defaults.security.externalEgress`, then to the hard
-  default `true`.
-- `EnvironmentConfig.data.network.externalEgressCIDRs` is the external egress
-  allowlist. Operators can use `0.0.0.0/0` and `::/0` for open external
-  IPv4/IPv6 egress, or narrower platform-approved ranges. If the list is empty
-  or omitted, no broad external allow block is rendered, even though
-  `externalEgress` defaults to `true`.
-- `EnvironmentConfig.data.network.blacklistIPs` lists CIDRs excluded from broad
-  external egress, for example AWS EC2 and Scaleway metadata IPv4/IPv6
-  endpoints.
-- `EnvironmentConfig.data.network.podCIDRs` and `serviceCIDR` are also excluded
-  from broad external egress. This keeps other runtime namespaces unreachable
-  by PodIP or ServiceIP unless an operator adds an explicit allow policy.
-- Session access allows port 8888 only from Educates workshop Pods. Permanent
-  access allows port 4180 from any source. The file browser requires sign-in;
-  public shares allow browsing and downloads without sign-in.
-  The proxy can reach the configured IAM namespace.
+The DNS rule lets Data resolve storage hosts and lets sessions resolve their
+vCluster Service. Namespace and Pod selectors on the vCluster rule limit it
+to the same Datalab.
 
-`deny-egress` is the default-deny base policy, so it blocks all egress unless
-another selected policy also allows it.
+NetworkPolicies are additive. `deny-egress` selects Pods for egress isolation;
+it does not override an allow rule in another selected policy. Check all
+policies that select a Pod when testing access.
 
-`allow-namespace-egress` allows Pod-to-Pod traffic inside the same runtime
-namespace, which is why the workshop can still reach its own namespace-local
-Pods.
+## External and internal ranges
 
-`allow-vcluster-egress` allows the runtime to use its virtual Kubernetes API.
-The namespace and Pod selectors prevent the rule from granting access to
-another Datalab or to unrelated Pods in a vCluster host namespace.
+`spec.security.externalEgress` falls back to
+`EnvironmentConfig.data.defaults.security.externalEgress`, then to `true`.
+The external allow rule uses these EnvironmentConfig fields:
 
-`allow-dns-egress` allows DNS lookups to `kube-system` on TCP and UDP port 53.
-Data retains this rule for its S3 endpoint, and an enabled vCluster retains it
-because its kubeconfig uses the `my-vcluster` Service name.
+| Field under `data.network` | Purpose |
+| --- | --- |
+| `externalEgressCIDRs` | External destination ranges. An empty list grants no broad external access. |
+| `blacklistIPs` | Ranges excluded from that rule, such as cloud metadata endpoints. |
+| `podCIDRs` | Host Pod networks excluded from broad external access. |
+| `serviceCIDR` | Host Service network excluded from broad external access. |
 
-`allow-external-egress` allows outbound traffic to the CIDRs in
-`externalEgressCIDRs`, minus the excluded ranges from `blacklistIPs`,
-`podCIDRs`, and `serviceCIDR`.
+Use `0.0.0.0/0` and `::/0` to allow all external IPv4 and IPv6 destinations,
+or list narrower ranges. Supply the actual host cluster ranges so that this
+rule does not also grant access to other Datalab namespaces.
 
-`allow-internal-egress` allows explicit backend Pods in other namespaces,
-using the namespace and pod selectors configured in
-`EnvironmentConfig.data.network.internalEgress`.
+With `externalEgress: false`, the broad external rule is omitted. Same-namespace
+traffic, DNS needed by Data or a vCluster, and access to the Datalab's vCluster
+API remain allowed. Add `internalEgress` entries for required backends in
+other namespaces. Each entry selects a namespace, Pods, and destination ports.
+See [Network access](../how-to-guides/installation.md#network-access) for an example.
 
-A CIDR is just IP-range notation, such as `10.42.0.0/16`, which means "all IPs
-in that block." Kubernetes `NetworkPolicy` works with IP blocks, so Provider
-Datalab configures explicit CIDRs instead of a separate "cluster internal"
-label.
+## Data service policies
 
-The system cannot auto-detect "cluster internal" in a portable way because
-Kubernetes does not expose a universal internal-vs-external egress concept and
-Pod/Service ranges vary by cluster, CNI, and dual-stack setup. That is why the
-operator supplies `podCIDRs` and `serviceCIDR`.
+For session access, packageR accepts port 8888 from Educates workshop Pods.
+For permanent access, its OAuth proxy accepts port 4180. The file browser
+requires sign-in; public shares permit browsing and downloads without it.
 
-The closest upstream convention is the standardized namespace label
-`kubernetes.io/metadata.name`, which lets a `namespaceSelector` target a
-specific namespace by name. Kubernetes does not define a standard label such as
-`internal=true` for services or workloads, so any "internal service" label
-scheme is an operator convention, not a Kubernetes one.
+The S3 service accepts Gateway traffic on port 8080. Data and S3 proxies can
+reach IAM on TCP port 8080 in the configured IAM namespace. Object-storage
+access follows the Datalab's egress rules.
 
-With `externalEgress: false`, the generated policies do not allow external
-network access. DNS remains enabled when a vCluster or Data needs service-name
-resolution. The Datalab's vCluster API remains reachable when it is enabled.
-Other cross-namespace traffic is not allowed by default; operators must
-configure `internalEgress` for explicit cross-namespace dependencies.
+## Replace or exclude policies
 
-NetworkPolicies are additive: if any selected egress policy allows traffic, the
-traffic is allowed. Generated policies can be skipped with
-`EnvironmentConfig.data.network.excludePolicies`, but this is an exceptional
-operator option for clusters that replace the generated baseline with
-their own policy set.
+Use `EnvironmentConfig.data.network.excludePolicies` only when another policy
+system provides the required controls. Excluding `allow-dns-egress` also
+suppresses the Data DNS policy.
 
-## Operator Checks
-
-For the current baseline, operators should verify and be able to explain:
-
-- the installed CNI enforces Kubernetes NetworkPolicy
-- `externalEgress` defaults match the platform trust model
-- `blacklistIPs` includes the cloud metadata and platform-control CIDRs that
-  must not be reachable through broad external egress
-- any cross-namespace dependencies have explicit, operator-owned policies
-- `excludePolicies` is used only when another policy system supplies equivalent
-  controls
-- `kubernetesAccess` and `kubernetesRole` defaults match the platform trust
-  model
-- privileged/Docker/registry workflows are limited to trusted Datalabs
-
-## Hardening Direction
-
-Further hardening work includes:
-
-- decide whether a future stricter profile should replace the current
-  `externalEgress: true` compatibility default
-- add profile-specific allows for DNS, central ingress, storage, and optional
-  Kubernetes API access
-- add admission policy, for example Kyverno, to prevent tenants from weakening
-  generated NetworkPolicies or selecting privileged/admin settings without
-  operator approval
-- document and validate the Educates install settings that must be aligned
-  with Provider Datalab
+Before changing these settings, verify the CNI, the allowed network ranges,
+and every required cross-namespace connection. Restrict who can change
+NetworkPolicies or request privileged and admin settings through the
+platform's RBAC and admission policy.

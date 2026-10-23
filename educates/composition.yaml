@@ -503,6 +503,23 @@ spec:
               if session_token:
                   manifest["stringData"]["AWS_SESSION_TOKEN"] = session_token
 
+              aws_credentials = (
+                  "[default]\n"
+                  f"aws_access_key_id = {access_key}\n"
+                  f"aws_secret_access_key = {secret_key}\n"
+              )
+              if session_token:
+                  aws_credentials += f"aws_session_token = {session_token}\n"
+              manifest["stringData"]["aws-credentials"] = aws_credentials
+
+              oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
+              client_secret = _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+              if client_secret:
+                  manifest["stringData"]["OAUTH2_CLIENT_ID"] = (
+                      _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"]) or xr_name
+                  )
+                  manifest["stringData"]["OAUTH2_CLIENT_SECRET"] = client_secret
+
               doc_stores = spec.get("documentStores") or {}
               if isinstance(doc_stores, dict):
                   for store_name in sorted(doc_stores.keys()):
@@ -1775,6 +1792,7 @@ spec:
                   return
 
               checksum_keys = (
+                  "aws-credentials",
                   "AWS_ACCESS_KEY_ID",
                   "AWS_SECRET_ACCESS_KEY",
                   "AWS_SESSION_TOKEN",
@@ -1864,6 +1882,7 @@ spec:
           /package-r config init \
             --address=0.0.0.0 \
             --port=8888 \
+            --cors-allowed-origins='*' \
             --auth.method=proxy \
             --auth.header=X-Forwarded-Preferred-Username \
             --auth.mapper=
@@ -1954,34 +1973,7 @@ spec:
                                       {"name": "PACKAGE_R_ROOT", "value": "/"},
                                       {"name": "PACKAGE_R_BUCKETS", "value": ""},
                                       {"name": "XDG_CACHE_HOME", "value": "/cache"},
-                                      {
-                                          "name": "AWS_ACCESS_KEY_ID",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": storage_secret_name,
-                                                  "key": "AWS_ACCESS_KEY_ID",
-                                              }
-                                          },
-                                      },
-                                      {
-                                          "name": "AWS_SECRET_ACCESS_KEY",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": storage_secret_name,
-                                                  "key": "AWS_SECRET_ACCESS_KEY",
-                                              }
-                                          },
-                                      },
-                                      {
-                                          "name": "AWS_SESSION_TOKEN",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": storage_secret_name,
-                                                  "key": "AWS_SESSION_TOKEN",
-                                                  "optional": True,
-                                              }
-                                          },
-                                      },
+                                      {"name": "AWS_SHARED_CREDENTIALS_FILE", "value": "/var/run/datalab/storage/aws-credentials"},
                                       endpoint_env,
                                       {
                                           "name": "AWS_REGION",
@@ -2014,6 +2006,7 @@ spec:
                                       {"name": "state", "mountPath": "/state"},
                                       {"name": "cache", "mountPath": "/cache"},
                                       {"name": "tmp", "mountPath": "/tmp"},
+                                      {"name": "storage-credentials", "mountPath": "/var/run/datalab/storage", "readOnly": True},
                                   ],
                               }] + ([{
                                   "name": "oauth2-proxy",
@@ -2024,6 +2017,9 @@ spec:
                                       "--metrics-address=127.0.0.1:44180",
                                       "--provider=keycloak-oidc",
                                       f"--provider-display-name={realm} realm",
+                                      f"--client-id={xr_name}",
+                                      "--client-secret-file=/var/run/datalab/oauth2/client_secret",
+                                      "--cookie-secret-file=/var/run/datalab/oauth2/cookie_secret",
                                       f"--oidc-issuer-url={issuer_url}",
                                       "--skip-oidc-discovery=true",
                                       f"--login-url={issuer_url}/protocol/openid-connect/auth",
@@ -2078,35 +2074,6 @@ spec:
                                       "containerPort": 4180,
                                       "protocol": "TCP",
                                   }],
-                                  "env": [
-                                      {
-                                          "name": "OAUTH2_PROXY_CLIENT_ID",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": f"{xr_name}-oauth2-client",
-                                                  "key": "client_id",
-                                              }
-                                          },
-                                      },
-                                      {
-                                          "name": "OAUTH2_PROXY_CLIENT_SECRET",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": f"{xr_name}-oauth2-client",
-                                                  "key": "client_secret",
-                                              }
-                                          },
-                                      },
-                                      {
-                                          "name": "OAUTH2_PROXY_COOKIE_SECRET",
-                                          "valueFrom": {
-                                              "secretKeyRef": {
-                                                  "name": f"{xr_name}-oauth2-client",
-                                                  "key": "cookie_secret",
-                                              }
-                                          },
-                                      },
-                                  ],
                                   "resources": {
                                       "requests": {"cpu": "20m", "memory": "64Mi"},
                                       "limits": {"cpu": "250m", "memory": "128Mi"},
@@ -2119,7 +2086,10 @@ spec:
                                       "httpGet": {"path": "/ping", "port": "auth-proxy"},
                                       "periodSeconds": 20,
                                   },
-                                  "volumeMounts": [{"name": "tmp", "mountPath": "/tmp"}],
+                                  "volumeMounts": [
+                                      {"name": "tmp", "mountPath": "/tmp"},
+                                      {"name": "oauth2-credentials", "mountPath": "/var/run/datalab/oauth2", "readOnly": True},
+                                  ],
                               }] if permanent_access else []),
                               "volumes": [
                                   {"name": "state", "emptyDir": {"sizeLimit": "64Mi"}},
@@ -2130,6 +2100,36 @@ spec:
                       },
                   },
               }
+
+              storage_volume = {
+                  "name": "storage-credentials",
+                  "secret": {
+                      "secretName": storage_secret_name,
+                      "defaultMode": 0o440,
+                      "items": [{"key": "aws-credentials", "path": "aws-credentials"}],
+                  },
+              }
+              deployment["spec"]["template"]["spec"]["volumes"].append(storage_volume)
+
+              oauth_volume = {
+                  "name": "oauth2-credentials",
+                  "secret": {
+                      "secretName": f"{xr_name}-oauth2-client",
+                      "defaultMode": 0o440,
+                      "items": [{"key": key, "path": key} for key in ("client_secret", "cookie_secret")],
+                  },
+              }
+              oauth_cookie_checksum = ""
+              if permanent_access:
+                  deployment["spec"]["template"]["spec"]["volumes"].append(oauth_volume)
+                  oauth_resource = rsp.desired.resources.get(f"oauth2-client-secret-{xr_name}")
+                  oauth_object = _to_dict(oauth_resource.resource) if oauth_resource else {}
+                  oauth_manifest = ((oauth_object.get("spec") or {}).get("forProvider") or {}).get("manifest") or {}
+                  cookie_secret = (oauth_manifest.get("stringData") or {}).get("cookie_secret")
+                  if cookie_secret:
+                      # The cookie cipher is built at startup, even when a Secret file is used.
+                      oauth_cookie_checksum = _hashlib.sha256(cookie_secret.encode("utf-8")).hexdigest()
+                      deployment["spec"]["template"]["metadata"]["annotations"]["datalabs.pkg.internal/oauth2-cookie-checksum"] = oauth_cookie_checksum
 
               service = {
                   "apiVersion": "v1",
@@ -2279,6 +2279,7 @@ spec:
                                   "env": [
                                       {"name": "RCLONE_CONFIG_UPSTREAM_TYPE", "value": "s3"},
                                       {"name": "RCLONE_CONFIG_UPSTREAM_ENV_AUTH", "value": "true"},
+                                      {"name": "AWS_SHARED_CREDENTIALS_FILE", "value": "/var/run/datalab/storage/aws-credentials"},
                                       {
                                           "name": "RCLONE_CONFIG_UPSTREAM_PROVIDER",
                                           "value": _safe_str(storage.get("provider") or "Other"),
@@ -2295,9 +2296,6 @@ spec:
                                               **({"optional": True} if key == "AWS_SESSION_TOKEN" else {}),
                                           }},
                                       } for name, key in (
-                                          ("AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
-                                          ("AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
-                                          ("AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"),
                                           ("RCLONE_CONFIG_UPSTREAM_ENDPOINT", "AWS_ENDPOINT_URL"),
                                           ("RCLONE_CONFIG_UPSTREAM_REGION", "AWS_REGION"),
                                       )],
@@ -2318,6 +2316,7 @@ spec:
                                   "volumeMounts": [
                                       {"name": "cache", "mountPath": "/cache"},
                                       {"name": "tmp", "mountPath": "/tmp"},
+                                      {"name": "storage-credentials", "mountPath": "/var/run/datalab/storage", "readOnly": True},
                                   ],
                               }],
                               "volumes": [
@@ -2328,6 +2327,8 @@ spec:
                       },
                   },
               }
+              s3_deployment["spec"]["template"]["spec"]["volumes"].append(_copy.deepcopy(storage_volume))
+
               s3_service = {
                   "apiVersion": "v1",
                   "kind": "Service",
@@ -2361,6 +2362,8 @@ spec:
                   },
               }
               if s3_enabled:
+                  s3_network_policy["spec"]["policyTypes"].append("Egress")
+                  s3_network_policy["spec"]["egress"] = _copy.deepcopy(network_policy["spec"]["egress"])
                   auth_proxy = _copy.deepcopy(next(
                       container for container in deployment["spec"]["template"]["spec"]["containers"]
                       if container["name"] == "oauth2-proxy"
@@ -2417,6 +2420,9 @@ spec:
                       "data": {"nginx.conf": gateway_config},
                   }
                   pod = s3_deployment["spec"]["template"]
+                  pod["spec"]["volumes"].append(_copy.deepcopy(oauth_volume))
+                  if oauth_cookie_checksum:
+                      pod["metadata"]["annotations"]["datalabs.pkg.internal/oauth2-cookie-checksum"] = oauth_cookie_checksum
                   pod["metadata"]["annotations"]["datalabs.pkg.internal/gateway-config-checksum"] = _hashlib.sha256(gateway_config.encode()).hexdigest()
                   pod["spec"]["volumes"].append({"name": "gateway-config", "configMap": {"name": "data-s3"}})
                   pod["spec"]["containers"].extend([auth_proxy, {

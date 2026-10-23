@@ -9,13 +9,15 @@ copyright: "Copyright &copy; 2025, Versioneer"
 nav:
   - Home: index.md
   - How-to guides:
-    - Usage & Concepts: how-to-guides/usage_concepts.md
     - Installation: how-to-guides/installation.md
-    - Additional Services: how-to-guides/additional_services.md
+    - Use a Datalab: how-to-guides/usage_concepts.md
+    - Authentication: how-to-guides/authentication.md
+    - S3 client access: how-to-guides/s3-access.md
+    - Additional services: how-to-guides/additional_services.md
   - Security:
     - Overview: security/index.md
-    - Workspace Sessions as Sandboxes: security/workspace-sessions.md
-    - Sandbox Security Measures: security/sandbox-controls.md
+    - Session access: security/workspace-sessions.md
+    - Network policies: security/sandbox-controls.md
   - Reference guides:
     - API: reference-guides/api.md
     - Architecture:
