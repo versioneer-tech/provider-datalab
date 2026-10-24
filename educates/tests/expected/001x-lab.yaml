@@ -327,12 +327,16 @@ spec:
               - --cookie-csrf-per-request-limit=5
               - --skip-auth-route=GET=^/api/public(/|$)
               - --skip-auth-route=HEAD=^/api/public(/|$)
+              - --skip-auth-route=OPTIONS=^/api/public(/|$)
               - --skip-auth-route=GET=^/public(/|$)
               - --skip-auth-route=HEAD=^/public(/|$)
+              - --skip-auth-route=OPTIONS=^/public(/|$)
               - --skip-auth-route=GET=^/share(/|$)
               - --skip-auth-route=HEAD=^/share(/|$)
+              - --skip-auth-route=OPTIONS=^/share(/|$)
               - --skip-auth-route=GET=^/static(/|$)
               - --skip-auth-route=HEAD=^/static(/|$)
+              - --skip-auth-route=OPTIONS=^/static(/|$)
               - --silence-ping-logging=true
               image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
               imagePullPolicy: IfNotPresent
