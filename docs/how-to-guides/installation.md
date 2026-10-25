@@ -266,7 +266,30 @@ network:
       port: 9000
 ```
 
-Data uses these rules to reach object storage. The Data and S3 proxies also
+Use `network.internalIngress` for inbound traffic. It uses the same fields as
+`internalEgress`, with `namespace` and `podSelector` selecting the source:
+
+```yaml
+network:
+  internalIngress:
+  - namespace: operations
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+    targetPodSelector:
+      matchLabels:
+        app.kubernetes.io/name: package-r
+    ports:
+    - protocol: TCP
+      port: 8888
+```
+
+`targetPodSelector` is optional; without it, the policy selects all runtime
+pods for ingress isolation. Existing allow policies still apply. The provider
+updates these policies in existing runtime namespaces. Add
+`allow-internal-ingress` to `excludePolicies` to disable them.
+
+Data uses `internalEgress` to reach object storage. The Data and S3 proxies also
 have an IAM egress rule for TCP port 8080 in the configured IAM namespace.
 When replacing a manual IAM policy, verify the composed policy and an S3 read
 before removal, then repeat the read without the manual policy.

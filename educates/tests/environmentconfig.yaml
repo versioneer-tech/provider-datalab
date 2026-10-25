@@ -111,6 +111,17 @@ data:
     - sbs-default
     - sbs-default-retain
   network:
+    internalIngress:
+    - namespace: operations
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+      targetPodSelector:
+        matchLabels:
+          app.kubernetes.io/name: package-r
+      ports:
+      - protocol: TCP
+        port: 8888
     externalEgressCIDRs:
     - 0.0.0.0/0
     - ::/0

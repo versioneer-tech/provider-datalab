@@ -1067,6 +1067,8 @@ spec:
         script: |
           import base64 as _base64
           import ipaddress as _ipaddress
+          import hashlib as _hashlib
+          import json as _json
           from crossplane.function.proto.v1 import run_function_pb2 as fnv1
           from google.protobuf import json_format as _json_format
 
@@ -1253,7 +1255,8 @@ spec:
               excluded_network_policies = set(_string_list(network_env.get("excludePolicies") or []))
               blacklist_ips = _string_list(network_env.get("blacklistIPs") or [])
               external_egress_cidrs = _string_list(network_env.get("externalEgressCIDRs") or [])
-              internal_egress = network_env.get("internalEgress") or []
+              internal_egress = network_env.get("internalEgress", [])
+              internal_ingress = network_env.get("internalIngress", [])
               internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
               service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
               if service_cidr:
@@ -1271,15 +1274,15 @@ spec:
               def _policy_enabled(name):
                   return name not in excluded_network_policies
 
-              def _network_policy(name, egress):
+              def _network_policy(name, rules, direction="egress", pod_selector=None):
                   return {
                       "apiVersion": "networking.k8s.io/v1",
                       "kind": "NetworkPolicy",
                       "metadata": {"name": name},
                       "spec": {
-                          "podSelector": {},
-                          "policyTypes": ["Egress"],
-                          "egress": egress,
+                          "podSelector": pod_selector or {},
+                          "policyTypes": [direction.capitalize()],
+                          direction: rules,
                       },
                   }
 
@@ -1300,71 +1303,53 @@ spec:
                       block["except"] = exceptions
                   return {"ipBlock": block}
 
-              def _selector_for(match_labels_or_expr):
-                  if not isinstance(match_labels_or_expr, dict):
-                      return {}
-                  selector = {}
-                  match_labels = match_labels_or_expr.get("matchLabels")
-                  if isinstance(match_labels, dict) and match_labels:
-                      selector["matchLabels"] = match_labels
-                  match_expressions = match_labels_or_expr.get("matchExpressions")
-                  if isinstance(match_expressions, list) and match_expressions:
-                      selector["matchExpressions"] = [
-                          expr for expr in match_expressions
-                          if isinstance(expr, dict) and expr.get("key") and expr.get("operator")
-                      ]
-                  return selector
+              def _internal_ports(items):
+                  return [
+                      {key: item[key] for key in ("port", "protocol", "endPort") if item.get(key) is not None}
+                      for item in items
+                  ]
 
-              def _internal_egress_ports(items):
-                  ports = []
+              def _internal_rules(items, peer_key):
+                  field = "internalIngress" if peer_key == "from" else "internalEgress"
                   if not isinstance(items, list):
-                      return ports
-                  for item in items:
-                      if not isinstance(item, dict):
-                          continue
-                      port = item.get("port")
-                      if port is None:
-                          continue
-                      port_entry = {"port": port}
-                      protocol = _safe_str(item.get("protocol"))
-                      if protocol:
-                          port_entry["protocol"] = protocol
-                      end_port = item.get("endPort")
-                      if end_port is not None:
-                          port_entry["endPort"] = end_port
-                      ports.append(port_entry)
-                  return ports
-
-              def _internal_egress_rules(items):
+                      raise ValueError(f"network.{field} must be a list")
                   rules = []
-                  if not isinstance(items, list):
-                      return rules
                   for item in items:
-                      if not isinstance(item, dict):
-                          continue
-                      namespace = _safe_str(item.get("namespace"))
-                      if not namespace:
-                          continue
-                      peer = {
-                          "namespaceSelector": {
-                              "matchLabels": {
-                                  "kubernetes.io/metadata.name": namespace,
-                              }
-                          }
-                      }
-                      pod_selector = _selector_for(item.get("podSelector") or {})
-                      if pod_selector:
-                          peer["podSelector"] = pod_selector
-                      rule = {"to": [peer]}
-                      ports = _internal_egress_ports(item.get("ports") or [])
+                      if not isinstance(item, dict) or not isinstance(item.get("namespace"), str) or not item["namespace"].strip():
+                          raise ValueError(f"network.{field} entries require a namespace")
+                      selector = item.get("podSelector", {})
+                      ports = item.get("ports", [])
+                      if not isinstance(selector, dict):
+                          raise ValueError(f"network.{field} selectors must be objects")
+                      if not isinstance(ports, list) or any(not isinstance(port, dict) or port.get("port") is None for port in ports):
+                          raise ValueError(f"network.{field} ports must be a list of port objects")
+                      peer = {"namespaceSelector": {"matchLabels": {
+                          "kubernetes.io/metadata.name": item["namespace"].strip(),
+                      }}}
+                      if selector:
+                          peer["podSelector"] = selector
+                      rule = {peer_key: [peer]}
                       if ports:
-                          rule["ports"] = ports
+                          rule["ports"] = _internal_ports(ports)
                       rules.append(rule)
                   return rules
 
-              def _add_policy(policies, name, egress):
+              def _add_policy(policies, name, rules):
                   if _policy_enabled(name):
-                      policies.append(_network_policy(name, egress))
+                      policies.append(_network_policy(name, rules))
+
+              ingress_policies = {}
+              for item, rule in zip(internal_ingress, _internal_rules(internal_ingress, "from")):
+                  target = item.get("targetPodSelector", {})
+                  if not isinstance(target, dict):
+                      raise ValueError("network.internalIngress selectors must be objects")
+                  name = "allow-internal-ingress"
+                  if target:
+                      selector = _json.dumps(target, sort_keys=True, separators=(",", ":"))
+                      name += "-" + _hashlib.sha256(selector.encode()).hexdigest()[:10]
+                  ingress_policy = ingress_policies.setdefault(name, _network_policy(name, [], "ingress", target))
+                  if rule not in ingress_policy["spec"]["ingress"]:
+                      ingress_policy["spec"]["ingress"].append(rule)
 
               network_policies = []
               _add_policy(network_policies, "deny-egress", [])
@@ -1416,7 +1401,7 @@ spec:
                           for cidr in external_egress_cidrs
                       ])
 
-              internal_egress_rules = _internal_egress_rules(internal_egress)
+              internal_egress_rules = _internal_rules(internal_egress, "to")
               if internal_egress_rules:
                   _add_policy(network_policies, "allow-internal-egress", internal_egress_rules)
 
@@ -1577,6 +1562,13 @@ spec:
               observed_resources = getattr(req.observed, "resources", {}) or {}
               env_manifest = _extract_manifest(observed_resources.get(f"workshopenvironment-{xr_name}"))
               workshop_ns = _safe_str(((env_manifest.get("status") or {}).get("educates") or {}).get("namespace") or xr_name)
+
+              runtime_namespace = ((env_manifest.get("status") or {}).get("educates") or {}).get("namespace")
+              if runtime_namespace and _policy_enabled("allow-internal-ingress"):
+                  for name, manifest in sorted(ingress_policies.items()):
+                      if _policy_enabled(name):
+                          manifest["metadata"]["namespace"] = runtime_namespace
+                          emit("NetworkPolicy", manifest, key_suffix=name)
 
               if workshop_ns:
                   emit("ResourceQuota", {

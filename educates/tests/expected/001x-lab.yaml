@@ -97,6 +97,10 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
+      name: networkpolicy-s-joe-allow-internal-ingress-bde2a5ce46
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
       name: observe-oauth-client-secret-s-joe
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -162,7 +166,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: data-deployment-s-joe, data-dns-networkpolicy-s-joe,
-      data-networkpolicy-s-joe, and 29 more'
+      data-networkpolicy-s-joe, and 30 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -1680,6 +1684,54 @@ spec:
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: networkpolicy-s-joe-allow-internal-ingress-bde2a5ce46
+  labels:
+    crossplane.io/composite: s-joe
+  name: networkpolicy-s-joe-allow-internal-ingress-bde2a5ce46
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-joe
+    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-ingress-bde2a5ce46
+        namespace: s-joe
+      spec:
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: operations
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+          ports:
+          - port: 8888
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: package-r
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
