@@ -1228,6 +1228,8 @@ spec:
       access.token.claim: "true"
       id.token.claim: "false"
       included.client.audience: datalab-service-custom
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
     name: datalab-service-custom-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
@@ -1262,6 +1264,8 @@ spec:
       access.token.claim: "true"
       id.token.claim: "false"
       included.client.audience: s-joe
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
     name: s-joe-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
