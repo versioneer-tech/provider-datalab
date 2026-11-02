@@ -82,6 +82,11 @@ apply_generated_policies() {
 
 apply_verification_resources() {
   log 'Applying network verification resources'
+  kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
+  kube patch environmentconfig datalab --type=merge \
+    --patch '{"data":{"defaults":{"security":{"externalEgress":false}}}}'
+  kube patch environmentconfig datalab-custom --type=merge \
+    --patch '{"data":{"defaults":{"security":{"externalEgress":true},"vcluster":{"enabled":true}}}}'
   for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}" "${NS_VCLUSTER}"; do
     kube create namespace "${namespace}" --dry-run=client -o yaml | kube apply -f -
   done

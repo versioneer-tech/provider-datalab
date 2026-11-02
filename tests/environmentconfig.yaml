@@ -14,7 +14,6 @@ data:
     secret: wildcard-tls
   storage:
     endpoint: https://s3.acme
-    publicEndpoint: https://s3-public.acme
     forcePathStyle: "true"
     provider: Other
     region: acme
@@ -57,6 +56,14 @@ data:
         - image:
             url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
+    vcluster:
+      enabled: true
+    registry:
+      enabled: true
+      storage: 5Gi
+    data:
+      enabled: true
+      readOnlyMount: false
     quota:
       memory: 2Gi
       storage: 1Gi
@@ -101,7 +108,7 @@ data:
     httpSectionName: workspaces-http
   storage:
     endpoint: https://s3.acme
-    forcePathStyle: "true"
+    forcePathStyle: 'true'
     provider: Other
     region: acme
     secretNamespace: datalab
@@ -125,7 +132,7 @@ data:
     externalEgressCIDRs:
     - 0.0.0.0/0
     - ::/0
-    serviceCIDR: "10.43.0.0/16"
+    serviceCIDR: 10.43.0.0/16
     podCIDRs:
     - 10.42.0.0/16
     blacklistIPs:
@@ -134,31 +141,66 @@ data:
     - 169.254.42.42/32
     - fd00:42::42/128
     excludePolicies: []
+    internalEgress:
+    - namespace: minio
+      podSelector:
+        matchLabels:
+          v1.min.io/tenant: default
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 9000
   packages:
-    - name: awscli
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-    - name: rclone
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
+  - name: awscli
+    files:
+    - image:
+        url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
+  - name: rclone
+    files:
+    - image:
+        url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
+    data:
+      enabled: true
+      readOnlyMount: true
+    vcluster:
+      enabled: true
     quota:
-      memory: 2Gi
-      storage: 1Gi
-      budget: medium
+      memory: 4Gi
+      storage: 40Gi
+      budget: x-large
     overallQuota:
-      storage: 80Gi
+      storage: 200Gi
     security:
-      policy: baseline
+      policy: privileged
       kubernetesAccess: true
-      kubernetesRole: edit
+      kubernetesRole: admin
       externalEgress: true
+    registry:
+      enabled: true
+      storage: 3Gi
+    persistence:
+      storageClassName: sbs-default-retain
+    files:
+    - git:
+        url: https://github.com/versioneer-tech/datalab-example
+        ref: origin/main
+      includePaths:
+      - /workshop/**
+      - /data/**
+      - /README.md
+      path: .
   database:
     tlsRoute:
       parentName: default
       parentNamespace: projectcontour
       sectionName: postgres-passthrough
-    storageClassName: ""
-    backupStorageClassName: ""
+    storageClassName: sbs-default-retain
+    backupStorageClassName: sbs-default-retain
+  documentStore:
+    storageClassName: sbs-default-retain
+  cacheStore:
+    storageClassName: sbs-default-retain
+  vectorStore:
+    storageClassName: sbs-default-retain

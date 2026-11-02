@@ -1,26 +1,14 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# The generated Datalab Secret includes the OAuth client ID and secret.
-# Jane runs a datalab s-jane with a default session automatically created.
-# That session will run permanently until stopped by the operator,
-# and a dedicated vcluster is provisioned for runtime isolation.
-# No workshop files are attached. Credentials to storage are expected
-# to exist in a secret "s-jane" in the same namespace.
-# A Keycloak group, role, and client are created; user "jane" must exist in the configured Keycloak realm.
-# This configuration explicitly overrides default resource quotas and security settings:
-# - Security policy: "privileged" → automatically enables Docker with 20 Gi workspace storage.
-# - Docker registry is enabled with 3 Gi storage.
-# - Session quota: increased to 4 Gi memory, 40 Gi storage, budget class "x-large".
-# - Overall environment PVC storage quota: increased to 200 Gi.
-# - Kubernetes role: elevated to "admin" for full namespace permissions.
-# The shared object storage browser disallows data changes from its Data tabs.
-# The session workspace uses a durable Datalab-owned PVC with the default allowed StorageClass.
-# Additionally, one PostgreSQL database is provisioned for the lab: "analytics".
+# The custom environment supplies privileged sessions, registry, file bundles,
+# quotas, vCluster, and Gateway access. Jane requests PostgreSQL.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-jane
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
 spec:
   users:
     - jane
@@ -28,21 +16,6 @@ spec:
   sessions:
     - name: default
       state: started
-  vcluster: true
-  data:
-    readOnlyMount: true
-  quota:
-    memory: 4Gi
-    storage: 40Gi
-    budget: x-large
-  overallQuota:
-    storage: 200Gi
-  registry:
-    enabled: true
-    storage: 3Gi
-  security:
-    policy: privileged
-    kubernetesRole: admin
   databases:
     pg0:
       names:

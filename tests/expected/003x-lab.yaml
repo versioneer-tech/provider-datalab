@@ -5,10 +5,20 @@
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
   name: s-jane
 spec:
   crossplane:
     resourceRefs:
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-jane-datalab-service-custom-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-jane-s-jane-audience
+      namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
       name: s-jane-ws-access
@@ -59,6 +69,30 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
+      name: data-redirect-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-route-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-config-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-deployment-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-networkpolicy-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: data-s3-service-s-jane
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
       name: data-service-s-jane
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -72,6 +106,10 @@ spec:
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
       name: db-tlsroute-s-jane-pg0
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: networkpolicy-s-jane-allow-internal-ingress-bde2a5ce46
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
@@ -137,33 +175,18 @@ spec:
       kind: Role
       name: s-jane-ws-api
       namespace: default
-  data:
-    readOnlyMount: true
   databases:
     pg0:
       backupStorage: 3Gi
       names:
       - analytics
       storage: 1Gi
-  overallQuota:
-    storage: 200Gi
-  quota:
-    budget: x-large
-    memory: 4Gi
-    storage: 40Gi
-  registry:
-    enabled: true
-    storage: 3Gi
   secretName: s-jane
-  security:
-    kubernetesRole: admin
-    policy: privileged
   sessions:
   - name: default
     state: started
   users:
   - jane
-  vcluster: true
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -176,7 +199,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: data-deployment-s-jane, data-dns-networkpolicy-s-jane,
-      data-networkpolicy-s-jane, and 29 more'
+      data-networkpolicy-s-jane, and 38 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -223,6 +246,7 @@ spec:
         template:
           metadata:
             annotations:
+              datalabs.pkg.internal/oauth2-cookie-checksum: 0a54310cd42983aaa9388e08066b195548cb42c3e474db950ec352c9c839a63f
               datalabs.pkg.internal/storage-secret-checksum: 800e67d2821909a1bf41c8ad32f56395b41288df4801433c909a164e56f863df
             labels:
               app.kubernetes.io/instance: s-jane
@@ -305,6 +329,94 @@ spec:
               - mountPath: /var/run/datalab/storage
                 name: storage-credentials
                 readOnly: true
+            - args:
+              - --http-address=0.0.0.0:4180
+              - --metrics-address=127.0.0.1:44180
+              - --provider=keycloak-oidc
+              - --provider-display-name=acme realm
+              - --client-id=s-jane
+              - --client-secret-file=/var/run/datalab/oauth2/client_secret
+              - --cookie-secret-file=/var/run/datalab/oauth2/cookie_secret
+              - --oidc-issuer-url=https://identity.acme.com/realms/acme
+              - --skip-oidc-discovery=true
+              - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
+              - --redeem-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/token
+              - --oidc-jwks-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/certs
+              - --profile-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/userinfo
+              - --insecure-oidc-skip-nonce=false
+              - --scope=openid email profile
+              - --code-challenge-method=S256
+              - --redirect-url=https://s-jane.lab.acme.com/oauth2/callback
+              - --upstream=http://127.0.0.1:8888/
+              - --email-domain=*
+              - --allowed-group=s-jane
+              - --reverse-proxy=true
+              - --trusted-proxy-ip=10.42.0.0/16
+              - --whitelist-domain=s-jane.lab.acme.com
+              - --pass-basic-auth=false
+              - --pass-access-token=false
+              - --pass-authorization-header=false
+              - --pass-user-headers=true
+              - --skip-provider-button=true
+              - --cookie-name=__Host-s-jane
+              - --cookie-secure=true
+              - --cookie-httponly=true
+              - --cookie-samesite=lax
+              - --cookie-refresh=1h
+              - --cookie-expire=8h
+              - --cookie-csrf-per-request=true
+              - --cookie-csrf-per-request-limit=5
+              - --skip-auth-route=GET=^/api/public(/|$)
+              - --skip-auth-route=HEAD=^/api/public(/|$)
+              - --skip-auth-route=OPTIONS=^/api/public(/|$)
+              - --skip-auth-route=GET=^/public(/|$)
+              - --skip-auth-route=HEAD=^/public(/|$)
+              - --skip-auth-route=OPTIONS=^/public(/|$)
+              - --skip-auth-route=GET=^/share(/|$)
+              - --skip-auth-route=HEAD=^/share(/|$)
+              - --skip-auth-route=OPTIONS=^/share(/|$)
+              - --skip-auth-route=GET=^/static(/|$)
+              - --skip-auth-route=HEAD=^/static(/|$)
+              - --skip-auth-route=OPTIONS=^/static(/|$)
+              - --silence-ping-logging=true
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                httpGet:
+                  path: /ping
+                  port: auth-proxy
+                periodSeconds: 20
+              name: oauth2-proxy
+              ports:
+              - containerPort: 4180
+                name: auth-proxy
+                protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /ready
+                  port: auth-proxy
+                periodSeconds: 10
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 65532
+                runAsUser: 65532
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /var/run/datalab/oauth2
+                name: oauth2-credentials
+                readOnly: true
             initContainers:
             - args:
               - |
@@ -319,7 +431,6 @@ spec:
                 /package-r config init   --address=0.0.0.0   --port=8888   --cors-allowed-origins='*'   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
 
                 /package-r users add default ""
-                /package-r users add datalab ''
                 /package-r users add jane ''
                 /package-r shares add default public /s-jane/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
 
@@ -376,6 +487,15 @@ spec:
                 - key: aws-credentials
                   path: aws-credentials
                 secretName: s-jane-datalab
+            - name: oauth2-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: client_secret
+                  path: client_secret
+                - key: cookie_secret
+                  path: cookie_secret
+                secretName: s-jane-oauth2-client
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -464,14 +584,17 @@ spec:
         name: package-r
         namespace: s-jane
       spec:
-        egress: []
-        ingress:
-        - from:
-          - podSelector:
+        egress:
+        - ports:
+          - port: 8080
+            protocol: TCP
+          to:
+          - namespaceSelector:
               matchLabels:
-                training.educates.dev/application: workshop
-          ports:
-          - port: 8888
+                kubernetes.io/metadata.name: keycloak
+        ingress:
+        - ports:
+          - port: 4180
             protocol: TCP
         podSelector:
           matchLabels:
@@ -480,6 +603,549 @@ spec:
         policyTypes:
         - Ingress
         - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-redirect-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-redirect-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: data-https-redirect
+        namespace: s-jane
+      spec:
+        hostnames:
+        - s-jane.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: contour
+          sectionName: workspaces-http
+        rules:
+        - filters:
+          - requestRedirect:
+              scheme: https
+              statusCode: 301
+            type: RequestRedirect
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
+      p.parentRef.name == "default" && has(p.parentRef.namespace) && p.parentRef.namespace
+      == "contour" && has(p.parentRef.sectionName) && p.parentRef.sectionName == object.spec.parentRefs[0].sectionName
+      && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
+      == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c,
+      c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-route-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-route-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: data
+        namespace: s-jane
+      spec:
+        hostnames:
+        - s-jane.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: contour
+          sectionName: workspaces-https
+        rules:
+        - backendRefs:
+          - name: data-s3
+            port: 8080
+          matches:
+          - headers:
+            - name: User-Agent
+              type: RegularExpression
+              value: ^aws-cli/.*
+          - headers:
+            - name: Authorization
+              type: RegularExpression
+              value: ^AWS4-HMAC-SHA256 .*
+          - queryParams:
+            - name: X-Amz-Algorithm
+              value: AWS4-HMAC-SHA256
+          timeouts:
+            request: 3600s
+        - backendRefs:
+          - name: package-r
+            port: 4180
+          timeouts:
+            request: 3600s
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
+      p.parentRef.name == "default" && has(p.parentRef.namespace) && p.parentRef.namespace
+      == "contour" && has(p.parentRef.sectionName) && p.parentRef.sectionName == object.spec.parentRefs[0].sectionName
+      && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
+      == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c,
+      c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-config-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-s3-config-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        nginx.conf: |
+          pid /tmp/nginx.pid;
+          error_log /dev/stderr warn;
+          events { worker_connections 1024; }
+          http {
+            access_log off;
+            client_body_temp_path /tmp/body; proxy_temp_path /tmp/proxy;
+            fastcgi_temp_path /tmp/fastcgi; uwsgi_temp_path /tmp/uwsgi; scgi_temp_path /tmp/scgi;
+            map $http_authorization $tenant_valid {
+              default 0;
+              ~^AWS4-HMAC-SHA256\s+Credential=s-jane/ 1;
+            }
+            server {
+              listen 8080;
+              location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }
+              location / {
+                if ($tenant_valid = 0) { return 403; }
+                if ($http_x_amz_security_token = "") { return 403; }
+                limit_except GET { deny all; }
+                auth_request /_s3_auth;
+                proxy_set_header Host $http_host;
+                proxy_buffering off; proxy_read_timeout 3600s;
+                proxy_pass http://127.0.0.1:8081;
+              }
+              location = /_s3_auth {
+                internal; proxy_pass_request_body off;
+                proxy_set_header Content-Length "";
+                proxy_set_header Cookie "";
+                proxy_set_header Authorization "Bearer $http_x_amz_security_token";
+                proxy_pass http://127.0.0.1:4180/oauth2/auth?;
+              }
+            }
+          }
+      kind: ConfigMap
+      metadata:
+        name: data-s3
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-deployment-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-s3-deployment-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-jane
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 2
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: s-jane
+            app.kubernetes.io/name: data-s3
+        template:
+          metadata:
+            annotations:
+              datalabs.pkg.internal/gateway-config-checksum: f3dfa9dcc1780a24879ff2dac7d6dbbee902ccf12b03b76331a37fab7f2eb768
+              datalabs.pkg.internal/oauth2-cookie-checksum: 0a54310cd42983aaa9388e08066b195548cb42c3e474db950ec352c9c839a63f
+              datalabs.pkg.internal/storage-secret-checksum: 800e67d2821909a1bf41c8ad32f56395b41288df4801433c909a164e56f863df
+            labels:
+              app.kubernetes.io/instance: s-jane
+              app.kubernetes.io/name: data-s3
+          spec:
+            automountServiceAccountToken: false
+            containers:
+            - args:
+              - serve
+              - s3
+              - 'upstream:'
+              - --addr=127.0.0.1:8081
+              - --auth-key=s-jane,s-jane
+              - --config=/dev/null
+              - --cache-dir=/cache
+              - --dir-cache-time=10s
+              - --read-only
+              env:
+              - name: RCLONE_CONFIG_UPSTREAM_TYPE
+                value: s3
+              - name: RCLONE_CONFIG_UPSTREAM_ENV_AUTH
+                value: "true"
+              - name: AWS_SHARED_CREDENTIALS_FILE
+                value: /var/run/datalab/storage/aws-credentials
+              - name: RCLONE_CONFIG_UPSTREAM_PROVIDER
+                value: Other
+              - name: RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE
+                value: "true"
+              - name: RCLONE_CONFIG_UPSTREAM_ENDPOINT
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_ENDPOINT_URL
+                    name: s-jane-datalab
+              - name: RCLONE_CONFIG_UPSTREAM_REGION
+                valueFrom:
+                  secretKeyRef:
+                    key: AWS_REGION
+                    name: s-jane-datalab
+              image: rclone/rclone:1.71.0
+              imagePullPolicy: IfNotPresent
+              name: s3
+              readinessProbe:
+                exec:
+                  command:
+                  - rclone
+                  - lsf
+                  - ':s3:'
+                  - --config=/dev/null
+                  - --s3-provider=Other
+                  - --s3-endpoint=http://127.0.0.1:8081
+                  - --s3-access-key-id=s-jane
+                  - --s3-secret-access-key=s-jane
+                  - --s3-env-auth=false
+                periodSeconds: 30
+                timeoutSeconds: 20
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+              - mountPath: /cache
+                name: cache
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /var/run/datalab/storage
+                name: storage-credentials
+                readOnly: true
+            - args:
+              - --metrics-address=127.0.0.1:44180
+              - --provider=keycloak-oidc
+              - --provider-display-name=acme realm
+              - --client-id=s-jane
+              - --client-secret-file=/var/run/datalab/oauth2/client_secret
+              - --cookie-secret-file=/var/run/datalab/oauth2/cookie_secret
+              - --oidc-issuer-url=https://identity.acme.com/realms/acme
+              - --skip-oidc-discovery=true
+              - --login-url=https://identity.acme.com/realms/acme/protocol/openid-connect/auth
+              - --redeem-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/token
+              - --oidc-jwks-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/certs
+              - --profile-url=http://keycloak.keycloak:8080/realms/acme/protocol/openid-connect/userinfo
+              - --insecure-oidc-skip-nonce=false
+              - --scope=openid email profile
+              - --code-challenge-method=S256
+              - --redirect-url=https://s-jane.lab.acme.com/oauth2/callback
+              - --email-domain=*
+              - --reverse-proxy=true
+              - --trusted-proxy-ip=10.42.0.0/16
+              - --whitelist-domain=s-jane.lab.acme.com
+              - --pass-basic-auth=false
+              - --pass-access-token=false
+              - --pass-authorization-header=false
+              - --pass-user-headers=true
+              - --skip-provider-button=true
+              - --cookie-name=__Host-s-jane
+              - --cookie-secure=true
+              - --cookie-httponly=true
+              - --cookie-samesite=lax
+              - --cookie-refresh=1h
+              - --cookie-expire=8h
+              - --cookie-csrf-per-request=true
+              - --cookie-csrf-per-request-limit=5
+              - --silence-ping-logging=true
+              - --http-address=127.0.0.1:4180
+              - --upstream=static://202
+              - --skip-jwt-bearer-tokens=true
+              - --bearer-token-login-fallback=false
+              - --insecure-oidc-allow-unverified-email=true
+              - --allowed-role=s-jane:ws_access
+              - --allowed-role=s-jane:ws_admin
+              - --allowed-role=s-jane:ws_api
+              - --request-logging=false
+              - --auth-logging=false
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+              imagePullPolicy: IfNotPresent
+              name: oauth2-proxy
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 65532
+                runAsUser: 65532
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /var/run/datalab/oauth2
+                name: oauth2-credentials
+                readOnly: true
+            - args:
+              - -g
+              - daemon off;
+              command:
+              - nginx
+              image: nginxinc/nginx-unprivileged:1.28-alpine
+              name: gateway
+              ports:
+              - containerPort: 8080
+                name: s3-gateway
+              readinessProbe:
+                httpGet:
+                  path: /_ready
+                  port: s3-gateway
+              resources:
+                limits:
+                  cpu: 250m
+                  memory: 64Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /etc/nginx/nginx.conf
+                name: gateway-config
+                readOnly: true
+                subPath: nginx.conf
+            securityContext:
+              fsGroup: 100
+              runAsGroup: 100
+              runAsNonRoot: true
+              runAsUser: 1000
+              seccompProfile:
+                type: RuntimeDefault
+            volumes:
+            - emptyDir:
+                sizeLimit: 256Mi
+              name: cache
+            - emptyDir:
+                sizeLimit: 128Mi
+              name: tmp
+            - name: storage-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: aws-credentials
+                  path: aws-credentials
+                secretName: s-jane-datalab
+            - name: oauth2-credentials
+              secret:
+                defaultMode: 288
+                items:
+                - key: client_secret
+                  path: client_secret
+                - key: cookie_secret
+                  path: cookie_secret
+                secretName: s-jane-oauth2-client
+            - configMap:
+                name: data-s3
+              name: gateway-config
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration
+      >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas
+      >= 1
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-networkpolicy-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-s3-networkpolicy-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-jane
+      spec:
+        egress:
+        - ports:
+          - port: 8080
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: keycloak
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: contour
+          ports:
+          - port: 8080
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/instance: s-jane
+            app.kubernetes.io/name: data-s3
+        policyTypes:
+        - Ingress
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: data-s3-service-s-jane
+  labels:
+    crossplane.io/composite: s-jane
+  name: data-s3-service-s-jane
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: data-s3
+        name: data-s3
+        namespace: s-jane
+      spec:
+        ports:
+        - name: s3
+          port: 8080
+          targetPort: s3-gateway
+        selector:
+          app.kubernetes.io/instance: s-jane
+          app.kubernetes.io/name: data-s3
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -516,10 +1182,10 @@ spec:
         namespace: s-jane
       spec:
         ports:
-        - name: http
-          port: 8888
+        - name: auth-proxy
+          port: 4180
           protocol: TCP
-          targetPort: package-r
+          targetPort: auth-proxy
         selector:
           app.kubernetes.io/instance: s-jane
           app.kubernetes.io/name: package-r
@@ -609,6 +1275,7 @@ spec:
                   resources:
                     requests:
                       storage: 3Gi
+                  storageClassName: sbs-default-retain
         databaseInitSQL:
           key: init.sql
           name: pg0-init-sql
@@ -619,6 +1286,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
+            storageClassName: sbs-default-retain
           name: primary
           replicas: 1
         postGISVersion: "3.5"
@@ -737,6 +1405,78 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-jane-oauth-client
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-jane-datalab-service-custom-audience
+  labels:
+    crossplane.io/composite: s-jane
+  name: s-jane-datalab-service-custom-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: datalab-service-custom
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-jane-s-jane-s-jane-audience
+  labels:
+    crossplane.io/composite: s-jane
+  name: s-jane-s-jane-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: s-jane
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: s-jane-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
@@ -1154,6 +1894,54 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: networkpolicy-s-jane-allow-internal-ingress-bde2a5ce46
+  labels:
+    crossplane.io/composite: s-jane
+  name: networkpolicy-s-jane-allow-internal-ingress-bde2a5ce46
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-ingress-bde2a5ce46
+        namespace: s-jane
+      spec:
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: operations
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+          ports:
+          - port: 8888
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: package-r
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: oauth2-client-secret-s-jane
   labels:
     crossplane.io/composite: s-jane
@@ -1340,7 +2128,7 @@ spec:
         resources:
           requests:
             storage: 40Gi
-        storageClassName: sbs-default
+        storageClassName: sbs-default-retain
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -1541,23 +2329,14 @@ spec:
                   to: $(workshop_namespace)/pg0-primary
               version: "1.34"
             workshop:
-              enabled: false
+              enabled: true
           dashboards:
           - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+            url: https://s-jane.lab.acme.com/
           envFrom:
           - secretRef:
               name: s-jane-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
+          ingresses: []
           namespaces:
             budget: x-large
             role: admin
@@ -1580,7 +2359,15 @@ spec:
         title: Default DataLab
         version: "1.0"
         workshop:
-          files: []
+          files:
+          - git:
+              ref: origin/main
+              url: https://github.com/versioneer-tech/datalab-example
+            includePaths:
+            - /workshop/**
+            - /data/**
+            - /README.md
+            path: .
           packages:
           - files:
             - image:

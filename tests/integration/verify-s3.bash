@@ -121,7 +121,7 @@ verify_s3() {
   kube exec verify-s3-client --namespace "${runtime_namespace}" -- python -u /test/e2e.py
 
   log 'Disabling environment S3 and checking browser-only Gateway exposure'
-  kube patch environmentconfig datalab-s3-it --type=merge \
+  kube patch environmentconfig datalab-custom --type=merge \
     --patch '{"data":{"httpRoute":{"enableS3":false}}}'
   kube wait deployment/data-s3 --namespace "${runtime_namespace}" --for=delete --timeout=5m
   local deadline=$((SECONDS + 120))

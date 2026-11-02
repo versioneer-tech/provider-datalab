@@ -8,9 +8,9 @@ Use a vCluster for tools that need their own CRDs, controllers, or cluster
 roles. For a short-lived process, you can run it in the terminal and use the
 editor's Ports tab to open its web interface.
 
-For PostgreSQL, MongoDB, Redis, Qdrant, and a registry, first check whether the
-[managed service fields](usage_concepts.md) meet your needs. The platform
-operator maintains those services and their backups.
+Use the [Datalab service fields](usage_concepts.md#database) for managed
+PostgreSQL, MongoDB, Redis, and Qdrant stores. The environment also supplies
+a session registry.
 
 ## Dask
 
@@ -84,6 +84,7 @@ spec:
             limits:   {cpu: "1",    memory: "2Gi"}
 EOF
 ```
+
 Open the scheduler dashboard through the editor's Ports tab:
 
 ```bash
@@ -106,7 +107,6 @@ helm upgrade --install dask-gateway dask/dask-gateway \
   --wait --atomic
 ```
 
-
 ## MLflow
 
 MLflow records experiment runs and their artifacts. This example stores its
@@ -114,11 +114,12 @@ SQLite database on a PVC and artifacts in an existing S3 bucket. Set `BUCKET`
 to a bucket your Datalab can write to.
 
 The PVC belongs to the current namespace. Check namespace deletion rules and
-the volume's reclaim policy before using it for records you need to keep. For a shared service,
-use a managed database and arrange artifact backups with the operator.
+the volume's reclaim policy before storing records you need to keep.
+For a shared service, use a managed database and arrange artifact backups
+with the operator.
 
 ```bash
-export BUCKET=ws-frank # replace accordingly
+export BUCKET=example-data # Use a bucket you can write to.
 
 kubectl apply -f - <<EOF
 apiVersion: v1
@@ -226,6 +227,7 @@ spec:
             claimName: mlflow
 EOF
 ```
+
 Open the MLflow interface through the editor's Ports tab:
 
 ```bash
@@ -237,7 +239,6 @@ Point your code at the forwarded tracking server:
 ```bash
 export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 ```
-
 
 ## PostgreSQL with psql
 
@@ -298,7 +299,6 @@ INSERT INTO demo (name, meta) VALUES
 
 SELECT * FROM demo;
 ```
-
 
 ## Keep or remove a service
 

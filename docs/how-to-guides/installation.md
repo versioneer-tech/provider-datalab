@@ -25,7 +25,9 @@ Install the operators for the managed stores you plan to offer:
 | `spec.cacheStores` | Redis Kubernetes Operator | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
 | `spec.vectorStores` | Qdrant Operator | `QdrantCluster` in `qdrant.io/v1alpha1` |
 
-Check the served APIs and fields before upgrading an operator. The
+See [managed service types](usage_concepts.md#managed-service-types) for the
+request fields and type defaults. Check the served APIs and fields before
+upgrading an operator. The
 [integration tests](https://github.com/versioneer-tech/provider-datalab/tree/main/tests/integration)
 contain the dependency settings used by this repository. Configure storage,
 backup and restore, monitoring, and deletion for each store you offer.
@@ -145,6 +147,14 @@ data:
     - fd00:42::42/128
     excludePolicies: []
   defaults:
+    vcluster:
+      enabled: true
+    registry:
+      enabled: true
+      storage: 5Gi
+    data:
+      enabled: true
+      readOnlyMount: false
     overallQuota:
       storage: 100Gi
     security:
@@ -152,44 +162,22 @@ data:
 ```
 
 Replace the example storage classes, network ranges, and DNS names before
-applying it. To select another EnvironmentConfig for one Datalab, set its
-`datalabs.pkg.internal/environment` annotation or label to that config's name.
-
-### Identity
-
-Set `iam.realm` to the Keycloak realm that contains your users. The public
-`iam.issuerURL` is used for browser login; `iam.internalURL` is used for
-in-cluster token and signing-key requests. The IAM namespace defaults to
-`keycloak`. Set `iam.namespace` if your installation uses another namespace.
-
-Provider Datalab creates a confidential OAuth client, groups, roles, and
-memberships for each Datalab. Platform ingress policy must protect session
-access. See [Authentication](authentication.md) for the role model and the
-controller examples.
+applying it. Configure [authentication](authentication.md) before users start
+sessions.
 
 ### Data address
 
-`ingress.enabled` and `httpRoute.enabled` both default to `false`. In that
-case, a session reaches Data through its Educates-authenticated ingress.
-Enable one setting to give each Datalab a permanent Data address. Enabling
-both stops reconciliation.
+Enable either `ingress.enabled` or `httpRoute.enabled` for a permanent Data
+address. Enabling both stops reconciliation. With neither enabled, Data is
+available through a session's Educates-authenticated ingress.
 
-Both options need `iam.issuerURL`, `iam.internalURL`, and `ingress.domain`.
-An Ingress also needs `ingress.class` and `ingress.secret`. Use
-`ingress.annotations` for controller settings.
-
-For Gateway API exposure, merge this block into the EnvironmentConfig:
+For Gateway API exposure, replace the example's `ingress.enabled: true` with
+`false` and add:
 
 ```yaml
 data:
-  ingress:
-    enabled: false
-    class: nginx
-    domain: lab.example.org
-    secret: wildcard-tls
   httpRoute:
     enabled: true
-    enableS3: false
     parentName: default
     parentNamespace: gateway-system
     sectionName: workspaces-https
@@ -197,40 +185,118 @@ data:
 ```
 
 The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
-routes from Datalab runtime namespaces. It manages the permanent Data
-certificate. Keep `ingress.class` and `ingress.secret` for Educates session
-Ingress objects.
+routes from runtime namespaces. It manages the permanent Data certificate.
+Keep the session ingress class and TLS Secret set for Educates. For the
+optional read-only S3 endpoint, see [S3 client access](s3-access.md).
 
-Set `httpRoute.enableS3: true` to add the experimental read-only S3 endpoint
-for every Data-enabled Datalab in the environment. Browser and S3 requests
-then use the same hostname. See [S3 client access](s3-access.md) for the
-controller requirements and client setup.
+packageR permits all browser origins (`*`) for public catalog access.
+To restrict origins, configure the Gateway to replace or remove backend CORS
+headers and handle preflight requests. Adding a header does not restrict the
+wildcard. Cookie-based cross-origin access needs a separate policy.
 
-### Public catalog CORS
+### EnvironmentConfig values and defaults
 
-packageR allows all browser origins (`*`) for public catalog access. No chart
-or EnvironmentConfig CORS setting is needed. To restrict origins, configure
-the Gateway to replace or remove backend CORS headers and handle preflight
-requests. Adding another CORS header does not restrict the wildcard.
-Check the controller's support for
-[HTTPRoute CORS filters](https://gateway-api.sigs.k8s.io/guides/user-guides/http-cors/).
-Cookie-based cross-origin access needs its own policy.
+All paths below are relative to `EnvironmentConfig.data`. Defaults apply
+when a setting is omitted; example values such as cluster CIDRs, endpoints,
+and StorageClass names are not built-in defaults.
 
-### Storage and quotas
+Select a specific EnvironmentConfig with the
+`datalabs.pkg.internal/environment` annotation or label to use its settings
+without per-Datalab overrides, as shown in the
+[`datalab-custom` example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml).
+The annotation takes priority over the label; the default selection is `datalab`.
 
-`storage.endpoint` is the S3 address used by session tools and packageR.
-It must be reachable from the runtime Pods. Browsers connect to Data rather
-than directly to object storage. Use `storage.forcePathStyle` when the store
-requires path-style addresses.
+Runtime settings come from the EnvironmentConfig. The XRD retains unknown
+fields, but extra fields in `spec` do not override these settings.
 
-`storageClasses.allowed` restricts the classes used by session PVCs. A
-requested class is used when listed; otherwise the first listed class is
-used. With an empty or omitted list, any requested class is allowed.
+#### Runtime and service defaults
 
-`defaults.overallQuota.storage` sets the total PVC request limit for each
-Datalab environment namespace. A Datalab can override it with
-`spec.overallQuota.storage`. If neither is set, the limit is `100Gi`.
-PVCs in other namespaces are outside that quota.
+| Setting | Default | Use |
+| --- | --- | --- |
+| `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started Educates session. |
+| `defaults.registry.enabled` | `true` | Session Docker registry. |
+| `defaults.registry.storage` | `5Gi` | Registry volume size. |
+| `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |
+| `defaults.data.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
+| `defaults.quota.memory` | `2Gi` | Session memory request. |
+| `defaults.quota.storage` | `1Gi` | Workspace PVC size. |
+| `defaults.quota.budget` | `medium` | Educates namespace budget. |
+| `defaults.overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the environment namespace. |
+| `defaults.security.policy` | `baseline` | Pod security level: `restricted`, `baseline`, or `privileged`. |
+| `defaults.security.kubernetesAccess` | `true` | Session Kubernetes service account token. |
+| `defaults.security.kubernetesRole` | `edit` | Session role: `view`, `edit`, or `admin`. |
+| `defaults.security.externalEgress` | `true` | Broad egress to the configured external CIDRs. |
+| `defaults.persistence.storageClassName` | First allowed class, or cluster default | Workspace StorageClass; a value outside the allowlist falls back to its first entry. |
+| `defaults.files` | `[]` | Workshop file bundles. |
+| `packages` | `[]` | Educates extension packages. |
+
+File bundles and extension packages are passed to Educates unchanged.
+Set Data enablement before creating Datalabs because Educates saves each
+environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
+for a file bundle example.
+
+#### Identity and endpoints
+
+| Setting | Default | Use |
+| --- | --- | --- |
+| `iam.realm` | `default` | Keycloak realm; users must already exist here. |
+| `iam.namespace` | `keycloak` | Namespace selected by IAM egress rules. |
+| `iam.issuerURL` | Not set | Public login issuer; required for permanent Data exposure. |
+| `iam.internalURL` | Not set | Token and signing-key URL; required for permanent Data exposure. |
+| `iam.extraAudiences` | `[]` | Additional OAuth client audiences. |
+| `ingress.enabled` | `false` | Permanent Data Ingress; mutually exclusive with `httpRoute.enabled`. |
+| `ingress.class` | Empty | Session ingress class; required for Data Ingress. |
+| `ingress.domain` | `default` for sessions | Host suffix; must be set for permanent Data exposure. |
+| `ingress.secret` | `wildcard-tls` for sessions | TLS Secret; must be set for Data Ingress. |
+| `ingress.annotations` | `{}` | Annotations on the permanent Data Ingress. |
+| `httpRoute.enabled` | `false` | Permanent Data Gateway routes. |
+| `httpRoute.enableS3` | `false` | Read-only S3 endpoint; requires `httpRoute.enabled`. |
+| `httpRoute.parentName` | Not set | Gateway name; required when Gateway exposure is enabled. |
+| `httpRoute.parentNamespace` | Not set | Gateway namespace; required when Gateway exposure is enabled. |
+| `httpRoute.sectionName` | Not set | HTTPS listener; required when Gateway exposure is enabled. |
+| `httpRoute.httpSectionName` | Not set | HTTP redirect listener; required when Gateway exposure is enabled. |
+
+#### Storage and managed stores
+
+| Setting | Default | Use |
+| --- | --- | --- |
+| `storage.endpoint` | Empty | Endpoint reachable by runtime Pods; the input Secret's `AWS_ENDPOINT_URL` takes priority. |
+| `storage.region` | Empty | Object-store region; the input Secret's `AWS_REGION` takes priority. |
+| `storage.type` | Empty | rclone backend type, usually `s3`. |
+| `storage.provider` | Empty for rclone; `Other` for the S3 proxy | Object-store provider. |
+| `storage.forcePathStyle` | `true` | Path-style S3 requests. |
+| `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
+| `storageClasses.allowed` | `[]` | Allowed workspace StorageClasses; an empty list permits any configured class. |
+| `database.storageClassName` | Cluster default | PostgreSQL data StorageClass. |
+| `database.backupStorageClassName` | Cluster default | PostgreSQL backup StorageClass. |
+| `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
+| `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
+| `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
+| `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
+| `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |
+| `vectorStore.storageClassName` | Cluster default | Qdrant data StorageClass. |
+
+PostgreSQL TLSRoutes are created only when all three
+`database.tlsRoute` settings are present.
+
+#### Network rules
+
+| Setting | Default | Use |
+| --- | --- | --- |
+| `network.externalEgressCIDRs` | `[]` | External destination ranges; empty means no broad external allow rule. |
+| `network.blacklistIPs` | `[]` | CIDRs excluded from external egress. |
+| `network.podCIDRs` | `[]` | Host Pod ranges excluded from external egress. |
+| `network.serviceCIDR` | Not set | Host Service range excluded from external egress. |
+| `network.excludePolicies` | `[]` | Generated policies to omit. |
+| `network.internalEgress` | `[]` | Explicit cross-namespace destinations. |
+| `network.internalIngress` | `[]` | Explicit cross-namespace sources. |
+| `network.internalEgress[].namespace`, `network.internalIngress[].namespace` | Required for each entry | Peer namespace. |
+| `network.internalEgress[].podSelector`, `network.internalIngress[].podSelector` | `{}` | Peer Pod selector; omitted means all Pods in the peer namespace. |
+| `network.internalEgress[].ports`, `network.internalIngress[].ports` | `[]` | Ports; omitted means all ports. |
+| `network.internalEgress[].ports[].port`, `network.internalIngress[].ports[].port` | Required for each port entry | Named or numbered port. |
+| `network.internalEgress[].ports[].protocol`, `network.internalIngress[].ports[].protocol` | Kubernetes default (`TCP`) | Port protocol. |
+| `network.internalEgress[].ports[].endPort`, `network.internalIngress[].ports[].endPort` | Not set | End of a numeric port range. |
+| `network.internalIngress[].targetPodSelector` | `{}` | Runtime Pods selected by the ingress policy; omitted means all runtime Pods. |
 
 ### Network access
 
@@ -244,11 +310,8 @@ Pod CIDRs can be listed with:
 kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"  "}{.spec.podCIDR}{"  "}{.spec.podCIDRs}{"\n"}{end}'
 ```
 
-`network.externalEgressCIDRs` lists the external ranges allowed when
-`externalEgress` is true. Use `0.0.0.0/0` and `::/0` for all external IPv4 and
-IPv6 addresses, or list narrower ranges. An empty list grants no broad
-external access. `network.blacklistIPs` excludes ranges such as cloud
-metadata endpoints from that rule.
+Use `0.0.0.0/0` and `::/0` for all external IPv4 and IPv6 destinations,
+or list narrower ranges in `network.externalEgressCIDRs`.
 
 For a backend Pod in another namespace, add an `internalEgress` entry:
 
@@ -284,19 +347,9 @@ network:
       port: 8888
 ```
 
-`targetPodSelector` is optional; without it, the policy selects all runtime
-pods for ingress isolation. Existing allow policies still apply. The provider
-updates these policies in existing runtime namespaces. Add
-`allow-internal-ingress` to `excludePolicies` to disable them.
-
-Data uses `internalEgress` to reach object storage. The Data and S3 proxies also
-have an IAM egress rule for TCP port 8080 in the configured IAM namespace.
-When replacing a manual IAM policy, verify the composed policy and an S3 read
-before removal, then repeat the read without the manual policy.
-
-Use `network.excludePolicies` only when another policy system supplies the
-same controls. See [Network policies](../security/sandbox-controls.md) for
-the generated policies and how they combine.
+These rules apply to existing runtime namespaces too. See
+[Network policies](../security/sandbox-controls.md) for how policies combine,
+Data access, and policy exclusions.
 
 ## 5. Supply storage credentials
 
@@ -346,9 +399,6 @@ kubectl get datalabs -n workspace
 kubectl describe datalab demo -n workspace
 ```
 
-The default session starts and gets a workspace PVC. Its Data tab opens the
-shared file browser. With the permanent address enabled, users can also open
-Data without a session and publish files through the default public share.
 See [Use a Datalab](usage_concepts.md) for session state, managed services,
 workshop files, and sharing.
 

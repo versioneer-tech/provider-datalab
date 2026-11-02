@@ -29,15 +29,6 @@ service's token checks. The S3 endpoint adds the Datalab client ID as an
 audience when enabled. Other OAuth clients that call these services must emit
 the required audience and roles too.
 
-## Apply ingress policy
-
-Apply controller settings through platform policy so they cover every session
-Ingress. These examples use Kyverno CEL policies. Kyverno is needed only for
-these examples, not by Provider Datalab itself. Check that the installed Kyverno
-CRDs serve `MutatingPolicy` and `GeneratingPolicy` in `policies.kyverno.io/v1`.
-
-For the other access controls, see [Security](../security/index.md).
-
 ## Generated session resources
 
 For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
@@ -59,9 +50,8 @@ training.educates.dev/component: session
 training.educates.dev/environment.name: s-jane
 ```
 
-Provider Datalab also creates a confidential Keycloak client named after the
-Datalab. For `s-jane`, the generated client includes redirect and web-origin
-entries for the Datalab root and each declared session host:
+For `s-jane`, the generated client includes redirect and web-origin entries
+for the Datalab root and each declared session host:
 
 ```text
 https://s-jane.lab.acme.org/*
@@ -83,31 +73,9 @@ policy should require `ws_api` and any configured audience.
 
 ## Set the shared ingress settings
 
-Change `ingress.class` to match the ingress controller you operate.
-
-```yaml
-apiVersion: apiextensions.crossplane.io/v1beta1
-kind: EnvironmentConfig
-metadata:
-  name: datalab
-data:
-  iam:
-    realm: acme
-  ingress:
-    class: apisix # use "nginx" for the nginx example
-    domain: lab.acme.org
-    secret: workspace-tls
-  storage:
-    endpoint: https://s3.acme.org
-    provider: Other
-    region: acme
-    forcePathStyle: "true"
-    secretNamespace: workspace
-    type: s3
-```
-
-The Educates installation must use the same ingress class, domain, and TLS
-secret. For example, an APISIX-based deployment would set:
+Set the ingress class, domain, and TLS Secret in the
+[EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
+values in the Educates installation, for example:
 
 ```yaml
 clusterIngressDomain: lab.acme.org
@@ -117,284 +85,50 @@ tlsCertificateRef:
   namespace: workspace
 ```
 
-For TLS, use a wildcard certificate for the session domain:
+Use a wildcard certificate for `*.lab.acme.org`.
 
-```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: workspace-cert
-  namespace: workspace
-spec:
-  dnsNames:
-  - "*.lab.acme.org"
-  issuerRef:
-    kind: ClusterIssuer
-    name: letsencrypt-dns-prod
-  secretName: workspace-tls
-```
+## Apply ingress policy
 
-## NGINX Ingress with OAuth2 Proxy
+Apply controller settings through platform policy so they cover every session
+Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
+`MutatingPolicy` and `GeneratingPolicy` in `policies.kyverno.io/v1`.
+Kyverno is required for these policies, not for Provider Datalab itself.
+Adapt the domains, issuer, and controller settings in the linked manifests.
 
-Run OAuth2 Proxy as a shared service and add external-auth annotations to the
-session Ingress objects.
+### NGINX Ingress with OAuth2 Proxy
 
-Give that proxy its own OAuth client with a redirect URI such as:
+Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
+URI such as `https://auth.lab.acme.org/oauth2/callback`. Its authorization
+policy must check access to the Datalab named in the requested host.
 
-```text
-https://auth.lab.acme.org/oauth2/callback
-```
-
-The shared proxy can use one client for all Datalabs. Its authorization policy
-must still check access to the Datalab named in the requested host.
-
-```yaml
-apiVersion: policies.kyverno.io/v1
-kind: MutatingPolicy
-metadata:
-  name: protect-workshop-sessions-nginx
-spec:
-  failurePolicy: Fail
-  evaluation:
-    admission:
-      enabled: true
-    background:
-      enabled: false
-  matchConstraints:
-    resourceRules:
-      - apiGroups: [networking.k8s.io]
-        apiVersions: [v1]
-        operations: [CREATE, UPDATE]
-        resources: [ingresses]
-  matchConditions:
-    - name: is-workshop-session
-      expression: >-
-        has(object.metadata.labels) &&
-        'training.educates.dev/application' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
-        'training.educates.dev/component' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/component'] == 'session'
-    - name: uses-nginx
-      expression: >-
-        has(object.spec.ingressClassName) &&
-        object.spec.ingressClassName == 'nginx'
-    - name: uses-datalab-domain
-      expression: >-
-        has(object.spec.rules) && object.spec.rules.exists(rule,
-          has(rule.host) && rule.host.endsWith('.lab.acme.org'))
-  mutations:
-    - patchType: ApplyConfiguration
-      applyConfiguration:
-        expression: |
-          Object{
-            metadata: Object.metadata{
-              annotations: {
-                "nginx.ingress.kubernetes.io/auth-url": "https://auth.lab.acme.org/oauth2/auth",
-                "nginx.ingress.kubernetes.io/auth-signin": "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri",
-                "nginx.ingress.kubernetes.io/auth-response-headers": "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
-              }
-            }
-          }
-```
-
+Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
+to add external-auth annotations to matching session Ingress objects.
 Set the proxy cookie domain to cover the session hosts, for example
 `.lab.acme.org`, and allow redirects only to that domain.
 
-## APISIX Ingress configured by Kyverno
+### APISIX Ingress configured by Kyverno
 
-The Kyverno generating policy creates an `ApisixPluginConfig` in the session
-namespace. The mutating policy adds its name to the Ingress annotation.
-APISIX then uses that configuration for incoming requests. Kyverno configures
-the Ingress; it does not check browser tokens on each request.
+The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
+gives Kyverno permission to create `ApisixPluginConfig` resources, generates
+one in each session namespace, and attaches it to matching Ingress objects.
+APISIX checks incoming requests; Kyverno configures the resources.
 
-The existing repository example uses `openid-connect` with a central client
-named `datalab-sessions`. It also contains an `opa` plugin entry that points
-to an external OPA service. The example does not deploy that service or supply
-its policy. Use that entry only with an OPA service configured by your
-platform. Provider Datalab itself does not require OPA.
+The example uses `openid-connect` with a central public client named
+`datalab-sessions`. Its `opa` entry points to an external OPA service.
+The manifest does not deploy that service or supply its policy. Configure
+both for your platform so that the authorizer checks access to the requested
+Datalab. OPA is needed only for this example.
 
-Kyverno needs permission to create `ApisixPluginConfig` resources in the
-generated session namespaces:
+The policies do not read Secrets. For a confidential central client, use the
+ingress controller's supported Secret mechanism to supply its credential.
 
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kyverno:datalab-session-apisix-pluginconfigs
-  labels:
-    rbac.kyverno.io/aggregate-to-admission-controller: "true"
-    rbac.kyverno.io/aggregate-to-background-controller: "true"
-rules:
-- apiGroups:
-  - apisix.apache.org
-  resources:
-  - apisixpluginconfigs
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-```
+The plugin forwards the access token in `Authorization` and disables ID token,
+userinfo, and refresh token forwarding. Check that your authorizer and
+upstream service accept these settings.
 
-The Kyverno policies below do not need Secret read access because they use a
-central public OAuth client. If your platform uses a confidential central
-client, inject that platform-managed credential with the ingress controller's
-supported Secret mechanism instead of the generated per-Datalab runtime Secret.
+Kyverno generates the plugin's session secret once. Synchronization is disabled
+to keep it stable. After changing the template, recreate an existing generated
+plugin config or restart its session to apply the change.
 
-The CEL policies generate one APISIX plugin config per session namespace and
-annotate the matching workshop ingress to use it:
-
-```yaml
-apiVersion: policies.kyverno.io/v1
-kind: GeneratingPolicy
-metadata:
-  name: generate-workshop-session-apisix-pluginconfigs
-spec:
-  evaluation:
-    synchronize:
-      enabled: false
-  matchConstraints:
-    resourceRules:
-      - apiGroups: [networking.k8s.io]
-        apiVersions: [v1]
-        operations: [CREATE, UPDATE]
-        resources: [ingresses]
-  matchConditions:
-    - name: is-workshop-session
-      expression: >-
-        has(object.metadata.labels) &&
-        'training.educates.dev/application' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
-        'training.educates.dev/component' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/component'] == 'session'
-    - name: uses-apisix
-      expression: >-
-        has(object.spec.ingressClassName) &&
-        object.spec.ingressClassName == 'apisix'
-    - name: uses-datalab-domain
-      expression: >-
-        has(object.spec.rules) && object.spec.rules.exists(rule,
-          has(rule.host) && rule.host.endsWith('.lab.acme.org'))
-    - name: has-datalab-name
-      expression: >-
-        'training.educates.dev/environment.name' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/environment.name'] != ''
-  variables:
-    - name: environmentName
-      expression: object.metadata.labels['training.educates.dev/environment.name']
-    - name: targetNamespace
-      expression: object.metadata.namespace
-  generate:
-    - template:
-        interpolate: cel
-        value: |
-          apiVersion: apisix.apache.org/v2
-          kind: ApisixPluginConfig
-          metadata:
-            name: datalab-session-oidc-(( variables.environmentName ))
-            namespace: (( variables.targetNamespace ))
-            labels:
-              training.educates.dev/application: workshop
-              training.educates.dev/component: session
-              training.educates.dev/environment.name: (( variables.environmentName ))
-          spec:
-            plugins:
-              - name: openid-connect
-                enable: true
-                config:
-                  discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
-                  use_jwks: true
-                  bearer_only: false
-                  scope: openid profile email roles
-                  client_id: datalab-sessions
-                  client_secret: ""
-                  session:
-                    secret: (( random.random('[A-Za-z0-9]{32}') ))
-                  access_token_in_authorization_header: true
-                  set_access_token_header: true
-                  set_id_token_header: false
-                  set_userinfo_header: false
-                  set_refresh_token_header: false
-              - name: opa
-                enable: true
-                config:
-                  host: http://opa.iam:8181
-                  policy: example/datalab/session
----
-apiVersion: policies.kyverno.io/v1
-kind: MutatingPolicy
-metadata:
-  name: annotate-workshop-sessions-for-apisix
-spec:
-  failurePolicy: Fail
-  evaluation:
-    admission:
-      enabled: true
-    background:
-      enabled: false
-  matchConstraints:
-    resourceRules:
-      - apiGroups: [networking.k8s.io]
-        apiVersions: [v1]
-        operations: [CREATE, UPDATE]
-        resources: [ingresses]
-  matchConditions:
-    - name: is-workshop-session
-      expression: >-
-        has(object.metadata.labels) &&
-        'training.educates.dev/application' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/application'] == 'workshop' &&
-        'training.educates.dev/component' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/component'] == 'session'
-    - name: uses-apisix
-      expression: >-
-        has(object.spec.ingressClassName) &&
-        object.spec.ingressClassName == 'apisix'
-    - name: uses-datalab-domain
-      expression: >-
-        has(object.spec.rules) && object.spec.rules.exists(rule,
-          has(rule.host) && rule.host.endsWith('.lab.acme.org'))
-    - name: has-datalab-name
-      expression: >-
-        'training.educates.dev/environment.name' in object.metadata.labels &&
-        object.metadata.labels['training.educates.dev/environment.name'] != ''
-  variables:
-    - name: environmentName
-      expression: object.metadata.labels['training.educates.dev/environment.name']
-  mutations:
-    - patchType: ApplyConfiguration
-      applyConfiguration:
-        expression: |
-          Object{
-            metadata: Object.metadata{
-              annotations: {
-                "k8s.apisix.apache.org/plugin-config-name":
-                  "datalab-session-oidc-" + variables.environmentName
-              }
-            }
-          }
-```
-
-The external authorizer in this example must check access to the requested
-Datalab. Its endpoint and policy path are placeholders for the platform's
-settings.
-
-The session secret is generated when Kyverno creates the `ApisixPluginConfig`.
-Disabled synchronization keeps the generated object stable. If you change the
-plugin template for an existing session, recreate the generated plugin config or
-restart the session so Kyverno can generate a new one.
-
-This example forwards the access token in the `Authorization` header and
-disables ID token, userinfo, and refresh token forwarding. Check that those
-settings match the authorization plugins and upstream service you use.
-
-For another ingress controller, match the session Ingress objects by label and
+For another ingress controller, match session Ingress objects by label and
 domain, then attach its authentication and authorization settings.
-
-The complete manifests are in the repository:
-
-- [NGINX and OAuth2 Proxy](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
-- [APISIX Kyverno policies](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)

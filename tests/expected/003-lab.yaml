@@ -5,10 +5,20 @@
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
   name: s-jane
 spec:
   crossplane:
     resourceRefs:
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-jane-datalab-service-custom-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-jane-s-jane-audience
+      namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
       name: s-jane-ws-access
@@ -113,33 +123,18 @@ spec:
       kind: Role
       name: s-jane-ws-api
       namespace: default
-  data:
-    readOnlyMount: true
   databases:
     pg0:
       backupStorage: 3Gi
       names:
       - analytics
       storage: 1Gi
-  overallQuota:
-    storage: 200Gi
-  quota:
-    budget: x-large
-    memory: 4Gi
-    storage: 40Gi
-  registry:
-    enabled: true
-    storage: 3Gi
   secretName: s-jane
-  security:
-    kubernetesRole: admin
-    policy: privileged
   sessions:
   - name: default
     state: started
   users:
   - jane
-  vcluster: true
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -152,7 +147,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
-      db-tlsroute-s-jane-pg0, and 23 more'
+      db-tlsroute-s-jane-pg0, and 25 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -238,6 +233,7 @@ spec:
                   resources:
                     requests:
                       storage: 3Gi
+                  storageClassName: sbs-default-retain
         databaseInitSQL:
           key: init.sql
           name: pg0-init-sql
@@ -248,6 +244,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
+            storageClassName: sbs-default-retain
           name: primary
           replicas: 1
         postGISVersion: "3.5"
@@ -366,6 +363,78 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-jane-oauth-client
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-jane-datalab-service-custom-audience
+  labels:
+    crossplane.io/composite: s-jane
+  name: s-jane-datalab-service-custom-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: datalab-service-custom
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-jane-s-jane-s-jane-audience
+  labels:
+    crossplane.io/composite: s-jane
+  name: s-jane-s-jane-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jane
+    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: s-jane
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: s-jane-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
@@ -902,7 +971,7 @@ spec:
         resources:
           requests:
             storage: 40Gi
-        storageClassName: sbs-default
+        storageClassName: sbs-default-retain
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -1103,23 +1172,14 @@ spec:
                   to: $(workshop_namespace)/pg0-primary
               version: "1.34"
             workshop:
-              enabled: false
+              enabled: true
           dashboards:
           - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+            url: https://s-jane.lab.acme.com/
           envFrom:
           - secretRef:
               name: s-jane-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
+          ingresses: []
           namespaces:
             budget: x-large
             role: admin
@@ -1142,7 +1202,15 @@ spec:
         title: Default DataLab
         version: "1.0"
         workshop:
-          files: []
+          files:
+          - git:
+              ref: origin/main
+              url: https://github.com/versioneer-tech/datalab-example
+            includePaths:
+            - /workshop/**
+            - /data/**
+            - /README.md
+            path: .
           packages:
           - files:
             - image:

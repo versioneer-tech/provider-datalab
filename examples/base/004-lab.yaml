@@ -1,18 +1,14 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# John has a datalab s-john with a default session automatically created.
-# That session will run permanently until stopped by the operator.
-# No vcluster is provisioned. Workshop and data files are pulled from Git,
-# enabling the workshop tab in the Educates UI.
-# Session workspaces use durable Datalab-owned PVCs. The default session starts,
-# while the analysis session is stopped and keeps only its PVC.
-# Credentials to storage are expected in a secret "s-john" in the same namespace.
-# A Keycloak group, role, and client are created; user "john" must exist in the configured Keycloak realm.
+# The custom environment supplies the workspace StorageClass and file bundles.
+# John has started and stopped sessions; each declared session keeps its PVC.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-john
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
 spec:
   users:
   - john
@@ -21,15 +17,3 @@ spec:
   - name: default
   - name: analysis
     state: stopped
-  vcluster: false
-  persistence:
-    storageClassName: sbs-default-retain
-  files:
-  - git:
-      url: https://github.com/versioneer-tech/datalab-example
-      ref: origin/main
-    includePaths:
-    - /workshop/**
-    - /data/**
-    - /README.md
-    path: .

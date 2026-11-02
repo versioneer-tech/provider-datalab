@@ -128,10 +128,18 @@ jobs:
 
       - name: Generate API docs
         run: |
-          # Adapt XRD to K8s CRD format for crdoc
-          sed -i 's/CompositeResourceDefinition/CustomResourceDefinition/' xrd.yaml
-          sed -i 's#apiextensions.crossplane.io/v2#apiextensions.k8s.io/v1#g' xrd.yaml
-          crdoc -r xrd.yaml -o docs/reference-guides/api.md
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          crd = yaml.safe_load(Path("xrd.yaml").read_text())
+          crd["apiVersion"] = "apiextensions.k8s.io/v1"
+          crd["kind"] = "CustomResourceDefinition"
+          # The compatibility version has no typed fields to document.
+          crd["spec"]["versions"] = [v for v in crd["spec"]["versions"] if v.get("referenceable")]
+          Path("/tmp/xyz-api-crd.yaml").write_text(yaml.safe_dump(crd))
+          PY
+          crdoc -r /tmp/xyz-api-crd.yaml -o docs/reference-guides/api.md
 
       - name: Replace Crossplane Configuration version with tag
         run: |

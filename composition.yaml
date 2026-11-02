@@ -75,17 +75,15 @@ spec:
               return str(value).strip() if value is not None else ""
 
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-              xr = _to_dict(req.observed.composite.resource)
-              spec = xr.get("spec", {}) or {}
-              data = spec.get("data") or {}
+              context = _to_dict(req.context)
+              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+              data = ((environment.get("defaults") or {}).get("data") or {})
               data_enabled = data.get("enabled")
               if data_enabled is None:
                   data_enabled = True
               if not _boolish(data_enabled):
                   return
 
-              context = _to_dict(req.context)
-              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
               iam = environment.get("iam") or {}
               ingress = environment.get("ingress") or {}
               http_route = environment.get("httpRoute") or {}
@@ -799,7 +797,7 @@ spec:
                   for audience in extra_audiences_raw
                   if _safe_str(audience)
               ])
-              data_enabled = (spec.get("data") or {}).get("enabled", True)
+              data_enabled = ((env.get("defaults") or {}).get("data") or {}).get("enabled", True)
               s3_enabled = (env.get("httpRoute") or {}).get("enableS3", False)
               if (data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
                   extra_audiences = _distinct([*extra_audiences, xr_name])
@@ -1130,7 +1128,6 @@ spec:
               xr_name = meta.get("name")
               xr_namespace = meta.get("namespace") or "default"
 
-              files = spec.get("files") or []
               def _session_name(session):
                   if isinstance(session, dict):
                       return _safe_str(session.get("name") or "")
@@ -1157,7 +1154,6 @@ spec:
                   for session in (spec.get("sessions") or [])
                   if _session_name(session) and _session_state(session) == "started"
               ]
-              vcluster = _boolish(spec.get("vcluster", False))
               db_service_names = []
               db_hosts = spec.get("databases") or {}
               if isinstance(db_hosts, dict):
@@ -1176,48 +1172,43 @@ spec:
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
               defaults = (env.get("defaults") or {})
-              env_quota = (defaults.get("quota") or {})
-              quota = (spec.get("quota") or {})
-              env_overall_quota = (defaults.get("overallQuota") or {})
-              overall_quota = (spec.get("overallQuota") or {})
+              vcluster = _boolish((defaults.get("vcluster") or {}).get("enabled", True))
+              files = defaults.get("files") or []
+              quota = defaults.get("quota") or {}
+              overall_quota = defaults.get("overallQuota") or {}
 
-              memory = quota.get("memory") or env_quota.get("memory") or "2Gi"
-              storage = quota.get("storage") or env_quota.get("storage") or "1Gi"
-              budget = quota.get("budget") or env_quota.get("budget") or "medium"
+              memory = quota.get("memory") or "2Gi"
+              storage = quota.get("storage") or "1Gi"
+              budget = quota.get("budget") or "medium"
               overall_storage = _safe_str(
-                  overall_quota.get("storage")
-                  or env_overall_quota.get("storage")
-                  or "100Gi"
+                  overall_quota.get("storage") or "100Gi"
               )
 
               env_security = (defaults.get("security") or {})
-              security = (spec.get("security") or {})
 
-              policy = (security.get("policy") or env_security.get("policy") or "baseline")
+              policy = env_security.get("policy") or "baseline"
 
-              ka = security.get("kubernetesAccess")
-              if ka is None:
-                  ka = env_security.get("kubernetesAccess")
+              ka = env_security.get("kubernetesAccess")
               if ka is None:
                   ka = True
               kubernetes_access = _boolish(ka)
 
-              role = (security.get("kubernetesRole") or env_security.get("kubernetesRole") or "edit")
+              role = env_security.get("kubernetesRole") or "edit"
 
-              data_cfg = spec.get("data") or {}
+              data_cfg = defaults.get("data") or {}
               data_enabled = data_cfg.get("enabled")
               if data_enabled is None:
                   data_enabled = True
               data_enabled = _boolish(data_enabled)
 
-              registry_cfg = spec.get("registry") or {}
+              registry_cfg = defaults.get("registry") or {}
               registry_enabled = registry_cfg.get("enabled")
               if registry_enabled is None:
-                  registry_enabled = False
+                  registry_enabled = True
               registry_enabled = _boolish(registry_enabled)
               registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
-              persistence_cfg = spec.get("persistence") or {}
+              persistence_cfg = defaults.get("persistence") or {}
               requested_storage_class = _safe_str(persistence_cfg.get("storageClassName") or "")
 
               ingress_env = env.get("ingress") or {}
@@ -1246,9 +1237,7 @@ spec:
               else:
                   persistent_storage_class = requested_storage_class
 
-              external_egress = security.get("externalEgress")
-              if external_egress is None:
-                  external_egress = env_security.get("externalEgress")
+              external_egress = env_security.get("externalEgress")
               if external_egress is None:
                   external_egress = True
               external_egress = _boolish(external_egress)
@@ -1660,12 +1649,13 @@ spec:
           def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
               xr = _to_dict(req.observed.composite.resource)
               metadata = xr.get("metadata", {}) or {}
-              spec = xr.get("spec", {}) or {}
 
               xr_name = metadata.get("name")
               xr_namespace = metadata.get("namespace") or "default"
 
-              data_config = spec.get("data") or {}
+              context = _to_dict(req.context)
+              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+              data_config = ((environment.get("defaults") or {}).get("data") or {})
               data_enabled = data_config.get("enabled")
               if data_enabled is None:
                   data_enabled = True
@@ -1753,7 +1743,9 @@ spec:
               xr_name = metadata.get("name")
               xr_namespace = metadata.get("namespace") or "default"
 
-              data_config = spec.get("data") or {}
+              context = _to_dict(req.context)
+              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+              data_config = ((environment.get("defaults") or {}).get("data") or {})
               data_enabled = data_config.get("enabled")
               if data_enabled is None:
                   data_enabled = True
@@ -1799,8 +1791,6 @@ spec:
               )
               storage_secret_checksum = _hashlib.sha256(checksum_input.encode("utf-8")).hexdigest()
 
-              context = _to_dict(req.context)
-              environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
               iam = environment.get("iam") or {}
               ingress = environment.get("ingress") or {}
               storage = environment.get("storage") or {}
@@ -2870,7 +2860,7 @@ spec:
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-              mongo_env = env.get("mongodb") or {}
+              mongo_env = env.get("documentStore") or {}
               mongo_storage_class = _safe_str(mongo_env.get("storageClassName") or "")
 
               observed = getattr(req.observed, "resources", None) or {}
@@ -3103,7 +3093,7 @@ spec:
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-              redis_env = env.get("redis") or {}
+              redis_env = env.get("cacheStore") or {}
               redis_storage_class = _safe_str(redis_env.get("storageClassName") or "")
 
               observed = getattr(req.observed, "resources", None) or {}
@@ -3315,7 +3305,7 @@ spec:
 
               ctx = _to_dict(req.context)
               env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-              qdrant_env = env.get("qdrant") or {}
+              qdrant_env = env.get("vectorStore") or {}
               qdrant_storage_class = _safe_str(qdrant_env.get("storageClassName") or "")
 
               observed = getattr(req.observed, "resources", None) or {}

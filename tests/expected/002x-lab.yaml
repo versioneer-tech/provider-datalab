@@ -10,6 +10,7 @@ spec:
   cacheStores:
     prod:
       storage: 1Gi
+      type: redis
   crossplane:
     resourceRefs:
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
@@ -110,6 +111,10 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
+      name: observe-runtime-storage-secret-s-jeff
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
       name: observe-storage-secret-s-jeff
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -180,8 +185,6 @@ spec:
       kind: Secret
       name: s-jeff-datalab
       namespace: default
-  data:
-    enabled: false
   databases:
     pg0:
       backupStorage: 3Gi
@@ -189,21 +192,12 @@ spec:
       - dev
       - prod
       storage: 1Gi
+      type: postgres
   documentStores:
     prod:
       storage: 1Gi
-  files: []
-  quota:
-    budget: x-large
-    memory: 6Gi
-    storage: 1Gi
-  registry:
-    enabled: false
+      type: mongo
   secretName: s-jeff
-  security:
-    externalEgress: false
-    kubernetesAccess: false
-  sessions: []
   userOverrides:
     jim:
       grantedAt: "2025-01-10T19:00:00Z"
@@ -212,10 +206,10 @@ spec:
   - jeff
   - jim
   - jane
-  vcluster: false
   vectorStores:
     prod:
       storage: 1Gi
+      type: qdrant
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -228,7 +222,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 38 more'
+      db-tlsroute-s-jeff-pg0, and 39 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -1285,6 +1279,37 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-jeff
+  labels:
+    crossplane.io/composite: s-jeff
+  name: observe-runtime-storage-secret-s-jeff
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jeff-datalab
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: observe-storage-secret-s-jeff
   labels:
     crossplane.io/composite: s-jeff
@@ -1754,6 +1779,70 @@ spec:
           - apiVersion: networking.k8s.io/v1
             kind: NetworkPolicy
             metadata:
+              name: allow-vcluster-egress
+            spec:
+              egress:
+              - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 8443
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      training.educates.dev/environment.name: s-jeff
+                      training.educates.dev/session.objects: "true"
+                  podSelector:
+                    matchLabels:
+                      app: vcluster
+                      release: my-vcluster
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-dns-egress
+            spec:
+              egress:
+              - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-external-egress
+            spec:
+              egress:
+              - to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                    - 169.254.169.254/32
+                    - 169.254.42.42/32
+                    - 10.42.0.0/16
+                    - 10.43.0.0/16
+              - to:
+                - ipBlock:
+                    cidr: ::/0
+                    except:
+                    - fd00:ec2::254/128
+                    - fd00:42::42/128
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
               name: allow-internal-egress
             spec:
               egress:
@@ -1781,12 +1870,15 @@ spec:
               enabled: false
             editor:
               enabled: true
+            registry:
+              enabled: true
+              storage: 5Gi
             slides:
               enabled: false
             terminal:
               enabled: true
             vcluster:
-              enabled: false
+              enabled: true
               services:
                 fromHost:
                 - from: $(workshop_namespace)/pg0-primary
@@ -1794,21 +1886,39 @@ spec:
               version: "1.34"
             workshop:
               enabled: false
-          dashboards: []
+          dashboards:
+          - name: Data
+            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
           envFrom:
           - secretRef:
               name: s-jeff-datalab
-          ingresses: []
+          ingresses:
+          - authentication:
+              type: session
+            headers:
+            - name: X-Package-R-User
+              value: datalab
+            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
+            name: data
+            port: 8888
+            protocol: http
           namespaces:
-            budget: x-large
+            budget: medium
             role: edit
             security:
               policy: baseline
               token:
-                enabled: false
-          objects: []
+                enabled: true
+          objects:
+          - apiVersion: v1
+            data:
+              cidr: 10.43.0.0/16
+            kind: ConfigMap
+            metadata:
+              name: vc-cidr-my-vcluster
+              namespace: $(session_namespace)-vc
           resources:
-            memory: 6Gi
+            memory: 2Gi
             storage: 1Gi
         title: Default DataLab
         version: "1.0"

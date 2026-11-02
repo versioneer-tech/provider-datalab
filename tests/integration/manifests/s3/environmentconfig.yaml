@@ -4,7 +4,7 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-s3-it
+  name: datalab-custom
 data:
   iam:
     realm: integration
@@ -25,7 +25,6 @@ data:
     httpSectionName: workspaces-http
   storage:
     endpoint: http://default-hl.minio:9000
-    publicEndpoint: http://default-hl.minio:9000
     forcePathStyle: "true"
     provider: Minio
     region: us-east-1
@@ -68,7 +67,15 @@ data:
           - protocol: TCP
             port: 8443
   defaults:
+    vcluster:
+      enabled: false
+    registry:
+      enabled: false
+    data:
+      enabled: true
+      readOnlyMount: false
     overallQuota:
       storage: 100Gi
     security:
-      externalEgress: true
+      kubernetesAccess: false
+      externalEgress: false

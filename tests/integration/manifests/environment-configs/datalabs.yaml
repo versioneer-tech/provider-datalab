@@ -4,7 +4,7 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-minio
+  name: datalab
 data:
   iam:
     realm: integration
@@ -14,7 +14,6 @@ data:
     secret: wildcard-tls
   storage:
     endpoint: http://default-hl.minio:9000
-    publicEndpoint: http://default-hl.minio:9000
     forcePathStyle: "true"
     provider: Minio
     region: us-east-1
@@ -40,7 +39,67 @@ data:
           - protocol: TCP
             port: 9000
   defaults:
+    vcluster:
+      enabled: false
+    registry:
+      enabled: false
+    data:
+      enabled: false
+      readOnlyMount: false
     overallQuota:
       storage: 100Gi
     security:
+      kubernetesAccess: false
       externalEgress: true
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-custom
+data:
+  iam:
+    realm: integration
+  ingress:
+    class: nginx
+    domain: lab.local
+    secret: wildcard-tls
+  storage:
+    endpoint: http://default-hl.minio:9000
+    forcePathStyle: "true"
+    provider: Minio
+    region: us-east-1
+    secretNamespace: workspace
+    type: s3
+  storageClasses:
+    allowed:
+      - standard
+  network:
+    externalEgressCIDRs:
+      - 0.0.0.0/0
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+      - 10.244.0.0/16
+    blacklistIPs:
+      - 169.254.169.254/32
+    internalEgress:
+      - namespace: minio
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: provider-datalab-minio-it
+        ports:
+          - protocol: TCP
+            port: 9000
+  defaults:
+    vcluster:
+      enabled: false
+    data:
+      enabled: false
+      readOnlyMount: false
+    overallQuota:
+      storage: 100Gi
+    registry:
+      enabled: true
+      storage: 1Gi
+    security:
+      kubernetesAccess: false
+      externalEgress: false

@@ -17,7 +17,7 @@ import tempfile
 ENVIRONMENT = {
     'apiVersion': 'apiextensions.crossplane.io/v1beta1',
     'kind': 'EnvironmentConfig',
-    'metadata': {'name': 'datalab-custom'},
+    'metadata': {'name': 'datalab'},
     'data': {
         'iam': {
             'realm': 'acme',
@@ -82,8 +82,12 @@ def main():
             if exposure == 'gateway':
                 route_config.pop('enableS3')  # S3 defaults to false.
             if exposure == 'disabled-data':
-                source = source.replace('spec:\n', 'spec:\n  data:\n    enabled: false\n', 1)
+                env['data']['defaults'] = {'data': {'enabled': False}}
             output = render(env, source)
+            if exposure == 'default':
+                workshop = resource(output, 'workshop-s-joe')
+                assert re.search(r'vcluster:\s+enabled: true', workshop)
+                assert re.search(r'registry:\s+enabled: true\s+storage: 5Gi', workshop)
             assert bool(resource(output, 'data-ingress-s-joe')) == (exposure in ('default',))
             route = resource(output, 'data-route-s-joe')
             assert bool(route) == (exposure in ('gateway', 'gateway-s3'))
@@ -106,6 +110,7 @@ def main():
             assert bool(deployment) == (exposure != 'disabled-data')
             if deployment:
                 assert "--cors-allowed-origins='*'" in deployment
+                assert '--perm.create=true' in deployment
                 assert 'name: AWS_SHARED_CREDENTIALS_FILE' in deployment
                 assert '/var/run/datalab/storage/aws-credentials' in deployment
                 for key in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'):
@@ -204,11 +209,105 @@ def main():
         env['metadata']['name'] = 'datalab'
         refs = {'parentName': 'default', 'parentNamespace': 'contour', 'sectionName': 'postgres-passthrough'}
         env['data']['database'] = {'tlsRoute': refs}
+        stores = {
+            'documentStore': 'mongodb-community-s-jeff-prod',
+            'cacheStore': 'redis-cache-s-jeff-prod',
+            'vectorStore': 'qdrant-vector-s-jeff-prod',
+        }
+        for setting in stores:
+            env['data'][setting] = {'storageClassName': f'xyz-{setting}'}
         current = render(env, source, observed='tests/observed/002-lab.yaml')
         assert 'kind: TLSRoute' in current
         route = resource(current, 'db-tlsroute-s-jeff-pg0')
         assert 'postgres-passthrough' in route and 'namespace: contour' in route
         print('PASS database.tlsRoute listener references', flush=True)
+        for setting, name in stores.items():
+            assert f'storageClassName: xyz-{setting}' in resource(current, name)
+        print('PASS managed-store StorageClasses from EnvironmentConfig', flush=True)
+
+        env = deepcopy(ENVIRONMENT)
+        env['metadata']['name'] = 'datalab-custom'
+        env['data']['defaults'] = {
+            'data': {'enabled': True, 'readOnlyMount': True},
+            'quota': {'memory': '7Gi', 'storage': '9Gi', 'budget': 'large'},
+            'overallQuota': {'storage': '50Gi'},
+            'security': {'policy': 'restricted', 'externalEgress': False, 'kubernetesAccess': False, 'kubernetesRole': 'view'},
+            'registry': {'enabled': True, 'storage': '3Gi'},
+            'persistence': {'storageClassName': 'sbs-default-retain'},
+            'files': [{'git': {'url': 'https://example.org/workshop', 'ref': 'main'}}],
+        }
+        env['data']['storageClasses'] = {'allowed': ['sbs-default', 'sbs-default-retain']}
+        env['data']['network'] = {'externalEgressCIDRs': ['0.0.0.0/0']}
+        source = {
+            'apiVersion': 'pkg.internal/v1beta2',
+            'kind': 'Datalab',
+            'metadata': {
+                'name': 's-joe',
+                'annotations': {'datalabs.pkg.internal/environment': 'datalab-custom'},
+            },
+            'spec': {
+                'users': ['joe'],
+                'sessions': [{'name': 'default'}],
+                'vcluster': False,
+                'data': {'enabled': False, 'readOnlyMount': False},
+                'security': {'policy': 'privileged', 'externalEgress': True, 'kubernetesAccess': True, 'kubernetesRole': 'admin'},
+                'quota': {'memory': '1Gi', 'storage': '1Gi', 'budget': 'small'},
+                'overallQuota': {'storage': '1Gi'},
+                'registry': {'enabled': False},
+                'persistence': {'storageClassName': 'sbs-default'},
+                'files': [],
+            },
+        }
+        # Removed XR fields must not override the operator's environment settings.
+        output = render(env, json.dumps(source))
+        workshop = resource(output, 'workshop-s-joe')
+        deployment = resource(output, 'data-deployment-s-joe')
+        assert deployment and '--perm.create=true' not in deployment
+        assert 'memory: 7Gi' in workshop and 'budget: large' in workshop
+        assert 'role: view' in workshop and 'policy: restricted' in workshop
+        assert 'docker:' not in workshop and 'allow-external-egress' not in workshop
+        assert re.search(r'token:\s+enabled: false', workshop)
+        assert re.search(r'registry:\s+enabled: true\s+storage: 3Gi', workshop)
+        assert 'https://example.org/workshop' in workshop
+        assert re.search(r'vcluster:\s+enabled: true', workshop)
+        assert 'allow-vcluster-egress' in workshop
+        pvc = resource(output, 'persistentvolumeclaim-s-joe-default-persistent')
+        assert 'storage: 9Gi' in pvc and 'storageClassName: sbs-default-retain' in pvc
+        quota = resource(output, 'resourcequota-s-joe-overall-storage')
+        assert 'requests.storage: 50Gi' in quota
+        print('PASS environment-only security, session, and aggregate quota settings', flush=True)
+
+        env['data']['defaults']['vcluster'] = {'enabled': True}
+        source['spec']['vcluster'] = {'enabled': False}
+        enabled = render(env, json.dumps(source))
+        workshop = resource(enabled, 'workshop-s-joe')
+        assert re.search(r'vcluster:\s+enabled: true', workshop)
+        assert 'allow-vcluster-egress' in workshop
+        assert 'name: KUBECONFIG' in resource(enabled, 'workshopsession-s-joe-default')
+        env['data']['defaults']['vcluster']['enabled'] = False
+        source['spec']['vcluster']['enabled'] = True
+        disabled = render(env, json.dumps(source))
+        workshop = resource(disabled, 'workshop-s-joe')
+        assert re.search(r'vcluster:\s+enabled: false', workshop)
+        assert 'allow-vcluster-egress' not in workshop
+        assert 'name: KUBECONFIG' not in resource(disabled, 'workshopsession-s-joe-default')
+        print('PASS environment-only vcluster toggle and default true', flush=True)
+
+        env['data']['defaults']['data']['readOnlyMount'] = False
+        source['spec']['data']['readOnlyMount'] = True
+        writable = render(env, json.dumps(source))
+        assert '--perm.create=true' in resource(writable, 'data-deployment-s-joe')
+        env['data']['defaults']['data']['enabled'] = False
+        env['data']['defaults']['registry']['enabled'] = False
+        source['spec']['registry']['enabled'] = True
+        source['spec']['data']['enabled'] = True
+        disabled_data = render(env, json.dumps(source))
+        assert not resource(disabled_data, 'data-deployment-s-joe')
+        assert not resource(disabled_data, 'observe-runtime-storage-secret-s-joe')
+        assert not resource(disabled_data, 's-joe-s-joe-audience')
+        assert 'name: Data' not in resource(disabled_data, 'workshop-s-joe')
+        assert not re.search(r'^\s+registry:', resource(disabled_data, 'workshop-s-joe'), re.MULTILINE)
+        print('PASS environment-only Data and registry toggles and read-only permissions', flush=True)
 
 
 if __name__ == '__main__':

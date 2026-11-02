@@ -5,10 +5,20 @@
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
   name: s-john
 spec:
   crossplane:
     resourceRefs:
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-john-datalab-service-custom-audience
+      namespace: default
+    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+      kind: ProtocolMapper
+      name: s-john-s-john-audience
+      namespace: default
     - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
       kind: RoleMapper
       name: s-john-ws-access
@@ -101,17 +111,6 @@ spec:
       kind: Role
       name: s-john-ws-api
       namespace: default
-  files:
-  - git:
-      ref: origin/main
-      url: https://github.com/versioneer-tech/datalab-example
-    includePaths:
-    - /workshop/**
-    - /data/**
-    - /README.md
-    path: .
-  persistence:
-    storageClassName: sbs-default-retain
   secretName: s-john
   sessions:
   - name: default
@@ -119,7 +118,6 @@ spec:
     state: stopped
   users:
   - john
-  vcluster: false
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -131,8 +129,8 @@ status:
     status: "True"
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-john, keycloak-group-admin-s-john-admin,
-      keycloak-group-s-john, and 20 more'
+    message: 'Unready resources: keycloak-client-s-john, keycloak-extra-audience-datalab-service-custom-s-john-datalab-service-custom-audience,
+      keycloak-extra-audience-s-john-s-john-s-john-audience, and 22 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -204,6 +202,78 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-john-oauth-client
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-john-datalab-service-custom-audience
+  labels:
+    crossplane.io/composite: s-john
+  name: s-john-datalab-service-custom-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-john
+    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-john
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: datalab-service-custom
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: datalab-service-custom-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-john-s-john-s-john-audience
+  labels:
+    crossplane.io/composite: s-john
+  name: s-john-s-john-audience
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-john
+    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-john
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: "true"
+      id.token.claim: "false"
+      included.client.audience: s-john
+      introspection.token.claim: "true"
+      userinfo.token.claim: "false"
+    name: s-john-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
@@ -708,7 +778,7 @@ spec:
         - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 40Gi
         storageClassName: sbs-default-retain
   providerConfigRef:
     kind: ProviderConfig
@@ -746,7 +816,7 @@ spec:
         - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 40Gi
         storageClassName: sbs-default-retain
   providerConfigRef:
     kind: ProviderConfig
@@ -781,7 +851,7 @@ spec:
         namespace: s-john
       spec:
         hard:
-          requests.storage: 100Gi
+          requests.storage: 200Gi
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -833,6 +903,29 @@ spec:
               egress:
               - to:
                 - podSelector: {}
+              podSelector: {}
+              policyTypes:
+              - Egress
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-vcluster-egress
+            spec:
+              egress:
+              - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 8443
+                  protocol: TCP
+                to:
+                - namespaceSelector:
+                    matchLabels:
+                      training.educates.dev/environment.name: s-john
+                      training.educates.dev/session.objects: "true"
+                  podSelector:
+                    matchLabels:
+                      app: vcluster
+                      release: my-vcluster
               podSelector: {}
               policyTypes:
               - Egress
@@ -905,14 +998,20 @@ spec:
           applications:
             console:
               enabled: false
+            docker:
+              enabled: true
+              storage: 20Gi
             editor:
               enabled: true
+            registry:
+              enabled: true
+              storage: 3Gi
             slides:
               enabled: false
             terminal:
               enabled: true
             vcluster:
-              enabled: false
+              enabled: true
               services:
                 fromHost: []
               version: "1.34"
@@ -920,30 +1019,28 @@ spec:
               enabled: true
           dashboards:
           - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
+            url: https://s-john.lab.acme.com/
           envFrom:
           - secretRef:
               name: s-john-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
+          ingresses: []
           namespaces:
-            budget: medium
-            role: edit
+            budget: x-large
+            role: admin
             security:
-              policy: baseline
+              policy: privileged
               token:
                 enabled: true
-          objects: []
+          objects:
+          - apiVersion: v1
+            data:
+              cidr: 10.43.0.0/16
+            kind: ConfigMap
+            metadata:
+              name: vc-cidr-my-vcluster
+              namespace: $(session_namespace)-vc
           resources:
-            memory: 2Gi
+            memory: 4Gi
             volume:
               name: $(session_name)-persistent
         title: Default DataLab
@@ -1057,6 +1154,8 @@ spec:
             value: s-john-default
           - name: FRAME_ANCESTORS
             value: ""
+          - name: KUBECONFIG
+            value: /opt/kubeconfig/config
           id: default
           ingress:
             domain: lab.acme.com

@@ -24,6 +24,7 @@ source "${INTEGRATION_DIR}/educates.bash"
 
 apply_registry_datalab() {
   log 'Applying the registry verification Datalab'
+  kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
   kube apply -f "${MANIFEST_DIR}/registry/datalab.yaml"
 }
 

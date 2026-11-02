@@ -7,15 +7,11 @@ metadata:
   name: __DATALAB_NAME__
   namespace: __WORKSPACE_NAMESPACE__
   annotations:
-    datalabs.pkg.internal/environment: datalab-minio
+    datalabs.pkg.internal/environment: datalab
 spec:
   users: []
   secretName: __STORAGE_SECRET__
   sessions: []
-  data:
-    enabled: false
-  registry:
-    enabled: false
   documentStores:
     verify:
       storage: 1Gi

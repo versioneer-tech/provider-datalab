@@ -7,16 +7,11 @@ metadata:
   name: verify-s3
   namespace: workspace
   annotations:
-    datalabs.pkg.internal/environment: datalab-s3-it
+    datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: [verify-s3]
   secretName: verify-s3
   sessions: []
-  data:
-    enabled: true
-  security:
-    kubernetesAccess: false
-    externalEgress: false
 ---
 apiVersion: v1
 kind: Secret

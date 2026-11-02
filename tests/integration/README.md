@@ -68,9 +68,16 @@ The Data profile reuses the Educates installation and seeds one disposable
 MinIO bucket for file operations. It tests access through the runtime Service.
 Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 
-The S3 profile enables `httpRoute.enableS3` in its EnvironmentConfig.
-It adds Contour, Keycloak, and an SDK client to test
-[S3 client access](../../docs/how-to-guides/usage_concepts.md#s3-client-access).
+Integration fixtures also use only `datalab` and `datalab-custom`; profiles
+explicitly disable services that are outside their checks.
+The network, registry, and Data profiles restore the common environment
+settings before creating their Datalabs. The network profile disables
+external egress in `datalab` and enables external egress and vCluster access
+in `datalab-custom`. The S3 profile replaces
+`datalab-custom` with its Gateway and identity settings.
+
+The S3 profile adds Contour, Keycloak, and an SDK client to test
+[S3 client access](../../docs/how-to-guides/s3-access.md).
 The boto3 client uses `s3-credentials.py` as its AWS `credential_process`.
 The test Pod receives `CLIENT_SECRET` from the generated Datalab OAuth Secret.
 Set `KEEP_S3_RESOURCES=1` to retain successful resources.
@@ -123,5 +130,6 @@ KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
 
 The pinned Educates controllers receive read-only CRD discovery permissions
 from `manifests/educates-rbac.yaml` before startup. The harness checks both
-controller rollouts before it creates a Datalab runtime. Controllers request CPU and memory so they receive a CPU share under local
-load. Their health probes allow five minutes for cold starts.
+controller rollouts before it creates a Datalab runtime. Controllers request
+CPU and memory so they receive a CPU share under local load. Their health
+probes allow five minutes for cold starts.

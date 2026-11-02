@@ -1,28 +1,8 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# Jeff (owner), Jim (admin) and Jane (user) share a datalab s-jeff with no pre-created session.
-# This is the canonical shared store-validation example: the lab stays sessionless by default.
-# The lab does not use a vcluster and has no workshop files.
-# Credentials to storage are expected to exist in a secret "s-jeff" in the same namespace.
-# A Keycloak group, role, and client are created; users "jeff", "jim" and "jane" must exist in the configured Keycloak realm.
-# This configuration keeps the default baseline security policy:
-# - Docker registry is disabled for this shared example.
-# - Session quota: increased to 6 Gi memory, 1 Gi storage, budget class "x-large".
-# - Kubernetes API access is disabled (kubernetesAccess=false).
-# The shared object storage browser and its per-session Data tabs are disabled.
-# Additionally, two PostgreSQL databases are provisioned for the lab: "prod" and "dev".
-# Additionally, one MongoDB-backed key-value/document store is provisioned:
-# - prod with 1 Gi storage
-# Additionally, one Redis-backed cache store is provisioned:
-# - prod with 1 Gi storage
-# Additionally, one Qdrant-backed vector store is provisioned:
-# - prod with 1 Gi storage
-# Credential observers follow operator Secret replacements and updates.
-# Access credentials are generated as secrets in the runtime namespace:
-# - MongoDB: <store>-mongodb-auth
-# - Redis: <store>-redis-auth
-# - Qdrant: <store>-qdrant-auth
+# The default environment supplies baseline session settings. This example
+# requests shared stores and writable Data without a session.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
@@ -37,31 +17,21 @@ spec:
       grantedAt: "2025-01-10T19:00:00Z"
       role: admin
   secretName: s-jeff
-  sessions: []
-  vcluster: false
-  data:
-    enabled: false
-  quota:
-    memory: 6Gi
-    storage: 1Gi
-    budget: x-large
-  files: []
-  security:
-    kubernetesAccess: false
-    externalEgress: false
-  registry:
-    enabled: false
   documentStores:
     prod:
+      type: mongo
       storage: 1Gi
   cacheStores:
     prod:
+      type: redis
       storage: 1Gi
   vectorStores:
     prod:
+      type: qdrant
       storage: 1Gi
   databases:
     pg0:
+      type: postgres
       names:
       - dev
       - prod

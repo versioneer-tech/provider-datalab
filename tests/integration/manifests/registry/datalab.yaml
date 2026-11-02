@@ -7,19 +7,10 @@ metadata:
   name: verify-registry
   namespace: workspace
   annotations:
-    datalabs.pkg.internal/environment: datalab-minio
+    datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: []
   secretName: verify-registry
   sessions:
     - name: default
       state: started
-  vcluster: false
-  data:
-    enabled: false
-  registry:
-    enabled: true
-    storage: 1Gi
-  security:
-    kubernetesAccess: false
-    externalEgress: false

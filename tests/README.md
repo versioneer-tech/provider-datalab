@@ -1,37 +1,40 @@
-### Unit Testing
+# Unit tests
 
-You can unit-test the Composition for Crossplane v2 or later with `crossplane render`. Supply observed and required resources to validate the pipeline without touching a live cluster. The command below renders actual outputs and compares them to golden files with `dyff`, which is easy to use in CI to catch regressions early.
+The unit suite renders the composition with `crossplane render` and compares
+its output with snapshots through `dyff`. It also checks Data exposure,
+credential rotation, network rules, and environment-controlled settings.
+It does not use a Kubernetes cluster.
 
-### Required practice in this repo
+## Run the suite
 
-- `crossplane render` requires Docker running locally.
-- Use Crossplane CLI `v2.4.1` when you regenerate the expected render snapshots.
-  Other CLI versions can emit different framework-owned status and owner
-  metadata even when the composed resource specifications are unchanged.
-- Run focused checks during development. Before sign-off, run the full unit
-  suite and all integration profiles. Documentation changes need a docs build
-  during development.
-- Actual render output is written to `/tmp`. Only expected snapshots are tracked.
-- Any change to `xrd.yaml` or `composition.yaml` must be covered by at least one updated test scenario (`examples/base/00*-lab.yaml`).
-- For those changes, update the corresponding golden files in `tests/expected/` after validating the rendered diff.
-- Run `pre-commit run --all-files` at the end of each change cycle.
+Docker must be running. Use Crossplane CLI `v2.4.1` when updating snapshots;
+other versions can change framework status and owner metadata.
 
-```sh
-tests/unit.bash
+```bash
+bash tests/unit.bash
+pre-commit run --all-files
 ```
 
-To check one example, use `tests/unit.bash 001`. Example `001` uses the custom
-environment for Gateway and experimental S3 access. Its focused checks also
-cover endpoint configuration and storage token rotation.
+To check one example, use `bash tests/unit.bash 001`. This example also runs
+the Data and S3 behavior checks. Actual renders are written to `/tmp`;
+only the expected snapshots in `tests/expected/` are tracked.
+Review intended output changes before updating a snapshot. Run the full
+unit suite after source changes and build the docs after documentation changes.
+See [Integration tests](integration/README.md) for cluster checks.
 
-Live NetworkPolicy checks are part of the `verify-network`
-integration profile. The `verify-registry` profile verifies a session registry.
-The `verify-data` profile checks file access, credential rotation, and
-read-only enforcement. Render tests cover Data resource structure and disabled
-Data. The `verify-s3` profile checks the experimental S3 endpoint and shared
-browser hostname with the normal Datalab OAuth client.
-The `verify-postgres` profile applies a Datalab with PostgreSQL enabled and
-verifies internal database access through the generated Datalab Secret.
-`verify-mongo`, `verify-redis`, and `verify-qdrant` do the same for managed
-document, cache, and vector stores. The profiles are documented in
-`tests/integration/README.md`.
+## Fixtures
+
+The Datalab manifests are in [`examples/base/`](../examples/base).
+[`environmentconfig.yaml`](environmentconfig.yaml) contains only `datalab`
+and `datalab-custom`. The custom profile demonstrates the settings listed in
+the [usage examples](../docs/how-to-guides/usage_concepts.md#examples).
+
+| Example | Environment | Main checks |
+| --- | --- | --- |
+| `001` | `datalab` | Data without sessions, default environment, credential rotation |
+| `002` | `datalab` | Default environment selection, writable Data, managed stores |
+| `003` | `datalab-custom` | vCluster session, read-only Data, PostgreSQL |
+| `004` | `datalab-custom` | Started and stopped sessions, file bundles, workspace PVCs |
+
+For API or composition changes, use an existing scenario when it covers the
+required behavior. Add a scenario only for a missing observable outcome.

@@ -7,16 +7,8 @@ metadata:
   name: __ENABLED_DATALAB__
   namespace: __WORKSPACE_NAMESPACE__
   annotations:
-    datalabs.pkg.internal/environment: datalab-minio
+    datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: []
   secretName: __ENABLED_STORAGE_SECRET__
   sessions: []
-  data:
-    enabled: true
-    readOnlyMount: false
-  registry:
-    enabled: false
-  security:
-    kubernetesAccess: false
-    externalEgress: false
