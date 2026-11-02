@@ -4,6 +4,10 @@
 `composition/steps/` handles one task. Resource manifests are in `templates/`,
 grouped by service.
 
+Put shared Python functions in `composition/helpers.py` and import them from
+the step files. The build embeds each imported helper and its dependencies.
+Keep service-specific logic in its step file.
+
 Load and validate the environment before resource steps. Observe connection
 Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step
 uses the desired OAuth2 proxy Secret. Update session status and check resource

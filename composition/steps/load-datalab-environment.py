@@ -1,30 +1,21 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-from crossplane.function import request, response, resource
+from crossplane.function import request, resource, response
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format
+
+from composition.helpers import (
+    _to_dict,
+)
 
 ENVIRONMENT_KEY = "apiextensions.crossplane.io/environment"
 
 
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else (
-            struct
-            if isinstance(struct, dict)
-            else json_format.MessageToDict(struct, preserving_proto_field_name=True)
-        )
-    )
-
-
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
-    annotations = meta.get("annotations", {}) or {}
-    labels = meta.get("labels", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
+    annotations = metadata.get("annotations", {}) or {}
+    labels = metadata.get("labels", {}) or {}
     env_name = (
         annotations.get("datalabs.pkg.internal/environment")
         or labels.get("datalabs.pkg.internal/environment")

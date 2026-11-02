@@ -2,51 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as jf
-from google.protobuf import struct_pb2 as st
+from google.protobuf import json_format, struct_pb2
 
-
-def _to_dict(s):
-    return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    atp = (od.get("status") or {}).get("atProvider") or {}
-    return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
-
-
-def _safe_str(v):
-    return str(v).strip() if v is not None else ""
-
-
-def _session_name(session):
-    if isinstance(session, dict):
-        return _safe_str(session.get("name") or "")
-    return _safe_str(session)
-
-
-def _session_state(session):
-    if isinstance(session, dict):
-        state = _safe_str(session.get("state") or "started").lower()
-    else:
-        state = "started"
-    if state == "running":
-        return "started"
-    if state == "paused":
-        return "stopped"
-    return state
+from composition.helpers import (
+    _extract_manifest,
+    _session_name,
+    _session_state,
+    _to_dict,
+)
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     observed = getattr(req.observed, "resources", None) or {}
-    xr_obs = _to_dict(req.observed.composite.resource)
-    meta = xr_obs.get("metadata", {}) or {}
-    spec = xr_obs.get("spec", {}) or {}
+    xr = _to_dict(req.observed.composite.resource)
+    metadata = xr.get("metadata", {}) or {}
+    spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
+    xr_name = metadata.get("name")
 
     sessions_map = {}
 
@@ -81,12 +53,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if phase == "Running" and url:
             sessions_map[ws_id]["url"] = url
 
-    cur_status = (xr_obs.get("status") or {}).copy()
+    cur_status = (xr.get("status") or {}).copy()
     if sessions_map:
         cur_status["sessions"] = sessions_map
     else:
         cur_status.pop("sessions", None)
 
-    v = st.Value()
-    jf.ParseDict(cur_status, v)
-    rsp.desired.composite.resource.fields["status"].CopyFrom(v)
+    status_value = struct_pb2.Value()
+    json_format.ParseDict(cur_status, status_value)
+    rsp.desired.composite.resource.fields["status"].CopyFrom(status_value)

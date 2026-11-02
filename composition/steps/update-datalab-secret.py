@@ -1,63 +1,19 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-import base64 as _base64
-from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
-def _to_dict(s):
-    if s is None:
-        return {}
-    return (
-        s
-        if isinstance(s, dict)
-        else _json_format.MessageToDict(s, preserving_proto_field_name=True)
-    )
-
-
-def _safe_str(v):
-    return str(v).strip()
-
-
-def _b64get_any(d, keys):
-    if not d:
-        return None
-    for k in keys:
-        v = d.get(k)
-        if v is None:
-            continue
-        try:
-            return _base64.b64decode(v, validate=True).decode("utf-8")
-        except Exception:
-            return str(v)
-    return None
-
-
-def _extract_data(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    st = (od.get("status") or {}).get("atProvider") or {}
-    m1 = st.get("manifest") or {}
-    m2 = (st.get("raw") or {}).get("manifest") or {}
-    return (
-        m1.get("data")
-        or m1.get("stringData")
-        or m2.get("data")
-        or m2.get("stringData")
-        or {}
-    ) or {}
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    st = (od.get("status") or {}).get("atProvider") or {}
-    return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+from composition.helpers import (
+    _b64get_any,
+    _extract_data,
+    _extract_manifest,
+    _string_value,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def _store_key(prefix, store_name, suffix):
@@ -65,15 +21,8 @@ def _store_key(prefix, store_name, suffix):
     return f"{prefix}_{clean}_{suffix}"
 
 
-def _pg_key(host_name, suffix):
-    clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
-    return f"POSTGRES_{clean}_{suffix}"
-
-
 def _pg_db_key(host_name, db_name, suffix):
-    host_clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
-    db_clean = re.sub(r"[^A-Za-z0-9]", "_", str(db_name)).upper()
-    return f"POSTGRES_{host_clean}_{db_clean}_{suffix}"
+    return _store_key("POSTGRES", f"{host_name}_{db_name}", suffix)
 
 
 def _uri_with_database(uri, db_name):
@@ -104,20 +53,22 @@ def _external_pg_url(internal_url, external_host):
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
     spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
-    xr_namespace = meta.get("namespace") or "default"
+    xr_name = metadata.get("name")
+    xr_namespace = metadata.get("namespace") or "default"
 
-    ctx = _to_dict(req.context)
-    env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-    storage_env = env.get("storage") or {}
+    context = _to_dict(req.context)
+    environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    storage_env = environment.get("storage") or {}
     observed = getattr(req.observed, "resources", {}) or {}
 
-    env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
-    educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-    workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+    environment_manifest = _extract_manifest(
+        observed.get(f"workshopenvironment-{xr_name}")
+    )
+    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
     obs = observed.get(f"observe-storage-secret-{xr_name}")
     data_b64 = _extract_data(obs)
@@ -208,7 +159,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             if not isinstance(store_name, str) or not store_name.strip():
                 continue
             store = store_name.strip()
-            host = f"mongodb-{store}-svc.{workshop_ns}.svc"
+            host = f"mongodb-{store}-svc.{workshop_namespace}.svc"
             user = f"{store}-app"
             manifest["stringData"][_store_key("MONGO", store, "HOST")] = host
             manifest["stringData"][_store_key("MONGO", store, "PORT")] = "27017"
@@ -231,7 +182,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             if not isinstance(store_name, str) or not store_name.strip():
                 continue
             store = store_name.strip()
-            host = f"{store}.{workshop_ns}.svc"
+            host = f"{store}.{workshop_namespace}.svc"
             manifest["stringData"][_store_key("REDIS", store, "HOST")] = host
             manifest["stringData"][_store_key("REDIS", store, "PORT")] = "6379"
             manifest["stringData"][_store_key("REDIS", store, "USER")] = "default"
@@ -252,7 +203,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             if not isinstance(store_name, str) or not store_name.strip():
                 continue
             store = store_name.strip()
-            host = f"qdrant-{store}.{workshop_ns}.svc"
+            host = f"qdrant-{store}.{workshop_namespace}.svc"
             manifest["stringData"][_store_key("QDRANT", store, "HOST")] = host
             manifest["stringData"][_store_key("QDRANT", store, "PORT")] = "6333"
             manifest["stringData"][_store_key("QDRANT", store, "GRPC_PORT")] = "6334"
@@ -273,17 +224,17 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     db_hosts = spec.get("databases") or {}
     if isinstance(db_hosts, dict):
-        db_env = env.get("database") or {}
+        db_env = environment.get("database") or {}
         gateway_env = db_env.get("tlsRoute") or {}
 
-        gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
-        gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
-        gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+        gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
+        gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
+        gateway_section = _string_value(gateway_env.get("sectionName") or "")
         has_gateway_parent = bool(
             gateway_parent_name and gateway_parent_ns and gateway_section
         )
 
-        ingress_env = env.get("ingress") or {}
+        ingress_env = environment.get("ingress") or {}
         ingress_domain = ingress_env.get("domain", "default")
 
         for host_key in sorted(list(db_hosts.keys())):
@@ -295,7 +246,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
             cluster_name = host_key.strip()
             dbnames = [
-                _safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)
+                _string_value(x)
+                for x in list(host_cfg.get("names") or [])
+                if _string_value(x)
             ]
             if not dbnames:
                 continue
@@ -305,27 +258,29 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
             host = (
                 _b64get_any(host_data_b64, ["host"])
-                or f"{cluster_name}-primary.{workshop_ns}.svc"
+                or f"{cluster_name}-primary.{workshop_namespace}.svc"
             )
             port = _b64get_any(host_data_b64, ["port"]) or "5432"
             user = _b64get_any(host_data_b64, ["user"]) or "postgres"
             password = _b64get_any(host_data_b64, ["password"]) or ""
             internal_url = _b64get_any(host_data_b64, ["uri"]) or ""
 
-            manifest["stringData"][_pg_key(cluster_name, "HOST")] = host
-            manifest["stringData"][_pg_key(cluster_name, "PORT")] = port
-            manifest["stringData"][_pg_key(cluster_name, "USER")] = user
-            manifest["stringData"][_pg_key(cluster_name, "PASSWORD")] = password
-            manifest["stringData"][_pg_key(cluster_name, "DATABASES")] = ",".join(
-                dbnames
+            manifest["stringData"][_store_key("POSTGRES", cluster_name, "HOST")] = host
+            manifest["stringData"][_store_key("POSTGRES", cluster_name, "PORT")] = port
+            manifest["stringData"][_store_key("POSTGRES", cluster_name, "USER")] = user
+            manifest["stringData"][_store_key("POSTGRES", cluster_name, "PASSWORD")] = (
+                password
             )
+            manifest["stringData"][
+                _store_key("POSTGRES", cluster_name, "DATABASES")
+            ] = ",".join(dbnames)
 
             host_ext = ""
             if has_gateway_parent:
-                host_ext = f"{cluster_name}-{workshop_ns}.{ingress_domain}:443"
-                manifest["stringData"][_pg_key(cluster_name, "HOST_EXTERNAL")] = (
-                    host_ext.split(":")[0]
-                )
+                host_ext = f"{cluster_name}-{workshop_namespace}.{ingress_domain}:443"
+                manifest["stringData"][
+                    _store_key("POSTGRES", cluster_name, "HOST_EXTERNAL")
+                ] = host_ext.split(":")[0]
 
             for dbname in dbnames:
                 db_url = _uri_with_database(internal_url, dbname)

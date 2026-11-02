@@ -1,78 +1,47 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-import ipaddress as _ipaddress
 import hashlib as _hashlib
+import ipaddress as _ipaddress
 import json as _json
+
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
-
-
-def _boolish(v):
-    if isinstance(v, bool):
-        return v
-    return str(v).lower() in ("true", "1", "yes", "on")
-
-
-def _safe_str(v):
-    return str(v).strip()
+from composition.helpers import (
+    _boolish,
+    _extract_manifest,
+    _session_name,
+    _session_state,
+    _string_value,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def _string_list(v):
     if not isinstance(v, list):
         return []
-    return [_safe_str(item) for item in v if _safe_str(item)]
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    st = (od.get("status") or {}).get("atProvider") or {}
-    return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+    return [_string_value(item) for item in v if _string_value(item)]
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
     spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
-    xr_namespace = meta.get("namespace") or "default"
-
-    def _session_name(session):
-        if isinstance(session, dict):
-            return _safe_str(session.get("name") or "")
-        return _safe_str(session)
-
-    def _session_state(session):
-        if isinstance(session, dict):
-            state = _safe_str(session.get("state") or "started").lower()
-        else:
-            state = "started"
-        if state == "running":
-            return "started"
-        if state == "paused":
-            return "stopped"
-        return state
+    xr_name = metadata.get("name")
+    xr_namespace = metadata.get("namespace") or "default"
 
     sessions = [
-        _session_name(session)
+        _session_name(session, stringify_none=True)
         for session in (spec.get("sessions") or [])
-        if _session_name(session)
+        if _session_name(session, stringify_none=True)
     ]
     started_sessions = [
-        _session_name(session)
+        _session_name(session, stringify_none=True)
         for session in (spec.get("sessions") or [])
-        if _session_name(session) and _session_state(session) == "started"
+        if _session_name(session, stringify_none=True)
+        and _session_state(session) == "started"
     ]
     db_service_names = []
     db_hosts = spec.get("databases") or {}
@@ -84,16 +53,18 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             if not isinstance(host_cfg, dict):
                 continue
             dbnames = [
-                _safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)
+                _string_value(x)
+                for x in list(host_cfg.get("names") or [])
+                if _string_value(x)
             ]
-            db_storage = _safe_str(host_cfg.get("storage") or "")
-            backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+            db_storage = _string_value(host_cfg.get("storage") or "")
+            backup_storage = _string_value(host_cfg.get("backupStorage") or "")
             if dbnames and db_storage and backup_storage:
                 db_service_names.append(f"{host_key.strip()}-primary")
 
-    ctx = _to_dict(req.context)
-    env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-    defaults = env.get("defaults") or {}
+    context = _to_dict(req.context)
+    environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    defaults = environment.get("defaults") or {}
     vcluster = _boolish((defaults.get("vcluster") or {}).get("enabled", True))
     files = defaults.get("files") or []
     quota = defaults.get("quota") or {}
@@ -102,7 +73,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     memory = quota.get("memory") or "2Gi"
     storage = quota.get("storage") or "1Gi"
     budget = quota.get("budget") or "medium"
-    overall_storage = _safe_str(overall_quota.get("storage") or "100Gi")
+    overall_storage = _string_value(overall_quota.get("storage") or "100Gi")
 
     env_security = defaults.get("security") or {}
 
@@ -129,23 +100,24 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
     persistence_cfg = defaults.get("persistence") or {}
-    requested_storage_class = _safe_str(persistence_cfg.get("storageClassName") or "")
+    requested_storage_class = _string_value(
+        persistence_cfg.get("storageClassName") or ""
+    )
 
-    ingress_env = env.get("ingress") or {}
-    storage_env = env.get("storage") or {}
-    storage_classes_env = env.get("storageClasses") or {}
+    ingress_env = environment.get("ingress") or {}
+    storage_classes_env = environment.get("storageClasses") or {}
     allowed_storage_classes = [
-        _safe_str(sc)
+        _string_value(sc)
         for sc in (storage_classes_env.get("allowed") or [])
-        if _safe_str(sc)
+        if _string_value(sc)
     ]
-    packages = env.get("packages") or []
+    packages = environment.get("packages") or []
 
     ingress_class = ingress_env.get("class", "")
     ingress_domain = ingress_env.get("domain", "default")
     ingress_secret = ingress_env.get("secret", "wildcard-tls")
     permanent_access = _boolish(ingress_env.get("enabled")) or _boolish(
-        (env.get("httpRoute") or {}).get("enabled")
+        (environment.get("httpRoute") or {}).get("enabled")
     )
 
     storage_secret_name = f"{xr_name}-datalab"
@@ -164,7 +136,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         external_egress = True
     external_egress = _boolish(external_egress)
 
-    network_env = env.get("network") or {}
+    network_env = environment.get("network") or {}
     excluded_network_policies = set(
         _string_list(network_env.get("excludePolicies") or [])
     )
@@ -173,7 +145,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     internal_egress = network_env.get("internalEgress", [])
     internal_ingress = network_env.get("internalIngress", [])
     internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
-    service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
+    service_cidr = _string_value(network_env.get("serviceCIDR") or "")
     if service_cidr:
         internal_cidrs.append(service_cidr)
 
@@ -474,30 +446,32 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     )
 
     observed_resources = getattr(req.observed, "resources", {}) or {}
-    env_manifest = _extract_manifest(
+    environment_manifest = _extract_manifest(
         observed_resources.get(f"workshopenvironment-{xr_name}")
     )
-    workshop_ns = _safe_str(
-        ((env_manifest.get("status") or {}).get("educates") or {}).get("namespace")
+    workshop_namespace = _string_value(
+        ((environment_manifest.get("status") or {}).get("educates") or {}).get(
+            "namespace"
+        )
         or xr_name
     )
 
-    runtime_namespace = ((env_manifest.get("status") or {}).get("educates") or {}).get(
-        "namespace"
-    )
+    runtime_namespace = (
+        (environment_manifest.get("status") or {}).get("educates") or {}
+    ).get("namespace")
     if runtime_namespace and _policy_enabled("allow-internal-ingress"):
         for name, manifest in sorted(ingress_policies.items()):
             if _policy_enabled(name):
                 manifest["metadata"]["namespace"] = runtime_namespace
                 emit("NetworkPolicy", manifest, key_suffix=name)
 
-    if workshop_ns:
+    if workshop_namespace:
         emit(
             "ResourceQuota",
             _render_template(
                 req,
                 "educates/storage-quota",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
                 overall_storage=overall_storage,
             ),
             key_suffix="overall-storage",
@@ -517,7 +491,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     req,
                     "educates/workspace-pvc",
                     persistent_pvc_name=persistent_pvc_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     persistent_pvc_spec=persistent_pvc_spec,
                 ),
                 key_suffix=f"{sid}-persistent",

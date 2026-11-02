@@ -2,65 +2,41 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    atp = (od.get("status") or {}).get("atProvider") or {}
-    m1 = atp.get("manifest") or {}
-    m2 = (atp.get("raw") or {}).get("manifest") or {}
-    return (m1 or m2) or {}
-
-
-def _safe_str(v):
-    return str(v).strip()
-
-
-def _strong_token(seed):
-    import hashlib
-    import base64
-
-    digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
-    token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
-    return token[:32]
+from composition.helpers import (
+    _extract_manifest,
+    _string_value,
+    _strong_token,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
     spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
-    xr_namespace = meta.get("namespace") or "default"
+    xr_name = metadata.get("name")
+    xr_namespace = metadata.get("namespace") or "default"
 
     document_stores = spec.get("documentStores")
     if not isinstance(document_stores, dict) or not document_stores:
         return
 
-    ctx = _to_dict(req.context)
-    env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-    mongo_env = env.get("documentStore") or {}
-    mongo_storage_class = _safe_str(mongo_env.get("storageClassName") or "")
+    context = _to_dict(req.context)
+    environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    mongo_env = environment.get("documentStore") or {}
+    mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
 
     observed = getattr(req.observed, "resources", None) or {}
     env_key = f"workshopenvironment-{xr_name}"
-    env_manifest = _extract_manifest(observed.get(env_key))
+    environment_manifest = _extract_manifest(observed.get(env_key))
 
-    educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-    workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-    if not workshop_ns:
+    if not workshop_namespace:
         return
 
     # MongoDB operator expects these namespace-local prerequisites.
@@ -70,7 +46,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
             ),
         ),
         (
@@ -78,7 +54,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-database-pods",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
             ),
         ),
         (
@@ -86,7 +62,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-ops-manager",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
             ),
         ),
         (
@@ -94,7 +70,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/role-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
             ),
         ),
         (
@@ -102,7 +78,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/rolebinding-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
             ),
         ),
     ]
@@ -123,7 +99,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not isinstance(store_cfg, dict):
             continue
 
-        mongo_storage = _safe_str(store_cfg.get("storage") or "10Gi")
+        mongo_storage = _string_value(store_cfg.get("storage") or "10Gi")
         if not mongo_storage:
             continue
         pvc_spec = {
@@ -141,7 +117,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "mongodb/auth-secret",
             password_secret_name=password_secret_name,
-            workshop_ns=workshop_ns,
+            workshop_ns=workshop_namespace,
             mongo_password=mongo_password,
         )
         pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
@@ -158,7 +134,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "mongodb/store",
             mongo_resource_name=mongo_resource_name,
-            workshop_ns=workshop_ns,
+            workshop_ns=workshop_namespace,
             app_username=f"{store_name}-app",
             password_secret_name=password_secret_name,
             store_name=store_name,

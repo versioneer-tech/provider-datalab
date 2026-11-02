@@ -2,37 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
-
-
-def _boolish(value):
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in ("true", "1", "yes", "on")
-
-
-def _safe_str(value):
-    return str(value).strip() if value is not None else ""
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    obj = _to_dict(objres.resource)
-    at_provider = (obj.get("status") or {}).get("atProvider") or {}
-    return (
-        at_provider.get("manifest")
-        or (at_provider.get("raw") or {}).get("manifest")
-        or {}
-    ) or {}
+from composition.helpers import (
+    _boolish,
+    _extract_manifest,
+    _safe_str,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):

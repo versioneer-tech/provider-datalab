@@ -2,75 +2,61 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
-
-
-def _extract_manifest(objres):
-    if not objres or not getattr(objres, "resource", None):
-        return {}
-    od = _to_dict(objres.resource)
-    atp = (od.get("status") or {}).get("atProvider") or {}
-    m1 = atp.get("manifest") or {}
-    m2 = (atp.get("raw") or {}).get("manifest") or {}
-    return (m1 or m2) or {}
-
-
-def _safe_str(v):
-    return str(v).strip()
+from composition.helpers import (
+    _extract_manifest,
+    _string_value,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
     spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
-    xr_namespace = meta.get("namespace") or "default"
+    xr_name = metadata.get("name")
+    xr_namespace = metadata.get("namespace") or "default"
 
     db_hosts = spec.get("databases") or {}
     if not isinstance(db_hosts, dict) or not db_hosts:
         return
 
-    ctx = _to_dict(req.context)
-    env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+    context = _to_dict(req.context)
+    environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
 
-    ingress_env = env.get("ingress") or {}
+    ingress_env = environment.get("ingress") or {}
     ingress_domain = ingress_env.get("domain", "default")
 
-    db_env = env.get("database") or {}
+    db_env = environment.get("database") or {}
     gateway_env = db_env.get("tlsRoute") or {}
 
-    gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
-    gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
-    gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+    gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
+    gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
+    gateway_section = _string_value(gateway_env.get("sectionName") or "")
     has_gateway_parent = bool(
         gateway_parent_name and gateway_parent_ns and gateway_section
     )
 
-    data_sc_default = _safe_str(db_env.get("storageClassName") or "")
-    backup_sc_default = _safe_str(db_env.get("backupStorageClassName") or "")
+    data_sc_default = _string_value(db_env.get("storageClassName") or "")
+    backup_sc_default = _string_value(db_env.get("backupStorageClassName") or "")
 
     users = list(spec.get("users", []) or [])
     admin_user = "postgres"
-    other_users = [u for u in users if _safe_str(u) and _safe_str(u) != admin_user]
+    other_users = [
+        u for u in users if _string_value(u) and _string_value(u) != admin_user
+    ]
     users_all = [admin_user] + other_users
 
     observed = getattr(req.observed, "resources", None) or {}
     env_key = f"workshopenvironment-{xr_name}"
-    env_manifest = _extract_manifest(observed.get(env_key))
+    environment_manifest = _extract_manifest(observed.get(env_key))
 
-    educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-    workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-    if not workshop_ns:
+    if not workshop_namespace:
         return
 
     def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
@@ -97,19 +83,19 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             continue
 
         dbnames = list(host_cfg.get("names") or [])
-        dbnames = [_safe_str(x) for x in dbnames if _safe_str(x)]
+        dbnames = [_string_value(x) for x in dbnames if _string_value(x)]
         if not dbnames:
             continue
 
-        db_storage = _safe_str(host_cfg.get("storage") or "")
-        backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+        db_storage = _string_value(host_cfg.get("storage") or "")
+        backup_storage = _string_value(host_cfg.get("backupStorage") or "")
         if not db_storage or not backup_storage:
             continue
 
-        db_storage_class = _safe_str(
+        db_storage_class = _string_value(
             host_cfg.get("storageClassName") or data_sc_default
         )
-        backup_storage_class = _safe_str(
+        backup_storage_class = _string_value(
             host_cfg.get("backupStorageClassName") or backup_sc_default
         )
 
@@ -121,7 +107,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "postgres/init-sql",
             cm_name=cm_name,
-            workshop_ns=workshop_ns,
+            workshop_ns=workshop_namespace,
             init_sql=init_sql,
         )
 
@@ -143,7 +129,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "postgres/postgres-cluster",
             cluster_name=cluster_name,
-            workshop_ns=workshop_ns,
+            workshop_ns=workshop_namespace,
             cm_name=cm_name,
             data_vcs=data_vcs,
             repo_vcs=repo_vcs,
@@ -173,12 +159,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not has_gateway_parent:
             continue
 
-        hostname = f"{cluster_name}-{workshop_ns}.{ingress_domain}"
+        hostname = f"{cluster_name}-{workshop_namespace}.{ingress_domain}"
         route = _render_template(
             req,
             "postgres/route",
             cluster_name=cluster_name,
-            workshop_ns=workshop_ns,
+            workshop_ns=workshop_namespace,
             gateway_parent_name=gateway_parent_name,
             gateway_parent_ns=gateway_parent_ns,
             gateway_section=gateway_section,

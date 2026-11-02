@@ -6,8 +6,8 @@
 
 import argparse
 import ast
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -32,9 +32,53 @@ def represent_string(dumper, value):
 Dumper.add_representer(str, represent_string)
 
 
+def inline_helpers(script, helper_source, module_name="composition.helpers"):
+    helper_tree = ast.parse(helper_source)
+    definitions = {}
+    for node in helper_tree.body:
+        if isinstance(node, ast.FunctionDef):
+            definitions[node.name] = node
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                definitions[alias.asname or alias.name] = node
+
+    lines = script.splitlines(keepends=True)
+    required = set()
+    for node in ast.parse(script).body:
+        if isinstance(node, ast.ImportFrom) and node.module == module_name:
+            for alias in node.names:
+                if alias.asname or alias.name not in definitions:
+                    raise ValueError(f"Unsupported helper import: {alias.name}")
+                required.add(definitions[alias.name])
+            lines[node.lineno - 1 : node.end_lineno] = [""] * (
+                node.end_lineno - node.lineno + 1
+            )
+
+    if not required:
+        return script
+
+    pending = list(required)
+    while pending:
+        for node in ast.walk(pending.pop()):
+            dependency = (
+                definitions.get(node.id) if isinstance(node, ast.Name) else None
+            )
+            if dependency is not None and dependency not in required:
+                required.add(dependency)
+                pending.append(dependency)
+
+    helpers = "\n\n".join(
+        ast.get_source_segment(helper_source, node)
+        for node in helper_tree.body
+        if node in required
+    )
+    return helpers + "\n\n" + "".join(lines)
+
+
 def build():
     composition = yaml.safe_load((ROOT / "composition/pipeline.yaml").read_text())
-    helper = (ROOT / "composition/render.py").read_text()
+    helper_source = (ROOT / "composition/helpers.py").read_text()
+    renderer = (ROOT / "composition/render.py").read_text()
     for step in composition["spec"]["pipeline"]:
         data = step.get("input", {})
         script_file = data.pop("scriptFile", None)
@@ -53,7 +97,8 @@ def build():
                 and isinstance(node.args[1], ast.Constant)
             }
         )
-        data["script"] = (helper + "\n" if names else "") + script
+        script = inline_helpers(script, helper_source)
+        data["script"] = inline_helpers(script, renderer, "composition.render")
         compile(data["script"], script_file, "exec")
         if names:
             data["templates"] = {

@@ -21,6 +21,7 @@ for command_name in crossplane dyff docker python3; do
 done
 docker info >/dev/null
 python3 scripts/build-composition.py --check
+python3 tests/helpers.py
 
 render_dir="$(mktemp -d /tmp/datalab-render.XXXXXX)"
 cleanup() {

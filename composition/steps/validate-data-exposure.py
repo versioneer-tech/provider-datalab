@@ -3,25 +3,12 @@
 
 from crossplane.function import response
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
-
-
-def _boolish(value):
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in ("true", "1", "yes", "on")
-
-
-def _safe_str(value):
-    return str(value).strip() if value is not None else ""
+from composition.helpers import (
+    _boolish,
+    _safe_str,
+    _to_dict,
+)
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):

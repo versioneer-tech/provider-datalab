@@ -22,33 +22,30 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        from crossplane.function import request, response, resource
+        from crossplane.function import request, resource, response
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format
+
 
         ENVIRONMENT_KEY = "apiextensions.crossplane.io/environment"
 
 
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else (
-                    struct
-                    if isinstance(struct, dict)
-                    else json_format.MessageToDict(struct, preserving_proto_field_name=True)
-                )
-            )
-
-
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
-            annotations = meta.get("annotations", {}) or {}
-            labels = meta.get("labels", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
+            annotations = metadata.get("annotations", {}) or {}
+            labels = metadata.get("labels", {}) or {}
             env_name = (
                 annotations.get("datalabs.pkg.internal/environment")
                 or labels.get("datalabs.pkg.internal/environment")
@@ -73,30 +70,29 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
+        from google.protobuf import json_format
 
-        from crossplane.function import response
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
-
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
         def _boolish(value):
             if isinstance(value, bool):
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
 
-
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        from crossplane.function import response
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -169,13 +165,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -194,41 +188,42 @@ spec:
 
             return fill(template)
 
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
         from google.protobuf import json_format
 
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
         def _boolish(value):
             if isinstance(value, bool):
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
 
-
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            obj = _to_dict(objres.resource)
-            at_provider = (obj.get("status") or {}).get("atProvider") or {}
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
             return (
-                at_provider.get("manifest")
-                or (at_provider.get("raw") or {}).get("manifest")
-                or {}
-            ) or {}
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -341,13 +336,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -366,66 +359,66 @@ spec:
 
             return fill(template)
 
+        import base64
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        import base64 as _base64
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
         import re
         from urllib.parse import urlsplit, urlunsplit
 
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
-        def _to_dict(s):
-            if s is None:
-                return {}
-            return (
-                s
-                if isinstance(s, dict)
-                else _json_format.MessageToDict(s, preserving_proto_field_name=True)
-            )
-
-
-        def _safe_str(v):
-            return str(v).strip()
-
-
-        def _b64get_any(d, keys):
-            if not d:
-                return None
-            for k in keys:
-                v = d.get(k)
-                if v is None:
-                    continue
-                try:
-                    return _base64.b64decode(v, validate=True).decode("utf-8")
-                except Exception:
-                    return str(v)
-            return None
-
-
-        def _extract_data(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            st = (od.get("status") or {}).get("atProvider") or {}
-            m1 = st.get("manifest") or {}
-            m2 = (st.get("raw") or {}).get("manifest") or {}
-            return (
-                m1.get("data")
-                or m1.get("stringData")
-                or m2.get("data")
-                or m2.get("stringData")
-                or {}
-            ) or {}
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            st = (od.get("status") or {}).get("atProvider") or {}
-            return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
 
 
         def _store_key(prefix, store_name, suffix):
@@ -433,15 +426,8 @@ spec:
             return f"{prefix}_{clean}_{suffix}"
 
 
-        def _pg_key(host_name, suffix):
-            clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
-            return f"POSTGRES_{clean}_{suffix}"
-
-
         def _pg_db_key(host_name, db_name, suffix):
-            host_clean = re.sub(r"[^A-Za-z0-9]", "_", str(host_name)).upper()
-            db_clean = re.sub(r"[^A-Za-z0-9]", "_", str(db_name)).upper()
-            return f"POSTGRES_{host_clean}_{db_clean}_{suffix}"
+            return _store_key("POSTGRES", f"{host_name}_{db_name}", suffix)
 
 
         def _uri_with_database(uri, db_name):
@@ -472,20 +458,22 @@ spec:
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            storage_env = env.get("storage") or {}
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            storage_env = environment.get("storage") or {}
             observed = getattr(req.observed, "resources", {}) or {}
 
-            env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            environment_manifest = _extract_manifest(
+                observed.get(f"workshopenvironment-{xr_name}")
+            )
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
             obs = observed.get(f"observe-storage-secret-{xr_name}")
             data_b64 = _extract_data(obs)
@@ -576,7 +564,7 @@ spec:
                     if not isinstance(store_name, str) or not store_name.strip():
                         continue
                     store = store_name.strip()
-                    host = f"mongodb-{store}-svc.{workshop_ns}.svc"
+                    host = f"mongodb-{store}-svc.{workshop_namespace}.svc"
                     user = f"{store}-app"
                     manifest["stringData"][_store_key("MONGO", store, "HOST")] = host
                     manifest["stringData"][_store_key("MONGO", store, "PORT")] = "27017"
@@ -599,7 +587,7 @@ spec:
                     if not isinstance(store_name, str) or not store_name.strip():
                         continue
                     store = store_name.strip()
-                    host = f"{store}.{workshop_ns}.svc"
+                    host = f"{store}.{workshop_namespace}.svc"
                     manifest["stringData"][_store_key("REDIS", store, "HOST")] = host
                     manifest["stringData"][_store_key("REDIS", store, "PORT")] = "6379"
                     manifest["stringData"][_store_key("REDIS", store, "USER")] = "default"
@@ -620,7 +608,7 @@ spec:
                     if not isinstance(store_name, str) or not store_name.strip():
                         continue
                     store = store_name.strip()
-                    host = f"qdrant-{store}.{workshop_ns}.svc"
+                    host = f"qdrant-{store}.{workshop_namespace}.svc"
                     manifest["stringData"][_store_key("QDRANT", store, "HOST")] = host
                     manifest["stringData"][_store_key("QDRANT", store, "PORT")] = "6333"
                     manifest["stringData"][_store_key("QDRANT", store, "GRPC_PORT")] = "6334"
@@ -641,17 +629,17 @@ spec:
 
             db_hosts = spec.get("databases") or {}
             if isinstance(db_hosts, dict):
-                db_env = env.get("database") or {}
+                db_env = environment.get("database") or {}
                 gateway_env = db_env.get("tlsRoute") or {}
 
-                gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
-                gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
-                gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+                gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
+                gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
+                gateway_section = _string_value(gateway_env.get("sectionName") or "")
                 has_gateway_parent = bool(
                     gateway_parent_name and gateway_parent_ns and gateway_section
                 )
 
-                ingress_env = env.get("ingress") or {}
+                ingress_env = environment.get("ingress") or {}
                 ingress_domain = ingress_env.get("domain", "default")
 
                 for host_key in sorted(list(db_hosts.keys())):
@@ -663,7 +651,9 @@ spec:
 
                     cluster_name = host_key.strip()
                     dbnames = [
-                        _safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)
+                        _string_value(x)
+                        for x in list(host_cfg.get("names") or [])
+                        if _string_value(x)
                     ]
                     if not dbnames:
                         continue
@@ -673,27 +663,29 @@ spec:
 
                     host = (
                         _b64get_any(host_data_b64, ["host"])
-                        or f"{cluster_name}-primary.{workshop_ns}.svc"
+                        or f"{cluster_name}-primary.{workshop_namespace}.svc"
                     )
                     port = _b64get_any(host_data_b64, ["port"]) or "5432"
                     user = _b64get_any(host_data_b64, ["user"]) or "postgres"
                     password = _b64get_any(host_data_b64, ["password"]) or ""
                     internal_url = _b64get_any(host_data_b64, ["uri"]) or ""
 
-                    manifest["stringData"][_pg_key(cluster_name, "HOST")] = host
-                    manifest["stringData"][_pg_key(cluster_name, "PORT")] = port
-                    manifest["stringData"][_pg_key(cluster_name, "USER")] = user
-                    manifest["stringData"][_pg_key(cluster_name, "PASSWORD")] = password
-                    manifest["stringData"][_pg_key(cluster_name, "DATABASES")] = ",".join(
-                        dbnames
+                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "HOST")] = host
+                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "PORT")] = port
+                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "USER")] = user
+                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "PASSWORD")] = (
+                        password
                     )
+                    manifest["stringData"][
+                        _store_key("POSTGRES", cluster_name, "DATABASES")
+                    ] = ",".join(dbnames)
 
                     host_ext = ""
                     if has_gateway_parent:
-                        host_ext = f"{cluster_name}-{workshop_ns}.{ingress_domain}:443"
-                        manifest["stringData"][_pg_key(cluster_name, "HOST_EXTERNAL")] = (
-                            host_ext.split(":")[0]
-                        )
+                        host_ext = f"{cluster_name}-{workshop_namespace}.{ingress_domain}:443"
+                        manifest["stringData"][
+                            _store_key("POSTGRES", cluster_name, "HOST_EXTERNAL")
+                        ] = host_ext.split(":")[0]
 
                     for dbname in dbnames:
                         db_url = _uri_with_database(internal_url, dbname)
@@ -735,13 +727,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -760,33 +750,36 @@ spec:
 
             return fill(template)
 
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _session_name(session, *, stringify_none=False):
+            if isinstance(session, dict):
+                return _safe_str(session.get("name") or "")
+            return _string_value(session) if stringify_none else _safe_str(session)
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
 
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
 
 
         def _distinct(seq):
             return list(dict.fromkeys(seq))
-
-
-        def _safe_str(v):
-            return str(v).strip() if v is not None else ""
-
-
-        def _session_name(session):
-            if isinstance(session, dict):
-                return _safe_str(session.get("name") or "")
-            return _safe_str(session)
 
 
         def _workspace_redirect_uris(xr_name, domain, session_names):
@@ -808,16 +801,16 @@ spec:
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            iam_env = env.get("iam") or {}
-            ingress_env = env.get("ingress") or {}
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            iam_env = environment.get("iam") or {}
+            ingress_env = environment.get("ingress") or {}
             realm = iam_env.get("realm", "default")
             extra_audiences_raw = iam_env.get("extraAudiences")
             if isinstance(extra_audiences_raw, str):
@@ -827,8 +820,10 @@ spec:
             extra_audiences = _distinct(
                 [_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)]
             )
-            data_enabled = ((env.get("defaults") or {}).get("data") or {}).get("enabled", True)
-            s3_enabled = (env.get("httpRoute") or {}).get("enableS3", False)
+            data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get(
+                "enabled", True
+            )
+            s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
             if (
                 data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")
             ) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
@@ -1292,13 +1287,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -1317,73 +1310,72 @@ spec:
 
             return fill(template)
 
+        import base64
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        import base64 as _base64
         import hashlib as _hashlib
+
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
 
-
-        def _to_dict(s):
-            if s is None:
-                return {}
-            return (
-                s
-                if isinstance(s, dict)
-                else _json_format.MessageToDict(s, preserving_proto_field_name=True)
-            )
-
-
-        def _safe_str(v):
-            return str(v).strip() if v is not None else ""
-
-
-        def _b64get_any(d, keys):
-            if not d:
-                return None
-            for k in keys:
-                v = d.get(k)
-                if v is None:
-                    continue
-                try:
-                    return _base64.b64decode(v, validate=True).decode("utf-8")
-                except Exception:
-                    return str(v)
-            return None
-
-
-        def _extract_data(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            st = (od.get("status") or {}).get("atProvider") or {}
-            m1 = st.get("manifest") or {}
-            m2 = (st.get("raw") or {}).get("manifest") or {}
-            return (
-                m1.get("data")
-                or m1.get("stringData")
-                or m2.get("data")
-                or m2.get("stringData")
-                or {}
-            ) or {}
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            st = (od.get("status") or {}).get("atProvider") or {}
-            return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             observed = getattr(req.observed, "resources", {}) or {}
             oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
@@ -1398,9 +1390,11 @@ spec:
             )
             cookie_secret = _hashlib.sha256(client_secret.encode("utf-8")).hexdigest()[:32]
 
-            env_manifest = _extract_manifest(observed.get(f"workshopenvironment-{xr_name}"))
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            environment_manifest = _extract_manifest(
+                observed.get(f"workshopenvironment-{xr_name}")
+            )
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
 
             secret_name = f"{xr_name}-oauth2-client"
             key = f"oauth2-client-secret-{xr_name}"
@@ -1408,7 +1402,7 @@ spec:
                 req,
                 "oauth2-client-secret/manifest",
                 secret_name=secret_name,
-                workshop_ns=workshop_ns,
+                workshop_ns=workshop_namespace,
                 client_id=client_id,
                 client_secret=client_secret,
                 cookie_secret=cookie_secret,
@@ -1458,13 +1452,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -1483,81 +1475,89 @@ spec:
 
             return fill(template)
 
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _boolish(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes", "on")
+
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _session_name(session, *, stringify_none=False):
+            if isinstance(session, dict):
+                return _safe_str(session.get("name") or "")
+            return _string_value(session) if stringify_none else _safe_str(session)
+
+        def _session_state(session):
+            state = (
+                _safe_str(session.get("state") or "started").lower()
+                if isinstance(session, dict)
+                else "started"
+            )
+            return {"running": "started", "paused": "stopped"}.get(state, state)
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        import ipaddress as _ipaddress
         import hashlib as _hashlib
+        import ipaddress as _ipaddress
         import json as _json
+
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
 
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
-
-        def _boolish(v):
-            if isinstance(v, bool):
-                return v
-            return str(v).lower() in ("true", "1", "yes", "on")
-
-
-        def _safe_str(v):
-            return str(v).strip()
 
 
         def _string_list(v):
             if not isinstance(v, list):
                 return []
-            return [_safe_str(item) for item in v if _safe_str(item)]
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            st = (od.get("status") or {}).get("atProvider") or {}
-            return (st.get("manifest") or (st.get("raw") or {}).get("manifest") or {}) or {}
+            return [_string_value(item) for item in v if _string_value(item)]
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
-
-            def _session_name(session):
-                if isinstance(session, dict):
-                    return _safe_str(session.get("name") or "")
-                return _safe_str(session)
-
-            def _session_state(session):
-                if isinstance(session, dict):
-                    state = _safe_str(session.get("state") or "started").lower()
-                else:
-                    state = "started"
-                if state == "running":
-                    return "started"
-                if state == "paused":
-                    return "stopped"
-                return state
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             sessions = [
-                _session_name(session)
+                _session_name(session, stringify_none=True)
                 for session in (spec.get("sessions") or [])
-                if _session_name(session)
+                if _session_name(session, stringify_none=True)
             ]
             started_sessions = [
-                _session_name(session)
+                _session_name(session, stringify_none=True)
                 for session in (spec.get("sessions") or [])
-                if _session_name(session) and _session_state(session) == "started"
+                if _session_name(session, stringify_none=True)
+                and _session_state(session) == "started"
             ]
             db_service_names = []
             db_hosts = spec.get("databases") or {}
@@ -1569,16 +1569,18 @@ spec:
                     if not isinstance(host_cfg, dict):
                         continue
                     dbnames = [
-                        _safe_str(x) for x in list(host_cfg.get("names") or []) if _safe_str(x)
+                        _string_value(x)
+                        for x in list(host_cfg.get("names") or [])
+                        if _string_value(x)
                     ]
-                    db_storage = _safe_str(host_cfg.get("storage") or "")
-                    backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+                    db_storage = _string_value(host_cfg.get("storage") or "")
+                    backup_storage = _string_value(host_cfg.get("backupStorage") or "")
                     if dbnames and db_storage and backup_storage:
                         db_service_names.append(f"{host_key.strip()}-primary")
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            defaults = env.get("defaults") or {}
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            defaults = environment.get("defaults") or {}
             vcluster = _boolish((defaults.get("vcluster") or {}).get("enabled", True))
             files = defaults.get("files") or []
             quota = defaults.get("quota") or {}
@@ -1587,7 +1589,7 @@ spec:
             memory = quota.get("memory") or "2Gi"
             storage = quota.get("storage") or "1Gi"
             budget = quota.get("budget") or "medium"
-            overall_storage = _safe_str(overall_quota.get("storage") or "100Gi")
+            overall_storage = _string_value(overall_quota.get("storage") or "100Gi")
 
             env_security = defaults.get("security") or {}
 
@@ -1614,23 +1616,24 @@ spec:
             registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
             persistence_cfg = defaults.get("persistence") or {}
-            requested_storage_class = _safe_str(persistence_cfg.get("storageClassName") or "")
+            requested_storage_class = _string_value(
+                persistence_cfg.get("storageClassName") or ""
+            )
 
-            ingress_env = env.get("ingress") or {}
-            storage_env = env.get("storage") or {}
-            storage_classes_env = env.get("storageClasses") or {}
+            ingress_env = environment.get("ingress") or {}
+            storage_classes_env = environment.get("storageClasses") or {}
             allowed_storage_classes = [
-                _safe_str(sc)
+                _string_value(sc)
                 for sc in (storage_classes_env.get("allowed") or [])
-                if _safe_str(sc)
+                if _string_value(sc)
             ]
-            packages = env.get("packages") or []
+            packages = environment.get("packages") or []
 
             ingress_class = ingress_env.get("class", "")
             ingress_domain = ingress_env.get("domain", "default")
             ingress_secret = ingress_env.get("secret", "wildcard-tls")
             permanent_access = _boolish(ingress_env.get("enabled")) or _boolish(
-                (env.get("httpRoute") or {}).get("enabled")
+                (environment.get("httpRoute") or {}).get("enabled")
             )
 
             storage_secret_name = f"{xr_name}-datalab"
@@ -1649,7 +1652,7 @@ spec:
                 external_egress = True
             external_egress = _boolish(external_egress)
 
-            network_env = env.get("network") or {}
+            network_env = environment.get("network") or {}
             excluded_network_policies = set(
                 _string_list(network_env.get("excludePolicies") or [])
             )
@@ -1658,7 +1661,7 @@ spec:
             internal_egress = network_env.get("internalEgress", [])
             internal_ingress = network_env.get("internalIngress", [])
             internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
-            service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
+            service_cidr = _string_value(network_env.get("serviceCIDR") or "")
             if service_cidr:
                 internal_cidrs.append(service_cidr)
 
@@ -1959,30 +1962,32 @@ spec:
             )
 
             observed_resources = getattr(req.observed, "resources", {}) or {}
-            env_manifest = _extract_manifest(
+            environment_manifest = _extract_manifest(
                 observed_resources.get(f"workshopenvironment-{xr_name}")
             )
-            workshop_ns = _safe_str(
-                ((env_manifest.get("status") or {}).get("educates") or {}).get("namespace")
+            workshop_namespace = _string_value(
+                ((environment_manifest.get("status") or {}).get("educates") or {}).get(
+                    "namespace"
+                )
                 or xr_name
             )
 
-            runtime_namespace = ((env_manifest.get("status") or {}).get("educates") or {}).get(
-                "namespace"
-            )
+            runtime_namespace = (
+                (environment_manifest.get("status") or {}).get("educates") or {}
+            ).get("namespace")
             if runtime_namespace and _policy_enabled("allow-internal-ingress"):
                 for name, manifest in sorted(ingress_policies.items()):
                     if _policy_enabled(name):
                         manifest["metadata"]["namespace"] = runtime_namespace
                         emit("NetworkPolicy", manifest, key_suffix=name)
 
-            if workshop_ns:
+            if workshop_namespace:
                 emit(
                     "ResourceQuota",
                     _render_template(
                         req,
                         "educates/storage-quota",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                         overall_storage=overall_storage,
                     ),
                     key_suffix="overall-storage",
@@ -2002,7 +2007,7 @@ spec:
                             req,
                             "educates/workspace-pvc",
                             persistent_pvc_name=persistent_pvc_name,
-                            workshop_ns=workshop_ns,
+                            workshop_ns=workshop_namespace,
                             persistent_pvc_spec=persistent_pvc_spec,
                         ),
                         key_suffix=f"{sid}-persistent",
@@ -2174,13 +2179,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -2199,45 +2202,47 @@ spec:
 
             return fill(template)
 
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
+        from google.protobuf import json_format
 
-        import copy as _copy
-        import json as _json
-        import hashlib as _hashlib
-        import shlex as _shlex
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
-
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
         def _boolish(value):
             if isinstance(value, bool):
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
 
-
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            obj = _to_dict(objres.resource)
-            at_provider = (obj.get("status") or {}).get("atProvider") or {}
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
             return (
-                at_provider.get("manifest")
-                or (at_provider.get("raw") or {}).get("manifest")
-                or {}
-            ) or {}
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import copy as _copy
+        import hashlib as _hashlib
+        import json as _json
+        import shlex as _shlex
+
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
 
 
         def _extract_secret_data(objres):
@@ -3387,13 +3392,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -3412,79 +3415,86 @@ spec:
 
             return fill(template)
 
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
 
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            atp = (od.get("status") or {}).get("atProvider") or {}
-            m1 = atp.get("manifest") or {}
-            m2 = (atp.get("raw") or {}).get("manifest") or {}
-            return (m1 or m2) or {}
-
-
-        def _safe_str(v):
-            return str(v).strip()
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             db_hosts = spec.get("databases") or {}
             if not isinstance(db_hosts, dict) or not db_hosts:
                 return
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
 
-            ingress_env = env.get("ingress") or {}
+            ingress_env = environment.get("ingress") or {}
             ingress_domain = ingress_env.get("domain", "default")
 
-            db_env = env.get("database") or {}
+            db_env = environment.get("database") or {}
             gateway_env = db_env.get("tlsRoute") or {}
 
-            gateway_parent_name = _safe_str(gateway_env.get("parentName") or "")
-            gateway_parent_ns = _safe_str(gateway_env.get("parentNamespace") or "")
-            gateway_section = _safe_str(gateway_env.get("sectionName") or "")
+            gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
+            gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
+            gateway_section = _string_value(gateway_env.get("sectionName") or "")
             has_gateway_parent = bool(
                 gateway_parent_name and gateway_parent_ns and gateway_section
             )
 
-            data_sc_default = _safe_str(db_env.get("storageClassName") or "")
-            backup_sc_default = _safe_str(db_env.get("backupStorageClassName") or "")
+            data_sc_default = _string_value(db_env.get("storageClassName") or "")
+            backup_sc_default = _string_value(db_env.get("backupStorageClassName") or "")
 
             users = list(spec.get("users", []) or [])
             admin_user = "postgres"
-            other_users = [u for u in users if _safe_str(u) and _safe_str(u) != admin_user]
+            other_users = [
+                u for u in users if _string_value(u) and _string_value(u) != admin_user
+            ]
             users_all = [admin_user] + other_users
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
-            env_manifest = _extract_manifest(observed.get(env_key))
+            environment_manifest = _extract_manifest(observed.get(env_key))
 
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-            if not workshop_ns:
+            if not workshop_namespace:
                 return
 
             def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
@@ -3511,19 +3521,19 @@ spec:
                     continue
 
                 dbnames = list(host_cfg.get("names") or [])
-                dbnames = [_safe_str(x) for x in dbnames if _safe_str(x)]
+                dbnames = [_string_value(x) for x in dbnames if _string_value(x)]
                 if not dbnames:
                     continue
 
-                db_storage = _safe_str(host_cfg.get("storage") or "")
-                backup_storage = _safe_str(host_cfg.get("backupStorage") or "")
+                db_storage = _string_value(host_cfg.get("storage") or "")
+                backup_storage = _string_value(host_cfg.get("backupStorage") or "")
                 if not db_storage or not backup_storage:
                     continue
 
-                db_storage_class = _safe_str(
+                db_storage_class = _string_value(
                     host_cfg.get("storageClassName") or data_sc_default
                 )
-                backup_storage_class = _safe_str(
+                backup_storage_class = _string_value(
                     host_cfg.get("backupStorageClassName") or backup_sc_default
                 )
 
@@ -3535,7 +3545,7 @@ spec:
                     req,
                     "postgres/init-sql",
                     cm_name=cm_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     init_sql=init_sql,
                 )
 
@@ -3557,7 +3567,7 @@ spec:
                     req,
                     "postgres/postgres-cluster",
                     cluster_name=cluster_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     cm_name=cm_name,
                     data_vcs=data_vcs,
                     repo_vcs=repo_vcs,
@@ -3587,12 +3597,12 @@ spec:
                 if not has_gateway_parent:
                     continue
 
-                hostname = f"{cluster_name}-{workshop_ns}.{ingress_domain}"
+                hostname = f"{cluster_name}-{workshop_namespace}.{ingress_domain}"
                 route = _render_template(
                     req,
                     "postgres/route",
                     cluster_name=cluster_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     gateway_parent_name=gateway_parent_name,
                     gateway_parent_ns=gateway_parent_ns,
                     gateway_section=gateway_section,
@@ -3686,13 +3696,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -3711,69 +3719,74 @@ spec:
 
             return fill(template)
 
+        import base64
+
+        import hashlib
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
+            # Keep each service's existing seed and length to prevent credential changes.
+            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
+            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as _json_format
 
-
-        def _to_dict(struct):
-            return (
-                {}
-                if struct is None
-                else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-            )
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            atp = (od.get("status") or {}).get("atProvider") or {}
-            m1 = atp.get("manifest") or {}
-            m2 = (atp.get("raw") or {}).get("manifest") or {}
-            return (m1 or m2) or {}
-
-
-        def _safe_str(v):
-            return str(v).strip()
-
-
-        def _strong_token(seed):
-            import hashlib
-            import base64
-
-            digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
-            token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
-            return token[:32]
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             document_stores = spec.get("documentStores")
             if not isinstance(document_stores, dict) or not document_stores:
                 return
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            mongo_env = env.get("documentStore") or {}
-            mongo_storage_class = _safe_str(mongo_env.get("storageClassName") or "")
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            mongo_env = environment.get("documentStore") or {}
+            mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
-            env_manifest = _extract_manifest(observed.get(env_key))
+            environment_manifest = _extract_manifest(observed.get(env_key))
 
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-            if not workshop_ns:
+            if not workshop_namespace:
                 return
 
             # MongoDB operator expects these namespace-local prerequisites.
@@ -3783,7 +3796,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                     ),
                 ),
                 (
@@ -3791,7 +3804,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-database-pods",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                     ),
                 ),
                 (
@@ -3799,7 +3812,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-ops-manager",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                     ),
                 ),
                 (
@@ -3807,7 +3820,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/role-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                     ),
                 ),
                 (
@@ -3815,7 +3828,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/rolebinding-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_ns,
+                        workshop_ns=workshop_namespace,
                     ),
                 ),
             ]
@@ -3836,7 +3849,7 @@ spec:
                 if not isinstance(store_cfg, dict):
                     continue
 
-                mongo_storage = _safe_str(store_cfg.get("storage") or "10Gi")
+                mongo_storage = _string_value(store_cfg.get("storage") or "10Gi")
                 if not mongo_storage:
                     continue
                 pvc_spec = {
@@ -3854,7 +3867,7 @@ spec:
                     req,
                     "mongodb/auth-secret",
                     password_secret_name=password_secret_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     mongo_password=mongo_password,
                 )
                 pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
@@ -3871,7 +3884,7 @@ spec:
                     req,
                     "mongodb/store",
                     mongo_resource_name=mongo_resource_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     app_username=f"{store_name}-app",
                     password_secret_name=password_secret_name,
                     store_name=store_name,
@@ -4045,13 +4058,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -4070,63 +4081,74 @@ spec:
 
             return fill(template)
 
+        import base64
+
+        import hashlib
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
+            # Keep each service's existing seed and length to prevent credential changes.
+            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
+            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as jf
-        import base64
-        import hashlib
 
-
-        def _to_dict(s):
-            return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            atp = (od.get("status") or {}).get("atProvider") or {}
-            m1 = atp.get("manifest") or {}
-            m2 = (atp.get("raw") or {}).get("manifest") or {}
-            return (m1 or m2) or {}
-
-
-        def _safe_str(v):
-            return str(v).strip()
-
-
-        def _strong_token(seed):
-            d = hashlib.sha256(seed.encode("utf-8")).digest()
-            return base64.urlsafe_b64encode(d).decode("ascii").rstrip("=")[:28]
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             cache_stores = spec.get("cacheStores")
             if not isinstance(cache_stores, dict) or not cache_stores:
                 return
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            redis_env = env.get("cacheStore") or {}
-            redis_storage_class = _safe_str(redis_env.get("storageClassName") or "")
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            redis_env = environment.get("cacheStore") or {}
+            redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
-            env_manifest = _extract_manifest(observed.get(env_key))
+            environment_manifest = _extract_manifest(observed.get(env_key))
 
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-            if not workshop_ns:
+            if not workshop_namespace:
                 return
 
             for store_key in sorted(list(cache_stores.keys())):
@@ -4136,17 +4158,19 @@ spec:
                 if not isinstance(store_cfg, dict):
                     continue
 
-                redis_storage = _safe_str(store_cfg.get("storage") or "1Gi")
+                redis_storage = _string_value(store_cfg.get("storage") or "1Gi")
                 if not redis_storage:
                     continue
                 store_name = store_key.strip()
-                redis_password = _strong_token(f"{xr_name}:{store_name}:redis")
+                redis_password = _strong_token(
+                    f"{xr_name}:{store_name}:redis", suffix="", length=28
+                )
                 redis_auth_secret_name = f"{store_name}-redis-auth"
                 redis_auth_secret = _render_template(
                     req,
                     "redis/auth-secret",
                     redis_auth_secret_name=redis_auth_secret_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     redis_password=redis_password,
                 )
                 auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
@@ -4164,7 +4188,7 @@ spec:
                     req,
                     "redis/acl-secret",
                     redis_acl_secret_name=redis_acl_secret_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     stringData_user_acl=f"user default on >{redis_password} ~* +@all\n",
                 )
                 acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
@@ -4195,7 +4219,7 @@ spec:
                     req,
                     "redis/store",
                     store_name=store_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     redis_auth_secret_name=redis_auth_secret_name,
                     redis_acl_secret_name=redis_acl_secret_name,
                     storage=storage,
@@ -4218,7 +4242,7 @@ spec:
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
                     pod_name=f"{store_name}-0",
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
@@ -4354,13 +4378,11 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
         import copy as _template_copy
-        import re as _template_re
-        from google.protobuf import json_format as _template_json
 
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
 
         def _render_template(req, template_name, /, **values):
             """Fill complete scalar placeholders and preserve each value's type."""
@@ -4379,65 +4401,74 @@ spec:
 
             return fill(template)
 
+        import base64
+
+        import hashlib
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
+            # Keep each service's existing seed and length to prevent credential changes.
+            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
+            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as jf
 
-
-        def _to_dict(s):
-            return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            atp = (od.get("status") or {}).get("atProvider") or {}
-            m1 = atp.get("manifest") or {}
-            m2 = (atp.get("raw") or {}).get("manifest") or {}
-            return (m1 or m2) or {}
-
-
-        def _safe_str(v):
-            return str(v).strip()
-
-
-        def _strong_token(seed):
-            import hashlib
-            import base64
-
-            digest = hashlib.sha256((seed + ":provider-datalab").encode()).digest()
-            token = base64.urlsafe_b64encode(digest).decode().rstrip("=")
-            return token[:32]
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr = _to_dict(req.observed.composite.resource)
-            meta = xr.get("metadata", {}) or {}
+            metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
-            xr_namespace = meta.get("namespace") or "default"
+            xr_name = metadata.get("name")
+            xr_namespace = metadata.get("namespace") or "default"
 
             vector_stores = spec.get("vectorStores")
             if not isinstance(vector_stores, dict) or not vector_stores:
                 return
 
-            ctx = _to_dict(req.context)
-            env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-            qdrant_env = env.get("vectorStore") or {}
-            qdrant_storage_class = _safe_str(qdrant_env.get("storageClassName") or "")
+            context = _to_dict(req.context)
+            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            qdrant_env = environment.get("vectorStore") or {}
+            qdrant_storage_class = _string_value(qdrant_env.get("storageClassName") or "")
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
-            env_manifest = _extract_manifest(observed.get(env_key))
+            environment_manifest = _extract_manifest(observed.get(env_key))
 
-            educates_status = (env_manifest.get("status") or {}).get("educates") or {}
-            workshop_ns = _safe_str(educates_status.get("namespace") or xr_name)
+            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-            if not workshop_ns:
+            if not workshop_namespace:
                 return
 
             for store_key in sorted(list(vector_stores.keys())):
@@ -4447,7 +4478,7 @@ spec:
                 if not isinstance(store_cfg, dict):
                     continue
 
-                qdrant_storage = _safe_str(store_cfg.get("storage") or "1Gi")
+                qdrant_storage = _string_value(store_cfg.get("storage") or "1Gi")
                 if not qdrant_storage:
                     continue
                 store_name = store_key.strip()
@@ -4456,7 +4487,7 @@ spec:
                     req,
                     "qdrant/auth-secret",
                     qdrant_auth_secret_name=qdrant_auth_secret_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     stringData_apiKey=_strong_token(f"{xr_name}:{store_name}:qdrant:write"),
                     stringData_readApiKey=_strong_token(f"{xr_name}:{store_name}:qdrant:read"),
                 )
@@ -4478,7 +4509,7 @@ spec:
                     req,
                     "qdrant/store",
                     store_name=store_name,
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                     qdrant_auth_secret_name=qdrant_auth_secret_name,
                     persistence=persistence,
                 )
@@ -4500,7 +4531,7 @@ spec:
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
                     pod_name=f"qdrant-{store_name}-0",
-                    workshop_ns=workshop_ns,
+                    workshop_ns=workshop_namespace,
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
@@ -4605,55 +4636,64 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
+        def _string_value(value):
+            """Keep the literal string for null values in existing resource settings."""
+            return str(value).strip()
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _session_name(session, *, stringify_none=False):
+            if isinstance(session, dict):
+                return _safe_str(session.get("name") or "")
+            return _string_value(session) if stringify_none else _safe_str(session)
+
+        def _session_state(session):
+            state = (
+                _safe_str(session.get("state") or "started").lower()
+                if isinstance(session, dict)
+                else "started"
+            )
+            return {"running": "started", "paused": "stopped"}.get(state, state)
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format as jf
-        from google.protobuf import struct_pb2 as st
+        from google.protobuf import json_format, struct_pb2
 
-
-        def _to_dict(s):
-            return {} if s is None else jf.MessageToDict(s, preserving_proto_field_name=True)
-
-
-        def _extract_manifest(objres):
-            if not objres or not getattr(objres, "resource", None):
-                return {}
-            od = _to_dict(objres.resource)
-            atp = (od.get("status") or {}).get("atProvider") or {}
-            return (atp.get("manifest") or (atp.get("raw") or {}).get("manifest") or {}) or {}
-
-
-        def _safe_str(v):
-            return str(v).strip() if v is not None else ""
-
-
-        def _session_name(session):
-            if isinstance(session, dict):
-                return _safe_str(session.get("name") or "")
-            return _safe_str(session)
-
-
-        def _session_state(session):
-            if isinstance(session, dict):
-                state = _safe_str(session.get("state") or "started").lower()
-            else:
-                state = "started"
-            if state == "running":
-                return "started"
-            if state == "paused":
-                return "stopped"
-            return state
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             observed = getattr(req.observed, "resources", None) or {}
-            xr_obs = _to_dict(req.observed.composite.resource)
-            meta = xr_obs.get("metadata", {}) or {}
-            spec = xr_obs.get("spec", {}) or {}
+            xr = _to_dict(req.observed.composite.resource)
+            metadata = xr.get("metadata", {}) or {}
+            spec = xr.get("spec", {}) or {}
 
-            xr_name = meta.get("name")
+            xr_name = metadata.get("name")
 
             sessions_map = {}
 
@@ -4688,15 +4728,15 @@ spec:
                 if phase == "Running" and url:
                     sessions_map[ws_id]["url"] = url
 
-            cur_status = (xr_obs.get("status") or {}).copy()
+            cur_status = (xr.get("status") or {}).copy()
             if sessions_map:
                 cur_status["sessions"] = sessions_map
             else:
                 cur_status.pop("sessions", None)
 
-            v = st.Value()
-            jf.ParseDict(cur_status, v)
-            rsp.desired.composite.resource.fields["status"].CopyFrom(v)
+            status_value = struct_pb2.Value()
+            json_format.ParseDict(cur_status, status_value)
+            rsp.desired.composite.resource.fields["status"].CopyFrom(status_value)
   - step: check-resource-readiness
     functionRef:
       name: crossplane-contrib-function-auto-ready

@@ -2,29 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from google.protobuf import json_format as _json_format
 
-
-def _to_dict(struct):
-    return (
-        {}
-        if struct is None
-        else _json_format.MessageToDict(struct, preserving_proto_field_name=True)
-    )
+from composition.helpers import (
+    _safe_str,
+    _session_name,
+    _to_dict,
+)
+from composition.render import _render_template
 
 
 def _distinct(seq):
     return list(dict.fromkeys(seq))
-
-
-def _safe_str(v):
-    return str(v).strip() if v is not None else ""
-
-
-def _session_name(session):
-    if isinstance(session, dict):
-        return _safe_str(session.get("name") or "")
-    return _safe_str(session)
 
 
 def _workspace_redirect_uris(xr_name, domain, session_names):
@@ -46,16 +34,16 @@ def _workspace_redirect_uris(xr_name, domain, session_names):
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
-    meta = xr.get("metadata", {}) or {}
+    metadata = xr.get("metadata", {}) or {}
     spec = xr.get("spec", {}) or {}
 
-    xr_name = meta.get("name")
-    xr_namespace = meta.get("namespace") or "default"
+    xr_name = metadata.get("name")
+    xr_namespace = metadata.get("namespace") or "default"
 
-    ctx = _to_dict(req.context)
-    env = ctx.get("apiextensions.crossplane.io/environment", {}) or {}
-    iam_env = env.get("iam") or {}
-    ingress_env = env.get("ingress") or {}
+    context = _to_dict(req.context)
+    environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    iam_env = environment.get("iam") or {}
+    ingress_env = environment.get("ingress") or {}
     realm = iam_env.get("realm", "default")
     extra_audiences_raw = iam_env.get("extraAudiences")
     if isinstance(extra_audiences_raw, str):
@@ -65,8 +53,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     extra_audiences = _distinct(
         [_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)]
     )
-    data_enabled = ((env.get("defaults") or {}).get("data") or {}).get("enabled", True)
-    s3_enabled = (env.get("httpRoute") or {}).get("enableS3", False)
+    data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get(
+        "enabled", True
+    )
+    s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
     if (
         data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")
     ) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
