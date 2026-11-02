@@ -4,9 +4,17 @@
 `composition/steps/` handles one task. Resource manifests are in `templates/`,
 grouped by service.
 
+Use `templates/common/` for identical Object wrappers and Pod observers.
+Keep each service's readiness and watch rules explicit.
+
 Put shared Python functions in `composition/helpers.py` and import them from
 the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
+
+`composition/settings.yaml` sets `responseTTL` for all steps. Use a positive
+whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`). The build
+sets each Python response TTL before the step body and gives auto-ready the
+same TTL. New function types must have build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
 Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step

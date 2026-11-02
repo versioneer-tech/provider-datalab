@@ -66,6 +66,10 @@ pre-commit run --all-files
 Edit the Python steps in `composition/` and the manifests in `templates/`.
 See [Manifest templates](templates/README.md) for the source layout and build.
 
+`composition/settings.yaml` sets one response TTL for all pipeline steps.
+The default is `5m`. See the [installation guide](docs/how-to-guides/installation.md)
+for package setup.
+
 See [Unit tests](tests/README.md) for fixtures and focused checks, and
 [Integration tests](tests/integration/README.md) for the dedicated Kind cluster.
 

@@ -85,10 +85,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     for key, manifest in prereqs:
         body = _render_template(
             req,
-            "mongodb/rbac-object",
+            "common/object",
             key=key,
             xr_namespace=xr_namespace,
             manifest=manifest,
+            readiness={"policy": "SuccessfulCreate"},
         )
         rsp.desired.resources[key].resource.update(body)
 

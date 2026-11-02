@@ -652,7 +652,7 @@ mv "$work_database" "$database"
     def emit(key, manifest, readiness=None):
         body = _render_template(
             req,
-            "data/object",
+            "common/object",
             key=key,
             xr_namespace=xr_namespace,
             manifest=manifest,

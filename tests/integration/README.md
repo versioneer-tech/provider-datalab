@@ -10,8 +10,8 @@ Provider Storage. It creates fixed profile-named Secrets for the disposable
 in-cluster MinIO service because the Datalab composition needs object-storage
 credentials.
 
-Crossplane `2.4.1` is the reproducible test pin. Provider Datalab supports
-Crossplane v2 or later.
+Crossplane `2.4.1` is the reproducible test pin. See
+[`crossplane.yaml`](../../crossplane.yaml) for the supported Crossplane range.
 
 Run the render tests before cluster integration:
 
@@ -63,6 +63,8 @@ The registry profile installs Kyverno because the Educates runtime applies
 Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
 `2.2.1`, which contains Educates `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
 retain successful resources.
+The registry probe allows time for the HTTP service to start. It reports
+the failed operation and HTTP status without printing credentials.
 
 The Data profile reuses the Educates installation and seeds one disposable
 MinIO bucket for file operations. It tests access through the runtime Service.
@@ -80,6 +82,12 @@ The S3 profile adds Contour, Keycloak, and an SDK client to test
 [S3 client access](../../docs/how-to-guides/s3-access.md).
 The boto3 client uses `s3-credentials.py` as its AWS `credential_process`.
 The test Pod receives `CLIENT_SECRET` from the generated Datalab OAuth Secret.
+The S3 profile also pauses its disposable Keycloak client, changes the source
+OAuth connection Secret, and checks credential propagation and workload
+restart. It restores the credentials, resumes the client, and requires 30
+seconds without updates to the source, observer, and projected Secrets.
+It then repeats the S3 checks. This tests Secret propagation; it does not
+rotate credentials in Keycloak itself.
 Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
 The PostgreSQL profile installs Crunchy PGO `6.0.1`, which is the version

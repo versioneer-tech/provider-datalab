@@ -75,6 +75,8 @@ for file in "${examples[@]}"; do
   fi
 done
 
+python3 tests/response-ttl.py "${render_dir##*/}-python"
+
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
   render examples/base/001-lab.yaml \
     --observed-resources tests/observed/001-rotated-lab.yaml >"${render_dir}/rotated.yaml"

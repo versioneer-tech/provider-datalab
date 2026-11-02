@@ -101,6 +101,10 @@ kubectl get configurationrevisions.pkg.crossplane.io
 The package installs the Datalab resource definition and composition. Its
 providers and functions are managed separately by the platform.
 
+The package build reads `responseTTL: 5m` from `composition/settings.yaml`.
+It applies the value to every Python response and the auto-ready input.
+To change it, rebuild the composition and release a new package.
+
 ## 4. Set the shared environment
 
 Create an `EnvironmentConfig` named `datalab` with values for your cluster.

@@ -6,6 +6,7 @@
 
 import argparse
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -75,16 +76,67 @@ def inline_helpers(script, helper_source, module_name="composition.helpers"):
     return helpers + "\n\n" + "".join(lines)
 
 
-def build():
-    composition = yaml.safe_load((ROOT / "composition/pipeline.yaml").read_text())
-    helper_source = (ROOT / "composition/helpers.py").read_text()
-    renderer = (ROOT / "composition/render.py").read_text()
+def response_ttl_seconds(value):
+    match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(value))
+    if not match:
+        raise ValueError(
+            "responseTTL must be a positive whole duration, such as 30s, 5m, or 1h."
+        )
+    seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+    # Auto-ready uses a signed 64-bit count of nanoseconds.
+    if seconds > (2**63 - 1) // 1_000_000_000:
+        raise ValueError("responseTTL exceeds the auto-ready duration limit.")
+    return seconds
+
+
+def set_response_ttl(script, seconds):
+    functions = [
+        node
+        for node in ast.parse(script).body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "compose"
+    ]
+    if len(functions) != 1 or len(functions[0].args.args) != 2:
+        raise ValueError("A Python step must define one compose(req, rsp) function.")
+    function = functions[0]
+    first = function.body[0]
+    if first.lineno == function.lineno:
+        raise ValueError("The compose function body must start on a separate line.")
+    response_name = function.args.args[1].arg
+    lines = script.splitlines(keepends=True)
+    index = first.lineno - 1
+    if ast.get_docstring(function) is not None:
+        index = first.end_lineno
+    lines.insert(
+        index,
+        f"{' ' * first.col_offset}{response_name}.meta.ttl.FromSeconds({seconds})\n",
+    )
+    return "".join(lines)
+
+
+def build(root=ROOT):
+    settings = yaml.safe_load((root / "composition/settings.yaml").read_text())
+    ttl = settings["responseTTL"]
+    seconds = response_ttl_seconds(ttl)
+    composition = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
+    helper_source = (root / "composition/helpers.py").read_text()
+    renderer = (root / "composition/render.py").read_text()
     for step in composition["spec"]["pipeline"]:
-        data = step.get("input", {})
+        data = step.setdefault("input", {})
+        function_name = step["functionRef"]["name"]
+        if function_name == "crossplane-contrib-function-auto-ready":
+            data.update(
+                apiVersion="autoready.fn.crossplane.io/v1beta1", kind="Input", ttl=ttl
+            )
+            continue
+        if function_name != "crossplane-contrib-function-python":
+            raise ValueError(
+                f"No response TTL configuration for function: {function_name}"
+            )
         script_file = data.pop("scriptFile", None)
         if not script_file:
-            continue
-        script = (ROOT / "composition" / script_file).read_text()
+            raise ValueError(f"Python step {step['step']} must set scriptFile.")
+        script = (root / "composition" / script_file).read_text()
         tree = ast.parse(script)
         names = sorted(
             {
@@ -97,12 +149,13 @@ def build():
                 and isinstance(node.args[1], ast.Constant)
             }
         )
+        script = set_response_ttl(script, seconds)
         script = inline_helpers(script, helper_source)
         data["script"] = inline_helpers(script, renderer, "composition.render")
         compile(data["script"], script_file, "exec")
         if names:
             data["templates"] = {
-                name: yaml.safe_load((ROOT / "templates" / f"{name}.yaml").read_text())
+                name: yaml.safe_load((root / "templates" / f"{name}.yaml").read_text())
                 for name in names
             }
     return HEADER + yaml.dump(composition, Dumper=Dumper, sort_keys=False, width=110)

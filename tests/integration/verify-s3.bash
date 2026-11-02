@@ -120,6 +120,11 @@ verify_s3() {
   kube wait pod/verify-s3-client --namespace "${runtime_namespace}" --for=condition=Ready --timeout=5m
   kube exec verify-s3-client --namespace "${runtime_namespace}" -- python -u /test/e2e.py
 
+  log 'Checking watched OAuth Secret updates and recovery'
+  python3 "${INTEGRATION_DIR}/verify-oauth-watch.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${runtime_namespace}"
+  kube exec verify-s3-client --namespace "${runtime_namespace}" -- python -u /test/e2e.py
+
   log 'Disabling environment S3 and checking browser-only Gateway exposure'
   kube patch environmentconfig datalab-custom --type=merge \
     --patch '{"data":{"httpRoute":{"enableS3":false}}}'

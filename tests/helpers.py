@@ -23,20 +23,22 @@ def load_helpers(*names):
 class HelperTests(unittest.TestCase):
     def test_service_tokens_do_not_change(self):
         token = load_helpers("_strong_token")["_strong_token"]
-        self.assertEqual(token("xyz:mongo"), "xLKluo0Tk9ElXpQEy1WzmAIY0-nmRBfz")
-        self.assertEqual(token("xyz:qdrant:read"), "4om-ip0euXZX1ThMtDimN72Xn7XD7ktF")
+        self.assertEqual(token("sample:mongo"), "4YlC2SJsBu45oGi9FbJZFBypWCpXR-vU")
         self.assertEqual(
-            token("xyz:redis", suffix="", length=28), "q0vhYrvOs2ohHVFyDHjADrEL4WrS"
+            token("sample:qdrant:read"), "1ouGA0CiU6xSAfWP2i9XY3LIQ_TZ8bWW"
+        )
+        self.assertEqual(
+            token("sample:redis", suffix="", length=28), "E6xDTnRLBJ1XV75rV3xJDiEsGpHp"
         )
 
     def test_session_forms_and_state_aliases(self):
         helpers = load_helpers("_session_name", "_session_state")
         cases = (
-            (" xyz ", "xyz", "started"),
-            ({"name": " xyz ", "state": " RUNNING "}, "xyz", "started"),
-            ({"name": "xyz", "state": "paused"}, "xyz", "stopped"),
-            ({"name": "xyz", "state": "stopped"}, "xyz", "stopped"),
-            ({"name": "xyz"}, "xyz", "started"),
+            (" sample ", "sample", "started"),
+            ({"name": " sample ", "state": " RUNNING "}, "sample", "started"),
+            ({"name": "sample", "state": "paused"}, "sample", "stopped"),
+            ({"name": "sample", "state": "stopped"}, "sample", "stopped"),
+            ({"name": "sample"}, "sample", "started"),
             (None, "", "started"),
         )
         for session, name, state in cases:
@@ -50,7 +52,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(helpers["_safe_str"](None), "")
         self.assertEqual(helpers["_string_value"](None), "None")
         for name in ("_safe_str", "_string_value"):
-            self.assertEqual(helpers[name](" xyz "), "xyz")
+            self.assertEqual(helpers[name](" sample "), "sample")
             self.assertEqual(helpers[name](0), "0")
 
 

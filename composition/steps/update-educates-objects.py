@@ -427,7 +427,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         key = f"{kind.lower()}{suffix}"
         body = _render_template(
             req,
-            "educates/object",
+            "common/object",
             key=key,
             xr_namespace=xr_namespace,
             manifest=manifest,

@@ -42,6 +42,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             annotations = metadata.get("annotations", {}) or {}
@@ -96,6 +97,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             data = (environment.get("defaults") or {}).get("data") or {}
@@ -227,6 +229,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -242,7 +245,7 @@ spec:
             educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
             workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
 
-            def observe(key, secret_name, secret_namespace, watch=True):
+            def observe(key, secret_name, secret_namespace):
                 rsp.desired.resources[key].resource.update(
                     _render_template(
                         req,
@@ -251,7 +254,6 @@ spec:
                         xr_namespace=xr_namespace,
                         secret_name=secret_name,
                         secret_namespace=secret_namespace,
-                        watch=watch,
                     )
                 )
 
@@ -265,7 +267,6 @@ spec:
                 f"observe-oauth-client-secret-{xr_name}",
                 f"{xr_name}-oauth-client",
                 xr_namespace,
-                watch=False,
             )
 
             postgres_clusters = spec.get("databases")
@@ -276,7 +277,7 @@ spec:
                         observe(
                             f"observe-database-secret-{xr_name}-{cluster_name}",
                             f"{cluster_name}-pguser-postgres",
-                            xr_name,
+                            workshop_namespace,
                         )
 
             for field, backend in (
@@ -328,7 +329,7 @@ spec:
             providerConfigRef:
               name: provider-kubernetes
               kind: ProviderConfig
-            watch: ${watch}
+            watch: true
   - step: update-datalab-secret
     functionRef:
       name: crossplane-contrib-function-python
@@ -457,6 +458,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -759,6 +761,11 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _boolish(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes", "on")
+
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
@@ -800,6 +807,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -824,9 +832,7 @@ spec:
                 "enabled", True
             )
             s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
-            if (
-                data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")
-            ) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
+            if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
                 extra_audiences = _distinct([*extra_audiences, xr_name])
             domain = ingress_env.get("domain", "default")
             url = f"https://{xr_name}.{domain}"
@@ -1371,6 +1377,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
 
@@ -1410,25 +1417,15 @@ spec:
             rsp.desired.resources[key].resource.update(
                 _render_template(
                     req,
-                    "oauth2-client-secret/object",
+                    "common/object",
                     key=key,
                     xr_namespace=xr_namespace,
                     manifest=manifest,
+                    readiness={"policy": "SuccessfulCreate"},
                 )
             )
       templates:
-        oauth2-client-secret/manifest:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${secret_name}
-            namespace: ${workshop_ns}
-          type: Opaque
-          stringData:
-            client_id: ${client_id}
-            client_secret: ${client_secret}
-            cookie_secret: ${cookie_secret}
-        oauth2-client-secret/object:
+        common/object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           metadata:
@@ -1442,9 +1439,19 @@ spec:
               kind: ProviderConfig
             forProvider:
               manifest: ${manifest}
-            readiness:
-              policy: SuccessfulCreate
+            readiness: ${readiness}
             watch: true
+        oauth2-client-secret/manifest:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${secret_name}
+            namespace: ${workshop_ns}
+          type: Opaque
+          stringData:
+            client_id: ${client_id}
+            client_secret: ${client_secret}
+            cookie_secret: ${cookie_secret}
   - step: update-educates-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -1541,6 +1548,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -1943,7 +1951,7 @@ spec:
                 key = f"{kind.lower()}{suffix}"
                 body = _render_template(
                     req,
-                    "educates/object",
+                    "common/object",
                     key=key,
                     xr_namespace=xr_namespace,
                     manifest=manifest,
@@ -2042,13 +2050,7 @@ spec:
                     },
                 )
       templates:
-        educates/network-policy:
-          apiVersion: networking.k8s.io/v1
-          kind: NetworkPolicy
-          metadata:
-            name: ${name}
-          spec: ${spec}
-        educates/object:
+        common/object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           metadata:
@@ -2064,6 +2066,12 @@ spec:
               manifest: ${manifest}
             readiness: ${readiness}
             watch: true
+        educates/network-policy:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${name}
+          spec: ${spec}
         educates/session:
           apiVersion: training.educates.dev/v1beta1
           kind: WorkshopSession
@@ -2252,6 +2260,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -2880,7 +2889,7 @@ spec:
             def emit(key, manifest, readiness=None):
                 body = _render_template(
                     req,
-                    "data/object",
+                    "common/object",
                     key=key,
                     xr_namespace=xr_namespace,
                     manifest=manifest,
@@ -2933,6 +2942,22 @@ spec:
             if "allow-dns-egress" not in excluded_network_policies:
                 emit(f"data-dns-networkpolicy-{xr_name}", dns_network_policy)
       templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
         data/data-redirect:
           apiVersion: gateway.networking.k8s.io/v1
           kind: HTTPRoute
@@ -3144,22 +3169,6 @@ spec:
           - name: oauth2-credentials
             mountPath: /var/run/datalab/oauth2
             readOnly: true
-        data/object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${manifest}
-            readiness: ${readiness}
-            watch: true
         data/package-r-container:
           name: package-r
           image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
@@ -3450,6 +3459,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -3763,6 +3773,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -3835,10 +3846,11 @@ spec:
             for key, manifest in prereqs:
                 body = _render_template(
                     req,
-                    "mongodb/rbac-object",
+                    "common/object",
                     key=key,
                     xr_namespace=xr_namespace,
                     manifest=manifest,
+                    readiness={"policy": "SuccessfulCreate"},
                 )
                 rsp.desired.resources[key].resource.update(body)
 
@@ -3902,6 +3914,22 @@ spec:
                 )
                 rsp.desired.resources[key].resource.update(body)
       templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
         mongodb/auth-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -3928,23 +3956,6 @@ spec:
           type: Opaque
           stringData:
             password: ${mongo_password}
-        mongodb/rbac-object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${manifest}
-            readiness:
-              policy: SuccessfulCreate
-            watch: true
         mongodb/role-mongodb-kubernetes-appdb:
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
@@ -4125,6 +4136,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -4238,7 +4250,7 @@ spec:
                 pod_key = f"redis-pod-{xr_name}-{store_name}"
                 pod_body = _render_template(
                     req,
-                    "redis/pod-observer",
+                    "common/pod-observer",
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
                     pod_name=f"{store_name}-0",
@@ -4246,6 +4258,32 @@ spec:
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
+        common/pod-observer:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${pod_key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${pod_key}
+          spec:
+            managementPolicies:
+            - Observe
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest:
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: ${pod_name}
+                  namespace: ${workshop_ns}
+            readiness:
+              policy: DeriveFromCelQuery
+              celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
+                c.type == 'Ready' && c.status == 'True')
+            watch: true
         redis/acl-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -4298,32 +4336,6 @@ spec:
           type: Opaque
           stringData:
             password: ${redis_password}
-        redis/pod-observer:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${pod_key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${pod_key}
-          spec:
-            managementPolicies:
-            - Observe
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest:
-                apiVersion: v1
-                kind: Pod
-                metadata:
-                  name: ${pod_name}
-                  namespace: ${workshop_ns}
-            readiness:
-              policy: DeriveFromCelQuery
-              celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
-                c.type == 'Ready' && c.status == 'True')
-            watch: true
         redis/store:
           apiVersion: redis.redis.opstreelabs.in/v1beta2
           kind: Redis
@@ -4445,6 +4457,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -4527,7 +4540,7 @@ spec:
                 pod_key = f"qdrant-pod-{xr_name}-{store_name}"
                 pod_body = _render_template(
                     req,
-                    "qdrant/pod-observer",
+                    "common/pod-observer",
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
                     pod_name=f"qdrant-{store_name}-0",
@@ -4535,6 +4548,32 @@ spec:
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
+        common/pod-observer:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${pod_key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${pod_key}
+          spec:
+            managementPolicies:
+            - Observe
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest:
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: ${pod_name}
+                  namespace: ${workshop_ns}
+            readiness:
+              policy: DeriveFromCelQuery
+              celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
+                c.type == 'Ready' && c.status == 'True')
+            watch: true
         qdrant/auth-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -4562,32 +4601,6 @@ spec:
           stringData:
             apiKey: ${stringData_apiKey}
             readApiKey: ${stringData_readApiKey}
-        qdrant/pod-observer:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${pod_key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${pod_key}
-          spec:
-            managementPolicies:
-            - Observe
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest:
-                apiVersion: v1
-                kind: Pod
-                metadata:
-                  name: ${pod_name}
-                  namespace: ${workshop_ns}
-            readiness:
-              policy: DeriveFromCelQuery
-              celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
-                c.type == 'Ready' && c.status == 'True')
-            watch: true
         qdrant/store:
           apiVersion: qdrant.io/v1alpha1
           kind: QdrantCluster
@@ -4688,6 +4701,7 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+            rsp.meta.ttl.FromSeconds(300)
             observed = getattr(req.observed, "resources", None) or {}
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
@@ -4740,3 +4754,7 @@ spec:
   - step: check-resource-readiness
     functionRef:
       name: crossplane-contrib-function-auto-ready
+    input:
+      apiVersion: autoready.fn.crossplane.io/v1beta1
+      kind: Input
+      ttl: 5m

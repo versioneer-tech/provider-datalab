@@ -5,6 +5,12 @@ its output with snapshots through `dyff`. It also checks Data exposure,
 credential rotation, network rules, and environment-controlled settings.
 It does not use a Kubernetes cluster.
 
+The TTL checks run generated Python steps in the same function container
+and call auto-ready through its function service.
+They check the default and a changed build setting with store-enabled and
+early-return inputs. They also reject invalid durations and functions whose
+TTL is not configured by the build. Render checks do not measure live timing.
+
 ## Run the suite
 
 Docker must be running. Use Crossplane CLI `v2.4.1` when updating snapshots;

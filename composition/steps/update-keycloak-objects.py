@@ -4,6 +4,7 @@
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _boolish,
     _safe_str,
     _session_name,
     _to_dict,
@@ -57,9 +58,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         "enabled", True
     )
     s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
-    if (
-        data_enabled is None or str(data_enabled).lower() in ("true", "1", "yes", "on")
-    ) and str(s3_enabled).lower() in ("true", "1", "yes", "on"):
+    if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
         extra_audiences = _distinct([*extra_audiences, xr_name])
     domain = ingress_env.get("domain", "default")
     url = f"https://{xr_name}.{domain}"

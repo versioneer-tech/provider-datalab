@@ -95,7 +95,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         pod_key = f"qdrant-pod-{xr_name}-{store_name}"
         pod_body = _render_template(
             req,
-            "qdrant/pod-observer",
+            "common/pod-observer",
             pod_key=pod_key,
             xr_namespace=xr_namespace,
             pod_name=f"qdrant-{store_name}-0",

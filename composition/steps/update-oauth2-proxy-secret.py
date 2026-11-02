@@ -55,9 +55,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     rsp.desired.resources[key].resource.update(
         _render_template(
             req,
-            "oauth2-client-secret/object",
+            "common/object",
             key=key,
             xr_namespace=xr_namespace,
             manifest=manifest,
+            readiness={"policy": "SuccessfulCreate"},
         )
     )

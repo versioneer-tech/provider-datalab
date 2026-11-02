@@ -28,7 +28,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
     workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
 
-    def observe(key, secret_name, secret_namespace, watch=True):
+    def observe(key, secret_name, secret_namespace):
         rsp.desired.resources[key].resource.update(
             _render_template(
                 req,
@@ -37,7 +37,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 xr_namespace=xr_namespace,
                 secret_name=secret_name,
                 secret_namespace=secret_namespace,
-                watch=watch,
             )
         )
 
@@ -51,7 +50,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         f"observe-oauth-client-secret-{xr_name}",
         f"{xr_name}-oauth-client",
         xr_namespace,
-        watch=False,
     )
 
     postgres_clusters = spec.get("databases")
@@ -62,7 +60,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 observe(
                     f"observe-database-secret-{xr_name}-{cluster_name}",
                     f"{cluster_name}-pguser-postgres",
-                    xr_name,
+                    workshop_namespace,
                 )
 
     for field, backend in (

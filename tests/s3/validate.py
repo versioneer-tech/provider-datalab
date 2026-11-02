@@ -13,6 +13,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+import yaml
+
 
 ENVIRONMENT = {
     'apiVersion': 'apiextensions.crossplane.io/v1beta1',
@@ -158,9 +160,9 @@ def main():
                                + '\n---\n' + json.dumps(observer))
             return render(deepcopy(ENVIRONMENT), observed=str(fixture))
 
-        first = oauth_render('xyz-client-secret')
-        second = oauth_render('xyz-rotated-client-secret')
-        for output, secret in ((first, 'xyz-client-secret'), (second, 'xyz-rotated-client-secret')):
+        first = oauth_render('initial-client-secret')
+        second = oauth_render('rotated-client-secret')
+        for output, secret in ((first, 'initial-client-secret'), (second, 'rotated-client-secret')):
             generated = resource(output, 's-joe-datalab')
             assert 'OAUTH2_CLIENT_ID: s-joe' in generated
             assert f'OAUTH2_CLIENT_SECRET: {secret}' in generated
@@ -215,15 +217,28 @@ def main():
             'vectorStore': 'qdrant-vector-s-jeff-prod',
         }
         for setting in stores:
-            env['data'][setting] = {'storageClassName': f'xyz-{setting}'}
+            env['data'][setting] = {'storageClassName': f'test-{setting}'}
         current = render(env, source, observed='tests/observed/002-lab.yaml')
         assert 'kind: TLSRoute' in current
         route = resource(current, 'db-tlsroute-s-jeff-pg0')
         assert 'postgres-passthrough' in route and 'namespace: contour' in route
         print('PASS database.tlsRoute listener references', flush=True)
         for setting, name in stores.items():
-            assert f'storageClassName: xyz-{setting}' in resource(current, name)
+            assert f'storageClassName: test-{setting}' in resource(current, name)
         print('PASS managed-store StorageClasses from EnvironmentConfig', flush=True)
+
+        observed = list(yaml.safe_load_all(Path('tests/observed/002-lab.yaml').read_text()))
+        for item in observed:
+            if item['metadata']['name'] == 'workshopenvironment-s-jeff':
+                item['status']['atProvider']['manifest']['status']['educates']['namespace'] = 'test-runtime'
+        observed_path = work / 'observed.yaml'
+        observed_path.write_text(yaml.safe_dump_all(observed))
+        output = render(env, source, observed=str(observed_path))
+        observer = yaml.safe_load(resource(output, 'observe-database-secret-s-jeff-pg0'))
+        cluster = yaml.safe_load(resource(output, 'db-postgrescluster-s-jeff-pg0'))
+        for item in (observer, cluster):
+            assert item['spec']['forProvider']['manifest']['metadata']['namespace'] == 'test-runtime'
+        print('PASS PostgreSQL Secret observer uses the runtime namespace', flush=True)
 
         env = deepcopy(ENVIRONMENT)
         env['metadata']['name'] = 'datalab-custom'

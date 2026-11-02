@@ -30,30 +30,58 @@ spec:
         - -c
         - |
           set -eu
+          expect_status() {
+            if [ "$3" != "$2" ]; then
+              printf 'FAIL registry %s: expected HTTP %s, got %s\n' "$1" "$2" "$3" >&2
+              exit 1
+            fi
+            printf 'PASS registry %s\n' "$1"
+          }
+
           repository=provider-datalab-verification
           payload=datalab-registry-check
           digest="sha256:$(printf '%s' "${payload}" | sha256sum | cut -d ' ' -f 1)"
 
-          unauthenticated_code="$(curl --silent --output /dev/null \
-            --write-out '%{http_code}' "${REGISTRY_URL}/v2/")"
-          test "${unauthenticated_code}" = 401
+          # A ready Pod can appear before the registry accepts connections.
+          attempt=0
+          while :; do
+            unauthenticated_code="$(curl --silent --show-error --output /dev/null \
+              --connect-timeout 3 --max-time 5 --write-out '%{http_code}' \
+              "${REGISTRY_URL}/v2/")" || true
+            case "${unauthenticated_code}" in
+              000|5??)
+                attempt=$((attempt + 1))
+                if [ "${attempt}" -lt 20 ]; then
+                  sleep 2
+                  continue
+                fi
+                ;;
+            esac
+            expect_status 'anonymous access rejection' 401 "${unauthenticated_code}"
+            break
+          done
 
-          authenticated_code="$(curl --silent --output /dev/null \
+          authenticated_code="$(curl --silent --show-error --output /dev/null \
+            --connect-timeout 5 --max-time 30 \
             --write-out '%{http_code}' \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             "${REGISTRY_URL}/v2/")"
-          test "${authenticated_code}" = 200
+          expect_status 'authentication' 200 "${authenticated_code}"
 
           headers=/tmp/registry-upload-headers
-          upload_code="$(curl --silent --dump-header "${headers}" \
+          upload_code="$(curl --silent --show-error --dump-header "${headers}" \
+            --connect-timeout 5 --max-time 30 \
             --output /dev/null --write-out '%{http_code}' \
             --request POST \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             "${REGISTRY_URL}/v2/${repository}/blobs/uploads/")"
-          test "${upload_code}" = 202
-          location="$(awk 'BEGIN {IGNORECASE=1} /^Location:/ {print $2}' \
+          expect_status 'start blob upload' 202 "${upload_code}"
+          location="$(awk 'tolower($1) == "location:" {print $2}' \
             "${headers}" | tr -d '\r' | tail -n 1)"
-          test -n "${location}"
+          if [ -z "${location}" ]; then
+            printf 'FAIL registry upload: Location header is missing\n' >&2
+            exit 1
+          fi
           location_path="$(printf '%s' "${location}" | \
             sed -E 's#^https?://[^/]+##')"
           case "${location_path}" in
@@ -61,17 +89,22 @@ spec:
             *) separator='?' ;;
           esac
 
-          write_code="$(curl --silent --output /dev/null \
+          write_code="$(curl --silent --show-error --output /dev/null \
+            --connect-timeout 5 --max-time 30 \
             --write-out '%{http_code}' --request PUT \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             --header 'Content-Type: application/octet-stream' \
             --data-binary "${payload}" \
             "${REGISTRY_URL}${location_path}${separator}digest=${digest}")"
-          test "${write_code}" = 201
+          expect_status 'blob write' 201 "${write_code}"
 
           actual="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 30 \
             --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" \
             "${REGISTRY_URL}/v2/${repository}/blobs/${digest}")"
-          test "${actual}" = "${payload}"
+          if [ "${actual}" != "${payload}" ]; then
+            printf 'FAIL registry blob read: content differs from the upload\n' >&2
+            exit 1
+          fi
 
           printf 'PASS registry authentication and blob write/read verification\n'
