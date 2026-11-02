@@ -1,8 +1,13 @@
 <h1><img src="docs/imgs/logo.png" height="48" alt="Versioneer logo" /> Provider Datalab</h1>
 
 [![Tests](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml/badge.svg?branch=main&event=push)](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml)
-[![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab%2Feducates)
+[![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab)
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
+
+> [!NOTE]
+> From Datalab 0.12.0, the package path changes from
+> `ghcr.io/versioneer-tech/provider-datalab/educates`
+> to `ghcr.io/versioneer-tech/provider-datalab`.
 
 Provider Datalab is a Crossplane configuration package for shared data
 workspaces. A team requests storage access, compute sessions, and managed

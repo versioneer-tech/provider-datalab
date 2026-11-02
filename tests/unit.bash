@@ -37,7 +37,7 @@ from pathlib import Path
 import re
 import sys
 work = Path(sys.argv[1])
-source = Path('educates/dependencies/functions.yaml').read_text()
+source = Path('dependencies/functions.yaml').read_text()
 names = []
 def configure(match):
     name = work.name + '-' + match[1].removeprefix('crossplane-contrib-function-')
@@ -54,9 +54,9 @@ PY
 docker network create "${render_dir##*/}" >/dev/null
 
 render() {
-  crossplane render "$1" educates/composition.yaml "${render_dir}/functions.yaml" \
+  crossplane render "$1" composition.yaml "${render_dir}/functions.yaml" \
     --crossplane-docker-network "${render_dir##*/}" \
-    --required-resources educates/tests/environmentconfig.yaml -x "${@:2}"
+    --required-resources tests/environmentconfig.yaml -x "${@:2}"
 }
 
 started=${SECONDS}
@@ -64,18 +64,18 @@ for file in "${examples[@]}"; do
   name="$(basename "${file}")"
   actual="${render_dir}/${name}"
   render "${file}" >"${actual}"
-  dyff between "${actual}" "educates/tests/expected/${name}" -s
-  observed="educates/tests/observed/${name}"
+  dyff between "${actual}" "tests/expected/${name}" -s
+  observed="tests/observed/${name}"
   if [[ -f "${observed}" ]]; then
     actual="${render_dir}/${name/-lab/x-lab}"
     render "${file}" --observed-resources "${observed}" >"${actual}"
-    dyff between "${actual}" "educates/tests/expected/${name/-lab/x-lab}" -s
+    dyff between "${actual}" "tests/expected/${name/-lab/x-lab}" -s
   fi
 done
 
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
   render examples/base/001-lab.yaml \
-    --observed-resources educates/tests/observed/001-rotated-lab.yaml >"${render_dir}/rotated.yaml"
+    --observed-resources tests/observed/001-rotated-lab.yaml >"${render_dir}/rotated.yaml"
   baseline_checksum="$(awk '/datalabs.pkg.internal\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/001x-lab.yaml")"
   rotated_checksum="$(awk '/datalabs.pkg.internal\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/rotated.yaml")"
   if [[ -z "${baseline_checksum}" || -z "${rotated_checksum}" || "${baseline_checksum}" == "${rotated_checksum}" ]]; then

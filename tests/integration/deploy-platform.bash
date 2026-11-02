@@ -30,19 +30,19 @@ install_crossplane() {
 
 install_datalab() {
   log 'Installing Provider Datalab dependencies and source manifests'
-  kube apply -f "${REPO_ROOT}/educates/dependencies/00-mrap.yaml"
-  kube apply -f "${REPO_ROOT}/educates/dependencies/01-deploymentRuntimeConfigs.yaml"
-  kube apply -f "${REPO_ROOT}/educates/dependencies/02-providers.yaml"
-  kube apply -f "${REPO_ROOT}/educates/dependencies/functions.yaml"
-  kube apply -f "${REPO_ROOT}/educates/dependencies/rbac.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/00-mrap.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/01-deploymentRuntimeConfigs.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/02-providers.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/functions.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/rbac.yaml"
   wait_for_provider_runtime provider-keycloak
   wait_for_crd_established protocolmappers.client.keycloak.m.crossplane.io
   wait_for_provider_runtime provider-kubernetes
   wait_for_provider_runtime provider-helm
-  kube apply -f "${REPO_ROOT}/educates/dependencies/03-providerConfigs.yaml"
+  kube apply -f "${REPO_ROOT}/dependencies/03-providerConfigs.yaml"
   kube apply -f "${REPO_ROOT}/xrd.yaml"
   wait_for_crd_established datalabs.pkg.internal
-  kube apply -f "${REPO_ROOT}/educates/composition.yaml"
+  kube apply -f "${REPO_ROOT}/composition.yaml"
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
 }
 

@@ -9,7 +9,7 @@ Use your platform's GitOps and Secret tools for a shared installation.
 The cluster needs Crossplane, Educates, an ingress controller, Keycloak, and
 an S3-compatible object store. The CNI must enforce Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
-[metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/educates/crossplane.yaml).
+[metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
 Install Educates with its CRDs and controller RBAC before creating Datalabs.
 Follow the [Educates installation guide](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html).
@@ -50,7 +50,7 @@ runtime namespaces when the Datalab is reconciled.
 ## 2. Install provider dependencies
 
 Apply the files in
-[`educates/dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/main/educates/dependencies)
+[`dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/main/dependencies)
 in this order:
 
 | File | Purpose |
@@ -84,7 +84,7 @@ kind: Configuration
 metadata:
   name: datalab-educates
 spec:
-  package: ghcr.io/versioneer-tech/provider-datalab/educates:<!version!>
+  package: ghcr.io/versioneer-tech/provider-datalab:<!version!>
   skipDependencyResolution: true
 ```
 

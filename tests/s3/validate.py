@@ -48,18 +48,18 @@ def resource(output, name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--functions', default='educates/dependencies/functions.yaml')
+    parser.add_argument('--functions', default='dependencies/functions.yaml')
     parser.add_argument('--network')
     args = parser.parse_args()
     datalab = Path('examples/base/001-lab.yaml').read_text()
     with tempfile.TemporaryDirectory(prefix='data-routing-') as directory:
         work = Path(directory)
 
-        def render(environment, source=datalab, error=None, observed='educates/tests/observed/001-lab.yaml'):
+        def render(environment, source=datalab, error=None, observed='tests/observed/001-lab.yaml'):
             (work / 'environment.json').write_text(json.dumps(environment))
             (work / 'datalab.yaml').write_text(source)
             result = subprocess.run([
-                'crossplane', 'render', str(work / 'datalab.yaml'), 'educates/composition.yaml',
+                'crossplane', 'render', str(work / 'datalab.yaml'), 'composition.yaml',
                 args.functions, '--required-resources', str(work / 'environment.json'),
                 '--observed-resources', observed, '-x',
             ] + (['--crossplane-docker-network', args.network] if args.network else []),
@@ -149,7 +149,7 @@ def main():
                 }}}},
             }
             fixture = work / 'oauth-observed.yaml'
-            fixture.write_text(Path('educates/tests/observed/001-lab.yaml').read_text()
+            fixture.write_text(Path('tests/observed/001-lab.yaml').read_text()
                                + '\n---\n' + json.dumps(observer))
             return render(deepcopy(ENVIRONMENT), observed=str(fixture))
 
@@ -204,7 +204,7 @@ def main():
         env['metadata']['name'] = 'datalab'
         refs = {'parentName': 'default', 'parentNamespace': 'contour', 'sectionName': 'postgres-passthrough'}
         env['data']['database'] = {'tlsRoute': refs}
-        current = render(env, source, observed='educates/tests/observed/002-lab.yaml')
+        current = render(env, source, observed='tests/observed/002-lab.yaml')
         assert 'kind: TLSRoute' in current
         route = resource(current, 'db-tlsroute-s-jeff-pg0')
         assert 'postgres-passthrough' in route and 'namespace: contour' in route

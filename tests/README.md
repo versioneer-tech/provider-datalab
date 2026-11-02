@@ -12,8 +12,8 @@ You can unit-test the Composition for Crossplane v2 or later with `crossplane re
   suite and all integration profiles. Documentation changes need a docs build
   during development.
 - Actual render output is written to `/tmp`. Only expected snapshots are tracked.
-- Any change to `xrd.yaml` or `educates/composition.yaml` must be covered by at least one updated test scenario (`examples/base/00*-lab.yaml`).
-- For those changes, update the corresponding golden files in `educates/tests/expected/` after validating the rendered diff.
+- Any change to `xrd.yaml` or `composition.yaml` must be covered by at least one updated test scenario (`examples/base/00*-lab.yaml`).
+- For those changes, update the corresponding golden files in `tests/expected/` after validating the rendered diff.
 - Run `pre-commit run --all-files` at the end of each change cycle.
 
 ```sh

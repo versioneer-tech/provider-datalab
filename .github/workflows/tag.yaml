@@ -75,7 +75,7 @@ jobs:
           XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
           sudo install crossplane /usr/local/bin/crossplane
 
-      - name: Build and publish datalab-educates Configuration Package
+      - name: Build and publish datalab Configuration Package
         shell: bash
         run: |
           set -euo pipefail
@@ -83,18 +83,17 @@ jobs:
           REPO="${GITHUB_REPOSITORY#*/}"; REPO="${REPO,,}"
           TAG="${GITHUB_REF_NAME##*/}"
 
-          cp xrd.yaml educates/xrd.yaml
-
           crossplane xpkg build \
-            --package-root=educates \
-            --ignore 'dependencies/*' \
-            --ignore 'tests/expected/*,tests/observed/*,tests/*' \
-            --package-file educates/datalab-educates.xpkg \
+            --package-root=. \
+            --ignore '.github/workflows/*,.pre-commit-config.yaml,mkdocs.yml' \
+            --ignore 'dependencies/*,examples/*/*,examples/*/*/*' \
+            --ignore 'tests/*,tests/*/*,tests/*/*/*,tests/*/*/*/*' \
+            --package-file datalab.xpkg \
             --verbose
 
           crossplane xpkg push \
-            --package-files=educates/datalab-educates.xpkg \
-            "ghcr.io/${ORG}/${REPO}/educates:${TAG}" \
+            --package-files=datalab.xpkg \
+            "ghcr.io/${ORG}/${REPO}:${TAG}" \
             --verbose
 
   build_docs:
