@@ -9,6 +9,13 @@ default_language_version:
 repos:
   - repo: local
     hooks:
+      - id: composition-current
+        name: Generated composition is current
+        entry: python scripts/build-composition.py --check
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(composition/|templates/|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
       - id: copyright-header
         name: Copyright header
         entry: ./scripts/copyright.py

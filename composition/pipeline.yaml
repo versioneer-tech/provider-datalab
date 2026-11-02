@@ -1,0 +1,109 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: datalab-educates
+  labels:
+    provider: educates
+spec:
+  compositeTypeRef:
+    apiVersion: pkg.internal/v1beta2
+    kind: Datalab
+  mode: Pipeline
+  pipeline:
+  - step: load-datalab-environment
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/load-datalab-environment.py
+  - step: validate-data-exposure
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/validate-data-exposure.py
+  - step: observe-connection-secrets
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/observe-connection-secrets.py
+  - step: update-datalab-secret
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-datalab-secret.py
+  - step: update-keycloak-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-keycloak-objects.py
+  - step: update-oauth2-proxy-secret
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-oauth2-proxy-secret.py
+  - step: update-educates-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-educates-objects.py
+  - step: update-data-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-data-objects.py
+  - step: update-postgres-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-postgres-objects.py
+  - step: update-mongodb-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-mongodb-objects.py
+  - step: update-redis-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-redis-objects.py
+  - step: update-qdrant-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-qdrant-objects.py
+  - step: update-session-status
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-session-status.py
+  - step: check-resource-readiness
+    functionRef:
+      name: crossplane-contrib-function-auto-ready

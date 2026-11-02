@@ -1,0 +1,18 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${metadata_name}
+  namespace: ${xr_namespace}
+type: Opaque
+stringData:
+  remote: ${access_key}
+  remotePath: /
+  configData: ${config_data}
+  AWS_ACCESS_KEY_ID: ${access_key}
+  AWS_SECRET_ACCESS_KEY: ${secret_key}
+  AWS_REGION: ${region}
+  AWS_ENDPOINT_URL: ${endpoint}
+  AWS_S3_FORCE_PATH_STYLE: ${force_path_style}

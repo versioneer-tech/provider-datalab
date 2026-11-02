@@ -1,0 +1,72 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: package-r
+  namespace: ${workshop_namespace}
+  labels: ${labels}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: ${labels}
+  template:
+    metadata:
+      labels: ${labels}
+      annotations:
+        datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 100
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: prepare-database
+        image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - ${init_script}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsUser: 1000
+          runAsGroup: 100
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        volumeMounts:
+        - name: state
+          mountPath: /state
+        - name: tmp
+          mountPath: /tmp
+      containers: ${containers}
+      volumes:
+      - name: state
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 256Mi

@@ -1,0 +1,26 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: training.educates.dev/v1beta1
+kind: WorkshopEnvironment
+metadata:
+  name: ${xr_name}
+spec:
+  analytics:
+    amplitude:
+      trackingId: ''
+  cookies: {}
+  environment:
+    objects: []
+    secrets: []
+  request:
+    enabled: false
+  session:
+    ingress:
+      class: ${ingress_class}
+      domain: ${ingress_domain}
+      secret: ${ingress_secret}
+  theme:
+    name: default-website-theme
+  workshop:
+    name: ${xr_name}

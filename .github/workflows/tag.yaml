@@ -75,6 +75,13 @@ jobs:
           XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
           sudo install crossplane /usr/local/bin/crossplane
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
       - name: Build and publish datalab Configuration Package
         shell: bash
         run: |
@@ -83,16 +90,18 @@ jobs:
           REPO="${GITHUB_REPOSITORY#*/}"; REPO="${REPO,,}"
           TAG="${GITHUB_REF_NAME##*/}"
 
+          python3 -m pip install -r scripts/requirements.txt
+          python3 scripts/build-composition.py --check
+          package_root="$(mktemp -d)"
+          cp xrd.yaml composition.yaml crossplane.yaml "${package_root}/"
+
           crossplane xpkg build \
-            --package-root=. \
-            --ignore '.github/workflows/*,.pre-commit-config.yaml,mkdocs.yml' \
-            --ignore 'dependencies/*,examples/*/*,examples/*/*/*' \
-            --ignore 'tests/*,tests/*/*,tests/*/*/*,tests/*/*/*/*' \
-            --package-file datalab.xpkg \
+            --package-root="${package_root}" \
+            --package-file "${package_root}/datalab.xpkg" \
             --verbose
 
           crossplane xpkg push \
-            --package-files=datalab.xpkg \
+            --package-files="${package_root}/datalab.xpkg" \
             "ghcr.io/${ORG}/${REPO}:${TAG}" \
             --verbose
 

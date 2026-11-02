@@ -1,0 +1,35 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: ${mongo_resource_name}
+  namespace: ${workshop_ns}
+spec:
+  members: 1
+  type: ReplicaSet
+  version: 8.0.12
+  security:
+    authentication:
+      modes:
+      - SCRAM
+      ignoreUnknownUsers: true
+  users:
+  - name: ${app_username}
+    db: admin
+    passwordSecretRef:
+      name: ${password_secret_name}
+      key: password
+    roles:
+    - name: readWrite
+      db: ${store_name}
+    - name: dbAdmin
+      db: ${store_name}
+    scramCredentialsSecretName: ${scram_secret_name}
+  statefulSet:
+    spec:
+      volumeClaimTemplates:
+      - metadata:
+          name: data-volume
+        spec: ${pvc_spec}

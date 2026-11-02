@@ -1,0 +1,19 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: ${acl_key}
+  namespace: ${xr_namespace}
+  annotations:
+    crossplane.io/composition-resource-name: ${acl_key}
+spec:
+  providerConfigRef:
+    name: provider-kubernetes
+    kind: ProviderConfig
+  forProvider:
+    manifest: ${redis_acl_secret}
+  readiness:
+    policy: SuccessfulCreate
+  watch: true

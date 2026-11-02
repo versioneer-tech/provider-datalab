@@ -28,6 +28,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
       - name: Install test CLIs
         run: |
           set -euo pipefail
@@ -40,7 +47,9 @@ jobs:
           sudo install "$(go env GOPATH)/bin/dyff" /usr/local/bin/dyff
 
       - name: Run Composition unit tests
-        run: tests/unit.bash
+        run: |
+          python3 -m pip install -r scripts/requirements.txt
+          tests/unit.bash
 
       - name: Create Kind cluster
         uses: helm/kind-action@v1

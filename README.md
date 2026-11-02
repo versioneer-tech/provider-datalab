@@ -57,9 +57,14 @@ The documentation is also [published online](https://provider-datalab.versioneer
 Docker must be running for the render tests:
 
 ```bash
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/build-composition.py
 bash tests/unit.bash
 pre-commit run --all-files
 ```
+
+Edit the Python steps in `composition/` and the manifests in `templates/`.
+See [Manifest templates](templates/README.md) for the source layout and build.
 
 See [Unit tests](tests/README.md) for fixtures and focused checks, and
 [Integration tests](tests/integration/README.md) for the dedicated Kind cluster.

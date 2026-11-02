@@ -1,0 +1,42 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+name: oauth2-proxy
+image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+imagePullPolicy: IfNotPresent
+args: ${args}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities:
+    drop:
+    - ALL
+ports:
+- name: auth-proxy
+  containerPort: 4180
+  protocol: TCP
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: auth-proxy
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /ping
+    port: auth-proxy
+  periodSeconds: 20
+volumeMounts:
+- name: tmp
+  mountPath: /tmp
+- name: oauth2-credentials
+  mountPath: /var/run/datalab/oauth2
+  readOnly: true

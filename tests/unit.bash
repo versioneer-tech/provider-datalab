@@ -20,6 +20,7 @@ for command_name in crossplane dyff docker python3; do
   command -v "${command_name}" >/dev/null || { printf 'Missing required command: %s\n' "${command_name}" >&2; exit 1; }
 done
 docker info >/dev/null
+python3 scripts/build-composition.py --check
 
 render_dir="$(mktemp -d /tmp/datalab-render.XXXXXX)"
 cleanup() {

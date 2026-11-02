@@ -1,0 +1,74 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+name: package-r
+image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+imagePullPolicy: IfNotPresent
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 1000
+  runAsGroup: 100
+  capabilities:
+    drop:
+    - ALL
+ports:
+- name: package-r
+  containerPort: 8888
+  protocol: TCP
+env:
+- name: HOME
+  value: /tmp
+- name: PACKAGE_R_DATABASE
+  value: /state/package-r.db
+- name: PACKAGE_R_ADDRESS
+  value: 0.0.0.0
+- name: PACKAGE_R_PORT
+  value: '8888'
+- name: PACKAGE_R_ROOT
+  value: /
+- name: PACKAGE_R_BUCKETS
+  value: ''
+- name: XDG_CACHE_HOME
+  value: /cache
+- name: AWS_SHARED_CREDENTIALS_FILE
+  value: /var/run/datalab/storage/aws-credentials
+- ${endpoint_env}
+- name: AWS_REGION
+  valueFrom:
+    secretKeyRef:
+      name: ${storage_secret_name}
+      key: AWS_REGION
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: '2'
+    memory: 1Gi
+startupProbe:
+  httpGet:
+    path: /health
+    port: package-r
+  failureThreshold: 30
+  periodSeconds: 5
+readinessProbe:
+  httpGet:
+    path: /health
+    port: package-r
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /health
+    port: package-r
+  periodSeconds: 20
+volumeMounts:
+- name: state
+  mountPath: /state
+- name: cache
+  mountPath: /cache
+- name: tmp
+  mountPath: /tmp
+- name: storage-credentials
+  mountPath: /var/run/datalab/storage
+  readOnly: true

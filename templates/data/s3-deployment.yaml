@@ -1,0 +1,85 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-s3
+  namespace: ${workshop_namespace}
+  labels: ${s3_labels}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels: ${s3_labels}
+  template:
+    metadata:
+      labels: ${s3_labels}
+      annotations:
+        datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 100
+        fsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: s3
+        image: rclone/rclone:1.71.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - serve
+        - s3
+        - 'upstream:'
+        - --addr=127.0.0.1:8081
+        - ${auth_key_arg}
+        - --config=/dev/null
+        - --cache-dir=/cache
+        - --dir-cache-time=10s
+        - --read-only
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        env: ${s3_environment}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          exec:
+            command:
+            - rclone
+            - lsf
+            - ':s3:'
+            - --config=/dev/null
+            - --s3-provider=Other
+            - --s3-endpoint=http://127.0.0.1:8081
+            - ${access_key_arg}
+            - ${secret_key_arg}
+            - --s3-env-auth=false
+          periodSeconds: 30
+          timeoutSeconds: 20
+        volumeMounts:
+        - name: cache
+          mountPath: /cache
+        - name: tmp
+          mountPath: /tmp
+        - name: storage-credentials
+          mountPath: /var/run/datalab/storage
+          readOnly: true
+      volumes:
+      - name: cache
+        emptyDir:
+          sizeLimit: 256Mi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi

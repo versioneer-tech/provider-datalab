@@ -1,0 +1,48 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: ${xr_name}
+spec:
+  title: Default DataLab
+  description: A default DataLab environment.
+  version: '1.0'
+  session:
+    applications:
+      console:
+        enabled: false
+      editor:
+        enabled: true
+      slides:
+        enabled: false
+      terminal:
+        enabled: true
+      vcluster: ${vcluster_cfg}
+      workshop:
+        enabled: ${workshop_enabled}
+    dashboards: []
+    ingresses: []
+    resources:
+      memory: ${memory}
+      storage: ${storage}
+    namespaces:
+      budget: ${budget}
+      role: ${role}
+      security:
+        policy: ${policy}
+        token:
+          enabled: ${kubernetes_access}
+    envFrom:
+    - secretRef:
+        name: ${storage_secret_name}
+    objects: []
+  workshop:
+    files: ${files}
+    packages: ${packages}
+  environment:
+    secrets:
+    - name: ${storage_secret_name}
+      namespace: ${xr_namespace}
+    objects: ${network_policies}

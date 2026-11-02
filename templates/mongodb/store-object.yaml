@@ -1,0 +1,22 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: ${key}
+  namespace: ${xr_namespace}
+  annotations:
+    crossplane.io/composition-resource-name: ${key}
+spec:
+  providerConfigRef:
+    name: provider-kubernetes
+    kind: ProviderConfig
+  forProvider:
+    manifest: ${mongo}
+  readiness:
+    policy: DeriveFromCelQuery
+    celQuery: has(object.status) && object.status.phase == 'Running' && has(object.status.currentMongoDBMembers)
+      && object.status.currentMongoDBMembers >= 1 && has(object.status.currentStatefulSetReplicas) && object.status.currentStatefulSetReplicas
+      >= 1
+  watch: true

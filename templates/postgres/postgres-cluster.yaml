@@ -1,0 +1,31 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: postgres-operator.crunchydata.com/v1
+kind: PostgresCluster
+metadata:
+  name: ${cluster_name}
+  namespace: ${workshop_ns}
+spec:
+  postgresVersion: 17
+  postGISVersion: '3.5'
+  databaseInitSQL:
+    name: ${cm_name}
+    key: init.sql
+  instances:
+  - name: primary
+    replicas: 1
+    dataVolumeClaimSpec: ${data_vcs}
+  backups:
+    pgbackrest:
+      global:
+        repo1-retention-full-type: count
+        repo1-retention-full: '4'
+        repo1-path: /pgbackrest/repo1
+      repos:
+      - name: repo1
+        schedules:
+          full: 0 1 * * 0
+          differential: 0 1 * * 1-6
+        volume:
+          volumeClaimSpec: ${repo_vcs}

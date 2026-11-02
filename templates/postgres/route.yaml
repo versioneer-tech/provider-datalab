@@ -1,0 +1,19 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: ${cluster_name}
+  namespace: ${workshop_ns}
+spec:
+  parentRefs:
+  - name: ${gateway_parent_name}
+    namespace: ${gateway_parent_ns}
+    sectionName: ${gateway_section}
+  hostnames:
+  - ${hostname}
+  rules:
+  - backendRefs:
+    - name: ${backend_service_name}
+      port: 5432

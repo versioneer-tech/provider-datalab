@@ -1,0 +1,15 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-s3
+  namespace: ${workshop_namespace}
+  labels: ${s3_labels}
+spec:
+  podSelector:
+    matchLabels: ${s3_labels}
+  policyTypes:
+  - Ingress
+  ingress: ${ingress_rules}

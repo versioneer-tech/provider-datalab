@@ -1,0 +1,31 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: Redis
+metadata:
+  name: ${store_name}
+  namespace: ${workshop_ns}
+spec:
+  initContainer:
+    enabled: true
+    image: quay.io/opstree/redis:v7.0.15
+    imagePullPolicy: IfNotPresent
+    command:
+    - sh
+    - -c
+    args:
+    - mkdir -p /data/appendonlydir && chmod 0777 /data /data/appendonlydir
+    securityContext:
+      runAsUser: 0
+  kubernetesConfig:
+    image: quay.io/opstree/redis:v7.0.15
+    imagePullPolicy: IfNotPresent
+    redisSecret:
+      name: ${redis_auth_secret_name}
+      key: password
+    updateStrategy: {}
+  acl:
+    secret:
+      secretName: ${redis_acl_secret_name}
+  storage: ${storage}

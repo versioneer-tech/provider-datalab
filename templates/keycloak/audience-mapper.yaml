@@ -1,0 +1,24 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    realmId: ${realm}
+    clientIdRef:
+      name: ${xr_name}
+      policy:
+        resolution: Required
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    name: ${display_name}
+    config:
+      included.client.audience: ${audience}
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'

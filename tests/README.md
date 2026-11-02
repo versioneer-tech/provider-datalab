@@ -9,6 +9,9 @@ It does not use a Kubernetes cluster.
 
 Docker must be running. Use Crossplane CLI `v2.4.1` when updating snapshots;
 other versions can change framework status and owner metadata.
+Install the [build dependencies and generate the composition](../templates/README.md)
+before running the suite. It rejects a generated composition that differs
+from its Python and YAML sources.
 
 ```bash
 bash tests/unit.bash
