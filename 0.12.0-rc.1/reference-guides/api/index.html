@@ -434,6 +434,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../how-to-guides/vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../how-to-guides/additional_services/" class="md-nav__link">
         
   
@@ -762,6 +790,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -818,104 +874,16 @@
 <h1 id="api-reference">API Reference</h1>
 <p>Packages:</p>
 <ul>
-<li><a href="#pkginternalv1beta1">pkg.internal/v1beta1</a></li>
 <li><a href="#pkginternalv1beta2">pkg.internal/v1beta2</a></li>
 </ul>
-<h1 id="pkginternalv1beta1">pkg.internal/v1beta1</h1>
-<p>Resource Types:</p>
-<ul>
-<li><a href="#datalab">Datalab</a></li>
-</ul>
-<h2 id="datalab">Datalab</h2>
-<p><sup><sup><a href="#pkginternalv1beta1">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-      <td><b>apiVersion</b></td>
-      <td>string</td>
-      <td>pkg.internal/v1beta1</td>
-      <td>true</td>
-      </tr>
-      <tr>
-      <td><b>kind</b></td>
-      <td>string</td>
-      <td>Datalab</td>
-      <td>true</td>
-      </tr>
-      <tr>
-      <td><b><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#objectmeta-v1-meta">metadata</a></b></td>
-      <td>object</td>
-      <td>Refer to the Kubernetes API documentation for the fields of the `metadata` field.</td>
-      <td>true</td>
-      </tr><tr>
-        <td><b><a href="#datalabspec">spec</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-          <br/>
-            <i>Validations</i>:<li>(!has(oldSelf.data) || !has(oldSelf.data.enabled) ? true : oldSelf.data.enabled) == (!has(self.data) || !has(self.data.enabled) ? true : self.data.enabled): spec.data.enabled cannot change after the Datalab is created because Educates saves the Workshop specification for the environment.</li>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspec">Datalab.spec</h3>
-<p><sup><sup><a href="#datalab">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b><a href="#datalabspecdata">data</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecdata">Datalab.spec.data</h3>
-<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>enabled</b></td>
-        <td>boolean</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
 <h1 id="pkginternalv1beta2">pkg.internal/v1beta2</h1>
 <p>Resource Types:</p>
 <ul>
 <li><a href="#datalab">Datalab</a></li>
 </ul>
-<h2 id="datalab_1">Datalab</h2>
+<h2 id="datalab">Datalab</h2>
 <p><sup><sup><a href="#pkginternalv1beta2">↩ Parent</a></sup></sup></p>
-<p>A Datalab is a tenant-facing, namespaced composite resource. It defines ownership, membership, and optional file bundles to materialize in the environment.</p>
+<p>A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.</p>
 <table>
     <thead>
         <tr>
@@ -943,12 +911,10 @@
       <td>Refer to the Kubernetes API documentation for the fields of the `metadata` field.</td>
       <td>true</td>
       </tr><tr>
-        <td><b><a href="#datalabspec-1">spec</a></b></td>
+        <td><b><a href="#datalabspec">spec</a></b></td>
         <td>object</td>
         <td>
           Desired configuration of the datalab.<br/>
-          <br/>
-            <i>Validations</i>:<li>(!has(oldSelf.data) || !has(oldSelf.data.enabled) ? true : oldSelf.data.enabled) == (!has(self.data) || !has(self.data.enabled) ? true : self.data.enabled): spec.data.enabled cannot change after the Datalab is created because Educates saves the Workshop specification for the environment.</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -961,8 +927,8 @@
       </tr></tbody>
 </table>
 
-<h3 id="datalabspec_1">Datalab.spec</h3>
-<p><sup><sup><a href="#datalab-1">↩ Parent</a></sup></sup></p>
+<h3 id="datalabspec">Datalab.spec</h3>
+<p><sup><sup><a href="#datalab">↩ Parent</a></sup></sup></p>
 <p>Desired configuration of the datalab.</p>
 <table>
     <thead>
@@ -988,15 +954,7 @@
         <td>
           Optional cache stores for this datalab, implemented via Redis and managed through the Redis Kubernetes operator.<br/>
           <br/>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecdata-1">data</a></b></td>
-        <td>object</td>
-        <td>
-          Optional settings for the shared Data component. When enabled, one package-r service runs in the Datalab runtime namespace. When the environment enables Data ingress, started sessions link to its permanent authenticated endpoint.<br/>
-          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -1004,8 +962,9 @@
         <td><b><a href="#datalabspecdatabaseskey">databases</a></b></td>
         <td>map[string]object</td>
         <td>
-          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and a pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
+          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and an optional pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
           <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -1015,47 +974,7 @@
         <td>
           Optional document stores for this datalab, implemented via MongoDB and managed through the MongoDB Kubernetes operator.<br/>
           <br/>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindex">files</a></b></td>
-        <td>[]object</td>
-        <td>
-          File bundles to fetch from remote sources and copy into the environment. Supports image, git, and http sources, path filtering, and optional credentials.<br/>
-          <br/>
-            <i>Default</i>: []<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecoverallquota">overallQuota</a></b></td>
-        <td>object</td>
-        <td>
-          Optional per-Datalab override for aggregate resource quotas in the Datalab environment namespace. If omitted, the composition falls back to EnvironmentConfig.data.defaults.overallQuota and then to hard defaults.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecpersistence">persistence</a></b></td>
-        <td>object</td>
-        <td>
-          Optional settings for Datalab-owned session workspace PVCs. Provider Datalab creates a stable PVC per declared session, including stopped sessions, and mounts it as the session home workspace when the runtime is started.<br/>
-          <br/>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecquota">quota</a></b></td>
-        <td>object</td>
-        <td>
-          Optional per-datalab session quota overrides. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.quota`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): memory=2Gi, storage=1Gi, budget=medium.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecregistry">registry</a></b></td>
-        <td>object</td>
-        <td>
-          Optional settings for the in-session Docker registry. When enabled, a registry service is added to the session applications.<br/>
-          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -1064,13 +983,6 @@
         <td>string</td>
         <td>
           Name of the Secret containing the credentials to access the storage associated with this Datalab. If omitted, the Datalab name is used. The Secret is read from the namespace configured in EnvironmentConfig.data.storage.secretNamespace, which is usually the same namespace as the Datalab.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecsecurity">security</a></b></td>
-        <td>object</td>
-        <td>
-          Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at `spec.defaults.security`, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. Use `EnvironmentConfig.data.network.internalEgress` to allow explicit backend Pods in other namespaces. When policy is "privileged", Docker is automatically enabled with 20Gi storage.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1093,20 +1005,12 @@
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>vcluster</b></td>
-        <td>boolean</td>
-        <td>
-          Whether to provision an isolated vcluster for each datalab session.<br/>
-          <br/>
-            <i>Default</i>: false<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecvectorstoreskey">vectorStores</a></b></td>
+        <td><b><a href="#datalabspecvclusterskey">vclusters</a></b></td>
         <td>map[string]object</td>
         <td>
-          Optional vector stores for this datalab, implemented via Qdrant and managed through the Qdrant Kubernetes operator.<br/>
           <br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -1114,7 +1018,7 @@
 </table>
 
 <h3 id="datalabspeccachestoreskey">Datalab.spec.cacheStores[key]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
 <table>
     <thead>
         <tr>
@@ -1131,44 +1035,30 @@
           Storage size for Redis persistent data volume as a Kubernetes quantity (e.g., "1Gi", "10Gi"). Effective default: "1Gi".<br/>
         </td>
         <td>true</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecdata_1">Datalab.spec.data</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional settings for the shared Data component. When enabled, one package-r service runs in the Datalab runtime namespace. When the environment enables Data ingress, started sessions link to its permanent authenticated endpoint.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>enabled</b></td>
-        <td>boolean</td>
-        <td>
-          Whether to provision the shared package-r service. When the EnvironmentConfig also enables Data ingress, Data tabs for started sessions link to its permanent authenticated endpoint. Set this field when you create the Datalab. Its effective value cannot change after creation because Educates saves the Workshop specification for the environment. A false value omits the shared service and related tabs or ingress. Effective default: true.<br/>
-          <br/>
-            <i>Default</i>: true<br/>
-        </td>
-        <td>false</td>
       </tr><tr>
-        <td><b>readOnlyMount</b></td>
-        <td>boolean</td>
+        <td><b>type</b></td>
+        <td>enum</td>
         <td>
-          Controls package-r application permissions. When true, the package-r user keeps its default read-only permissions. When false, package-r grants create, delete, modify, and rename permissions. This field does not configure a filesystem mount, and the S3 IAM policy remains authoritative. Effective default: false.<br/>
+          Service type.<br/>
           <br/>
-            <i>Default</i>: false<br/>
+            <i>Enum</i>: redis<br/>
+            <i>Default</i>: redis<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the Redis backup PVC as a Kubernetes quantity. A positive value enables daily full RDB snapshots. Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
         </td>
         <td>false</td>
       </tr></tbody>
 </table>
 
 <h3 id="datalabspecdatabaseskey">Datalab.spec.databases[key]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
 <table>
     <thead>
         <tr>
@@ -1179,13 +1069,6 @@
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a Kubernetes quantity (e.g., "10Gi", "100Gi").<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
         <td><b>names</b></td>
         <td>[]string</td>
         <td>
@@ -1199,11 +1082,30 @@
           Storage size for the PostgreSQL data PVC of this PostgresCluster as a Kubernetes quantity (e.g., "1Gi", "10Gi").<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>type</b></td>
+        <td>enum</td>
+        <td>
+          Service type.<br/>
+          <br/>
+            <i>Enum</i>: postgres<br/>
+            <i>Default</i>: postgres<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a Kubernetes quantity (e.g., "10Gi", "100Gi"). Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
 <h3 id="datalabspecdocumentstoreskey">Datalab.spec.documentStores[key]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
 <table>
     <thead>
         <tr>
@@ -1220,651 +1122,30 @@
           Storage size for MongoDB persistent data volume as a Kubernetes quantity (e.g., "5Gi", "20Gi"). Effective default: "10Gi".<br/>
         </td>
         <td>true</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindex">Datalab.spec.files[index]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>excludePaths</b></td>
-        <td>[]string</td>
-        <td>
-          Glob patterns to exclude from the source.<br/>
-        </td>
-        <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabspecfilesindexgit">git</a></b></td>
-        <td>object</td>
-        <td>
-          Git repository source configuration.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindexhttp">http</a></b></td>
-        <td>object</td>
-        <td>
-          HTTP source configuration for downloading an asset or archive.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindeximage">image</a></b></td>
-        <td>object</td>
-        <td>
-          Container image source configuration.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>includePaths</b></td>
-        <td>[]string</td>
-        <td>
-          Glob patterns to include from the source.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>newRootPath</b></td>
-        <td>string</td>
-        <td>
-          Subdirectory within the source to treat as the root.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>path</b></td>
-        <td>string</td>
-        <td>
-          Destination directory for extracted files.<br/>
-          <br/>
-            <i>Default</i>: .<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgit">Datalab.spec.files[index].git</h3>
-<p><sup><sup><a href="#datalabspecfilesindex">↩ Parent</a></sup></sup></p>
-<p>Git repository source configuration.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>lfsSkipSmudge</b></td>
-        <td>boolean</td>
-        <td>
-          If true, do not fetch Git LFS objects.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>ref</b></td>
-        <td>string</td>
-        <td>
-          Branch, tag, or commit to fetch.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindexgitrefselection">refSelection</a></b></td>
-        <td>object</td>
-        <td>
-          Resolve an explicit ref by semver selection.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindexgitsecretref">secretRef</a></b></td>
-        <td>object</td>
-        <td>
-          Optional credentials for the Git server.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
-        <td>
-          Git repository URL (HTTPS or SSH).<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindexgitverification">verification</a></b></td>
-        <td>object</td>
-        <td>
-          GPG signature verification options.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitrefselection">Datalab.spec.files[index].git.refSelection</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgit">↩ Parent</a></sup></sup></p>
-<p>Resolve an explicit ref by semver selection.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b><a href="#datalabspecfilesindexgitrefselectionsemver">semver</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitrefselectionsemver">Datalab.spec.files[index].git.refSelection.semver</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgitrefselection">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>constraints</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindexgitrefselectionsemverprereleases">prereleases</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitrefselectionsemverprereleases">Datalab.spec.files[index].git.refSelection.semver.prereleases</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgitrefselectionsemver">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>identifiers</b></td>
-        <td>[]string</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitsecretref">Datalab.spec.files[index].git.secretRef</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgit">↩ Parent</a></sup></sup></p>
-<p>Optional credentials for the Git server.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Name of a Secret with auth (ssh-privatekey/knownhosts or username/password).<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          Namespace of the Secret.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitverification">Datalab.spec.files[index].git.verification</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgit">↩ Parent</a></sup></sup></p>
-<p>GPG signature verification options.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b><a href="#datalabspecfilesindexgitverificationpublickeyssecretref">publicKeysSecretRef</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexgitverificationpublickeyssecretref">Datalab.spec.files[index].git.verification.publicKeysSecretRef</h3>
-<p><sup><sup><a href="#datalabspecfilesindexgitverification">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Secret containing GPG public keys.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          Namespace of the Secret.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexhttp">Datalab.spec.files[index].http</h3>
-<p><sup><sup><a href="#datalabspecfilesindex">↩ Parent</a></sup></sup></p>
-<p>HTTP source configuration for downloading an asset or archive.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b><a href="#datalabspecfilesindexhttpsecretref">secretRef</a></b></td>
-        <td>object</td>
-        <td>
-          Optional basic-auth credentials for the HTTP server.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>sha256</b></td>
-        <td>string</td>
-        <td>
-          Optional checksum for verification of the downloaded asset.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
-        <td>
-          HTTP(S) URL to file or archive; archives are unpacked automatically.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindexhttpsecretref">Datalab.spec.files[index].http.secretRef</h3>
-<p><sup><sup><a href="#datalabspecfilesindexhttp">↩ Parent</a></sup></sup></p>
-<p>Optional basic-auth credentials for the HTTP server.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Secret containing username/password.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          Namespace of the Secret.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindeximage">Datalab.spec.files[index].image</h3>
-<p><sup><sup><a href="#datalabspecfilesindex">↩ Parent</a></sup></sup></p>
-<p>Container image source configuration.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>dangerousSkipTLSVerify</b></td>
-        <td>boolean</td>
-        <td>
-          Skip TLS verification when pulling from the registry.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindeximagesecretref">secretRef</a></b></td>
-        <td>object</td>
-        <td>
-          Optional credentials for the image registry.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindeximagetagselection">tagSelection</a></b></td>
-        <td>object</td>
-        <td>
-          Optional semantic-version tag selection policy.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
-        <td>
-          OCI image reference (e.g., ghcr.io/org/repo:tag or @sha256:...).<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindeximagesecretref">Datalab.spec.files[index].image.secretRef</h3>
-<p><sup><sup><a href="#datalabspecfilesindeximage">↩ Parent</a></sup></sup></p>
-<p>Optional credentials for the image registry.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Name of a Secret containing registry credentials.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          Namespace of the Secret.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindeximagetagselection">Datalab.spec.files[index].image.tagSelection</h3>
-<p><sup><sup><a href="#datalabspecfilesindeximage">↩ Parent</a></sup></sup></p>
-<p>Optional semantic-version tag selection policy.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b><a href="#datalabspecfilesindeximagetagselectionsemver">semver</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindeximagetagselectionsemver">Datalab.spec.files[index].image.tagSelection.semver</h3>
-<p><sup><sup><a href="#datalabspecfilesindeximagetagselection">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>constraints</b></td>
-        <td>string</td>
-        <td>
-          Semver constraint string.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecfilesindeximagetagselectionsemverprereleases">prereleases</a></b></td>
-        <td>object</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecfilesindeximagetagselectionsemverprereleases">Datalab.spec.files[index].image.tagSelection.semver.prereleases</h3>
-<p><sup><sup><a href="#datalabspecfilesindeximagetagselectionsemver">↩ Parent</a></sup></sup></p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>identifiers</b></td>
-        <td>[]string</td>
-        <td>
-          <br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecoverallquota">Datalab.spec.overallQuota</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional per-Datalab override for aggregate resource quotas in the Datalab environment namespace. If omitted, the composition falls back to EnvironmentConfig.data.defaults.overallQuota and then to hard defaults.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Aggregate PVC requested-storage limit for the Datalab environment namespace as a Kubernetes quantity (e.g., "100Gi"). This limit does not cover PVCs in other namespaces. Effective default: "100Gi".<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecpersistence">Datalab.spec.persistence</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional settings for Datalab-owned session workspace PVCs. Provider Datalab creates a stable PVC per declared session, including stopped sessions, and mounts it as the session home workspace when the runtime is started.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>storageClassName</b></td>
-        <td>string</td>
-        <td>
-          Optional StorageClass for Datalab-owned session workspace PVCs. If EnvironmentConfig.data.storageClasses.allowed is non-empty, the requested class is used only when it is listed there; otherwise the first allowed class is used. If the allowlist is empty or omitted, any requested class is allowed.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecquota">Datalab.spec.quota</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional per-datalab session quota overrides. If a field is not specified here, the composition falls back to EnvironmentConfig at <code>spec.defaults.quota</code>, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): memory=2Gi, storage=1Gi, budget=medium.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>budget</b></td>
+        <td><b>type</b></td>
         <td>enum</td>
         <td>
-          Namespace budget class determining available compute resources. Accepted values correspond to the runtime budgets supported by the provider. Effective default (if not set here or in EnvironmentConfig): "medium".<br/>
+          Service type.<br/>
           <br/>
-            <i>Enum</i>: small, medium, large, x-large, xx-large, xxx-large<br/>
+            <i>Enum</i>: mongo<br/>
+            <i>Default</i>: mongo<br/>
         </td>
-        <td>false</td>
+        <td>true</td>
       </tr><tr>
-        <td><b>memory</b></td>
+        <td><b>backupStorage</b></td>
         <td>string</td>
         <td>
-          Memory request for the session environment as a Kubernetes quantity (e.g., "2Gi", "512Mi"). Effective default (if not set here or in EnvironmentConfig): "2Gi".<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the session as a Kubernetes quantity (e.g., "1Gi"). Effective default (if not set here or in EnvironmentConfig): "1Gi".<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecregistry">Datalab.spec.registry</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional settings for the in-session Docker registry. When enabled, a registry service is added to the session applications.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>enabled</b></td>
-        <td>boolean</td>
-        <td>
-          Whether to provision the Docker registry application for this Datalab. Effective default: false.<br/>
+          Storage size for the MongoDB backup PVC as a Kubernetes quantity. A positive value enables daily full backups with mongodump and the oplog. Zero or an omitted value disables backups.<br/>
           <br/>
-            <i>Default</i>: false<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the Docker registry data volume as a Kubernetes quantity (e.g., "5Gi", "20Gi"). Effective default: "5Gi".<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-<h3 id="datalabspecsecurity">Datalab.spec.security</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
-<p>Optional per-datalab runtime namespace security settings. If a field is not specified here, the composition falls back to EnvironmentConfig at <code>spec.defaults.security</code>, and then to hard defaults. Effective defaults (when neither XR nor EnvironmentConfig provides a value): policy=baseline, kubernetesAccess=true, kubernetesRole=edit, externalEgress=true. Use <code>EnvironmentConfig.data.network.internalEgress</code> to allow explicit backend Pods in other namespaces. When policy is "privileged", Docker is automatically enabled with 20Gi storage.</p>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>externalEgress</b></td>
-        <td>boolean</td>
-        <td>
-          Whether the Datalab runtime namespace may egress outside itself. When false, Provider Datalab only renders the namespace-internal egress allow policy in addition to default deny. Use `EnvironmentConfig.data.network.internalEgress` to whitelist explicit backend Pods in other namespaces. When true, external egress is allowed with EnvironmentConfig network blacklist CIDRs excluded. Effective default (if not set here or in EnvironmentConfig): true.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>kubernetesAccess</b></td>
-        <td>boolean</td>
-        <td>
-          Whether a Kubernetes service account token should be made available within the session. Effective default (if not set here or in EnvironmentConfig): true.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>kubernetesRole</b></td>
-        <td>enum</td>
-        <td>
-          Session namespace RBAC role. Accepted values: "admin", "edit", "view". Effective default (if not set here or in EnvironmentConfig): "edit".<br/>
-          <br/>
-            <i>Enum</i>: admin, edit, view<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>policy</b></td>
-        <td>enum</td>
-        <td>
-          Pod Security Standard policy level. Accepted values: "restricted", "baseline", "privileged". Effective default (if not set here or in EnvironmentConfig): "baseline".<br/>
-          <br/>
-            <i>Enum</i>: restricted, baseline, privileged<br/>
+            <i>Default</i>: 0<br/>
         </td>
         <td>false</td>
       </tr></tbody>
 </table>
 
 <h3 id="datalabspecsessionsindex">Datalab.spec.sessions[index]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
 <table>
     <thead>
         <tr>
@@ -1896,7 +1177,7 @@
 </table>
 
 <h3 id="datalabspecuseroverrideskey">Datalab.spec.userOverrides[key]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
 <table>
     <thead>
         <tr>
@@ -1928,8 +1209,9 @@
       </tr></tbody>
 </table>
 
-<h3 id="datalabspecvectorstoreskey">Datalab.spec.vectorStores[key]</h3>
-<p><sup><sup><a href="#datalabspec-1">↩ Parent</a></sup></sup></p>
+<h3 id="datalabspecvclusterskey">Datalab.spec.vclusters[key]</h3>
+<p><sup><sup><a href="#datalabspec">↩ Parent</a></sup></sup></p>
+<p>Virtual Kubernetes clusters keyed by instance name.</p>
 <table>
     <thead>
         <tr>
@@ -1940,17 +1222,63 @@
         </tr>
     </thead>
     <tbody><tr>
+        <td><b><a href="#datalabspecvclusterskeygroupsindex">groups</a></b></td>
+        <td>[]object</td>
+        <td>
+          Access profiles with separate kubeconfigs and Kubernetes RBAC.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
         <td><b>storage</b></td>
         <td>string</td>
         <td>
-          Storage size for Qdrant persistent data volume as a Kubernetes quantity (e.g., "1Gi", "10Gi"). Effective default: "1Gi".<br/>
+          Control-plane PVC size. The environment default is used when omitted.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+<h3 id="datalabspecvclusterskeygroupsindex">Datalab.spec.vclusters[key].groups[index]</h3>
+<p><sup><sup><a href="#datalabspecvclusterskey">↩ Parent</a></sup></sup></p>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Profile name used for its Keycloak role and connection set.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          Virtual namespace to create, or '*' for virtual cluster administration.<br/>
+          <br/>
+            <i>Validations</i>:<li>self != "default" && !self.startsWith("kube-"): Select a workload namespace, not a Kubernetes system namespace.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>role</b></td>
+        <td>enum</td>
+        <td>
+          Kubernetes ClusterRole granted to this profile.<br/>
+          <br/>
+            <i>Enum</i>: view, edit, admin, cluster-admin<br/>
         </td>
         <td>true</td>
       </tr></tbody>
 </table>
 
 <h3 id="datalabstatus">Datalab.status</h3>
-<p><sup><sup><a href="#datalab-1">↩ Parent</a></sup></sup></p>
+<p><sup><sup><a href="#datalab">↩ Parent</a></sup></sup></p>
 <p>Current observed state of the datalab.</p>
 <table>
     <thead>
@@ -1962,12 +1290,126 @@
         </tr>
     </thead>
     <tbody><tr>
+        <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
+        <td>[]object</td>
+        <td>
+          Connection sets for the declared virtual clusters.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#datalabstatussessionskey">sessions</a></b></td>
         <td>map[string]object</td>
         <td>
           Map of session IDs and their lifecycle state and runtime details.<br/>
         </td>
         <td>false</td>
+      </tr></tbody>
+</table>
+
+<h3 id="datalabstatusconnectionsindex">Datalab.status.connections[index]</h3>
+<p><sup><sup><a href="#datalabstatus">↩ Parent</a></sup></sup></p>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>ready</b></td>
+        <td>boolean</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusconnectionsindexsecretref">secretRef</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>type</b></td>
+        <td>enum</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Enum</i>: s3, postgres, mongo, redis, vcluster<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>endpoint</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>group</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>instance</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>role</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>targetNamespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+<h3 id="datalabstatusconnectionsindexsecretref">Datalab.status.connections[index].secretRef</h3>
+<p><sup><sup><a href="#datalabstatusconnectionsindex">↩ Parent</a></sup></sup></p>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
       </tr></tbody>
 </table>
 
@@ -2044,7 +1486,7 @@
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

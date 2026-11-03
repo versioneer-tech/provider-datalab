@@ -434,6 +434,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../how-to-guides/vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../how-to-guides/additional_services/" class="md-nav__link">
         
   
@@ -606,21 +634,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-a-session-can-use" class="md-nav__link">
+  <a href="#kubernetes-and-container-access" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What a session can use
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#example-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example settings
+        Kubernetes and container access
       
     </span>
   </a>
@@ -832,6 +849,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -874,21 +919,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-a-session-can-use" class="md-nav__link">
+  <a href="#kubernetes-and-container-access" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What a session can use
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#example-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example settings
+        Kubernetes and container access
       
     </span>
   </a>
@@ -927,60 +961,28 @@
 
 
 <h1 id="session-access">Session access</h1>
-<p>A Datalab session runs as a Pod in the host cluster. Its access comes from
-Kubernetes permissions, credentials, volumes, and network rules. Check these
-together when deciding which code a user may run.</p>
-<h2 id="what-a-session-can-use">What a session can use</h2>
-<p>The session can read and write the data allowed by its storage and service
-credentials. It can use the mounted workspace PVC and any other volumes made
-available to the Pod. Docker, registries, host mounts, or runtime sockets can
-add further access.</p>
-<p><code>spec.security.kubernetesAccess</code> controls whether the session gets a Kubernetes
-token. <code>spec.security.kubernetesRole</code> sets its role. With
-<code>spec.vcluster: false</code>, workloads use the host namespace directly. With
-<code>true</code>, the session gets a virtual Kubernetes API, while its workloads still
-run on host Pods under the host's security and network rules.</p>
-<p><code>spec.security.policy</code> selects <code>restricted</code>, <code>baseline</code>, or <code>privileged</code>.
-Privileged mode enables Docker. The operator decides who may enable it.</p>
-<p>A user or service that can read <code>&lt;datalab&gt;-oauth2-client</code> in the runtime
-namespace can request machine tokens. Those tokens carry <code>ws_api</code>. Browser
-access uses the separate <code>ws_access</code> and <code>ws_admin</code> roles.</p>
-<h2 id="example-settings">Example settings</h2>
-<table>
-<thead>
-<tr>
-<th>Example</th>
-<th>Settings</th>
-<th>Access</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>s-jeff</code></td>
-<td>No session, Data disabled, Kubernetes access disabled</td>
-<td>Managed stores run without a workspace. A session added later can use the supplied service credentials.</td>
-</tr>
-<tr>
-<td><code>s-joe</code> and <code>s-john</code></td>
-<td>Host namespace, baseline policy, default <code>edit</code> role</td>
-<td>Session code can use its Kubernetes token unless the operator changes the default.</td>
-</tr>
-<tr>
-<td><code>s-jane</code></td>
-<td>vCluster, privileged policy, admin role, registry enabled</td>
-<td>Session code has broad permissions. Use only with operator approval.</td>
-</tr>
-</tbody>
-</table>
-<p>The manifests are in <code>examples/base/</code>. Their settings are examples, not a
-required policy for other Datalabs.</p>
+<p>A Datalab session runs as a Pod in the host cluster. It can use its storage
+and service credentials, workspace PVC, and any other mounted volumes.
+Check these permissions together when deciding which code a user may run.</p>
+<h2 id="kubernetes-and-container-access">Kubernetes and container access</h2>
+<p>The operator controls token availability and the Kubernetes role through
+<code>defaults.security</code> in the selected EnvironmentConfig. A session with
+vCluster enabled gets a virtual Kubernetes API. Its workloads still run on
+host Pods under the host's security and network rules. Without vCluster,
+the session uses its host namespace directly.</p>
+<p>The <code>privileged</code> security policy enables Docker. Host mounts, runtime
+sockets, broad roles, and privileged containers can give session code access
+beyond its namespace. Give this access only to workloads that need it.
+See the <a href="../../how-to-guides/installation/#runtime-and-service-defaults">configuration reference</a>
+for the settings and defaults.</p>
 <h2 id="explain-access-to-users">Explain access to users</h2>
-<p>Before users start a session, tell them which data and services it can use,
-whether Kubernetes and internet access are available, and whether Docker or
-privileged workloads are allowed. Explain what survives a stop or deletion,
-what is backed up, and who can restore it.</p>
-<p>See <a href="../">Security</a> for the platform's responsibilities and
-<a href="../sandbox-controls/">Network policies</a> for egress rules.</p>
+<p>Tell users which data and services a session can use, whether Kubernetes
+and internet access are available, and whether Docker or privileged workloads
+are allowed. Explain what survives a stop or deletion, what is backed up,
+and who can restore it.</p>
+<p>Stopping a Pod or tightening a network rule does not revoke a leaked
+credential. Rotate or revoke it at its source. Protect the generated OAuth
+Secret as described in <a href="../../how-to-guides/authentication/#keycloak-clients-and-roles">Authentication</a>.</p>
 
 
 
@@ -1010,7 +1012,7 @@ what is backed up, and who can restore it.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

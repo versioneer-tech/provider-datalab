@@ -255,24 +255,6 @@
         
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="." class="md-nav__link md-nav__link--active">
         
   
@@ -289,58 +271,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#create-a-workspace" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Create a workspace
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#add-managed-services" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Add managed services
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#read-the-guides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Read the guides
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -492,6 +422,34 @@
     
   
     S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="how-to-guides/vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
   
 
     
@@ -828,6 +786,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -863,47 +849,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#create-a-workspace" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Create a workspace
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#add-managed-services" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Add managed services
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#read-the-guides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Read the guides
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -923,81 +868,55 @@
 
 
 <h1 id="provider-datalab">Provider Datalab</h1>
-<p>Provider Datalab creates shared data workspaces on Kubernetes. A team declares
-its users, sessions, and services in a <code>Datalab</code> resource. Crossplane creates
-the resources from the platform's shared settings.</p>
-<p>The platform operator installs the controllers and sets the identity,
-network, storage, security, quota, and backup rules. Users can then work with
-data through the browser or start a session with an editor and terminal.</p>
-<h2 id="create-a-workspace">Create a workspace</h2>
-<p>After <a href="how-to-guides/installation/">installation</a>, apply a resource such as:</p>
-<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.internal/v1beta2</span>
-<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Datalab</span>
-<span class="nt">metadata</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
-<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">users</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">alice</span>
-<span class="w">  </span><span class="nt">sessions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-</code></pre></div>
-<p>This creates a workspace for Alice with a persistent home directory. Educates
-runs its editor, terminal, and tools. Stopping the session keeps its workspace
-PVC; starting it again uses the same volume.</p>
-<p>The shared Data service, packageR, gives Alice a file browser for the Datalab's
-object storage. When a permanent Data address is enabled, she can use it
-without a running session. To publish files, place them in the Datalab's
-<code>public</code> folder and send the public share link. Readers do not need an account.
-See <a href="how-to-guides/usage_concepts/#data-and-sharing">Data and sharing</a>.</p>
-<h2 id="add-managed-services">Add managed services</h2>
-<p>The same resource can request services for the team:</p>
+<p>Provider Datalab creates shared data workspaces on Kubernetes. Teams declare
+users, sessions, and managed services in a <code>Datalab</code> resource. Crossplane
+creates the resources from the platform's EnvironmentConfig.</p>
+<p>Sessions provide editors, terminals, and persistent workspaces.
+The shared Data service, packageR, provides object-storage browsing and file
+sharing. Datalabs can also request PostgreSQL, MongoDB, and Redis.</p>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Service</th>
+<th>Task</th>
+<th>Guide</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>spec.databases</code></td>
-<td>PostgreSQL clusters and logical databases</td>
+<td>Prepare the platform</td>
+<td><a href="how-to-guides/installation/">Installation and EnvironmentConfig reference</a></td>
 </tr>
 <tr>
-<td><code>spec.documentStores</code></td>
-<td>MongoDB stores</td>
+<td>Manage sessions, stores, and shared files</td>
+<td><a href="how-to-guides/usage_concepts/">Use a Datalab</a></td>
 </tr>
 <tr>
-<td><code>spec.cacheStores</code></td>
-<td>Redis stores</td>
+<td>Protect browser and machine access</td>
+<td><a href="how-to-guides/authentication/">Authentication</a></td>
 </tr>
 <tr>
-<td><code>spec.vectorStores</code></td>
-<td>Qdrant stores</td>
+<td>Read data with AWS tools</td>
+<td><a href="how-to-guides/s3-access/">S3 client access</a></td>
 </tr>
 <tr>
-<td><code>spec.registry</code></td>
-<td>A Docker registry</td>
+<td>Run Dask, MLflow, or psql</td>
+<td><a href="how-to-guides/additional_services/">Additional services</a></td>
+</tr>
+<tr>
+<td>Review access controls</td>
+<td><a href="security/">Security</a></td>
+</tr>
+<tr>
+<td>Look up Datalab fields</td>
+<td><a href="reference-guides/api/">API reference</a></td>
 </tr>
 </tbody>
 </table>
-<p>The cluster needs the operator for each requested managed store. The platform
-team manages its storage, backups, upgrades, and deletion. Provider Datalab
-uses an existing object-storage endpoint and credentials; it does not create
-buckets. <a href="https://provider-storage.versioneer.at/">Provider Storage</a> can
-create those separately.</p>
-<h2 id="read-the-guides">Read the guides</h2>
-<p>Start with <a href="how-to-guides/installation/">Installation</a> to prepare the
-platform. <a href="how-to-guides/usage_concepts/">Use a Datalab</a> explains the resource
-fields with examples for sessions, stores, Data, and workshop content.</p>
-<p><a href="how-to-guides/authentication/">Authentication</a> covers browser sign-in and
-Datalab roles. <a href="security/">Security</a> explains the other access
-controls. For command-line data access, use <a href="how-to-guides/s3-access/">S3 client access</a>.
-For services you deploy yourself, use <a href="how-to-guides/additional_services/">Additional services</a>.</p>
-<p>The <a href="reference-guides/api/">API reference</a> lists every field.
-<a href="architecture/0001-use-the-datalab-crd-as-the-workspace-contract/">ADR-001</a>
-explains the choice of the Datalab API and Educates runtime.</p>
+<p><a href="architecture/0001-use-the-datalab-crd-as-the-workspace-contract/">ADR-001</a>
+records why Datalab is the public API and runtime resources stay internal.
+<a href="architecture/0002-provide-managed-database-services/">ADR-002</a> records why
+PostgreSQL, MongoDB, and Redis are managed services and how users and the
+platform operator share responsibility.</p>
 
 
 
@@ -1027,7 +946,7 @@ explains the choice of the Datalab API and Educates runtime.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

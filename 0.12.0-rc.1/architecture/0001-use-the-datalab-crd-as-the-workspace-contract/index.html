@@ -14,6 +14,8 @@
         <link rel="prev" href="../../reference-guides/api/">
       
       
+        <link rel="next" href="../0002-provide-managed-database-services/">
+      
       
         
       
@@ -432,6 +434,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../how-to-guides/vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../how-to-guides/additional_services/" class="md-nav__link">
         
   
@@ -802,17 +832,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#date" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Date
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#implementation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -858,10 +877,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#use-educates-as-the-internal-runtime-primitive" class="md-nav__link">
+  <a href="#keep-the-runtime-implementation-internal" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use Educates as the internal runtime primitive
+        Keep the runtime implementation internal
       
     </span>
   </a>
@@ -948,6 +967,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1001,17 +1048,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#date" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Date
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#implementation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1057,10 +1093,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#use-educates-as-the-internal-runtime-primitive" class="md-nav__link">
+  <a href="#keep-the-runtime-implementation-internal" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use Educates as the internal runtime primitive
+        Keep the runtime implementation internal
       
     </span>
   </a>
@@ -1159,18 +1195,17 @@
 
 
 <h1 id="adr-001-use-datalab-as-the-public-contract">ADR-001: Use Datalab as the Public Contract</h1>
+<blockquote>
+<p>Written: 02.12.2025. Revised: 03.11.2026.</p>
+</blockquote>
 <h2 id="status">Status</h2>
 <p>Accepted</p>
-<h2 id="date">Date</h2>
-<p>2026-06-20</p>
 <h2 id="implementation">Implementation</h2>
 <p>Implemented.</p>
 <p>Users create a <code>Datalab</code>. Provider Datalab turns it into a working data
 workspace and reports session information on the same resource.</p>
-<p>Educates is the core runtime used by the current implementation. Its resources
-are created and managed internally; users and client tools do not need to know
-about them.</p>
-<p>Educates also provides the browser editor and terminal.</p>
+<p>Educates is the first implementation of runtime sessions. It provides the
+browser editor and terminal. Its resources are created and managed internally.</p>
 <h2 id="context">Context</h2>
 <p>A data workspace needs many things: an editor, a terminal, persistent files,
 credentials, networking, and optional services. Exposing every resource needed
@@ -1179,14 +1214,14 @@ to build that workspace would give users a complicated and fragile API.</p>
 the implementation behind it to change.</p>
 <h2 id="decision">Decision</h2>
 <h3 id="make-datalab-the-only-public-workspace-resource">Make <code>Datalab</code> the only public workspace resource</h3>
-<p>Users and GitOps tools work with the namespaced <code>Datalab</code> resource. It describes the desired workspace,
-including its named sessions and optional capabilities.</p>
+<p>Users and GitOps tools work with the namespaced <code>Datalab</code> resource. It describes
+the desired workspace, including its named sessions and optional capabilities.</p>
 <p>The Datalab name, namespace, and UID form its stable identity. Generated Pod,
 Secret, and runtime-resource names are not part of the public contract.</p>
-<h3 id="use-educates-as-the-internal-runtime-primitive">Use Educates as the internal runtime primitive</h3>
-<p>Educates provides the editor, terminal, workspace Pod, session runtime, and
-optional applications. Crossplane translates a Datalab into the Educates and
-Kubernetes resources required to run it.</p>
+<h3 id="keep-the-runtime-implementation-internal">Keep the runtime implementation internal</h3>
+<p>The internal runtime provides the editor, terminal, workspace Pod, sessions,
+and optional applications. Crossplane translates a Datalab into the runtime
+and Kubernetes resources required to run it.</p>
 <p>This translation is an implementation detail:</p>
 <div class="highlight"><pre><span></span><code>User or GitOps tool
   -&gt; Datalab
@@ -1194,7 +1229,7 @@ Kubernetes resources required to run it.</p>
         -&gt; internal runtime resources
            -&gt; working Datalab session
 </code></pre></div>
-<p>Clients never create, update, discover, or depend on Educates resources
+<p>Clients never create, update, discover, or depend on runtime resources
 directly. Crossplane owns those generated resources. This keeps one source of
 truth and lets the runtime implementation evolve without changing how users
 manage a Datalab.</p>
@@ -1211,7 +1246,7 @@ operators keep control of security and infrastructure policy.</p>
 <p>Each session has a unique name and a desired state such as <code>started</code> or
 <code>stopped</code>. Provider Datalab creates the internal runtime for started sessions
 and reports the observed phase, message, and browser URL in
-<code>Datalab.status.sessions</code>.</p>
+<code>Datalab.status.sessions</code>. A stopped session keeps its workspace PVC.</p>
 <p>Clients read the Datalab status. They do not look up the internal runtime.
 Diagnostic phase and message text is not a stable machine-readable lifecycle
 API; richer clients will need typed status fields.</p>
@@ -1226,7 +1261,7 @@ separate Datalabs when workloads need separate Kubernetes control planes or a
 stronger trust boundary.</p>
 <h3 id="add-tools-without-changing-the-contract">Add tools without changing the contract</h3>
 <p>Operators can add runtime tools through extension packages. This keeps the
-Datalab API stable and avoids baking every tool into one large base image.</p>
+Datalab API stable and avoids putting every tool in one large base image.</p>
 <h2 id="why-this-design">Why This Design</h2>
 <table>
 <thead>
@@ -1241,12 +1276,8 @@ Datalab API stable and avoids baking every tool into one large base image.</p>
 <td>Users have one clear object to create, review, and manage.</td>
 </tr>
 <tr>
-<td>Educates stays internal</td>
+<td>Runtime stays internal</td>
 <td>Clients are not coupled to runtime-specific resources or names.</td>
-</tr>
-<tr>
-<td>Access runtime stays internal</td>
-<td>The access implementation can change without creating a second user API.</td>
 </tr>
 <tr>
 <td>Crossplane owns generated resources</td>
@@ -1269,14 +1300,13 @@ Datalab API stable and avoids baking every tool into one large base image.</p>
 <h2 id="consequences">Consequences</h2>
 <ul>
 <li>Provider Datalab is self-contained: clients need only the Datalab API.</li>
-<li>Educates is essential to the current implementation but is not part of the
-  client contract.</li>
 <li>Changing the internal runtime does not require a second public workspace
   model.</li>
 <li>Crossplane remains responsible for generated-resource ownership and cleanup.</li>
 <li>Operators must validate user-selectable Secret references and other
   policy-sensitive options.</li>
-<li>Some lifecycle behavior still needs live transition tests.</li>
+<li>Render tests check generated resources; live tests must also check session
+  transitions and access to services.</li>
 </ul>
 
 
@@ -1307,7 +1337,7 @@ Datalab API stable and avoids baking every tool into one large base image.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

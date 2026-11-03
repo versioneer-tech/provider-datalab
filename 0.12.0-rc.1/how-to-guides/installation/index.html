@@ -440,17 +440,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#identity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Identity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#data-address" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -462,10 +451,22 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#public-catalog-cors" class="md-nav__link">
+  <a href="#environmentconfig-values-and-defaults" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Public catalog CORS
+        EnvironmentConfig values and defaults
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EnvironmentConfig values and defaults">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#runtime-and-service-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime and service defaults
       
     </span>
   </a>
@@ -473,13 +474,40 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#storage-and-quotas" class="md-nav__link">
+  <a href="#identity-and-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Storage and quotas
+        Identity and endpoints
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-managed-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and managed stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -612,6 +640,34 @@
     
   
     S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
   
 
     
@@ -948,6 +1004,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1046,17 +1130,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#identity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Identity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#data-address" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1068,10 +1141,22 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#public-catalog-cors" class="md-nav__link">
+  <a href="#environmentconfig-values-and-defaults" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Public catalog CORS
+        EnvironmentConfig values and defaults
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EnvironmentConfig values and defaults">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#runtime-and-service-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime and service defaults
       
     </span>
   </a>
@@ -1079,13 +1164,40 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#storage-and-quotas" class="md-nav__link">
+  <a href="#identity-and-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Storage and quotas
+        Identity and endpoints
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-managed-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and managed stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1159,68 +1271,86 @@
 
 
 <h1 id="install-provider-datalab">Install Provider Datalab</h1>
-<p>This guide prepares the platform, installs the configuration package, and
-creates a first Datalab. Run the commands with access to the target cluster.
-Use your platform's GitOps and Secret tools for a shared installation.</p>
+<p>Run these commands from a repository checkout with access to the target
+cluster. For a shared installation, manage manifests and Secrets through your
+platform's GitOps and Secret tools.</p>
 <h2 id="prerequisites">Prerequisites</h2>
-<p>The cluster needs Crossplane, Educates, an ingress controller, Keycloak, and
-an S3-compatible object store. The CNI must enforce Kubernetes NetworkPolicy.
+<p>The cluster needs Crossplane, the Educates session runtime, an ingress
+controller, Keycloak, and an S3-compatible object store. The CNI must enforce
+Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
-<a href="https://github.com/versioneer-tech/provider-datalab/blob/main/educates/crossplane.yaml">metadata</a>.</p>
-<p>Install Educates with its CRDs and controller RBAC before creating Datalabs.
-Follow the <a href="https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html">Educates installation guide</a>.
-The Educates ingress class, domain, and TLS Secret must match the settings
+<a href="https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml">metadata</a>.</p>
+<p>Install the session runtime with its CRDs and controller RBAC before creating
+Datalabs. Follow the <a href="https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html">runtime installation guide</a>.
+The runtime ingress class, domain, and TLS Secret must match the settings
 below.</p>
-<p>Install the operators for the managed stores you plan to offer:</p>
+<p>Install the operators for the managed stores you plan to offer. Provider
+Datalab integration tests use these versions:</p>
 <table>
 <thead>
 <tr>
 <th>Datalab field</th>
 <th>Operator</th>
+<th>Test version</th>
 <th>Required resource API</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>spec.databases</code></td>
-<td>Crunchy PostgreSQL Operator</td>
+<td>Crunchy PostgreSQL Operator (PGO)</td>
+<td><code>6.0.2</code></td>
 <td><code>PostgresCluster</code> in <code>postgres-operator.crunchydata.com/v1</code></td>
 </tr>
 <tr>
 <td><code>spec.documentStores</code></td>
 <td>MongoDB Kubernetes Operator</td>
+<td><code>1.14.0</code></td>
 <td><code>MongoDBCommunity</code> in <code>mongodbcommunity.mongodb.com/v1</code></td>
 </tr>
 <tr>
 <td><code>spec.cacheStores</code></td>
-<td>Redis Kubernetes Operator</td>
+<td>Opstree Redis Operator</td>
+<td><code>0.27.0</code> (Helm chart <code>0.27.0</code>)</td>
 <td><code>Redis</code> in <code>redis.redis.opstreelabs.in/v1beta2</code></td>
-</tr>
-<tr>
-<td><code>spec.vectorStores</code></td>
-<td>Qdrant Operator</td>
-<td><code>QdrantCluster</code> in <code>qdrant.io/v1alpha1</code></td>
 </tr>
 </tbody>
 </table>
-<p>Check the served APIs and fields before upgrading an operator. The
+<p>These are fixed test pins. Other versions need validation before use.
+The harness applies each chart's CRDs before it installs or upgrades the operator.</p>
+<p>See <a href="../usage_concepts/#managed-service-types">managed service types</a> for the
+request fields and type defaults. Check the served APIs and fields before
+upgrading an operator. The
 <a href="https://github.com/versioneer-tech/provider-datalab/tree/main/tests/integration">integration tests</a>
 contain the dependency settings used by this repository. Configure storage,
 backup and restore, monitoring, and deletion for each store you offer.</p>
+<p>PostgreSQL without backups requires Crunchy PGO 5.7 or later. MongoDB
+Community backups use a composition-managed CronJob and the matching MongoDB
+image's database tools. Redis backups use a CronJob with the standard Redis
+tools image at the same Redis version as the server. Provider Kubernetes
+needs the <code>batch/cronjobs</code>
+permissions in <code>dependencies/rbac.yaml</code>. Backup volumes need a StorageClass
+that supports <code>ReadWriteOnce</code>. See <a href="../usage_concepts/#backups">backup settings</a>
+for schedules, retention, and restore limits.</p>
 <p>Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
 <code>TLSRoute</code> in <code>gateway.networking.k8s.io/v1</code> and direct TLS with SNI.</p>
+<p>For <code>spec.vclusters</code>, apply the supplied provider RBAC and configure an HTTPS
+issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
+ValidatingAdmissionPolicy and BackendTLSPolicy support. See
+<a href="../vcluster/#platform-settings">virtual cluster setup</a>.</p>
 <h2 id="1-choose-the-claim-namespace">1. Choose the claim namespace</h2>
 <p>This guide uses <code>workspace</code> for Datalab resources and their namespaced
 ProviderConfigs:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>workspace
+kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>datalab
 </code></pre></div>
-<p>The input storage Secret lives in <code>storage.secretNamespace</code>, set below.
-This guide also uses <code>workspace</code> for that namespace. Educates creates the
-runtime namespaces when the Datalab is reconciled.</p>
+<p>Input storage Secrets live in <code>datalab</code>, as set by <code>storage.secretNamespace</code>
+in the environment examples. Each Datalab also has a separate namespace for
+its runtime and shared services.</p>
 <h2 id="2-install-provider-dependencies">2. Install provider dependencies</h2>
 <p>Apply the files in
-<a href="https://github.com/versioneer-tech/provider-datalab/tree/main/educates/dependencies"><code>educates/dependencies/</code></a>
+<a href="https://github.com/versioneer-tech/provider-datalab/tree/main/dependencies"><code>dependencies/</code></a>
 in this order:</p>
 <table>
 <thead>
@@ -1271,9 +1401,9 @@ release tag you want to install.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.crossplane.io/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Configuration</span>
 <span class="nt">metadata</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab-educates</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/versioneer-tech/provider-datalab/educates:0.12.0-rc.1</span>
+<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/versioneer-tech/provider-datalab:0.12.0-rc.1</span>
 <span class="w">  </span><span class="nt">skipDependencyResolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
 <p>Apply it and check the package conditions:</p>
@@ -1283,6 +1413,9 @@ kubectl<span class="w"> </span>get<span class="w"> </span>configurationrevisions
 </code></pre></div>
 <p>The package installs the Datalab resource definition and composition. Its
 providers and functions are managed separately by the platform.</p>
+<p>The package build reads <code>responseTTL: 5m</code> from <code>composition/settings.yaml</code>.
+It applies the value to every Python response and the auto-ready input.
+To change it, rebuild the composition and release a new package.</p>
 <h2 id="4-set-the-shared-environment">4. Set the shared environment</h2>
 <p>Create an <code>EnvironmentConfig</code> named <code>datalab</code> with values for your cluster.
 This example uses a permanent Data Ingress:</p>
@@ -1292,21 +1425,21 @@ This example uses a permanent Data Ingress:</p>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
 <span class="nt">data</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">iam</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">realm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
-<span class="w">    </span><span class="nt">issuerURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.example.org/realms/demo</span>
-<span class="w">    </span><span class="nt">internalURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://keycloak.keycloak:8080/realms/demo</span>
+<span class="w">    </span><span class="nt">realm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">issuerURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.acme.com/realms/acme</span>
+<span class="w">    </span><span class="nt">internalURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://keycloak.keycloak:8080/realms/acme</span>
 <span class="w">  </span><span class="nt">ingress</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">class</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx</span>
-<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.example.org</span>
+<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.acme.com</span>
 <span class="w">    </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wildcard-tls</span>
 <span class="w">    </span><span class="nt">annotations</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
 <span class="w">  </span><span class="nt">storage</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://s3.example.org</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://s3.acme.com</span>
 <span class="w">    </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Other</span>
 <span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">us-east-1</span>
 <span class="w">    </span><span class="nt">forcePathStyle</span><span class="p">:</span><span class="w"> </span><span class="s">"true"</span>
-<span class="w">    </span><span class="nt">secretNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="w">    </span><span class="nt">secretNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s3</span>
 <span class="w">  </span><span class="nt">storageClasses</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">allowed</span><span class="p">:</span>
@@ -1326,74 +1459,459 @@ This example uses a permanent Data Ingress:</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fd00:42::42/128</span>
 <span class="w">    </span><span class="nt">excludePolicies</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">  </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vcluster</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">registry</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+<span class="w">    </span><span class="nt">data</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">readOnlyMount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">    </span><span class="nt">overallQuota</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span>
 <span class="w">    </span><span class="nt">security</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">externalEgress</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
 <p>Replace the example storage classes, network ranges, and DNS names before
-applying it. To select another EnvironmentConfig for one Datalab, set its
-<code>datalabs.pkg.internal/environment</code> annotation or label to that config's name.</p>
-<h3 id="identity">Identity</h3>
-<p>Set <code>iam.realm</code> to the Keycloak realm that contains your users. The public
-<code>iam.issuerURL</code> is used for browser login; <code>iam.internalURL</code> is used for
-in-cluster token and signing-key requests. The IAM namespace defaults to
-<code>keycloak</code>. Set <code>iam.namespace</code> if your installation uses another namespace.</p>
-<p>Provider Datalab creates a confidential OAuth client, groups, roles, and
-memberships for each Datalab. Platform ingress policy must protect session
-access. See <a href="../authentication/">Authentication</a> for the role model and the
-controller examples.</p>
+applying it. Configure <a href="../authentication/">authentication</a> before users start
+sessions.</p>
 <h3 id="data-address">Data address</h3>
-<p><code>ingress.enabled</code> and <code>httpRoute.enabled</code> both default to <code>false</code>. In that
-case, a session reaches Data through its Educates-authenticated ingress.
-Enable one setting to give each Datalab a permanent Data address. Enabling
-both stops reconciliation.</p>
-<p>Both options need <code>iam.issuerURL</code>, <code>iam.internalURL</code>, and <code>ingress.domain</code>.
-An Ingress also needs <code>ingress.class</code> and <code>ingress.secret</code>. Use
-<code>ingress.annotations</code> for controller settings.</p>
-<p>For Gateway API exposure, merge this block into the EnvironmentConfig:</p>
+<p>Enable either <code>ingress.enabled</code> or <code>httpRoute.enabled</code> for a permanent Data
+address. Enabling both stops reconciliation. With neither enabled, Data is
+available through a session's authenticated ingress.</p>
+<p>For Gateway API exposure, replace the example's <code>ingress.enabled: true</code> with
+<code>false</code> and add:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">ingress</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">    </span><span class="nt">class</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx</span>
-<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.example.org</span>
-<span class="w">    </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wildcard-tls</span>
 <span class="w">  </span><span class="nt">httpRoute</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">enableS3</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">    </span><span class="nt">parentName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<span class="w">    </span><span class="nt">parentNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gateway-system</span>
+<span class="w">    </span><span class="nt">parentNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contour</span>
 <span class="w">    </span><span class="nt">sectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-https</span>
 <span class="w">    </span><span class="nt">httpSectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-http</span>
 </code></pre></div>
 <p>The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
-routes from Datalab runtime namespaces. It manages the permanent Data
-certificate. Keep <code>ingress.class</code> and <code>ingress.secret</code> for Educates session
-Ingress objects.</p>
-<p>Set <code>httpRoute.enableS3: true</code> to add the experimental read-only S3 endpoint
-for every Data-enabled Datalab in the environment. Browser and S3 requests
-then use the same hostname. See <a href="../s3-access/">S3 client access</a> for the
-controller requirements and client setup.</p>
-<h3 id="public-catalog-cors">Public catalog CORS</h3>
-<p>packageR allows all browser origins (<code>*</code>) for public catalog access. No chart
-or EnvironmentConfig CORS setting is needed. To restrict origins, configure
-the Gateway to replace or remove backend CORS headers and handle preflight
-requests. Adding another CORS header does not restrict the wildcard.
-Check the controller's support for
-<a href="https://gateway-api.sigs.k8s.io/guides/user-guides/http-cors/">HTTPRoute CORS filters</a>.
-Cookie-based cross-origin access needs its own policy.</p>
-<h3 id="storage-and-quotas">Storage and quotas</h3>
-<p><code>storage.endpoint</code> is the S3 address used by session tools and packageR.
-It must be reachable from the runtime Pods. Browsers connect to Data rather
-than directly to object storage. Use <code>storage.forcePathStyle</code> when the store
-requires path-style addresses.</p>
-<p><code>storageClasses.allowed</code> restricts the classes used by session PVCs. A
-requested class is used when listed; otherwise the first listed class is
-used. With an empty or omitted list, any requested class is allowed.</p>
-<p><code>defaults.overallQuota.storage</code> sets the total PVC request limit for each
-Datalab environment namespace. A Datalab can override it with
-<code>spec.overallQuota.storage</code>. If neither is set, the limit is <code>100Gi</code>.
-PVCs in other namespaces are outside that quota.</p>
+routes from runtime namespaces. It manages the permanent Data certificate.
+Keep the ingress class and TLS Secret set for the session runtime. For the
+optional read-only S3 endpoint, see <a href="../s3-access/">S3 client access</a>.</p>
+<p>packageR permits all browser origins (<code>*</code>) for public catalog access.
+To restrict origins, configure the Gateway to replace or remove backend CORS
+headers and handle preflight requests. Adding a header does not restrict the
+wildcard. Cookie-based cross-origin access needs a separate policy.</p>
+<h3 id="environmentconfig-values-and-defaults">EnvironmentConfig values and defaults</h3>
+<p>All paths below are relative to <code>EnvironmentConfig.data</code>. Defaults apply
+when a setting is omitted; example values such as cluster CIDRs, endpoints,
+and StorageClass names are not built-in defaults.</p>
+<p>Select a specific EnvironmentConfig with the
+<code>datalabs.pkg.internal/environment</code> annotation or label to use its settings
+without per-Datalab overrides, as shown in the
+<a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml"><code>datalab-custom</code> example</a>.
+The annotation takes priority over the label; the default selection is <code>datalab</code>.</p>
+<p>Runtime settings come from the EnvironmentConfig. The XRD retains unknown
+fields, but extra fields in <code>spec</code> do not override these settings.</p>
+<h4 id="runtime-and-service-defaults">Runtime and service defaults</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>defaults.vcluster.enabled</code></td>
+<td><code>true</code></td>
+<td>Virtual Kubernetes API for each started session.</td>
+</tr>
+<tr>
+<td><code>defaults.registry.enabled</code></td>
+<td><code>true</code></td>
+<td>Session Docker registry.</td>
+</tr>
+<tr>
+<td><code>defaults.registry.storage</code></td>
+<td><code>5Gi</code></td>
+<td>Registry volume size.</td>
+</tr>
+<tr>
+<td><code>defaults.data.enabled</code></td>
+<td><code>true</code></td>
+<td>Shared packageR service and its configured endpoint.</td>
+</tr>
+<tr>
+<td><code>defaults.data.readOnlyMount</code></td>
+<td><code>false</code></td>
+<td>Read-only application permissions when enabled; storage IAM still applies.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.memory</code></td>
+<td><code>2Gi</code></td>
+<td>Session memory request.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.storage</code></td>
+<td><code>1Gi</code></td>
+<td>Workspace PVC size.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.budget</code></td>
+<td><code>medium</code></td>
+<td>Session namespace budget.</td>
+</tr>
+<tr>
+<td><code>defaults.overallQuota.storage</code></td>
+<td><code>100Gi</code></td>
+<td>Aggregate PVC request limit in the environment namespace.</td>
+</tr>
+<tr>
+<td><code>defaults.security.policy</code></td>
+<td><code>baseline</code></td>
+<td>Pod security level: <code>restricted</code>, <code>baseline</code>, or <code>privileged</code>.</td>
+</tr>
+<tr>
+<td><code>defaults.security.kubernetesAccess</code></td>
+<td><code>true</code></td>
+<td>Session Kubernetes service account token.</td>
+</tr>
+<tr>
+<td><code>defaults.security.kubernetesRole</code></td>
+<td><code>edit</code></td>
+<td>Session role: <code>view</code>, <code>edit</code>, or <code>admin</code>.</td>
+</tr>
+<tr>
+<td><code>defaults.security.externalEgress</code></td>
+<td><code>true</code></td>
+<td>Broad egress to the configured external CIDRs.</td>
+</tr>
+<tr>
+<td><code>defaults.persistence.storageClassName</code></td>
+<td>First allowed class, or cluster default</td>
+<td>Workspace StorageClass; a value outside the allowlist falls back to its first entry.</td>
+</tr>
+<tr>
+<td><code>defaults.files</code></td>
+<td><code>[]</code></td>
+<td>Workshop file bundles.</td>
+</tr>
+<tr>
+<td><code>packages</code></td>
+<td><code>[]</code></td>
+<td>Session extension packages.</td>
+</tr>
+</tbody>
+</table>
+<p>File bundles and extension packages are passed to the session runtime
+unchanged. Set Data enablement before creating Datalabs because the runtime
+saves each environment's Workshop specification. See <a href="../usage_concepts/#files-and-the-workshop-tab">file sources</a>
+for a file bundle example.</p>
+<h4 id="identity-and-endpoints">Identity and endpoints</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>iam.realm</code></td>
+<td><code>default</code></td>
+<td>Keycloak realm; users must already exist here.</td>
+</tr>
+<tr>
+<td><code>iam.namespace</code></td>
+<td><code>keycloak</code></td>
+<td>Namespace selected by IAM egress rules.</td>
+</tr>
+<tr>
+<td><code>iam.issuerURL</code></td>
+<td>Not set</td>
+<td>Public login issuer; required for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>iam.internalURL</code></td>
+<td>Not set</td>
+<td>Token and signing-key URL; required for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>iam.extraAudiences</code></td>
+<td><code>[]</code></td>
+<td>Additional OAuth client audiences.</td>
+</tr>
+<tr>
+<td><code>ingress.enabled</code></td>
+<td><code>false</code></td>
+<td>Permanent Data Ingress; mutually exclusive with <code>httpRoute.enabled</code>.</td>
+</tr>
+<tr>
+<td><code>ingress.class</code></td>
+<td>Empty</td>
+<td>Session ingress class; required for Data Ingress.</td>
+</tr>
+<tr>
+<td><code>ingress.domain</code></td>
+<td><code>default</code> for sessions</td>
+<td>Host suffix; must be set for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>ingress.secret</code></td>
+<td><code>wildcard-tls</code> for sessions</td>
+<td>TLS Secret; must be set for Data Ingress.</td>
+</tr>
+<tr>
+<td><code>ingress.annotations</code></td>
+<td><code>{}</code></td>
+<td>Annotations on the permanent Data Ingress.</td>
+</tr>
+<tr>
+<td><code>httpRoute.enabled</code></td>
+<td><code>false</code></td>
+<td>Permanent Data Gateway routes.</td>
+</tr>
+<tr>
+<td><code>httpRoute.enableS3</code></td>
+<td><code>false</code></td>
+<td>Read-only S3 endpoint; requires <code>httpRoute.enabled</code>.</td>
+</tr>
+<tr>
+<td><code>httpRoute.parentName</code></td>
+<td>Not set</td>
+<td>Gateway name; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.parentNamespace</code></td>
+<td>Not set</td>
+<td>Gateway namespace; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.sectionName</code></td>
+<td>Not set</td>
+<td>HTTPS listener; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.httpSectionName</code></td>
+<td>Not set</td>
+<td>HTTP redirect listener; required when Gateway exposure is enabled.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="storage-and-managed-stores">Storage and managed stores</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>storage.endpoint</code></td>
+<td>Empty</td>
+<td>Endpoint reachable by runtime Pods; the input Secret's <code>AWS_ENDPOINT_URL</code> takes priority.</td>
+</tr>
+<tr>
+<td><code>storage.region</code></td>
+<td>Empty</td>
+<td>Object-store region; the input Secret's <code>AWS_REGION</code> takes priority.</td>
+</tr>
+<tr>
+<td><code>storage.type</code></td>
+<td>Empty</td>
+<td>rclone backend type, usually <code>s3</code>.</td>
+</tr>
+<tr>
+<td><code>storage.provider</code></td>
+<td>Empty for rclone; <code>Other</code> for the S3 proxy</td>
+<td>Object-store provider.</td>
+</tr>
+<tr>
+<td><code>storage.forcePathStyle</code></td>
+<td><code>true</code></td>
+<td>Path-style S3 requests.</td>
+</tr>
+<tr>
+<td><code>storage.secretNamespace</code></td>
+<td>Datalab namespace, or <code>default</code></td>
+<td>Input storage Secret namespace.</td>
+</tr>
+<tr>
+<td><code>storageClasses.allowed</code></td>
+<td><code>[]</code></td>
+<td>Allowed workspace StorageClasses; an empty list permits any configured class.</td>
+</tr>
+<tr>
+<td><code>vcluster.storage</code></td>
+<td><code>5Gi</code></td>
+<td>Default control-plane PVC size for named virtual clusters.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClasses.allowed</code></td>
+<td>Required when virtual clusters are declared</td>
+<td>Host classes exposed to virtual workloads.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClasses.default</code></td>
+<td>First allowed class</td>
+<td>Virtual workload default class.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClassName</code></td>
+<td>Virtual default class</td>
+<td>Control-plane StorageClass; must be allowed.</td>
+</tr>
+<tr>
+<td><code>vcluster.issuerCA</code></td>
+<td>System trust</td>
+<td>PEM CA for the HTTPS issuer.</td>
+</tr>
+<tr>
+<td><code>vcluster.discoveryURL</code></td>
+<td>Issuer discovery</td>
+<td>Optional HTTPS discovery address.</td>
+</tr>
+<tr>
+<td><code>vcluster.backendTLS.apiVersion</code></td>
+<td><code>gateway.networking.k8s.io/v1</code></td>
+<td>BackendTLSPolicy API served by the Gateway.</td>
+</tr>
+<tr>
+<td><code>ingress.certificateAuthority</code></td>
+<td>System trust</td>
+<td>PEM Gateway CA embedded in profile kubeconfigs.</td>
+</tr>
+<tr>
+<td><code>database.storageClassName</code></td>
+<td>Cluster default</td>
+<td>PostgreSQL data StorageClass.</td>
+</tr>
+<tr>
+<td><code>database.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>PostgreSQL backup StorageClass.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.parentName</code></td>
+<td>Not set</td>
+<td>PostgreSQL Gateway name.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.parentNamespace</code></td>
+<td>Not set</td>
+<td>PostgreSQL Gateway namespace.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.sectionName</code></td>
+<td>Not set</td>
+<td>PostgreSQL TLS listener.</td>
+</tr>
+<tr>
+<td><code>documentStore.storageClassName</code></td>
+<td>Cluster default</td>
+<td>MongoDB data StorageClass.</td>
+</tr>
+<tr>
+<td><code>documentStore.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>MongoDB backup StorageClass.</td>
+</tr>
+<tr>
+<td><code>cacheStore.storageClassName</code></td>
+<td>Cluster default</td>
+<td>Redis data StorageClass.</td>
+</tr>
+<tr>
+<td><code>cacheStore.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>Redis backup StorageClass.</td>
+</tr>
+</tbody>
+</table>
+<p>PostgreSQL TLSRoutes are created only when all three
+<code>database.tlsRoute</code> settings are present.</p>
+<h4 id="network-rules">Network rules</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network.externalEgressCIDRs</code></td>
+<td><code>[]</code></td>
+<td>External destination ranges; empty means no broad external allow rule.</td>
+</tr>
+<tr>
+<td><code>network.blacklistIPs</code></td>
+<td><code>[]</code></td>
+<td>CIDRs excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.podCIDRs</code></td>
+<td><code>[]</code></td>
+<td>Host Pod ranges excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.serviceCIDR</code></td>
+<td>Not set</td>
+<td>Host Service range excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.excludePolicies</code></td>
+<td><code>[]</code></td>
+<td>Generated policies to omit.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress</code></td>
+<td><code>[]</code></td>
+<td>Explicit cross-namespace destinations.</td>
+</tr>
+<tr>
+<td><code>network.internalIngress</code></td>
+<td><code>[]</code></td>
+<td>Explicit cross-namespace sources.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].namespace</code>, <code>network.internalIngress[].namespace</code></td>
+<td>Required for each entry</td>
+<td>Peer namespace.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].podSelector</code>, <code>network.internalIngress[].podSelector</code></td>
+<td><code>{}</code></td>
+<td>Peer Pod selector; omitted means all Pods in the peer namespace.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports</code>, <code>network.internalIngress[].ports</code></td>
+<td><code>[]</code></td>
+<td>Ports; omitted means all ports.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].port</code>, <code>network.internalIngress[].ports[].port</code></td>
+<td>Required for each port entry</td>
+<td>Named or numbered port.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].protocol</code>, <code>network.internalIngress[].ports[].protocol</code></td>
+<td>Kubernetes default (<code>TCP</code>)</td>
+<td>Port protocol.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].endPort</code>, <code>network.internalIngress[].ports[].endPort</code></td>
+<td>Not set</td>
+<td>End of a numeric port range.</td>
+</tr>
+<tr>
+<td><code>network.internalIngress[].targetPodSelector</code></td>
+<td><code>{}</code></td>
+<td>Runtime Pods selected by the ingress policy; omitted means all runtime Pods.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="network-access">Network access</h3>
 <p>Set <code>network.podCIDRs</code> and <code>network.serviceCIDR</code> to the host cluster's network
 ranges. They are excluded from broad external egress so that it does not also
@@ -1402,11 +1920,8 @@ the Service CIDR. A DNS Service IP alone does not identify the full range.
 Pod CIDRs can be listed with:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>get<span class="w"> </span>nodes<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{range .items[*]}{.metadata.name}{"  "}{.spec.podCIDR}{"  "}{.spec.podCIDRs}{"\n"}{end}'</span>
 </code></pre></div>
-<p><code>network.externalEgressCIDRs</code> lists the external ranges allowed when
-<code>externalEgress</code> is true. Use <code>0.0.0.0/0</code> and <code>::/0</code> for all external IPv4 and
-IPv6 addresses, or list narrower ranges. An empty list grants no broad
-external access. <code>network.blacklistIPs</code> excludes ranges such as cloud
-metadata endpoints from that rule.</p>
+<p>Use <code>0.0.0.0/0</code> and <code>::/0</code> for all external IPv4 and IPv6 destinations,
+or list narrower ranges in <code>network.externalEgressCIDRs</code>.</p>
 <p>For a backend Pod in another namespace, add an <code>internalEgress</code> entry:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">network</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">internalEgress</span><span class="p">:</span>
@@ -1435,17 +1950,9 @@ metadata endpoints from that rule.</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TCP</span>
 <span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8888</span>
 </code></pre></div>
-<p><code>targetPodSelector</code> is optional; without it, the policy selects all runtime
-pods for ingress isolation. Existing allow policies still apply. The provider
-updates these policies in existing runtime namespaces. Add
-<code>allow-internal-ingress</code> to <code>excludePolicies</code> to disable them.</p>
-<p>Data uses <code>internalEgress</code> to reach object storage. The Data and S3 proxies also
-have an IAM egress rule for TCP port 8080 in the configured IAM namespace.
-When replacing a manual IAM policy, verify the composed policy and an S3 read
-before removal, then repeat the read without the manual policy.</p>
-<p>Use <code>network.excludePolicies</code> only when another policy system supplies the
-same controls. See <a href="../../security/sandbox-controls/">Network policies</a> for
-the generated policies and how they combine.</p>
+<p>These rules apply to existing runtime namespaces too. See
+<a href="../../security/sandbox-controls/">Network policies</a> for how policies combine,
+Data access, and policy exclusions.</p>
 <h2 id="5-supply-storage-credentials">5. Supply storage credentials</h2>
 <p>Create the object-storage bucket and credentials through your platform's
 storage process or <a href="https://provider-storage.versioneer.at/">Provider Storage</a>.
@@ -1456,34 +1963,31 @@ Provider Datalab reads an existing input Secret. Its name comes from
 permit bucket listing with <code>s3:ListAllMyBuckets</code>. The endpoint must support
 path-style S3 requests.</p>
 <p>For a manual setup, create the Secret with your credential values:</p>
-<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>-n<span class="w"> </span>workspace<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>demo<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_ACCESS_KEY_ID</span><span class="o">=</span>&lt;KEY_ID&gt;<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span>&lt;SECRET&gt;
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>-n<span class="w"> </span>datalab<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>s-joe<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_ACCESS_KEY_ID</span><span class="o">=</span><span class="s1">'&lt;KEY_ID&gt;'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span><span class="s1">'&lt;SECRET&gt;'</span>
 </code></pre></div>
 <p>Use the platform's Secret tools for shared installations. Keep live
 credentials out of Git.</p>
 <h2 id="6-create-a-datalab">6. Create a Datalab</h2>
-<p>Save this resource as <code>datalab.yaml</code>. Alice must already exist in Keycloak.</p>
+<p>Save this resource as <code>datalab.yaml</code>. The user <code>joe</code> must already exist in
+Keycloak. This uses the <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml">Joe example</a>
+with an explicit claim namespace.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.internal/v1beta2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Datalab</span>
 <span class="nt">metadata</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-joe</span>
 <span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">users</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">alice</span>
-<span class="w">  </span><span class="nt">sessions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">joe</span>
 </code></pre></div>
 <p>Apply it and check its conditions:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>datalab.yaml
 kubectl<span class="w"> </span>get<span class="w"> </span>datalabs<span class="w"> </span>-n<span class="w"> </span>workspace
-kubectl<span class="w"> </span>describe<span class="w"> </span>datalab<span class="w"> </span>demo<span class="w"> </span>-n<span class="w"> </span>workspace
+kubectl<span class="w"> </span>describe<span class="w"> </span>datalab<span class="w"> </span>s-joe<span class="w"> </span>-n<span class="w"> </span>workspace
 </code></pre></div>
-<p>The default session starts and gets a workspace PVC. Its Data tab opens the
-shared file browser. With the permanent address enabled, users can also open
-Data without a session and publish files through the default public share.
-See <a href="../usage_concepts/">Use a Datalab</a> for session state, managed services,
+<p>See <a href="../usage_concepts/">Use a Datalab</a> for session state, managed services,
 workshop files, and sharing.</p>
 <h2 id="7-check-the-installation">7. Check the installation</h2>
 <p>Check that provider and function revisions are healthy and that the
@@ -1504,8 +2008,8 @@ kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<
 kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<span class="o">=</span>gateway.networking.k8s.io
 </code></pre></div>
 <p>For a managed store, also check its API group from the prerequisite table.
-Then verify the session login, Data address, storage access, and each requested
-service before giving the Datalab to users.</p>
+Verify the Data address, storage access, and each requested service. If you
+declared a session, also check its browser login before giving users access.</p>
 
 
 
@@ -1535,7 +2039,7 @@ service before giving the Datalab to users.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

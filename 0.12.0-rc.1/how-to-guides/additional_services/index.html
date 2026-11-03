@@ -11,7 +11,7 @@
         <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.12.0-rc.1/how-to-guides/additional_services/">
       
       
-        <link rel="prev" href="../s3-access/">
+        <link rel="prev" href="../vcluster/">
       
       
         <link rel="next" href="../../security/">
@@ -416,6 +416,34 @@
     
   
     S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
   
 
     
@@ -843,6 +871,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -951,18 +1007,19 @@
 <h1 id="additional-services">Additional services</h1>
 <p>Run services such as Dask or MLflow as Kubernetes workloads from your Datalab
 terminal. These examples need Kubernetes API access and permission to create
-Pods, Deployments, Services, and PVCs in the target namespace.</p>
+Pods, Deployments, Services, and PVCs in the target namespace.
+If the Datalab has no session, <a href="../usage_concepts/#sessions">declare one</a> first.</p>
 <p>Use a vCluster for tools that need their own CRDs, controllers, or cluster
 roles. For a short-lived process, you can run it in the terminal and use the
 editor's Ports tab to open its web interface.</p>
-<p>For PostgreSQL, MongoDB, Redis, Qdrant, and a registry, first check whether the
-<a href="../usage_concepts/">managed service fields</a> meet your needs. The platform
-operator maintains those services and their backups.</p>
+<p>Use the <a href="../usage_concepts/#database">Datalab service fields</a> for managed
+PostgreSQL, MongoDB, and Redis stores. The environment also supplies
+a session registry.</p>
 <h2 id="dask">Dask</h2>
 <p>Dask runs tasks across a scheduler and workers. This example creates one
 scheduler and one worker in the current namespace. Connect to the scheduler
 from Python with <code>dask.distributed.Client</code>.</p>
-<p><div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
 <span class="s">---</span>
 <span class="s">apiVersion: v1</span>
 <span class="s">kind: Service</span>
@@ -1027,7 +1084,7 @@ from Python with <code>dask.distributed.Client</code>.</p>
 <span class="s">            limits:   {cpu: "1",    memory: "2Gi"}</span>
 <span class="s">EOF</span>
 </code></pre></div>
-Open the scheduler dashboard through the editor's Ports tab:</p>
+<p>Open the scheduler dashboard through the editor's Ports tab:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>port-forward<span class="w"> </span>svc/dask-scheduler<span class="w"> </span><span class="m">8787</span>:8787
 </code></pre></div>
 <p>Dask Gateway also needs cluster-wide resources. Use a vCluster or ask the
@@ -1048,9 +1105,10 @@ helm<span class="w"> </span>upgrade<span class="w"> </span>--install<span class=
 SQLite database on a PVC and artifacts in an existing S3 bucket. Set <code>BUCKET</code>
 to a bucket your Datalab can write to.</p>
 <p>The PVC belongs to the current namespace. Check namespace deletion rules and
-the volume's reclaim policy before using it for records you need to keep. For a shared service,
-use a managed database and arrange artifact backups with the operator.</p>
-<p><div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BUCKET</span><span class="o">=</span>ws-frank<span class="w"> </span><span class="c1"># replace accordingly</span>
+the volume's reclaim policy before storing records you need to keep.
+For a shared service, use a managed database and arrange artifact backups
+with the operator.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BUCKET</span><span class="o">=</span>s-jeff<span class="w"> </span><span class="c1"># Use a bucket your Datalab can write to.</span>
 
 kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;EOF</span>
 <span class="s">apiVersion: v1</span>
@@ -1061,6 +1119,7 @@ kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> <
 <span class="s">stringData:</span>
 <span class="s">  accessKey: "${AWS_ACCESS_KEY_ID}"</span>
 <span class="s">  secretKey: "${AWS_SECRET_ACCESS_KEY}"</span>
+<span class="s">  sessionToken: "${AWS_SESSION_TOKEN:-}"</span>
 <span class="s">---</span>
 <span class="s">apiVersion: v1</span>
 <span class="s">kind: ConfigMap</span>
@@ -1137,6 +1196,9 @@ kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> <
 <span class="s">            - name: AWS_SECRET_ACCESS_KEY</span>
 <span class="s">              valueFrom:</span>
 <span class="s">                secretKeyRef: { name: minio-creds, key: secretKey }</span>
+<span class="s">            - name: AWS_SESSION_TOKEN</span>
+<span class="s">              valueFrom:</span>
+<span class="s">                secretKeyRef: { name: minio-creds, key: sessionToken }</span>
 <span class="s">            - name: AWS_S3_FORCE_PATH_STYLE</span>
 <span class="s">              value: "true"</span>
 <span class="s">            - name: AWS_EC2_METADATA_DISABLED</span>
@@ -1158,18 +1220,17 @@ kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> <
 <span class="s">            claimName: mlflow</span>
 <span class="s">EOF</span>
 </code></pre></div>
-Open the MLflow interface through the editor's Ports tab:</p>
+<p>Open the MLflow interface through the editor's Ports tab:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>port-forward<span class="w"> </span>svc/mlflow<span class="w"> </span><span class="m">5000</span>:5000
 </code></pre></div>
 <p>Point your code at the forwarded tracking server:</p>
 <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">MLFLOW_TRACKING_URI</span><span class="o">=</span><span class="s2">"http://127.0.0.1:5000"</span>
 </code></pre></div>
 <h2 id="postgresql-with-psql">PostgreSQL with psql</h2>
-<p>If your Datalab provides database credentials through
-<code>POSTGRES_&lt;HOST&gt;_&lt;DATABASE&gt;_URL_EXTERNAL</code> environment variables, you can
-connect to the managed PostgreSQL instance by starting a Pod that opens a
-<code>psql</code> shell.</p>
-<div class="highlight"><pre><span></span><code>envsubst<span class="w"> </span><span class="s">&lt;&lt;'EOF' | kubectl apply -f -</span>
+<p>The <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml">Jeff example</a>
+provides <code>POSTGRES_PG0_DEV_URL</code> for database <code>dev</code> on <code>pg0</code>. Run this command
+from a session with that variable to start a psql Pod in the current namespace:</p>
+<div class="highlight"><pre><span></span><code>envsubst<span class="w"> </span><span class="s1">'${POSTGRES_PG0_DEV_URL}'</span><span class="w"> </span><span class="s">&lt;&lt;'EOF' | kubectl apply -f -</span>
 <span class="s">apiVersion: v1</span>
 <span class="s">kind: Pod</span>
 <span class="s">metadata:</span>
@@ -1185,34 +1246,20 @@ connect to the managed PostgreSQL instance by starting a Pod that opens a
 <span class="s">      - sh</span>
 <span class="s">      - -lc</span>
 <span class="s">      - |</span>
-<span class="s">        exec psql "$POSTGRES_URL_EXTERNAL"</span>
+<span class="s">        exec psql "$POSTGRES_URL"</span>
 <span class="s">    env:</span>
-<span class="s">      - name: POSTGRES_URL_EXTERNAL</span>
-<span class="s">        value: ${POSTGRES_PG0_DEV_URL_EXTERNAL}</span>
+<span class="s">      - name: POSTGRES_URL</span>
+<span class="s">        value: ${POSTGRES_PG0_DEV_URL}</span>
 <span class="s">EOF</span>
 </code></pre></div>
 <p>Attach to the Pod after it starts:</p>
 <div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>attach<span class="w"> </span>-it<span class="w"> </span>pgsql-debug
 </code></pre></div>
-<p>Use psql to create and query a test table:</p>
+<p>Check the connection with a temporary table:</p>
 <div class="highlight"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">on</span>
-<span class="err">\</span><span class="n">l</span>
-
-<span class="k">DROP</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">demo</span><span class="p">;</span>
-
-<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">demo</span><span class="w"> </span><span class="p">(</span>
-<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">serial</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-<span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="nb">text</span><span class="p">,</span>
-<span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">timestamptz</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">now</span><span class="p">(),</span>
-<span class="w">    </span><span class="n">meta</span><span class="w"> </span><span class="n">jsonb</span>
-<span class="p">);</span>
-
-<span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">demo</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">meta</span><span class="p">)</span><span class="w"> </span><span class="k">VALUES</span>
-<span class="p">(</span><span class="s1">'alpha'</span><span class="p">,</span><span class="w"> </span><span class="s1">'{"type":"test","value":1}'</span><span class="p">),</span>
-<span class="p">(</span><span class="s1">'beta'</span><span class="p">,</span><span class="w">  </span><span class="s1">'{"type":"test","value":2}'</span><span class="p">),</span>
-<span class="p">(</span><span class="s1">'gamma'</span><span class="p">,</span><span class="w"> </span><span class="s1">'{"type":"prod","value":3}'</span><span class="p">);</span>
-
-<span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">demo</span><span class="p">;</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">TEMP</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">datalab_check</span><span class="w"> </span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="nb">text</span><span class="p">);</span>
+<span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">datalab_check</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="s1">'ready'</span><span class="p">);</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">datalab_check</span><span class="p">;</span>
 </code></pre></div>
 <h2 id="keep-or-remove-a-service">Keep or remove a service</h2>
 <p>Remove test services when the experiment ends. Before keeping one, agree with
@@ -1247,7 +1294,7 @@ Back up the service data separately from the session volume.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

@@ -434,6 +434,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../how-to-guides/vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../how-to-guides/additional_services/" class="md-nav__link">
         
   
@@ -527,24 +555,6 @@
         
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Overview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -561,58 +571,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#access-to-a-datalab" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Access to a Datalab
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#session-defaults" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session defaults
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#platform-responsibilities" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Platform responsibilities
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -832,6 +790,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -867,47 +853,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#access-to-a-datalab" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Access to a Datalab
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#session-defaults" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session defaults
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#platform-responsibilities" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Platform responsibilities
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -928,85 +873,40 @@
 
 <h1 id="security">Security</h1>
 <p>A session can use the credentials, volumes, Kubernetes permissions, and
-network access available to its Pod. The platform operator decides which
-users may start sessions and which resources they may use.</p>
-<p>Provider Datalab passes session security settings to Educates and creates
-network policies. Educates creates the workspace Pods and applies the
-namespace, role, and token settings. The cluster must enforce them through
-its CNI, admission rules, Pod security, and RBAC.</p>
-<h2 id="access-to-a-datalab">Access to a Datalab</h2>
-<p>The ingress controller must handle session sign-in and authorization.
-Provider Datalab creates Keycloak clients, groups, and roles for each Datalab.
-Users receive <code>ws_access</code> or <code>ws_admin</code>; the client service account receives
-<code>ws_api</code> for machine access.</p>
-<p>Shared browser ingress can use one platform OAuth client and check the
-Datalab roles for each requested host. Services belonging to one Datalab can
-use its generated client. See <a href="../how-to-guides/authentication/">Authentication</a>
-for the client model and controller examples.</p>
-<p>Anyone who can read the runtime <code>&lt;datalab&gt;-oauth2-client</code> Secret can request
-machine tokens for that Datalab. Limit Secret access to the users and
-services that need it, and rotate credentials when access changes.</p>
-<p>Public Data shares allow browsing and downloads without sign-in. Users
-should place only files they intend to publish in the Datalab's <code>public</code>
-folder. See <a href="../how-to-guides/usage_concepts/#sharing-data-with-the-world">Public sharing</a>.</p>
-<h2 id="session-defaults">Session defaults</h2>
+network access available to its Pod. The platform operator decides who may
+use them and sets the <a href="../how-to-guides/installation/#environmentconfig-values-and-defaults">EnvironmentConfig</a>.</p>
+<p>Provider Datalab configures sessions and creates network policies. The cluster
+must enforce these controls through its CNI, admission rules, Pod security,
+and RBAC.</p>
 <table>
 <thead>
 <tr>
-<th>Setting</th>
-<th>Default</th>
-<th>Effect</th>
+<th>Control</th>
+<th>Details</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>spec.security.policy</code></td>
-<td><code>baseline</code></td>
-<td>Selects the Educates namespace security policy. <code>privileged</code> also enables Docker.</td>
+<td>Browser sign-in, Datalab roles, and machine tokens</td>
+<td><a href="../how-to-guides/authentication/">Authentication</a></td>
 </tr>
 <tr>
-<td><code>spec.security.kubernetesAccess</code></td>
-<td><code>true</code></td>
-<td>Makes a Kubernetes service account token available to the session.</td>
+<td>Pod credentials, Kubernetes access, and privileged workloads</td>
+<td><a href="workspace-sessions/">Session access</a></td>
 </tr>
 <tr>
-<td><code>spec.security.kubernetesRole</code></td>
-<td><code>edit</code></td>
-<td>Sets the session's Kubernetes permissions.</td>
+<td>Allowed traffic and generated NetworkPolicies</td>
+<td><a href="sandbox-controls/">Network policies</a></td>
 </tr>
 <tr>
-<td><code>spec.security.externalEgress</code></td>
-<td><code>true</code></td>
-<td>Enables the external egress rule for the configured CIDRs.</td>
-</tr>
-<tr>
-<td><code>spec.vcluster</code></td>
-<td><code>false</code></td>
-<td>Uses the host namespace directly. When enabled, adds a virtual Kubernetes API.</td>
+<td>Files that readers can open without sign-in</td>
+<td><a href="../how-to-guides/usage_concepts/#sharing-data-with-the-world">Public sharing</a></td>
 </tr>
 </tbody>
 </table>
-<p>Set shared security defaults in <code>EnvironmentConfig.data.defaults.security</code>.
-Use stricter values when workspace code does not need Kubernetes access,
-external traffic, or privileged containers. A vCluster changes the Kubernetes
-API available to users; its Pods still run on the host cluster.</p>
-<h2 id="platform-responsibilities">Platform responsibilities</h2>
-<p>The platform team manages ingress authentication, the CNI, admission rules,
-RBAC, DNS, storage classes, quotas, and node access. It also manages cloud
-IAM, bucket policy, backup, retention, and audit for the data and services
-available to a Datalab.</p>
-<p>NetworkPolicy rules are additive. Another policy can allow traffic that the
-generated policies do not allow. Standard NetworkPolicy also cannot express
-ordered deny rules or domain-name allowlists. Check the combined rules in
-the deployed cluster.</p>
-<p>Privileged containers, host mounts, runtime sockets, and broad credentials
-can give workspace code access beyond its namespace. Approve those settings
-only for users and workloads that need them. Replacing a Pod or tightening a
-network rule does not revoke a leaked credential; rotate or revoke it at its
-source.</p>
-<p><a href="workspace-sessions/">Session access</a> describes what workspace code can use.
-<a href="sandbox-controls/">Network policies</a> lists the generated policies and the
-settings that control them.</p>
+<p>The platform team also manages node access, DNS, storage classes, quotas,
+cloud IAM, backup, retention, and audit. Check these controls together before
+giving users access to a Datalab.</p>
 
 
 
@@ -1036,7 +936,7 @@ settings that control them.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   

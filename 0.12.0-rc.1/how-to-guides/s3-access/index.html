@@ -14,7 +14,7 @@
         <link rel="prev" href="../authentication/">
       
       
-        <link rel="next" href="../additional_services/">
+        <link rel="next" href="../vcluster/">
       
       
         
@@ -479,15 +479,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#s3-access-to-s-joe" class="md-nav__link">
+  <a href="#s3-access-to-s-jane" class="md-nav__link">
     <span class="md-ellipsis">
       
-        S3 access to s-joe
+        S3 access to s-jane
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="S3 access to s-joe">
+    <nav class="md-nav" aria-label="S3 access to s-jane">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -521,6 +521,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -849,6 +877,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -902,15 +958,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#s3-access-to-s-joe" class="md-nav__link">
+  <a href="#s3-access-to-s-jane" class="md-nav__link">
     <span class="md-ellipsis">
       
-        S3 access to s-joe
+        S3 access to s-jane
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="S3 access to s-joe">
+    <nav class="md-nav" aria-label="S3 access to s-jane">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -964,46 +1020,29 @@
 <p>The read-only S3 endpoint is experimental. Range reads currently return HTTP
 <code>200</code> with <code>Content-Range</code>, rather than HTTP <code>206</code>.</p>
 <h2 id="enable-the-endpoint">Enable the endpoint</h2>
-<p>Set <code>EnvironmentConfig.data.httpRoute.enableS3: true</code> to add a read-only
-S3 endpoint on the shared Data hostname for every Data-enabled Datalab in the
-environment. There is no per-Datalab override. Set <code>httpRoute.enabled: true</code>
-and <code>ingress.enabled: false</code>. Use a Gateway API controller that supports
-HTTPRoute header regular expressions, such as Contour, with HTTP and
-TLS-terminating HTTPS listeners for the Data hostnames. Add a ReferenceGrant
-if the Gateway uses a certificate Secret from another namespace.</p>
-<p>Merge these settings into the selected EnvironmentConfig:</p>
-<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">ingress</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.acme.com</span>
-<span class="w">  </span><span class="nt">httpRoute</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">enableS3</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">parentName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<span class="w">    </span><span class="nt">parentNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gateway-system</span>
-<span class="w">    </span><span class="nt">sectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-https</span>
-<span class="w">    </span><span class="nt">httpSectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-http</span>
-</code></pre></div>
-<p>With <code>enableS3: false</code> or omitted, the same HTTPRoutes serve only the browser
-endpoint. The controller does not create an S3 service or S3 routing rule.</p>
-<p>Allow the runtime to reach object storage through the environment's network
-settings. The composed S3 policy permits IAM traffic on TCP port 8080 in the
-configured IAM namespace. The Gateway must be able to reach the S3 service.
-See <a href="../installation/#network-access">Network access</a> for the shared settings.</p>
-<h2 id="s3-access-to-s-joe">S3 access to s-joe</h2>
-<p>The <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml">Joe example</a>
-creates the Datalab <code>s-joe</code> and selects <code>datalab-custom</code>. With the example
-EnvironmentConfig, its endpoint is <code>https://s-joe.lab.acme.com</code> and its issuer
+<p>Set <code>httpRoute.enableS3: true</code> in the selected
+<a href="../installation/#identity-and-endpoints">EnvironmentConfig</a>, with Gateway
+Data exposure configured as described under <a href="../installation/#data-address">Data address</a>.
+This adds the S3 endpoint to each Data-enabled Datalab's browser hostname.</p>
+<p>Use a Gateway API controller that supports HTTPRoute header regular
+expressions, such as Contour. Add a ReferenceGrant if its certificate Secret
+is in another namespace. With S3 disabled, the routes serve only the browser.
+The <a href="../../security/sandbox-controls/#data-service-policies">network policies</a>
+must permit access from the Gateway and access to object storage and IAM.</p>
+<h2 id="s3-access-to-s-jane">S3 access to s-jane</h2>
+<p>The <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml">Jane example</a>
+creates the Datalab <code>s-jane</code> and selects <code>datalab-custom</code>. With the example
+EnvironmentConfig, its endpoint is <code>https://s-jane.lab.acme.com</code> and its issuer
 is <code>https://identity.acme.com/realms/acme</code>. Replace these example DNS names
 with your environment's values.</p>
 <p>Keycloak checks <code>CLIENT_SECRET</code> and issues a JWT. The AWS CLI sends it as
 <code>AWS_SESSION_TOKEN</code> in the <code>X-Amz-Security-Token</code> header. NGINX checks the
 tenant ID and passes the token to oauth2-proxy, which checks its signature,
 issuer, audience, expiry, and Datalab role. After authorization, <code>rclone serve
-s3</code> checks the original AWS SigV4 request using <code>s-joe</code> as both signing
+s3</code> checks the original AWS SigV4 request using <code>s-jane</code> as both signing
 values. It serves read-only data through separate upstream storage credentials.</p>
 <div class="highlight"><pre><span></span><code>AWS CLI
-  │ HTTPS :443 → s-joe.lab.acme.com
+  │ HTTPS :443 → s-jane.lab.acme.com
   ▼
 Contour / Envoy
   │ HTTP → Service data-s3 :8080
@@ -1014,7 +1053,7 @@ NGINX gateway :8080
   │                        (example internal URL: keycloak.keycloak:8080)
   │
   └─ If authorized → rclone 127.0.0.1:8081
-                         └─ HTTPS → upstream S3 storage (s3.acme :443)
+                         └─ HTTPS → upstream S3 storage (s3.acme.com :443)
 </code></pre></div>
 <p>NGINX, oauth2-proxy, and rclone share the <code>data-s3</code> Pod and use localhost for
 calls within that Pod. The Gateway implementation and upstream storage depend
@@ -1030,11 +1069,11 @@ on your environment. The example internal Keycloak URL uses Service port
 <tbody>
 <tr>
 <td><code>AccessKeyId</code></td>
-<td><code>s-joe</code></td>
+<td><code>s-jane</code></td>
 </tr>
 <tr>
 <td><code>SecretAccessKey</code></td>
-<td><code>s-joe</code></td>
+<td><code>s-jane</code></td>
 </tr>
 <tr>
 <td><code>SessionToken</code></td>
@@ -1047,8 +1086,8 @@ on your environment. The example internal Keycloak URL uses Service port
 </tbody>
 </table>
 <p>The signing values are public tenant identifiers. They do not grant access
-without a valid JWT. The token must include <code>s-joe</code> in <code>aud</code> and at least one
-of <code>ws_access</code>, <code>ws_admin</code>, or <code>ws_api</code> under <code>resource_access.s-joe.roles</code>.
+without a valid JWT. The token must include <code>s-jane</code> in <code>aud</code> and at least one
+of <code>ws_access</code>, <code>ws_admin</code>, or <code>ws_api</code> under <code>resource_access.s-jane.roles</code>.
 These are Keycloak client roles, separate from OAuth scopes. All three permit
 reads. The upstream storage policy limits which buckets and objects the
 Datalab can read. Missing or invalid tokens cannot use a browser cookie or an
@@ -1058,30 +1097,31 @@ OAuth clients must emit the same audience and tenant roles. Service-account
 tokens do not need a verified email address.</p>
 <p>The following Bash commands use the
 <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/tests/s3/s3-credentials.py">credential helper</a>
-from the repository root. It uses the client credentials grant with <code>s-joe</code>
+from the repository root. It uses the client credentials grant with <code>s-jane</code>
 as the client ID. At the prompt, enter the <code>client_secret</code> from the generated
-<code>s-joe-oauth2-client</code> Secret in the runtime namespace. Replace <code>example-data</code>
-with a bucket that the Datalab can read. Both methods use path-style requests.</p>
+<code>s-jane-oauth2-client</code> Secret in the runtime namespace. The commands read bucket
+<code>s-jane</code> with path-style requests. Change the bucket name if your storage uses
+another name.</p>
 <h3 id="manual-token-retrieval">Manual token retrieval</h3>
 <div class="highlight"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-z<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">CLIENT_SECRET</span><span class="k">:-</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
 <span class="w">  </span><span class="nv">CLIENT_SECRET</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">'import getpass; print(getpass.getpass("CLIENT_SECRET: "))'</span><span class="k">)</span><span class="s2">"</span>
 <span class="k">fi</span>
 <span class="nb">export</span><span class="w"> </span>CLIENT_SECRET
-<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_ACCESS_KEY_ID</span><span class="o">=</span>s-joe<span class="w"> </span><span class="nv">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span>s-joe
-<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_ENDPOINT_URL</span><span class="o">=</span>https://s-joe.lab.acme.com
+<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_ACCESS_KEY_ID</span><span class="o">=</span>s-jane<span class="w"> </span><span class="nv">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span>s-jane
+<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_ENDPOINT_URL</span><span class="o">=</span>https://s-jane.lab.acme.com
 <span class="nb">export</span><span class="w"> </span><span class="nv">AWS_DEFAULT_REGION</span><span class="o">=</span>us-east-1
-<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_PROFILE</span><span class="o">=</span>s-joe
-aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>s3.addressing_style<span class="w"> </span>path<span class="w"> </span>--profile<span class="w"> </span>s-joe
+<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_PROFILE</span><span class="o">=</span>s-jane
+aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>s3.addressing_style<span class="w"> </span>path<span class="w"> </span>--profile<span class="w"> </span>s-jane
 
 <span class="nv">credentials</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>python3<span class="w"> </span>tests/s3/s3-credentials.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--tenant<span class="w"> </span>s-joe<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tenant<span class="w"> </span>s-jane<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--issuer<span class="w"> </span>https://identity.acme.com/realms/acme<span class="k">)</span><span class="s2">"</span>
 <span class="nv">AWS_SESSION_TOKEN</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span><span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"</span><span class="nv">$credentials</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">'import json, sys; print(json.load(sys.stdin)["SessionToken"])'</span><span class="k">)</span><span class="s2">"</span>
 <span class="nb">export</span><span class="w"> </span>AWS_SESSION_TOKEN
 <span class="nb">unset</span><span class="w"> </span>credentials
 
-aws<span class="w"> </span>s3<span class="w"> </span>ls<span class="w"> </span>s3://example-data/
+aws<span class="w"> </span>s3<span class="w"> </span>ls<span class="w"> </span>s3://s-jane/
 </code></pre></div>
 <p>Run the token retrieval command again after the token expires, or use automatic
 renewal below.</p>
@@ -1097,23 +1137,24 @@ process. The CLI obtains new credentials when needed, using the helper's
 <span class="w">  </span><span class="nv">CLIENT_SECRET</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">'import getpass; print(getpass.getpass("CLIENT_SECRET: "))'</span><span class="k">)</span><span class="s2">"</span>
 <span class="k">fi</span>
 <span class="nb">export</span><span class="w"> </span>CLIENT_SECRET
-<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_PROFILE</span><span class="o">=</span>s-joe
+<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_PROFILE</span><span class="o">=</span>s-jane
 
-aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>region<span class="w"> </span>us-east-1<span class="w"> </span>--profile<span class="w"> </span>s-joe
-aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>endpoint_url<span class="w"> </span>https://s-joe.lab.acme.com<span class="w"> </span>--profile<span class="w"> </span>s-joe
-aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>s3.addressing_style<span class="w"> </span>path<span class="w"> </span>--profile<span class="w"> </span>s-joe
+aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>region<span class="w"> </span>us-east-1<span class="w"> </span>--profile<span class="w"> </span>s-jane
+aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>endpoint_url<span class="w"> </span>https://s-jane.lab.acme.com<span class="w"> </span>--profile<span class="w"> </span>s-jane
+aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>s3.addressing_style<span class="w"> </span>path<span class="w"> </span>--profile<span class="w"> </span>s-jane
 aws<span class="w"> </span>configure<span class="w"> </span><span class="nb">set</span><span class="w"> </span>credential_process<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">"python3 \"</span><span class="nv">$PWD</span><span class="s2">/tests/s3/s3-credentials.py\" --tenant s-joe --issuer https://identity.acme.com/realms/acme"</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--profile<span class="w"> </span>s-joe
+<span class="w">  </span><span class="s2">"python3 \"</span><span class="nv">$PWD</span><span class="s2">/tests/s3/s3-credentials.py\" --tenant s-jane --issuer https://identity.acme.com/realms/acme"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--profile<span class="w"> </span>s-jane
 
-aws<span class="w"> </span>s3<span class="w"> </span>ls<span class="w"> </span>s3://example-data/
+aws<span class="w"> </span>s3<span class="w"> </span>ls<span class="w"> </span>s3://s-jane/
 </code></pre></div>
 <p>Keep <code>CLIENT_SECRET</code> available in the environment of the AWS CLI or SDK
 process. If you move the repository, update the helper's absolute path in the
 profile.</p>
 <p>The endpoint supports list, HEAD, GET, and byte-range GET requests. It remains
-read only when <code>spec.data.readOnlyMount</code> is false. Writes and presigned S3 URLs
-are rejected. packageR download and share links use the browser route.</p>
+read only even when the Data browser has write permissions. Writes and
+presigned S3 URLs are rejected. packageR download and share links use the
+browser route.</p>
 
 
 
@@ -1143,7 +1184,7 @@ are rejected. packageR download and share links use the browser route.</p>
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Copyright &copy; 2025, Versioneer
+      Copyright &copy; 2026, Versioneer
     </div>
   
   
