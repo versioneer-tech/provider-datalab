@@ -5,16 +5,20 @@
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
 > [!NOTE]
-> From Datalab 0.12.0, the package path changes from
-> `ghcr.io/versioneer-tech/provider-datalab/educates`
-> to `ghcr.io/versioneer-tech/provider-datalab`.
+> The v1 release removes Educates and built-in session management.
+> See [ADR-001](docs/architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md)
+> for the decision and upgrade effects.
 
 Provider Datalab is a Crossplane configuration package for shared data
-workspaces. A team requests storage access, compute sessions, and managed
+services. A team requests storage access, virtual clusters, and managed
 services through one `Datalab` resource.
 
+Use `pkg.internal/v1` for Datalab resources. See the
+[API migration guide](docs/how-to-guides/installation.md#datalab-api-version)
+for the deprecated beta endpoints.
+
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: s-jeff
@@ -34,29 +38,28 @@ spec:
 ```
 
 The platform operator sets identity, network, storage, and security rules.
+Each service publishes a separate connection Secret. Approved exports can
+bind selected keys into a named virtual namespace; the Datalab reports delivery
+in `status.secretBindings`. There is no combined credential Secret.
 
-Sessions provide a browser editor, terminal, and persistent workspace.
 The shared Data service, packageR, lets users browse and share object storage.
 Datalabs can also request PostgreSQL, MongoDB, Redis, and named virtual Kubernetes
 clusters. Each virtual API uses `https://<datalab>.<domain>/.<instance>`, such as
 `https://s-joe.lab.acme.com/.vc0`.
 
-The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
-Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
-See the [operator prerequisites](docs/how-to-guides/installation.md#prerequisites)
-for the required resource APIs.
-
-<img src="docs/imgs/datalab-vs-code-server.png" height="200" alt="Datalab browser editor"/>
+Install `ghcr.io/versioneer-tech/provider-datalab` with the providers and
+operators listed in the [installation guide](docs/how-to-guides/installation.md).
 
 ## Documentation
 
 - [Installation](docs/how-to-guides/installation.md): prerequisites, setup, and all EnvironmentConfig values and defaults.
-- [Use a Datalab](docs/how-to-guides/usage_concepts.md): sessions, stores, and file sharing.
+- [Use a Datalab](docs/how-to-guides/usage_concepts.md): stores, virtual clusters, and file sharing.
 - [Examples](examples/base): complete Datalab manifests.
-- [Authentication](docs/how-to-guides/authentication.md): Keycloak roles and session ingress protection.
+- [Authentication](docs/how-to-guides/authentication.md): Keycloak roles and service access.
 - [S3 client access](docs/how-to-guides/s3-access.md): read data with AWS tools.
+- [Connections](docs/how-to-guides/connections.md): service Secrets and approved virtual namespace bindings.
 - [Virtual clusters](docs/how-to-guides/vcluster.md): access profiles and a PostgreSQL-backed STAC catalog.
-- [Additional services](docs/how-to-guides/additional_services.md): run Dask, MLflow, or psql from a workspace.
+- [Additional services](docs/how-to-guides/additional_services.md): run Dask, MLflow, or psql in a virtual cluster.
 - [Security](docs/security/index.md): access rules and operator responsibilities.
 - [API reference](docs/reference-guides/api.md): Datalab fields and service types.
 

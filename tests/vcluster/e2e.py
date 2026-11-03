@@ -24,7 +24,6 @@ from urllib.request import Request, urlopen
 ISSUER = "https://keycloak.keycloak:8443/realms/integration"
 LAB = "verify-vcluster"
 HOST = "verify-vcluster.lab.acme.com"
-PREFIX = "/.vc0"
 
 
 CATALOG_PATH = "/api/v1/namespaces/demo/services/catalog:8080/proxy"
@@ -53,36 +52,32 @@ def check_catalog(api, bearer):
 
 
 def deploy_catalog(api, bearer):
-    postgres = Path("/postgres")
+    injected = api("/api/v1/namespaces/demo/secrets/catalog-postgres-admin", bearer)
     values = {
-        target: (postgres / source).read_text().strip()
-        for target, source in (
-            ("PGHOST", "POSTGRES_PG0_HOST"),
-            ("PGPORT", "POSTGRES_PG0_PORT"),
-            ("PGUSER", "POSTGRES_PG0_USER"),
-            ("PGPASSWORD", "POSTGRES_PG0_PASSWORD"),
-        )
+        key: base64.b64decode(value).decode() for key, value in injected["data"].items()
     }
+    assert set(values) == {"PGHOST", "PGPORT", "PGUSER", "PGPASSWORD"}
     values["PGDATABASE"] = "catalog"
-    for name, data in (
-        ("catalog-postgres-admin", values),
-        (
-            "catalog-postgres",
-            {**values, "PGUSER": "catalog", "PGPASSWORD": secrets.token_urlsafe(32)},
-        ),
-    ):
-        api(
-            "/api/v1/namespaces/demo/secrets",
-            bearer,
-            method="POST",
-            expected=201,
-            body={
-                "apiVersion": "v1",
-                "kind": "Secret",
-                "metadata": {"name": name},
-                "stringData": data,
+    print(
+        "PASS the catalog receives its approved PostgreSQL binding through the virtual API",
+        flush=True,
+    )
+    api(
+        "/api/v1/namespaces/demo/secrets",
+        bearer,
+        method="POST",
+        expected=201,
+        body={
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": "catalog-postgres"},
+            "stringData": {
+                **values,
+                "PGUSER": "catalog",
+                "PGPASSWORD": secrets.token_urlsafe(32),
             },
-        )
+        },
+    )
     documents = json.loads(Path("/test/catalog.json").read_text())
     api(
         "/apis/batch/v1/namespaces/demo/jobs",
@@ -100,12 +95,6 @@ def deploy_catalog(api, bearer):
         return status.get("succeeded") == 1
 
     wait_until(migration_finished, "PgSTAC migration did not finish")
-    # Remove the privileged migration input before starting the application.
-    api(
-        "/api/v1/namespaces/demo/secrets/catalog-postgres-admin",
-        bearer,
-        method="DELETE",
-    )
     api(
         "/apis/apps/v1/namespaces/demo/deployments",
         bearer,
@@ -316,9 +305,10 @@ def main():
     parser.add_argument("gateway_ip")
     parser.add_argument("--other-only", action="store_true")
     parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--api-only", action="store_true")
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--revoked", action="store_true")
+    parser.add_argument("--binding-version")
+    parser.add_argument("--bindings-removed", action="store_true")
     args = parser.parse_args()
     context = ssl.create_default_context(cafile="/test/gateway.crt")
 
@@ -398,20 +388,50 @@ def main():
         print("PASS vc1 remains available after vc0 removal", flush=True)
         return
 
-    if args.api_only:
-        deadline = time.monotonic() + 120
-        while True:
-            try:
-                api("/api/v1/namespaces", profile_token("administrator"))
-                break
-            except (AssertionError, OSError, subprocess.CalledProcessError):
-                if time.monotonic() > deadline:
-                    raise
-                time.sleep(2)
-        print("PASS HTTPS API and generated credentials after re-enable", flush=True)
-        return
-
     bearer = profile_token("administrator")
+    settings_path = "/api/v1/namespaces/connections/secrets/catalog-settings"
+    if args.binding_version:
+        def binding_current():
+            result = api(settings_path, bearer, expected=(200, 404))
+            return result.get("data") == {
+                "CATALOG_ENDPOINT": base64.b64encode(args.binding_version.encode()).decode()
+            }
+
+        wait_until(binding_current, "The selected host Secret did not reach its binding")
+        api(
+            "/api/v1/namespaces/connections", profile_token("other", "vc1"),
+            expected=404, instance="vc1",
+        )
+        api(
+            settings_path, bearer,
+            {"metadata": {"labels": {"datalabs.pkg.internal/secret-binding": None}}},
+            method="PATCH", expected=(403, 422),
+        )
+        print("PASS selected host keys, instance isolation, and binding ownership admission", flush=True)
+        return
+    if args.bindings_removed:
+        def bindings_absent():
+            return all(
+                api(path, bearer, expected=(200, 404)).get("kind") != "Secret"
+                for path in (settings_path, "/api/v1/namespaces/demo/secrets/catalog-postgres-admin")
+            )
+
+        wait_until(bindings_absent, "The removed bindings still have target Secrets")
+        api("/api/v1/namespaces/connections", bearer)
+
+        def target_released():
+            result = api(
+                "/api/v1/namespaces/connections/secrets", bearer,
+                {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "catalog-settings"}},
+                method="POST", expected=(201, 403, 422),
+            )
+            return result.get("kind") == "Secret"
+
+        wait_until(target_released, "Binding protection still reserves the removed target")
+        api(settings_path, bearer, method="DELETE")
+        check_catalog(api, bearer)
+        print("PASS binding removal releases the target and preserves its namespace and application", flush=True)
+        return
     marker = Path("/tmp/vcluster-editor-token")
     if args.read_only or args.revoked:
         editor = marker.read_text()

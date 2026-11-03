@@ -18,12 +18,6 @@ def compose(req, rsp):
         for key, value in {**req.observed.resources, **rsp.desired.resources}.items()
     }
 
-    if not any(
-        body.get("metadata", {}).get("labels", {}).get("datalabs.pkg.internal/vcluster")
-        for body in objects.values()
-    ):
-        return
-
     def reference(key):
         body = objects[key]
         return _render_template(
@@ -105,7 +99,6 @@ def compose(req, rsp):
         protect(
             f"{instance}-quota", f"resourcequota-{name}-overall-storage", control_plane
         )
-        protect(f"{instance}-environment", f"workshopenvironment-{name}", control_plane)
         for suffix in (
             "authentication",
             "config",
@@ -158,9 +151,7 @@ def compose(req, rsp):
         "groupId": ("group.keycloak.m.crossplane.io/v1alpha1", "Group"),
     }
     for key, body in objects.items():
-        if key.startswith(
-            "keycloak-vcluster-"
-        ) and ".keycloak.m.crossplane.io/" in body.get("apiVersion", ""):
+        if ".keycloak.m.crossplane.io/" in body.get("apiVersion", ""):
             params = body.get("spec", {}).get("forProvider", {})
             for field, (api_version, kind) in identity_refs.items():
                 refs = [params.get(field + "Ref", {})]

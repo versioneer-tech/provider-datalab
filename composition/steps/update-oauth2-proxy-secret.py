@@ -9,8 +9,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _b64get_any,
     _extract_data,
-    _extract_manifest,
-    _safe_str,
     _to_dict,
 )
 from composition.render import _render_template
@@ -36,11 +34,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     )
     cookie_secret = _hashlib.sha256(client_secret.encode("utf-8")).hexdigest()[:32]
 
-    environment_manifest = _extract_manifest(
-        observed.get(f"workshopenvironment-{xr_name}")
-    )
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
+    runtime_namespace = xr_name
 
     secret_name = f"{xr_name}-oauth2-client"
     key = f"oauth2-client-secret-{xr_name}"
@@ -48,7 +42,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         req,
         "oauth2-client-secret/manifest",
         secret_name=secret_name,
-        workshop_ns=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         data={
             key: _base64.b64encode(value.encode("utf-8")).decode("ascii")
             for key, value in {

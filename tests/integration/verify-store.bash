@@ -28,8 +28,8 @@ case "${store_type}" in
     SERVICE_NAME=mongodb-verify-svc
     CLIENT_IMAGE="${MONGO_CLIENT_IMAGE}"
     SECRET_KEYS=(
-      MONGO_VERIFY_HOST MONGO_VERIFY_PORT MONGO_VERIFY_DATABASE
-      MONGO_VERIFY_USER MONGO_VERIFY_PASSWORD MONGO_VERIFY_URI
+      host port database
+      user password uri
     )
     ;;
   redis)
@@ -43,8 +43,8 @@ case "${store_type}" in
     SERVICE_NAME=verify
     CLIENT_IMAGE="${REDIS_CLIENT_IMAGE}"
     SECRET_KEYS=(
-      REDIS_VERIFY_HOST REDIS_VERIFY_PORT REDIS_VERIFY_USER
-      REDIS_VERIFY_PASSWORD REDIS_VERIFY_DATABASE REDIS_VERIFY_URL
+      host port user
+      password database url
     )
     ;;
   *)
@@ -56,7 +56,7 @@ esac
 readonly DATALAB_NAME OPERATOR_NAMESPACE OPERATOR_RELEASE OPERATOR_DEPLOYMENT
 readonly RESOURCE_TYPE RESOURCE_NAME POD_NAME SERVICE_NAME CLIENT_IMAGE
 readonly STORAGE_SECRET="${DATALAB_NAME}"
-readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
+readonly CONNECTION_SECRET="${DATALAB_NAME}-${store_type}-verify"
 readonly PROBE_NAME="${DATALAB_NAME}"
 readonly STORE_NAMESPACE="${DATALAB_NAME}"
 probe_value=""
@@ -77,6 +77,10 @@ install_mongo_operator() {
     --version "${MONGODB_OPERATOR_VERSION}" \
     --set-string 'operator.watchNamespace=*' \
     --set 'operator.watchedResources={mongodbcommunity}' \
+    --set operator.resources.requests.cpu=100m \
+    --set operator.resources.requests.memory=128Mi \
+    --set operator.resources.limits.cpu=500m \
+    --set operator.resources.limits.memory=512Mi \
     --wait \
     --timeout 10m
 }
@@ -97,6 +101,10 @@ install_redis_operator() {
     --create-namespace \
     --version "${REDIS_OPERATOR_CHART_VERSION}" \
     --set issuer.create=false \
+    --set resources.requests.cpu=100m \
+    --set resources.requests.memory=128Mi \
+    --set resources.limits.cpu=500m \
+    --set resources.limits.memory=512Mi \
     --wait \
     --timeout 10m
 }
@@ -107,17 +115,15 @@ install_operator() {
     mongo) install_mongo_operator ;;
     redis) install_redis_operator ;;
   esac
+  kube set resources "deployment/${OPERATOR_DEPLOYMENT}" --namespace "${OPERATOR_NAMESPACE}" \
+    --containers "${OPERATOR_DEPLOYMENT}" \
+    --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=512Mi
   start_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}"
   wait_for_crd_established "${RESOURCE_TYPE}"
 }
 
 apply_store_datalab() {
   log "Applying the ${store_type} verification Datalab"
-  if ! kube get customresourcedefinition.apiextensions.k8s.io/workshopenvironments.training.educates.dev \
-    >/dev/null 2>&1; then
-    kube create namespace "${STORE_NAMESPACE}" \
-      --dry-run=client -o yaml | kube apply -f -
-  fi
   apply_template "${MANIFEST_DIR}/${store_type}/datalab.yaml" \
     DATALAB_NAME "${DATALAB_NAME}" \
     WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
@@ -151,7 +157,7 @@ wait_for_store() {
     return 1
   fi
 
-  wait_for_connection_secret "${DATALAB_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
+  wait_for_connection_secret "${CONNECTION_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
 }
 
 run_store_probe() {
@@ -164,7 +170,7 @@ run_store_probe() {
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${CLIENT_IMAGE}" \
     PROBE_VALUE "${probe_value}" \
-    DATALAB_SECRET "${DATALAB_SECRET}" | kube apply -f -
+    CONNECTION_SECRET "${CONNECTION_SECRET}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
 }
@@ -250,7 +256,7 @@ show_store_diagnostics() {
   kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
     --namespace "${STORE_NAMESPACE}" -o yaml || true
   kube get pod,pvc,service,secret --namespace "${STORE_NAMESPACE}" || true
-  kube get "secret/${DATALAB_SECRET}" \
+  kube get "secret/${CONNECTION_SECRET}" \
     --namespace "${WORKSPACE_NAMESPACE}" || true
   kube get events --namespace "${STORE_NAMESPACE}" \
     --sort-by=.lastTimestamp || true
@@ -266,7 +272,7 @@ cleanup_successful_verification() {
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
-    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true --timeout=5m
+    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true --timeout=10m
     stop_unused_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}" "${RESOURCE_TYPE}"
   else
     printf '%s cleanup is still running; resources were kept for diagnosis.\n' \

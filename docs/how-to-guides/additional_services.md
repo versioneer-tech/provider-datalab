@@ -1,17 +1,14 @@
 # Additional services
 
-Run services such as Dask or MLflow as Kubernetes workloads from your Datalab
-terminal. These examples need Kubernetes API access and permission to create
-Pods, Deployments, Services, and PVCs in the target namespace.
-If the Datalab has no session, [declare one](usage_concepts.md#sessions) first.
-
-Use a vCluster for tools that need their own CRDs, controllers, or cluster
-roles. For a short-lived process, you can run it in the terminal and use the
-editor's Ports tab to open its web interface.
+Run services such as Dask or MLflow through a [virtual cluster profile](vcluster.md).
+Set `KUBECONFIG` to its downloaded file. These examples need permission to
+create Pods, Deployments, Services, and PVCs in the target virtual namespace.
+Use port forwarding to open a workload's web interface.
 
 Use the [Datalab service fields](usage_concepts.md#database) for managed
-PostgreSQL, MongoDB, and Redis stores. The environment also supplies
-a session registry.
+PostgreSQL, MongoDB, and Redis. Supply approved credentials to your workload
+through [Secret bindings](connections.md#bind-an-export-to-a-virtual-namespace).
+The operator must approve the source, keys, and destination.
 
 ## Dask
 
@@ -86,19 +83,20 @@ spec:
 EOF
 ```
 
-Open the scheduler dashboard through the editor's Ports tab:
+Open the scheduler dashboard with port forwarding:
 
 ```bash
 kubectl port-forward svc/dask-scheduler 8787:8787
 ```
 
-Dask Gateway also needs cluster-wide resources. Use a vCluster or ask the
-operator to install it. With the `dask` Helm repository configured, run:
+Dask Gateway needs cluster-wide permissions. Use a virtual cluster
+administrator profile or ask the operator to install it. With the `dask` Helm
+repository configured, run:
 
 ```bash
 helm repo update
 helm upgrade --install dask-gateway dask/dask-gateway \
-  -n "${DEFAULT_NAMESPACE:-default}" \
+  -n dask-gateway \
   --create-namespace \
   --set gateway.auth.type=simple \
   --set gateway.auth.simple.password='' \
@@ -233,7 +231,7 @@ spec:
 EOF
 ```
 
-Open the MLflow interface through the editor's Ports tab:
+Open MLflow with port forwarding:
 
 ```bash
 kubectl port-forward svc/mlflow 5000:5000
@@ -248,8 +246,9 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 ## PostgreSQL with psql
 
 The [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml)
-provides `POSTGRES_PG0_DEV_URL` for database `dev` on `pg0`. Run this command
-from a session with that variable to start a psql Pod in the current namespace:
+provides `dev_url` in `s-jeff-postgres-pg0` for database `dev`. Set
+`POSTGRES_PG0_DEV_URL` to that value before using the following example in your local
+shell. This creates a psql Pod in the current virtual namespace:
 
 ```bash
 envsubst '${POSTGRES_PG0_DEV_URL}' <<'EOF' | kubectl apply -f -
@@ -294,4 +293,4 @@ SELECT value FROM datalab_check;
 
 Remove test services when the experiment ends. Before keeping one, agree with
 the platform team on its storage, backups, monitoring, upgrades, and deletion.
-Back up the service data separately from the session volume.
+Back up service data and workload volumes according to their retention rules.

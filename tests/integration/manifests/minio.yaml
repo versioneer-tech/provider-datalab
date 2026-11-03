@@ -33,6 +33,13 @@ spec:
       containers:
         - name: minio
           image: alpine/minio:RELEASE.2025-10-15T17-29-55Z
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             runAsUser: 0
             runAsGroup: 0

@@ -1,7 +1,9 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check that environment settings control sessions and Data."""
+"""Check environment control of direct services, security, and storage quota."""
+
+from copy import deepcopy
 
 from render import arguments, environment, manifest, render
 
@@ -12,82 +14,90 @@ def main():
     env["metadata"]["name"] = "datalab-custom"
     env["data"]["defaults"] = {
         "data": {"enabled": True, "readOnlyMount": True},
-        "quota": {"memory": "7Gi", "storage": "9Gi", "budget": "large"},
         "overallQuota": {"storage": "50Gi"},
-        "security": {"policy": "restricted", "externalEgress": False, "kubernetesAccess": False,
-                     "kubernetesRole": "view"},
-        "registry": {"enabled": True, "storage": "3Gi"},
-        "persistence": {"storageClassName": "sbs-default-retain"},
-        "files": [{"git": {"url": "https://github.com/versioneer-tech/datalab-example", "ref": "origin/main"}}],
+        "security": {"policy": "restricted", "externalEgress": False},
     }
-    env["data"]["storageClasses"] = {"allowed": ["sbs-default", "sbs-default-retain"]}
-    env["data"]["network"] = {"externalEgressCIDRs": ["0.0.0.0/0"]}
+    env["data"]["network"] = {
+        "externalEgressCIDRs": ["0.0.0.0/0", "::/0"],
+        "serviceCIDR": "10.96.0.0/16",
+        "podCIDRs": ["10.244.0.0/16"],
+        "blacklistIPs": ["169.254.169.254/32", "fd00:ec2::254/128"],
+        "internalIngress": [{
+            "namespace": "operations",
+            "targetPodSelector": {"matchLabels": {"app": "metrics"}},
+            "ports": [{"port": 9000, "protocol": "TCP"}],
+        }],
+    }
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "pkg.internal/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "annotations": {"datalabs.pkg.internal/environment": "datalab-custom"}},
         "spec": {
-            "users": ["joe"], "sessions": [{"name": "default"}], "vcluster": False,
+            "users": ["joe"],
             "data": {"enabled": False, "readOnlyMount": False},
-            "security": {"policy": "privileged", "externalEgress": True, "kubernetesAccess": True,
-                         "kubernetesRole": "admin"},
-            "quota": {"memory": "1Gi", "storage": "1Gi", "budget": "small"},
-            "overallQuota": {"storage": "1Gi"}, "registry": {"enabled": False},
-            "persistence": {"storageClassName": "sbs-default"}, "files": [],
+            "security": {"policy": "privileged", "externalEgress": True},
+            "overallQuota": {"storage": "1Gi"},
         },
     }
-    # Old XR fields must not override the operator's environment settings.
     resources = render(args, env, source)
-    workshop = manifest(resources, "workshop-s-joe")["spec"]
-    session = workshop["session"]
-    assert session["resources"]["memory"] == "7Gi"
-    assert session["namespaces"]["budget"] == "large"
-    assert session["namespaces"]["role"] == "view"
-    assert session["namespaces"]["security"] == {"policy": "restricted", "token": {"enabled": False}}
-    assert session["applications"]["registry"] == {"enabled": True, "storage": "3Gi"}
-    assert session["applications"]["vcluster"]["enabled"] is True
-    assert "docker" not in session["applications"]
-    policies = {item["metadata"]["name"] for item in workshop["environment"]["objects"]}
-    assert "allow-external-egress" not in policies
-    assert "allow-vcluster-egress" in policies
-    assert workshop["workshop"]["files"] == env["data"]["defaults"]["files"]
-    pvc = manifest(resources, "persistentvolumeclaim-s-joe-default-persistent")["spec"]
-    assert pvc["resources"]["requests"]["storage"] == "9Gi"
-    assert pvc["storageClassName"] == "sbs-default-retain"
+    namespace = manifest(resources, "namespace-s-joe")
+    assert namespace["metadata"]["labels"]["pod-security.kubernetes.io/enforce"] == "restricted"
+    assert "networkpolicy-s-joe-allow-external-egress" not in resources
     quota = manifest(resources, "resourcequota-s-joe-overall-storage")
     assert quota["spec"]["hard"]["requests.storage"] == "50Gi"
-    deployment = manifest(resources, "data-deployment-s-joe")
-    containers = deployment["spec"]["template"]["spec"]["initContainers"]
-    assert not any("--perm.create=true" in arg for container in containers for arg in container.get("args", []))
-    session = manifest(resources, "workshopsession-s-joe-default")
-    assert any(entry["name"] == "KUBECONFIG" for entry in session["spec"]["session"]["env"])
-    print("PASS environment session, security, storage, and quota settings", flush=True)
-
-    env["data"]["defaults"]["vcluster"] = {"enabled": False}
-    env["data"]["defaults"]["data"]["readOnlyMount"] = False
-    source["spec"]["vcluster"] = {"enabled": True}
-    source["spec"]["data"]["readOnlyMount"] = True
-    resources = render(args, env, source)
-    workshop = manifest(resources, "workshop-s-joe")["spec"]
-    assert workshop["session"]["applications"]["vcluster"]["enabled"] is False
-    assert "allow-vcluster-egress" not in {item["metadata"]["name"] for item in workshop["environment"]["objects"]}
-    session = manifest(resources, "workshopsession-s-joe-default")
-    assert not any(entry["name"] == "KUBECONFIG" for entry in session["spec"]["session"].get("env", []))
+    ingress = [
+        item["spec"]["forProvider"]["manifest"]["spec"]
+        for key, item in resources.items()
+        if key.startswith("networkpolicy-s-joe-allow-internal-ingress")
+    ]
+    assert len(ingress) == 1
+    assert ingress[0]["podSelector"] == {"matchLabels": {"app": "metrics"}}
+    assert ingress[0]["ingress"] == [{
+        "from": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "operations"}}}],
+        "ports": [{"port": 9000, "protocol": "TCP"}],
+    }]
+    ingress_name = next(
+        item["spec"]["forProvider"]["manifest"]["metadata"]["name"]
+        for key, item in resources.items()
+        if key.startswith("networkpolicy-s-joe-allow-internal-ingress")
+    )
     containers = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]["initContainers"]
-    assert any("--perm.create=true" in arg for container in containers for arg in container.get("args", []))
-    print("PASS environment vCluster toggle and writable Data", flush=True)
+    assert not any("--perm.create=true" in arg for c in containers for arg in c.get("args", []))
+    print("PASS environment security, quota, and read-only Data", flush=True)
+
+    env["data"]["defaults"]["data"]["readOnlyMount"] = False
+    env["data"]["defaults"]["security"]["externalEgress"] = True
+    resources = render(args, env, source)
+    assert "networkpolicy-s-joe-allow-external-egress" in resources
+    egress = manifest(resources, "networkpolicy-s-joe-allow-external-egress")["spec"]["egress"]
+    blocks = {rule["to"][0]["ipBlock"]["cidr"]: rule["to"][0]["ipBlock"]["except"] for rule in egress}
+    assert set(blocks["0.0.0.0/0"]) == {"10.96.0.0/16", "10.244.0.0/16", "169.254.169.254/32"}
+    assert blocks["::/0"] == ["fd00:ec2::254/128"]
+    containers = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]["initContainers"]
+    assert any("--perm.create=true" in arg for c in containers for arg in c.get("args", []))
+    print("PASS environment writable Data and external egress", flush=True)
 
     env["data"]["defaults"]["data"]["enabled"] = False
-    env["data"]["defaults"]["registry"]["enabled"] = False
-    source["spec"]["registry"]["enabled"] = True
-    source["spec"]["data"]["enabled"] = True
     resources = render(args, env, source)
     for name in ("data-deployment-s-joe", "observe-runtime-storage-secret-s-joe"):
         assert name not in resources
-    assert not any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values())
-    workshop = manifest(resources, "workshop-s-joe")["spec"]
-    assert "registry" not in workshop["session"]["applications"]
-    assert not any(dashboard["name"] == "Data" for dashboard in workshop["session"]["dashboards"])
-    print("PASS environment Data and registry toggles", flush=True)
+    assert "namespace-s-joe" in resources
+    print("PASS disabling Data preserves the service namespace", flush=True)
+
+    env["data"]["network"]["excludePolicies"] = ["allow-internal-ingress", "allow-external-egress"]
+    excluded = render(args, env, source)
+    assert not any(key.startswith("networkpolicy-s-joe-allow-internal-ingress") for key in excluded)
+    assert "networkpolicy-s-joe-allow-external-egress" not in excluded
+    env["data"]["network"]["excludePolicies"] = [ingress_name]
+    excluded = render(args, env, source)
+    assert f"networkpolicy-s-joe-{ingress_name}" not in excluded
+    assert "networkpolicy-s-joe-allow-external-egress" in excluded
+    print("PASS targeted ingress, external CIDR exclusions, and policy exclusions", flush=True)
+
+    for name in ("workspace", "default", "kube-public"):
+        invalid = deepcopy(source)
+        invalid["metadata"].update(name=name, namespace="workspace")
+        render(args, env, invalid, observed=[], error="service namespace must differ")
+    print("PASS claim and system namespaces are rejected", flush=True)
 
 
 if __name__ == "__main__":

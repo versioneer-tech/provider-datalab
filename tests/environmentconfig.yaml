@@ -19,10 +19,6 @@ data:
     region: acme
     secretNamespace: datalab
     type: s3
-  storageClasses:
-    allowed:
-    - sbs-default
-    - sbs-default-retain
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0
@@ -46,34 +42,14 @@ data:
       - protocol: TCP
         port: 9000
     excludePolicies: []
-  packages:
-    - name: awscli
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-    - name: rclone
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
-    vcluster:
-      enabled: true
-    registry:
-      enabled: true
-      storage: 5Gi
     data:
       enabled: true
       readOnlyMount: false
-    quota:
-      memory: 2Gi
-      storage: 1Gi
-      budget: medium
     overallQuota:
       storage: 100Gi
     security:
       policy: baseline
-      kubernetesAccess: true
-      kubernetesRole: edit
       externalEgress: true
   database:
     tlsRoute:
@@ -118,10 +94,6 @@ data:
     region: acme
     secretNamespace: datalab
     type: s3
-  storageClasses:
-    allowed:
-    - sbs-default
-    - sbs-default-retain
   network:
     internalIngress:
     - namespace: operations
@@ -156,46 +128,26 @@ data:
         port: 443
       - protocol: TCP
         port: 9000
-  packages:
-  - name: awscli
-    files:
-    - image:
-        url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-  - name: rclone
-    files:
-    - image:
-        url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
     data:
       enabled: true
       readOnlyMount: true
-    vcluster:
-      enabled: true
-    quota:
-      memory: 4Gi
-      storage: 40Gi
-      budget: x-large
     overallQuota:
       storage: 200Gi
     security:
       policy: privileged
-      kubernetesAccess: true
-      kubernetesRole: admin
       externalEgress: true
-    registry:
-      enabled: true
-      storage: 3Gi
-    persistence:
-      storageClassName: sbs-default-retain
-    files:
-    - git:
-        url: https://github.com/versioneer-tech/datalab-example
-        ref: origin/main
-      includePaths:
-      - /workshop/**
-      - /data/**
-      - /README.md
-      path: .
+  secretExports:
+    analytics-reader:
+      secretRef:
+        name: analytics-reader
+        namespace: workspace
+      keys: [url]
+      targets:
+      - claimNamespace: default
+        datalab: s-jane
+        instance: vc0
+        namespace: demo
   database:
     tlsRoute:
       parentName: default

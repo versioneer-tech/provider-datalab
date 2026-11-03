@@ -8,6 +8,8 @@ install_pgo() {
   local namespace=postgres-operator
   require_command helm
   if helm_release_matches pgo "${namespace}" "pgo-${PGO_VERSION}"; then
+    kube set resources deployment/pgo --namespace "${namespace}" \
+      --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=512Mi
     start_operator "${namespace}" pgo
     return
   fi
@@ -21,6 +23,10 @@ install_pgo() {
     --create-namespace \
     --version "${PGO_VERSION}" \
     --set singleNamespace=false \
+    --set resources.controller.requests.cpu=100m \
+    --set resources.controller.requests.memory=128Mi \
+    --set resources.controller.limits.cpu=500m \
+    --set resources.controller.limits.memory=512Mi \
     --wait \
     --timeout 10m
   start_operator "${namespace}" pgo

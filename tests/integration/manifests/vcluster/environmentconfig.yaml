@@ -48,18 +48,30 @@ data:
     - 0.0.0.0/0
     blacklistIPs:
     - 169.254.169.254/32
-  storageClasses:
-    allowed: [standard]
+  secretExports:
+    catalog-settings:
+      secretRef:
+        namespace: workspace
+        name: verify-vcluster-export
+      keys: [endpoint]
+      targets:
+      - claimNamespace: workspace
+        datalab: verify-vcluster
+        instance: vc0
+        namespace: connections
+    catalog-initialization:
+      connection: postgres-pg0
+      keys: [host, port, user, password]
+      targets:
+      - claimNamespace: workspace
+        datalab: verify-vcluster
+        instance: vc0
+        namespace: demo
   defaults:
-    vcluster:
-      enabled: false
     data:
-      enabled: false
-    registry:
       enabled: false
     overallQuota:
       storage: 20Gi
     security:
       policy: baseline
-      kubernetesAccess: false
       externalEgress: false

@@ -5,7 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: data-s3
-  namespace: ${workshop_namespace}
+  namespace: ${runtime_namespace}
   labels: ${s3_labels}
 spec:
   replicas: 1

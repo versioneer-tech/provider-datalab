@@ -42,6 +42,11 @@ def main():
             assert (f"data-s3-{kind}-s-joe" in resources) == s3
         assert any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values()) == s3
         assert ("data-deployment-s-joe" in resources) == (exposure != "disabled-data")
+        assert ("runtime-storage-secret-s-joe" in resources) == (exposure != "disabled-data")
+        if exposure != "disabled-data":
+            storage = manifest(resources, "runtime-storage-secret-s-joe")["data"]
+            assert "aws-credentials" in storage
+            assert all(key.startswith("AWS_") or key == "aws-credentials" for key in storage)
         if s3:
             for name in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):
                 pod = manifest(resources, name)["spec"]["template"]["spec"]
@@ -68,7 +73,7 @@ def main():
                for target in destinations)
     assert "Egress" in policy["policyTypes"]
     assert any(port["port"] == 8080 for rule in policy["egress"] for port in rule.get("ports", []))
-    generated = resources["secret-s-joe-datalab"]["stringData"]
+    generated = resources["connection-s-joe-s3"]["stringData"]
     assert generated["AWS_S3_FORCE_PATH_STYLE"] == "false"
     containers = manifest(resources, "data-s3-deployment-s-joe")["spec"]["template"]["spec"]["containers"]
     assert any(entry == {"name": "RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE", "value": "false"}
@@ -92,9 +97,9 @@ def main():
             "client_id": "s-joe", "client_secret": secret,
             "cookie_secret": hashlib.sha256(secret.encode()).hexdigest()[:32],
         }
-        generated = resources["secret-s-joe-datalab"]["stringData"]
-        assert generated["OAUTH2_CLIENT_ID"] == "s-joe"
-        assert generated["OAUTH2_CLIENT_SECRET"] == secret
+        generated = resources["connection-s-joe-s3"]["stringData"]
+        assert not any(key.startswith("OAUTH2_") for key in generated)
+        assert "secret-s-joe-datalab" not in resources
         assert "[default]" in generated["aws-credentials"]
         outputs.append(resources)
     for name in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):

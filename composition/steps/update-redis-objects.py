@@ -9,7 +9,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _backup_enabled,
     _extract_data,
-    _extract_manifest,
     _string_value,
     _strong_token,
     _to_dict,
@@ -36,14 +35,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
     observed = getattr(req.observed, "resources", None) or {}
-    env_key = f"workshopenvironment-{xr_name}"
-    environment_manifest = _extract_manifest(observed.get(env_key))
-
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-    if not workshop_namespace:
-        return
+    runtime_namespace = xr_name
 
     for store_key in sorted(list(cache_stores.keys())):
         if not isinstance(store_key, str) or not store_key.strip():
@@ -66,7 +58,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "redis/auth-secret",
             redis_auth_secret_name=redis_auth_secret_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             redis_password=redis_password,
         )
         auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
@@ -89,7 +81,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "redis/acl-secret",
             redis_acl_secret_name=redis_acl_secret_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             data_user_acl=encoded_acl,
         )
         acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
@@ -123,7 +115,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "redis/store",
             store_name=store_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             redis_auth_secret_name=redis_auth_secret_name,
             redis_acl_secret_name=redis_acl_secret_name,
             redis_acl_checksum=acl_checksum,
@@ -147,7 +139,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 req,
                 "redis/auth-secret",
                 redis_auth_secret_name=backup_secret_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 redis_password=backup_password,
             )
             backup_vcs = {
@@ -160,14 +152,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 req,
                 "redis/backup-pvc",
                 backup_name=backup_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 backup_vcs=backup_vcs,
             )
             backup_job = _render_template(
                 req,
                 "redis/backup-cronjob",
                 backup_name=backup_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 backup_secret_name=backup_secret_name,
                 backup_host=store_name,
             )
@@ -199,6 +191,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             pod_key=pod_key,
             xr_namespace=xr_namespace,
             pod_name=f"{store_name}-0",
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
         )
         rsp.desired.resources[pod_key].resource.update(pod_body)

@@ -91,21 +91,6 @@ def _strong_token(seed, *, suffix=":provider-datalab", length=32):
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
 
 
-def _session_name(session, *, stringify_none=False):
-    if isinstance(session, dict):
-        return _safe_str(session.get("name") or "")
-    return _string_value(session) if stringify_none else _safe_str(session)
-
-
-def _session_state(session):
-    state = (
-        _safe_str(session.get("state") or "started").lower()
-        if isinstance(session, dict)
-        else "started"
-    )
-    return {"running": "started", "paused": "stopped"}.get(state, state)
-
-
 def _resource_name(*parts, limit=63):
     name = "-".join(parts)
     if len(name) <= limit and (
@@ -125,10 +110,18 @@ def _vcluster_role(instance, group):
     return f"vcluster:{instance}:{group}"
 
 
-def _runtime_namespace(req, name):
-    environment = _extract_manifest(
-        req.observed.resources.get(f"workshopenvironment-{name}")
-    )
-    return ((environment.get("status") or {}).get("educates") or {}).get(
-        "namespace"
-    ) or ""
+def _secret_data(value):
+    """Read native or observed Secret data without changing binary values."""
+    if value is None:
+        return {}
+    body = _to_dict(value.resource) if hasattr(value, "resource") else _to_dict(value)
+    if body.get("kind") == "Object":
+        state = body.get("status", {}).get("atProvider", {})
+        body = state.get("manifest") or (state.get("raw") or {}).get("manifest") or {}
+    return {
+        **(body.get("data") or {}),
+        **{
+            key: base64.b64encode(value.encode()).decode()
+            for key, value in (body.get("stringData") or {}).items()
+        },
+    }

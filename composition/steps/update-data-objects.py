@@ -54,15 +54,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         ]
 
     observed = getattr(req.observed, "resources", {}) or {}
-    environment_manifest = _extract_manifest(
-        observed.get(f"workshopenvironment-{xr_name}")
-    )
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _safe_str(educates_status.get("namespace"))
-    if not workshop_namespace:
-        return
+    runtime_namespace = xr_name
 
-    storage_secret_name = f"{xr_name}-datalab"
+    storage_secret_name = f"{xr_name}-storage"
     runtime_secret_key = f"observe-runtime-storage-secret-{xr_name}"
     runtime_secret_data = _extract_secret_data(observed.get(runtime_secret_key))
     if not runtime_secret_data:
@@ -178,7 +172,7 @@ mv "$work_database" "$database"
     deployment = _render_template(
         req,
         "data/deployment",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         labels=labels,
         storage_secret_checksum=storage_secret_checksum,
         init_script=init_script,
@@ -296,7 +290,7 @@ mv "$work_database" "$database"
     service = _render_template(
         req,
         "data/service",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         labels=labels,
         ports=(
             [
@@ -327,7 +321,7 @@ mv "$work_database" "$database"
     network_policy = _render_template(
         req,
         "data/network-policy",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         labels=labels,
         ingress_rules=(
             [
@@ -335,9 +329,7 @@ mv "$work_database" "$database"
                     "from": [
                         {
                             "podSelector": {
-                                "matchLabels": {
-                                    "training.educates.dev/application": "workshop",
-                                }
+                                "matchLabels": {}
                             }
                         }
                     ],
@@ -377,7 +369,7 @@ mv "$work_database" "$database"
     permanent_ingress = _render_template(
         req,
         "data/permanent-ingress",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         labels=labels,
         ingress_annotations=ingress_annotations,
         ingress_class=ingress_class,
@@ -392,7 +384,7 @@ mv "$work_database" "$database"
     s3_deployment = _render_template(
         req,
         "data/s3-deployment",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         s3_labels=s3_labels,
         storage_secret_checksum=storage_secret_checksum,
         auth_key_arg=f"--auth-key={xr_name},{xr_name}",
@@ -440,13 +432,13 @@ mv "$work_database" "$database"
     s3_service = _render_template(
         req,
         "data/s3-service",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         s3_labels=s3_labels,
     )
     s3_network_policy = _render_template(
         req,
         "data/s3-network-policy",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         s3_labels=s3_labels,
         ingress_rules=[
             {
@@ -544,7 +536,7 @@ mv "$work_database" "$database"
         s3_config = _render_template(
             req,
             "data/s3-config",
-            workshop_namespace=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             gateway_config=gateway_config,
         )
         pod = s3_deployment["spec"]["template"]
@@ -572,7 +564,7 @@ mv "$work_database" "$database"
     data_route = _render_template(
         req,
         "data/data-route",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         gateway_name=_safe_str(gateway.get("parentName")),
         gateway_namespace=gateway_namespace,
         gateway_section=_safe_str(gateway.get("sectionName")),
@@ -625,7 +617,7 @@ mv "$work_database" "$database"
     data_redirect = _render_template(
         req,
         "data/data-redirect",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         gateway_name=_safe_str(gateway.get("parentName")),
         gateway_namespace=gateway_namespace,
         gateway_section=_safe_str(gateway.get("httpSectionName")),
@@ -647,7 +639,7 @@ mv "$work_database" "$database"
     dns_network_policy = _render_template(
         req,
         "data/dns-network-policy",
-        workshop_namespace=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         labels=labels,
         dns_targets=dns_targets,
     )

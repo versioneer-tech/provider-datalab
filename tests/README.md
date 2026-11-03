@@ -2,32 +2,30 @@
 
 The unit suite renders the composition with `crossplane render` and compares
 its output with snapshots through `dyff`. It also checks Data exposure,
-credential rotation, network rules, and environment-controlled settings.
+credential rotation, selected virtual Secret bindings, network rules, and
+environment-controlled settings.
 It does not use a Kubernetes cluster.
 
-Credential checks preserve the generated service passwords. Harness checks
-reject false network-isolation results. Session state and PVC behavior are
-covered by the rendered examples. Snapshots omit generated owner references,
-framework conditions, and resource references that repeat the resource list.
-They retain resource specs, readiness rules, and session status.
+The checks cover:
 
-Backup checks cover positive, zero, and omitted storage quantities for
-PostgreSQL, MongoDB, and Redis. They check that PostgreSQL stays available
-without backups and that a failed export keeps completed backups. Redis
-checks also reject an invalid snapshot before it replaces an older backup.
+- Data exposure, network denial, environment defaults, and credential rotation.
+- Separate service connections, delivery status, and virtual cluster isolation.
+- Approved Secret sources, selected keys, rotation, denial, outages, conflicts,
+  and binding removal.
+- Backup enablement and preservation of completed archives after an export
+  failure or an invalid Redis snapshot.
+- Response TTL defaults and test overrides on all generated steps.
 
-The TTL checks run generated Python steps in the same function container
-and call auto-ready through its function service.
-They check the default and a changed build setting with store-enabled and
-early-return inputs. They check the separate one-minute integration build without changing the
-deployment default. They also reject invalid durations and functions whose
-TTL is not configured by the build. Render checks do not measure live timing.
+Snapshots omit generated owner references, framework conditions, and resource
+references that repeat the resource list. They retain resource specs,
+readiness rules, and connection status.
 
 ## Run the suite
 
+Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, and `pre-commit`.
 Docker must be running for render and function checks.
 Install the [build dependencies and generate the composition](../templates/README.md)
-before running the suite. It rejects a generated composition that differs
+before running the suite. The suite rejects a generated composition that differs
 from its Python and YAML sources.
 
 ```bash
@@ -45,8 +43,8 @@ These checks share the render function in `render.py`.
 Actual renders are written to `/tmp`. Expected snapshots are tracked in
 `tests/expected/`.
 Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml`
-before updating its expected snapshot. Review intended output changes. Run the full
-unit suite after source changes and build the docs after documentation changes.
+before updating its expected snapshot. Review the output changes. Run the
+full unit suite after changes and build the docs after documentation changes.
 See [Integration tests](integration/README.md) for cluster checks.
 
 ## Fixtures
@@ -61,15 +59,13 @@ the environment settings.
 
 | Example | Environment | Main checks |
 | --- | --- | --- |
-| `001` | `datalab` | Data without sessions, default environment, credential rotation |
+| `001` | `datalab` | Independent Data, default environment, credential rotation |
 | `002` | `datalab` | Default environment selection, writable Data, managed stores |
-| `003` | `datalab-custom` | vCluster session, named virtual cluster, read-only Data, PostgreSQL |
-| `004` | `datalab-custom` | Started and stopped sessions, file bundles, workspace PVCs |
+| `003` | `datalab-custom` | Named virtual clusters, read-only Data, PostgreSQL |
+| `004` | `datalab-custom` | Read-only Data and custom namespace policy |
 
 For API or composition changes, use an existing scenario when it covers the
 required behavior. Add a scenario only for a missing observable outcome.
 
-Virtual cluster checks cover two independent instances, profile Secrets,
-instance removal and session coexistence. Kubernetes admission checks invalid
-store names in the integration profile. Live routing,
-streaming, persistence, and the STAC catalog are checked by `verify-vcluster`.
+The `verify-vcluster` integration profile checks API admission, live routing,
+streaming, persistence, and the STAC catalog.

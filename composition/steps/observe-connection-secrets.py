@@ -5,8 +5,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _boolish,
-    _extract_manifest,
-    _safe_str,
     _to_dict,
 )
 from composition.render import _render_template
@@ -21,12 +19,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-    observed = getattr(req.observed, "resources", {}) or {}
-    environment_manifest = _extract_manifest(
-        observed.get(f"workshopenvironment-{xr_name}")
-    )
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
+    runtime_namespace = xr_name
 
     def observe(key, secret_name, secret_namespace):
         rsp.desired.resources[key].resource.update(
@@ -60,7 +53,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 observe(
                     f"observe-database-secret-{xr_name}-{cluster_name}",
                     f"{cluster_name}-pguser-postgres",
-                    workshop_namespace,
+                    runtime_namespace,
                 )
 
     for field, backend in (
@@ -75,17 +68,16 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     observe(
                         f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                         f"{store_name}-{backend}-auth",
-                        workshop_namespace,
+                        runtime_namespace,
                     )
 
     data_config = (environment.get("defaults") or {}).get("data") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
         data_enabled = True
-    runtime_namespace = _safe_str(educates_status.get("namespace"))
     if _boolish(data_enabled) and runtime_namespace:
         observe(
             f"observe-runtime-storage-secret-{xr_name}",
-            f"{xr_name}-datalab",
+            f"{xr_name}-storage",
             runtime_namespace,
         )

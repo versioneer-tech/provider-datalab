@@ -18,8 +18,8 @@ same TTL. New function types must have build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
 Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step
-uses the desired OAuth2 proxy Secret. Update session status and check resource
-readiness last.
+uses the desired OAuth2 proxy Secret. Publish service and virtual cluster connections before the final resource
+readiness check.
 
 Each `${parameter}` replaces a complete YAML value. Values can be strings,
 numbers, booleans, lists, or mappings. The renderer does not evaluate

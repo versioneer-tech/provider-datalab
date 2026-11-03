@@ -68,11 +68,6 @@ jobs:
           tests/integration/verify-network.bash
           tests/integration/resource-budget.bash
 
-      - name: Verify Datalab registry
-        run: |
-          tests/integration/verify-registry.bash
-          tests/integration/resource-budget.bash
-
       - name: Verify Datalab Data service
         run: |
           tests/integration/verify-data.bash

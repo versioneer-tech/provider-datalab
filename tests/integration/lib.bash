@@ -16,8 +16,6 @@ readonly WORKSPACE_NAMESPACE=workspace
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
 : "${REUSE_DEPENDENCIES:=1}"
 : "${CROSSPLANE_VERSION:=2.4.1}"
-: "${KYVERNO_VERSION:=1.19.1}"
-: "${KYVERNO_CHART_VERSION:=3.9.1}"
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -181,38 +179,14 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster)
+    verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster>\n' "$2" >&2
       exit 1
       ;;
   esac
-}
-
-install_kyverno() {
-  require_command helm
-  if ! helm_release_matches kyverno kyverno "kyverno-${KYVERNO_CHART_VERSION}"; then
-    log "Installing Kyverno ${KYVERNO_VERSION} with chart ${KYVERNO_CHART_VERSION}"
-    helm_it repo add kyverno https://kyverno.github.io/kyverno/ --force-update
-    helm_it repo update kyverno
-    helm_it upgrade --install kyverno kyverno/kyverno \
-      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-      --kube-context "${KUBECTL_CONTEXT}" \
-      --namespace kyverno \
-      --create-namespace \
-      --version "${KYVERNO_CHART_VERSION}" \
-      --wait \
-      --timeout 10m
-
-  fi
-
-  kube wait deployment \
-    --namespace kyverno \
-    --selector app.kubernetes.io/instance=kyverno \
-    --for=condition=Available \
-    --timeout=5m
 }
 
 # Test-owned releases are reused only when the pinned chart is deployed.

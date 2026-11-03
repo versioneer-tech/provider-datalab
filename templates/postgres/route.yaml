@@ -5,7 +5,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: ${cluster_name}
-  namespace: ${workshop_ns}
+  namespace: ${runtime_namespace}
 spec:
   parentRefs:
   - name: ${gateway_parent_name}

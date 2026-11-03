@@ -1,0 +1,65 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab
+data:
+  iam:
+    realm: acme
+  ingress:
+    class: nginx
+    domain: lab.acme.com
+    secret: wildcard-tls
+  storage:
+    endpoint: https://s3.acme.com
+    forcePathStyle: 'true'
+    provider: Other
+    region: acme
+    secretNamespace: datalab
+    type: s3
+  network:
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    - ::/0
+    serviceCIDR: 10.43.0.0/16
+    podCIDRs:
+    - 10.42.0.0/16
+    blacklistIPs:
+    - 169.254.169.254/32
+    - fd00:ec2::254/128
+    - 169.254.42.42/32
+    - fd00:42::42/128
+    internalEgress:
+    - namespace: minio
+      podSelector:
+        matchLabels:
+          v1.min.io/tenant: default
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 9000
+    excludePolicies: []
+  defaults:
+    data:
+      enabled: true
+      readOnlyMount: false
+    overallQuota:
+      storage: 100Gi
+    security:
+      policy: baseline
+      externalEgress: true
+  database:
+    tlsRoute:
+      parentName: default
+      parentNamespace: projectcontour
+      sectionName: postgres-passthrough
+    storageClassName: ''
+    backupStorageClassName: ''
+  vcluster:
+    storageClasses:
+      allowed:
+      - standard
+      default: standard

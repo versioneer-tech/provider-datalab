@@ -25,9 +25,6 @@ spec:
     - name: other
       mountPath: /profiles/other
       readOnly: true
-    - name: postgres
-      mountPath: /postgres
-      readOnly: true
   volumes:
   - name: test
     configMap:
@@ -43,8 +40,4 @@ spec:
   - name: other
     secret:
       secretName: verify-vcluster-vcluster-vc1-cluster-admin-9da2539b9a
-      defaultMode: 256
-  - name: postgres
-    secret:
-      secretName: verify-vcluster-datalab
       defaultMode: 256

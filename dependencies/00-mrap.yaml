@@ -24,11 +24,3 @@ metadata:
 spec:
   activate:
     - objects.kubernetes.m.crossplane.io
----
-apiVersion: apiextensions.crossplane.io/v1alpha1
-kind: ManagedResourceActivationPolicy
-metadata:
-  name: provider-helm
-spec:
-  activate:
-    - releases.helm.m.crossplane.io

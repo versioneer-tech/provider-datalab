@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   annotations:
@@ -10,18 +10,161 @@ metadata:
   name: s-john
 spec:
   secretName: s-john
-  sessions:
-  - name: default
-  - name: analysis
-    state: stopped
   users:
   - john
 status:
-  sessions:
-    analysis:
-      state: stopped
-    default:
-      state: started
+  connections:
+  - name: s3
+    ready: false
+    secretRef:
+      name: s-john-s3
+      namespace: default
+    type: s3
+  secretBindings: []
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-4831c7015239-s-john-namespace-s-john-o-81013f577d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-runtime-storage-secret-s-john
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-56fe7fe12ee6-s-john-namespace-s-john-n-0c0681d84f
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-allow-internal-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-798071876ce3-s-john-namespace-s-john-n-431d36e00b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-allow-internal-ingress-bde2a5ce46
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-88533fd47d0f-s-john-namespace-s-john-n-390194bba6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-deny-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-a8ec7aa7f560-s-john-namespace-s-john-n-ff0d701218
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-allow-external-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-d43d2f326fdb-s-john-namespace-s-john-n-fdf71b165a
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-allow-namespace-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-e0485cda7737-s-john-namespace-s-john-n-a80ed4f356
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-john-allow-dns-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-eab9d8e60f52-s-john-namespace-s-john-r-d978df4251
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: resourcequota-s-john-overall-storage
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-john
+  replayDeletion: true
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
@@ -48,29 +191,9 @@ spec:
     standardFlowEnabled: true
     validRedirectUris:
     - https://s-john.lab.acme.com/*
-    - https://s-john-default.lab.acme.com/*
-    - https://editor-s-john-default.lab.acme.com/*
-    - https://s-john-default-editor.lab.acme.com/*
-    - https://data-s-john-default.lab.acme.com/*
-    - https://s-john-default-data.lab.acme.com/*
-    - https://s-john-analysis.lab.acme.com/*
-    - https://editor-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-editor.lab.acme.com/*
-    - https://data-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-data.lab.acme.com/*
     - http://localhost:*
     webOrigins:
     - https://s-john.lab.acme.com/*
-    - https://s-john-default.lab.acme.com/*
-    - https://editor-s-john-default.lab.acme.com/*
-    - https://s-john-default-editor.lab.acme.com/*
-    - https://data-s-john-default.lab.acme.com/*
-    - https://s-john-default-data.lab.acme.com/*
-    - https://s-john-analysis.lab.acme.com/*
-    - https://editor-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-editor.lab.acme.com/*
-    - https://data-s-john-analysis.lab.acme.com/*
-    - https://s-john-analysis-data.lab.acme.com/*
     - http://localhost:*
   providerConfigRef:
     kind: ProviderConfig
@@ -418,6 +541,588 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-01ce5f20470b-s-john-keycloak-group-ad-fc8da582b1
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-john-admin
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-john-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-075fff79213a-s-john-keycloak-role-adm-ef95c8fc52
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-admin
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-168ec9358017-s-john-keycloak-role-adm-2d44f1c81f
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-john-admin
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-16da3b117dc6-s-john-keycloak-client-s-55692ba6ee
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-access
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-24a917d62faf-s-john-keycloak-role-use-e34bba9da5
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-john
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-access
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-3f8bf21652f4-s-john-keycloak-role-api-549711e26c
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-john-ws-api
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-api
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-588230568b42-s-john-keycloak-client-s-a6ae262d39
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-admin
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-66852c4ac0e6-s-john-keycloak-group-s-f9bb636689
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Memberships
+    resourceRef:
+      name: s-john
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-67e7d81a4e77-s-john-keycloak-client-s-9f897f2ee5
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-6a000b042f37-s-john-keycloak-client-s-e5c0f0bcdd
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-access
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-7a51b14a020f-s-john-keycloak-client-s-b4178ec5f8
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-admin
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-8f63a30a9e2b-s-john-keycloak-client-s-e51cffd8d7
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-96241436b4c4-s-john-keycloak-client-s-5ac00cf72d
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: ProtocolMapper
+    resourceRef:
+      name: s-john-s-john-audience
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-a4834cc1d820-s-john-keycloak-client-s-56d4ef3b68
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-john-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-a66c3f96db39-s-john-keycloak-client-s-e9990dc61f
+  namespace: default
+spec:
+  by:
+    apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
+    kind: GroupMembershipProtocolMapper
+    resourceRef:
+      name: s-john
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-a9eae5702c2b-s-john-keycloak-group-s-b5eee84ee1
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-john
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-af6834496ee4-s-john-keycloak-group-ad-04e058247a
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Memberships
+    resourceRef:
+      name: s-john-admin
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-john-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-ba3cce5aff43-s-john-keycloak-role-use-55abf63b0d
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-access
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-access
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-ef7841e8c237-s-john-keycloak-client-s-1006c8a9f0
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: ProtocolMapper
+    resourceRef:
+      name: s-john-datalab-service-custom-audience
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-john
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-f9b778f7e6c9-s-john-keycloak-role-api-eb6e9605f7
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-john-ws-api
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-john-ws-api
+  replayDeletion: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: namespace-s-john
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        labels:
+          datalabs.pkg.internal/name: s-john
+          datalabs.pkg.internal/namespace: default
+          pod-security.kubernetes.io/enforce: privileged
+        name: s-john
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-allow-dns-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns-egress
+        namespace: s-john
+      spec:
+        egress:
+        - ports:
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-allow-external-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-external-egress
+        namespace: s-john
+      spec:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+              - 169.254.42.42/32
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+        - to:
+          - ipBlock:
+              cidr: ::/0
+              except:
+              - fd00:ec2::254/128
+              - fd00:42::42/128
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-allow-internal-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-egress
+        namespace: s-john
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 9000
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: minio
+            podSelector:
+              matchLabels:
+                v1.min.io/tenant: default
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-allow-internal-ingress-bde2a5ce46
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-ingress-bde2a5ce46
+        namespace: s-john
+      spec:
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: operations
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+          ports:
+          - port: 8888
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: package-r
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-allow-namespace-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-egress
+        namespace: s-john
+      spec:
+        egress:
+        - to:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-john-deny-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-egress
+        namespace: s-john
+      spec:
+        egress: []
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -431,6 +1136,26 @@ spec:
       metadata:
         name: s-john-oauth-client
         namespace: default
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-runtime-storage-secret-s-john
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-john-storage
+        namespace: s-john
   managementPolicies:
   - Observe
   providerConfigRef:
@@ -461,60 +1186,6 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: persistentvolumeclaim-s-john-analysis-persistent
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: s-john-analysis-persistent
-        namespace: s-john
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 40Gi
-        storageClassName: sbs-default-retain
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: persistentvolumeclaim-s-john-default-persistent
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: s-john-default-persistent
-        namespace: s-john
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 40Gi
-        storageClassName: sbs-default-retain
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: resourcequota-s-john-overall-storage
   namespace: default
 spec:
@@ -533,279 +1204,4 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshop-s-john
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: Workshop
-      metadata:
-        name: s-john
-      spec:
-        description: A default DataLab environment.
-        environment:
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: deny-egress
-            spec:
-              egress: []
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-namespace-egress
-            spec:
-              egress:
-              - to:
-                - podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-vcluster-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 8443
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/environment.name: s-john
-                      training.educates.dev/session.objects: 'true'
-                  podSelector:
-                    matchLabels:
-                      app: vcluster
-                      release: my-vcluster
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns-egress
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-external-egress
-            spec:
-              egress:
-              - to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                    - 169.254.169.254/32
-                    - 169.254.42.42/32
-                    - 10.42.0.0/16
-                    - 10.43.0.0/16
-              - to:
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                    - fd00:ec2::254/128
-                    - fd00:42::42/128
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-internal-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 9000
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: minio
-                  podSelector:
-                    matchLabels:
-                      v1.min.io/tenant: default
-              podSelector: {}
-              policyTypes:
-              - Egress
-          secrets:
-          - name: s-john-datalab
-            namespace: default
-        session:
-          applications:
-            console:
-              enabled: false
-            docker:
-              enabled: true
-              storage: 20Gi
-            editor:
-              enabled: true
-            registry:
-              enabled: true
-              storage: 3Gi
-            slides:
-              enabled: false
-            terminal:
-              enabled: true
-            vcluster:
-              enabled: true
-              services:
-                fromHost: []
-              version: '1.34'
-            workshop:
-              enabled: true
-          dashboards:
-          - name: Data
-            url: https://s-john.lab.acme.com/
-          envFrom:
-          - secretRef:
-              name: s-john-datalab
-          ingresses: []
-          namespaces:
-            budget: x-large
-            role: admin
-            security:
-              policy: privileged
-              token:
-                enabled: true
-          objects:
-          - apiVersion: v1
-            data:
-              cidr: 10.43.0.0/16
-            kind: ConfigMap
-            metadata:
-              name: vc-cidr-my-vcluster
-              namespace: $(session_namespace)-vc
-          resources:
-            memory: 4Gi
-            volume:
-              name: $(session_name)-persistent
-        title: Default DataLab
-        version: '1.0'
-        workshop:
-          files:
-          - git:
-              ref: origin/main
-              url: https://github.com/versioneer-tech/datalab-example
-            includePaths:
-            - /workshop/**
-            - /data/**
-            - /README.md
-            path: .
-          packages:
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-            name: awscli
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-            name: rclone
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshopenvironment-s-john
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-john
-      spec:
-        analytics:
-          amplitude:
-            trackingId: ''
-        cookies: {}
-        environment:
-          objects: []
-          secrets: []
-        request:
-          enabled: false
-        session:
-          ingress:
-            class: nginx
-            domain: lab.acme.com
-            secret: wildcard-tls
-        theme:
-          name: default-website-theme
-        workshop:
-          name: s-john
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
-    policy: DeriveFromCelQuery
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshopsession-s-john-default
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopSession
-      metadata:
-        name: s-john-default
-      spec:
-        environment:
-          name: s-john
-        session:
-          env:
-          - name: SESSION_NAME
-            value: s-john-default
-          - name: FRAME_ANCESTORS
-            value: ''
-          - name: KUBECONFIG
-            value: /opt/kubeconfig/config
-          id: default
-          ingress:
-            domain: lab.acme.com
-            secret: wildcard-tls
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
-    policy: DeriveFromCelQuery
   watch: true

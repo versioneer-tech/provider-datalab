@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v1
-kind: ConfigMap
+kind: ResourceQuota
 metadata:
-  name: vc-cidr-my-vcluster
-  namespace: $(session_namespace)-vc
-data:
-  cidr: ${service_cidr}
+  name: overall-storage
+  namespace: ${xr_name}
+spec:
+  hard:
+    requests.storage: ${overall_storage}

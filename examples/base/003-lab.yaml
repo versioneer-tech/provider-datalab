@@ -1,9 +1,8 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# The custom environment supplies privileged sessions, registry, file bundles,
 # quotas, vCluster, and Gateway access. Jane requests PostgreSQL.
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: s-jane
@@ -13,9 +12,6 @@ spec:
   users:
     - jane
   secretName: s-jane
-  sessions:
-    - name: default
-      state: started
   databases:
     pg0:
       names:
@@ -24,6 +20,14 @@ spec:
       backupStorage: 3Gi
   vclusters:
     vc0:
+      secretBindings:
+        catalog-database:
+          export: analytics-reader
+          target:
+            namespace: demo
+            name: catalog-database
+          keys:
+            url: DATABASE_URL
       storage: 1Gi
       groups:
       - name: namespace-demo

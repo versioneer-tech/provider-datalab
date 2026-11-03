@@ -2,9 +2,9 @@
 
 Packages:
 
-- [pkg.internal/v1beta2](#pkginternalv1beta2)
+- [pkg.internal/v1](#pkginternalv1)
 
-# pkg.internal/v1beta2
+# pkg.internal/v1
 
 Resource Types:
 
@@ -14,14 +14,14 @@ Resource Types:
 
 
 ## Datalab
-<sup><sup>[↩ Parent](#pkginternalv1beta2 )</sup></sup>
+<sup><sup>[↩ Parent](#pkginternalv1 )</sup></sup>
 
 
 
 
 
 
-A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+A Datalab is a tenant-facing, namespaced composite resource. It defines membership, storage access, managed data services, and virtual clusters.
 
 <table>
     <thead>
@@ -35,7 +35,7 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
     <tbody><tr>
       <td><b>apiVersion</b></td>
       <td>string</td>
-      <td>pkg.internal/v1beta2</td>
+      <td>pkg.internal/v1</td>
       <td>true</td>
       </tr>
       <tr>
@@ -127,15 +127,6 @@ Desired configuration of the datalab.
         <td>string</td>
         <td>
           Name of the Secret containing the credentials to access the storage associated with this Datalab. If omitted, the Datalab name is used. The Secret is read from the namespace configured in EnvironmentConfig.data.storage.secretNamespace, which is usually the same namespace as the Datalab.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
-        <td>[]object</td>
-        <td>
-          Sessions declared for this datalab.<br/>
-          <br/>
-            <i>Default</i>: []<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -307,44 +298,6 @@ Desired configuration of the datalab.
 </table>
 
 
-### Datalab.spec.sessions[index]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Session name.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.
-<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-            <i>Default</i>: started<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-
 ### Datalab.spec.userOverrides[key]
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
 
@@ -408,6 +361,16 @@ Virtual Kubernetes clusters keyed by instance name.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b><a href="#datalabspecvclusterskeysecretbindingskey">secretBindings</a></b></td>
+        <td>map[string]object</td>
+        <td>
+          Selected operator-approved Secrets delivered into virtual namespaces.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Binding names must be Kubernetes label names.</li>
+            <i>Default</i>: map[]<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>storage</b></td>
         <td>string</td>
         <td>
@@ -463,6 +426,85 @@ Virtual Kubernetes clusters keyed by instance name.
 </table>
 
 
+### Datalab.spec.vclusters[key].secretBindings[key]
+<sup><sup>[↩ Parent](#datalabspecvclusterskey)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>export</b></td>
+        <td>string</td>
+        <td>
+          Export alias in EnvironmentConfig.data.secretExports.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>keys</b></td>
+        <td>map[string]string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, k.matches('^[-._a-zA-Z0-9]+$')): Source keys must be valid Secret data keys.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvclusterskeysecretbindingskeytarget">target</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.spec.vclusters[key].secretBindings[key].target
+<sup><sup>[↩ Parent](#datalabspecvclusterskeysecretbindingskey)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self != "default" && !self.startsWith("kube-"): Select a workload namespace, not a Kubernetes system namespace.</li>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
 ### Datalab.status
 <sup><sup>[↩ Parent](#datalab)</sup></sup>
 
@@ -483,14 +525,14 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
         <td>[]object</td>
         <td>
-          Connection sets for the declared virtual clusters.<br/>
+          Connection references for storage, managed services, and virtual clusters.<br/>
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabstatussessionskey">sessions</a></b></td>
-        <td>map[string]object</td>
+        <td><b><a href="#datalabstatussecretbindingsindex">secretBindings</a></b></td>
+        <td>[]object</td>
         <td>
-          Map of session IDs and their lifecycle state and runtime details.<br/>
+          Observed delivery of approved Secrets into virtual namespaces.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -616,12 +658,12 @@ Current observed state of the datalab.
 </table>
 
 
-### Datalab.status.sessions[key]
+### Datalab.status.secretBindings[index]
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
 
 
-Observed state of a single datalab session.
+
 
 <table>
     <thead>
@@ -633,34 +675,80 @@ Observed state of a single datalab session.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>message</b></td>
+        <td><b>export</b></td>
         <td>string</td>
         <td>
-          Latest observed status message for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>phase</b></td>
-        <td>string</td>
-        <td>
-          Latest observed lifecycle phase for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired lifecycle state for the declared session.<br/>
           <br/>
-            <i>Enum</i>: started, stopped<br/>
         </td>
-        <td>false</td>
+        <td>true</td>
       </tr><tr>
-        <td><b>url</b></td>
+        <td><b>instance</b></td>
         <td>string</td>
         <td>
-          Public URL of the active session.<br/>
+          <br/>
         </td>
-        <td>false</td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>ready</b></td>
+        <td>boolean</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>reason</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatussecretbindingsindextarget">target</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.status.secretBindings[index].target
+<sup><sup>[↩ Parent](#datalabstatussecretbindingsindex)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
       </tr></tbody>
 </table>

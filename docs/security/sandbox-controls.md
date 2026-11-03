@@ -11,13 +11,11 @@ effect.
 | `deny-egress` | By default | No egress by itself; other policies can allow traffic. |
 | `allow-namespace-egress` | By default | Traffic to Pods in the same runtime namespace. |
 | `allow-dns-egress` | External egress, Data, or vCluster is enabled | DNS to `kube-system` on TCP and UDP port 53. |
-| `allow-vcluster-egress` | vCluster is enabled | TCP ports 443 and 8443 to the same Datalab's vCluster control-plane Pods. |
 | `allow-external-egress` | External egress is enabled | The configured external CIDRs, minus excluded ranges. |
 | `allow-internal-egress` | Internal targets are configured | The selected backend Pods and ports in other namespaces. |
 
-The DNS rule lets Data resolve storage hosts and lets sessions resolve their
-vCluster Service. Namespace and Pod selectors on the vCluster rule limit it
-to the same Datalab.
+The DNS rule lets Data and virtual workloads resolve service and storage hosts.
+Each virtual cluster also has policies for its control plane and synced workloads.
 
 NetworkPolicies are additive. `deny-egress` selects Pods for egress isolation;
 it does not override an allow rule in another selected policy. Check all
@@ -38,7 +36,7 @@ Standard NetworkPolicy cannot express ordered deny rules or DNS-name rules.
 
 ## Data service policies
 
-For session access, packageR accepts port 8888 from session Pods.
+For internal access, packageR accepts port 8888 from Pods in the service namespace.
 For permanent access, its OAuth proxy accepts port 4180. See
 [Data and sharing](../how-to-guides/usage_concepts.md#data-and-sharing) for
 browser access and public links.

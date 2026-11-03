@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check independent virtual clusters and legacy session coexistence."""
+"""Check virtual cluster isolation, access profiles, and instance removal."""
 
 from copy import deepcopy
 import base64
@@ -22,40 +22,18 @@ def main():
     env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
     group = {"name": "demo", "namespace": "demo", "role": "edit"}
     source = {
-        "apiVersion": "pkg.internal/v1beta2",
+        "apiVersion": "pkg.internal/v1",
         "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "workspace"},
         "spec": {
             "users": ["joe"],
-            "sessions": [{"name": "work"}],
             "vclusters": {
                 key: {"groups": [group], "storage": "2Gi"} for key in ("vc0", "vc1")
             },
         },
     }
-    observed = [
-        {
-            "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
-            "kind": "Object",
-            "metadata": {
-                "name": "workshopenvironment-s-joe",
-                "namespace": "workspace",
-                "annotations": {
-                    "crossplane.io/composition-resource-name": "workshopenvironment-s-joe"
-                },
-            },
-            "status": {
-                "atProvider": {
-                    "manifest": {"status": {"educates": {"namespace": "s-joe-runtime"}}}
-                }
-            },
-        }
-    ]
+    observed = []
     resources = render(args, env, source, observed, include_composite=True)
-    assert "workshopsession-s-joe-work" in resources
-    assert manifest(resources, "workshop-s-joe")["spec"]["session"]["applications"][
-        "vcluster"
-    ]["enabled"]
     for instance in ("vc0", "vc1"):
 
         def key(suffix):
@@ -63,7 +41,7 @@ def main():
 
         runtime = f"vcluster-{instance}"
         statefulset = manifest(resources, key("statefulset"))
-        assert statefulset["metadata"]["namespace"] == "s-joe-runtime"
+        assert statefulset["metadata"]["namespace"] == "s-joe"
         assert statefulset["metadata"]["name"] == runtime
         assert (
             statefulset["spec"]["template"]["metadata"]["labels"]
@@ -83,7 +61,7 @@ def main():
         assert route["filters"][0]["urlRewrite"]["path"]["replacePrefixMatch"] == "/"
         tls = manifest(resources, key("backend-tls"))["spec"]
         assert tls["targetRefs"][0]["name"] == runtime
-        assert tls["validation"]["hostname"] == f"{runtime}.s-joe-runtime.svc"
+        assert tls["validation"]["hostname"] == f"{runtime}.s-joe.svc"
         authentication = json.loads(
             manifest(resources, key("authentication"))["data"]["authentication.json"]
         )
@@ -96,10 +74,9 @@ def main():
             f"vcluster:{other}:demo"
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
-    assert len(resources["composite"]["status"]["connections"]) == 2
-    assert resources["composite"]["status"]["sessions"]["work"]["state"] == "started"
+    assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 2
     print(
-        "PASS two virtual clusters have separate routes, identities, selectors, and session status"
+        "PASS two virtual clusters have separate routes, identities, and selectors"
     )
 
     ready_observed = deepcopy(observed)
@@ -151,15 +128,14 @@ def main():
     assert manifest(
         reduced_resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58"
     ) == manifest(resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58")
-    assert manifest(reduced_resources, "workshopsession-s-joe-work") == manifest(
-        resources, "workshopsession-s-joe-work"
-    )
-    print("PASS removing one instance preserves the other instance and session")
+    print("PASS removing one instance preserves the other instance")
 
-    pending = render(args, env, source, [])
-    assert "vcluster-s-joe-vc0-statefulset-1987a0016d" not in pending
-    assert "workshopenvironment-s-joe" in pending
-    print("PASS native runtimes wait for the Educates namespace")
+    headless = deepcopy(source)
+    headless["spec"]["users"] = []
+    headless_resources = render(args, env, headless, [])
+    assert manifest(headless_resources, "namespace-s-joe")["metadata"]["name"] == "s-joe"
+    assert not any(item.get("kind") == "Memberships" for item in headless_resources.values())
+    print("PASS services provision without user memberships")
 
     hyphenated = deepcopy(source)
     hyphenated["spec"]["vclusters"] = {
@@ -172,7 +148,7 @@ def main():
         )
     }
     distinct = render(args, env, hyphenated, observed, include_composite=True)
-    connections = distinct["composite"]["status"]["connections"]
+    connections = [c for c in distinct["composite"]["status"]["connections"] if c["type"] == "vcluster"]
     assert len({c["name"] for c in connections}) == 4
     assert len({c["secretRef"]["name"] for c in connections}) == 4
     host_objects = [

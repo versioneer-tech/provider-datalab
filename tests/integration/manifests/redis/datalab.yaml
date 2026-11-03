@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: __DATALAB_NAME__
@@ -11,7 +11,6 @@ metadata:
 spec:
   users: []
   secretName: __STORAGE_SECRET__
-  sessions: []
   cacheStores:
     verify:
       storage: 1Gi

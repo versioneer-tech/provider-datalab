@@ -3,7 +3,7 @@
 Declare each virtual Kubernetes cluster under `spec.vclusters`:
 
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: s-joe
@@ -24,7 +24,11 @@ spec:
 
 Each entry creates one runtime in the Datalab namespace. Add
 `vc1` alongside `vc0` to create another cluster. An empty map creates none.
-Sessions and their environment-controlled vclusters remain separate.
+
+[ADR-003](../architecture/0003-isolate-teams-and-bind-service-secrets.md)
+describes one Datalab per team, one virtual cluster by default when needed,
+and explicit service Secret bindings for application namespaces. See
+[connection bindings](connections.md#bind-an-export-to-a-virtual-namespace).
 
 ## Platform settings
 
@@ -53,7 +57,7 @@ instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
 `vcluster.storageClassName` selects its class; otherwise the default class is
 used. Only classes in `vcluster.storageClasses.allowed` are exposed to virtual
 workloads. A host admission policy enforces this list for each syncer.
-Control-plane, workload, database, and session PVCs share the existing
+Control-plane, workload, and database PVCs share the existing
 `defaults.overallQuota.storage` limit.
 
 Apply `dependencies/rbac.yaml`. The host must serve
@@ -126,7 +130,7 @@ databases:
 
 [PgSTAC](https://stac-utils.github.io/pgstac/pgstac/) requires PostGIS and a schema
 migration. The example migration Job uses the generated PostgreSQL credentials
-from the Datalab Secret. It creates a separate `catalog` login with the
+from the separate PostgreSQL connection. It creates a separate `catalog` login with the
 `pgstac_ingest` role. The API uses that login and the standard
 [PostgreSQL settings](https://stac-utils.github.io/stac-fastapi-pgstac/settings/):
 `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
@@ -138,11 +142,15 @@ The integration has a PostgreSQL-specific policy for this case.
 
 The example expects `catalog-postgres-admin` and `catalog-postgres` Secrets in
 virtual namespace `demo`. The first contains migration credentials. The second
-contains the API login. Supply these through your Secret process. Build the
-image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
+contains the API login. Use an operator-approved
+[Secret binding](connections.md#bind-an-export-to-a-virtual-namespace) to
+deliver the required keys into `vc0/demo`. The integration example binds
+`postgres-pg0` for migration; application credentials must use a suitable
+backend account. Build the image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
 replace `__CATALOG_IMAGE__` with that image reference before applying the example.
 Wait for `catalog-migrate` to complete before starting the API Deployment.
-Remove the migration Secret after it completes.
+Remove the migration binding after it completes so the provider removes its
+managed copy. A direct Secret deletion would be reconciled.
 
 Connect to the catalog through the generated profile:
 
@@ -164,6 +172,6 @@ search after a control-plane restart.
 
 Removing a group revokes its identity and binding while retaining its virtual
 namespace data. Removing an instance removes its runtime and control-plane
-PVC. Other instances, databases, sessions, and the shared namespace remain.
+PVC. Other instances, databases, and the shared namespace remain.
 Deletion follows the host StorageClass retention policy. Back up control-plane
 and database volumes before removing an instance or Datalab.

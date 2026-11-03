@@ -11,113 +11,41 @@ spec:
     kind: Datalab
     plural: datalabs
   scope: Namespaced
+  defaultCompositionRef:
+    name: datalab
   versions:
     - name: v1beta1
       served: true
       referenceable: false
+      deprecated: true
+      deprecationWarning: pkg.internal/v1beta1 Datalab is deprecated; use pkg.internal/v1.
       schema:
         openAPIV3Schema:
           type: object
-          x-kubernetes-preserve-unknown-fields: true
           properties:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
-              properties:
-                vclusters:
-                  type: object
-                  default: {}
-                  maxProperties: 20
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    description: Virtual Kubernetes clusters keyed by instance name.
-                    properties:
-                      groups:
-                        type: array
-                        description: Access profiles with separate kubeconfigs and Kubernetes RBAC.
-                        maxItems: 20
-                        x-kubernetes-list-type: map
-                        x-kubernetes-list-map-keys:
-                        - name
-                        items:
-                          type: object
-                          required:
-                          - name
-                          - namespace
-                          - role
-                          x-kubernetes-validations:
-                          - rule: (self.namespace == "*") == (self.role == "cluster-admin")
-                            message: cluster-admin requires namespace '*'; other roles require a namespace.
-                          properties:
-                            name:
-                              type: string
-                              description: Profile name used for its Keycloak role and connection set.
-                              maxLength: 40
-                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
-                            namespace:
-                              type: string
-                              description: Virtual namespace to create, or '*' for virtual cluster administration.
-                              maxLength: 63
-                              pattern: ^(\*|[a-z]([a-z0-9-]*[a-z0-9])?)$
-                              x-kubernetes-validations:
-                              - rule: self != "default" && !self.startsWith("kube-")
-                                message: Select a workload namespace, not a Kubernetes system namespace.
-                            role:
-                              type: string
-                              description: Kubernetes ClusterRole granted to this profile.
-                              enum:
-                              - view
-                              - edit
-                              - admin
-                              - cluster-admin
-                        minItems: 1
-                      storage:
-                        type: string
-                        description: Control-plane PVC size. The environment default is used when omitted.
-                    required:
-                    - groups
-                databases:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                documentStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                cacheStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
     - name: v1beta2
+      served: true
+      referenceable: false
+      deprecated: true
+      deprecationWarning: pkg.internal/v1beta2 Datalab is deprecated; use pkg.internal/v1.
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+    - name: v1
       served: true
       referenceable: true
       schema:
         openAPIV3Schema:
           type: object
           x-kubernetes-preserve-unknown-fields: true
-          description: A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+          description: A Datalab is a tenant-facing, namespaced composite resource. It defines membership, storage access, managed data services, and virtual clusters.
           required:
             - spec
           properties:
@@ -161,28 +89,6 @@ spec:
                         description: >
                           RFC3339 timestamp indicating when the role became active.
                   default: {}
-                sessions:
-                  type: array
-                  description: Sessions declared for this datalab.
-                  items:
-                    type: object
-                    required:
-                      - name
-                    properties:
-                      name:
-                        type: string
-                        description: Session name.
-                      state:
-                        type: string
-                        description: >
-                          Desired runtime lifecycle for this session. Started sessions create an
-                          active runtime session. Stopped sessions keep their Datalab-owned
-                          workspace PVC but do not create a runtime.
-                        enum:
-                          - started
-                          - stopped
-                        default: started
-                  default: []
                 vclusters:
                   type: object
                   default: {}
@@ -234,6 +140,55 @@ spec:
                               - admin
                               - cluster-admin
                         minItems: 1
+                      secretBindings:
+                        type: object
+                        description: Selected operator-approved Secrets delivered into virtual namespaces.
+                        default: {}
+                        maxProperties: 100
+                        x-kubernetes-validations:
+                        - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                          message: Binding names must be Kubernetes label names.
+                        additionalProperties:
+                          type: object
+                          required:
+                          - export
+                          - target
+                          - keys
+                          properties:
+                            export:
+                              type: string
+                              maxLength: 63
+                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                              description: Export alias in EnvironmentConfig.data.secretExports.
+                            target:
+                              type: object
+                              required:
+                              - namespace
+                              - name
+                              properties:
+                                namespace:
+                                  type: string
+                                  maxLength: 63
+                                  pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                                  x-kubernetes-validations:
+                                  - rule: self != "default" && !self.startsWith("kube-")
+                                    message: Select a workload namespace, not a Kubernetes system namespace.
+                                name:
+                                  type: string
+                                  maxLength: 63
+                                  pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                            keys:
+                              type: object
+                              minProperties: 1
+                              maxProperties: 100
+                              x-kubernetes-validations:
+                              - rule: self.all(k, k.matches('^[-._a-zA-Z0-9]+$'))
+                                message: Source keys must be valid Secret data keys.
+                              additionalProperties:
+                                type: string
+                                minLength: 1
+                                maxLength: 253
+                                pattern: ^[-._a-zA-Z0-9]+$
                       storage:
                         type: string
                         description: Control-plane PVC size. The environment default is used when omitted.
@@ -357,31 +312,46 @@ spec:
               type: object
               description: Current observed state of the datalab.
               properties:
-                sessions:
-                  type: object
-                  description: Map of session IDs and their lifecycle state and runtime details.
-                  additionalProperties:
+                secretBindings:
+                  type: array
+                  description: Observed delivery of approved Secrets into virtual namespaces.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys:
+                  - instance
+                  - name
+                  items:
                     type: object
-                    description: Observed state of a single datalab session.
+                    required:
+                    - instance
+                    - name
+                    - export
+                    - target
+                    - ready
+                    - reason
                     properties:
-                      state:
+                      instance:
                         type: string
-                        description: Desired lifecycle state for the declared session.
-                        enum:
-                          - started
-                          - stopped
-                      phase:
+                      name:
                         type: string
-                        description: Latest observed lifecycle phase for the session runtime.
-                      message:
+                      export:
                         type: string
-                        description: Latest observed status message for the session runtime.
-                      url:
+                      target:
+                        type: object
+                        required:
+                        - namespace
+                        - name
+                        properties:
+                          namespace:
+                            type: string
+                          name:
+                            type: string
+                      ready:
+                        type: boolean
+                      reason:
                         type: string
-                        description: Public URL of the active session.
                 connections:
                   type: array
-                  description: Connection sets for the declared virtual clusters.
+                  description: Connection references for storage, managed services, and virtual clusters.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [name]
                   items:

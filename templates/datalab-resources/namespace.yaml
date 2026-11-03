@@ -1,0 +1,11 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${xr_name}
+  labels:
+    datalabs.pkg.internal/name: ${xr_name}
+    datalabs.pkg.internal/namespace: ${xr_namespace}
+    pod-security.kubernetes.io/enforce: ${policy}

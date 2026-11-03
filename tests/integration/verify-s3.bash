@@ -7,12 +7,10 @@ set -Eeuo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
-# shellcheck source=educates.bash
-source "${INTEGRATION_DIR}/educates.bash"
+# shellcheck source=runtime.bash
+source "${INTEGRATION_DIR}/runtime.bash"
 
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${KEEP_S3_RESOURCES:=0}"
-readonly EDUCATES_NAMESPACE=educates
 readonly S3_DATALAB=verify-s3
 readonly CONTOUR_VERSION=v1.33.7
 runtime_namespace=""
@@ -47,7 +45,7 @@ report_s3_failure() {
 trap report_s3_failure ERR
 
 install_s3_prerequisites() {
-  install_educates
+  create_ingress_certificate
   log 'Checking the Contour Gateway provisioner and Keycloak test realm'
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"

@@ -84,6 +84,8 @@ done
 
 python3 tests/vclusters.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 
+python3 tests/secret-bindings.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
   python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"

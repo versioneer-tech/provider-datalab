@@ -1,0 +1,21 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ['']
+      apiVersions: [v1]
+      operations: [CREATE, UPDATE, DELETE]
+      resources: [secrets]
+  matchConditions:
+  - name: binding-target
+    expression: ${target_expression}
+  validations:
+  - expression: ${ownership_expression}
+    message: This Secret name is reserved for its Datalab binding.

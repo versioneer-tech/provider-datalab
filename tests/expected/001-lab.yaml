@@ -2,13 +2,148 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: s-joe
 spec:
   users:
   - joe
+status:
+  connections:
+  - name: s3
+    ready: false
+    secretRef:
+      name: s-joe-s3
+      namespace: default
+    type: s3
+  secretBindings: []
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-14759054fd18-s-joe-namespace-s-joe-net-551cc31e21
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-internal-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-1f5dd464b26f-s-joe-namespace-s-joe-res-14558d3c5a
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: resourcequota-s-joe-overall-storage
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-33f50eaef1ed-s-joe-namespace-s-joe-net-f7a0f5f1ef
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-deny-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-6f9cb380ad34-s-joe-namespace-s-joe-obs-89aba04afd
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-runtime-storage-secret-s-joe
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b429a8b8c8ec-s-joe-namespace-s-joe-net-c8da8170ae
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-external-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-fa3ced2efbed-s-joe-namespace-s-joe-net-0b936f86c4
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-namespace-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-ffa9b12c8cf1-s-joe-namespace-s-joe-net-459783fda9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-dns-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
@@ -331,6 +466,515 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-2a7ccf8ae77a-s-joe-keycloak-role-user-87129e68c7
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-access
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-3f63465805ae-s-joe-keycloak-role-admi-823396ba23
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-admin
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-47d0a31f92cd-s-joe-keycloak-client-s-86a5d93597
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-4f485d31573f-s-joe-keycloak-client-s-1e2edb8e51
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-admin
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-578f1a13129b-s-joe-keycloak-role-api-fd4129c32e
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-api
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-api
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-63c58d09830d-s-joe-keycloak-role-api-74b17f2553
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-joe-ws-api
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-api
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-80b575bffcc4-s-joe-keycloak-group-s-j-2f2a4d6f94
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Memberships
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-99f1afad7a8d-s-joe-keycloak-client-s-059af30953
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-access
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-9c0f2cb88c0b-s-joe-keycloak-client-s-0585ea3b48
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-admin
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-a3c0cf88efbb-s-joe-keycloak-role-user-f713b072c8
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-joe-ws-access
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-access
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-af0e62ee0c99-s-joe-keycloak-role-admi-4d52363a33
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe-admin
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-c2778769b966-s-joe-keycloak-client-s-838f40d148
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-joe-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-d40c5bbb7098-s-joe-keycloak-client-s-ba0b74829b
+  namespace: default
+spec:
+  by:
+    apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
+    kind: GroupMembershipProtocolMapper
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-e2b434e81cd6-s-joe-keycloak-group-adm-0decfd4ba2
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe-admin
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-joe-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-e38caa17c7d8-s-joe-keycloak-group-adm-84508080f2
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Memberships
+    resourceRef:
+      name: s-joe-admin
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-joe-admin
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-e8526acc777c-s-joe-keycloak-group-s-j-69dd3f8c34
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-ed53b38c2a5f-s-joe-keycloak-client-s-02d6520215
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-access
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-edb99579b1f8-s-joe-keycloak-client-s-723f30d834
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-api
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: namespace-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        labels:
+          datalabs.pkg.internal/name: s-joe
+          datalabs.pkg.internal/namespace: default
+          pod-security.kubernetes.io/enforce: baseline
+        name: s-joe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-dns-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - ports:
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-external-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-external-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+              - 169.254.42.42/32
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+        - to:
+          - ipBlock:
+              cidr: ::/0
+              except:
+              - fd00:ec2::254/128
+              - fd00:42::42/128
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-internal-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 9000
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: minio
+            podSelector:
+              matchLabels:
+                v1.min.io/tenant: default
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-namespace-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - to:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-deny-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-egress
+        namespace: s-joe
+      spec:
+        egress: []
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -344,6 +988,26 @@ spec:
       metadata:
         name: s-joe-oauth-client
         namespace: default
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-runtime-storage-secret-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-joe-storage
+        namespace: s-joe
   managementPolicies:
   - Observe
   providerConfigRef:
@@ -392,241 +1056,4 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshop-s-joe
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: Workshop
-      metadata:
-        name: s-joe
-      spec:
-        description: A default DataLab environment.
-        environment:
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: deny-egress
-            spec:
-              egress: []
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-namespace-egress
-            spec:
-              egress:
-              - to:
-                - podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-vcluster-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 8443
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/environment.name: s-joe
-                      training.educates.dev/session.objects: 'true'
-                  podSelector:
-                    matchLabels:
-                      app: vcluster
-                      release: my-vcluster
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns-egress
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-external-egress
-            spec:
-              egress:
-              - to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                    - 169.254.169.254/32
-                    - 169.254.42.42/32
-                    - 10.42.0.0/16
-                    - 10.43.0.0/16
-              - to:
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                    - fd00:ec2::254/128
-                    - fd00:42::42/128
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-internal-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 9000
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: minio
-                  podSelector:
-                    matchLabels:
-                      v1.min.io/tenant: default
-              podSelector: {}
-              policyTypes:
-              - Egress
-          secrets:
-          - name: s-joe-datalab
-            namespace: default
-        session:
-          applications:
-            console:
-              enabled: false
-            editor:
-              enabled: true
-            registry:
-              enabled: true
-              storage: 5Gi
-            slides:
-              enabled: false
-            terminal:
-              enabled: true
-            vcluster:
-              enabled: true
-              services:
-                fromHost: []
-              version: '1.34'
-            workshop:
-              enabled: false
-          dashboards:
-          - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
-          envFrom:
-          - secretRef:
-              name: s-joe-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
-          namespaces:
-            budget: medium
-            role: edit
-            security:
-              policy: baseline
-              token:
-                enabled: true
-          objects:
-          - apiVersion: v1
-            data:
-              cidr: 10.43.0.0/16
-            kind: ConfigMap
-            metadata:
-              name: vc-cidr-my-vcluster
-              namespace: $(session_namespace)-vc
-          resources:
-            memory: 2Gi
-            storage: 1Gi
-        title: Default DataLab
-        version: '1.0'
-        workshop:
-          files: []
-          packages:
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-            name: awscli
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-            name: rclone
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshopenvironment-s-joe
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-joe
-      spec:
-        analytics:
-          amplitude:
-            trackingId: ''
-        cookies: {}
-        environment:
-          objects: []
-          secrets: []
-        request:
-          enabled: false
-        session:
-          ingress:
-            class: nginx
-            domain: lab.acme.com
-            secret: wildcard-tls
-        theme:
-          name: default-website-theme
-        workshop:
-          name: s-joe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
-    policy: DeriveFromCelQuery
   watch: true

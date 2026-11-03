@@ -20,7 +20,7 @@ spec:
       kind: Pod
       metadata:
         name: ${pod_name}
-        namespace: ${workshop_ns}
+        namespace: ${runtime_namespace}
   readiness:
     policy: DeriveFromCelQuery
     celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type ==

@@ -7,9 +7,7 @@ import json
 import re
 from crossplane.function import request, response
 from composition.helpers import (
-    _extract_manifest,
     _resource_name,
-    _runtime_namespace,
     _to_dict,
     _vcluster_profile,
     _vcluster_role,
@@ -24,9 +22,7 @@ def compose(req, rsp):
         return
     meta = xr["metadata"]
     name = meta["name"]
-    namespace = _runtime_namespace(req, name)
-    if not namespace:
-        return
+    namespace = name
     for instance, instance_config in sorted(instances.items()):
         _compose_instance(
             req,
@@ -141,18 +137,15 @@ def _compose_instance(
             **template_values,
         ),
     )
-    environment_manifest = (
-        _to_dict(rsp.desired.resources[f"workshop-{name}"].resource)
-        .get("spec", {})
-        .get("forProvider", {})
-        .get("manifest", {})
-    )
-    environment_objects = (
-        (environment_manifest.get("spec") or {}).get("environment") or {}
-    ).get("objects") or []
     workload_egress = [
         rule
-        for policy in environment_objects
+        for key in sorted(rsp.desired.resources)
+        for policy in [
+            _to_dict(rsp.desired.resources[key].resource)
+            .get("spec", {})
+            .get("forProvider", {})
+            .get("manifest", {})
+        ]
         if policy.get("kind") == "NetworkPolicy"
         and policy.get("metadata", {}).get("name")
         in ("allow-external-egress", "allow-internal-egress")

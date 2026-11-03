@@ -5,7 +5,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _backup_enabled,
-    _extract_manifest,
     _string_value,
     _strong_token,
     _to_dict,
@@ -31,15 +30,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
     backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
-    observed = getattr(req.observed, "resources", None) or {}
-    env_key = f"workshopenvironment-{xr_name}"
-    environment_manifest = _extract_manifest(observed.get(env_key))
-
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-    if not workshop_namespace:
-        return
+    runtime_namespace = xr_name
 
     # MongoDB operator expects these namespace-local prerequisites.
     prereqs = [
@@ -48,7 +39,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
             ),
         ),
         (
@@ -56,7 +47,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-database-pods",
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
             ),
         ),
         (
@@ -64,7 +55,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/serviceaccount-mongodb-kubernetes-ops-manager",
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
             ),
         ),
         (
@@ -72,7 +63,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/role-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
             ),
         ),
         (
@@ -80,7 +71,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             _render_template(
                 req,
                 "mongodb/rolebinding-mongodb-kubernetes-appdb",
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
             ),
         ),
     ]
@@ -120,7 +111,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "mongodb/auth-secret",
             password_secret_name=password_secret_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             mongo_password=mongo_password,
         )
         pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
@@ -137,7 +128,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "mongodb/store",
             mongo_resource_name=mongo_resource_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             app_username=f"{store_name}-app",
             password_secret_name=password_secret_name,
             store_name=store_name,
@@ -155,7 +146,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 req,
                 "mongodb/backup-secret",
                 backup_secret_name=backup_secret_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 backup_password=backup_password,
                 backup_config=f"password: {backup_password}\n",
             )
@@ -169,14 +160,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 req,
                 "mongodb/backup-pvc",
                 backup_name=backup_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 backup_vcs=backup_vcs,
             )
             backup_job = _render_template(
                 req,
                 "mongodb/backup-cronjob",
                 backup_name=backup_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 backup_secret_name=backup_secret_name,
                 backup_username=backup_username,
                 backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",

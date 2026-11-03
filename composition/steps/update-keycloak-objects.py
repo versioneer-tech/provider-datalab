@@ -6,7 +6,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _boolish,
     _safe_str,
-    _session_name,
     _to_dict,
     _vcluster_profile,
     _vcluster_role,
@@ -16,23 +15,6 @@ from composition.render import _render_template
 
 def _distinct(seq):
     return list(dict.fromkeys(seq))
-
-
-def _workspace_redirect_uris(xr_name, domain, session_names):
-    uris = [f"https://{xr_name}.{domain}/*"]
-    for sid in session_names:
-        session_host = f"{xr_name}-{sid}"
-        uris.extend(
-            [
-                f"https://{session_host}.{domain}/*",
-                f"https://editor-{session_host}.{domain}/*",
-                f"https://{session_host}-editor.{domain}/*",
-                f"https://data-{session_host}.{domain}/*",
-                f"https://{session_host}-data.{domain}/*",
-            ]
-        )
-    uris.append("http://localhost:*")
-    return _distinct(uris)
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -66,12 +48,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         extra_audiences = _distinct([*extra_audiences, xr_name])
     domain = ingress_env.get("domain", "default")
     url = f"https://{xr_name}.{domain}"
-    session_names = [
-        _session_name(session)
-        for session in (spec.get("sessions") or [])
-        if _session_name(session)
-    ]
-    redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
+    redirect_uris = [f"https://{xr_name}.{domain}/*", "http://localhost:*"]
 
     def put(key_base, body_base, name_override=xr_name):
         key = f"{key_base}-{name_override}"
@@ -357,25 +334,27 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     admins = _distinct((users[0:1] or []) + role_admins)
 
-    put(
-        "keycloak-memberships-users",
-        _render_template(
-            req,
-            "keycloak/user-memberships",
-            xr_name=xr_name,
-            realm=realm,
-            users=users,
-        ),
-    )
+    if users:
+        put(
+            "keycloak-memberships-users",
+            _render_template(
+                req,
+                "keycloak/user-memberships",
+                xr_name=xr_name,
+                realm=realm,
+                users=users,
+            ),
+        )
 
-    put(
-        "keycloak-memberships-admins",
-        _render_template(
-            req,
-            "keycloak/admin-memberships",
-            group_name=f"{xr_name}-admin",
-            realm=realm,
-            admins=admins,
-        ),
-        f"{xr_name}-admin",
-    )
+    if admins:
+        put(
+            "keycloak-memberships-admins",
+            _render_template(
+                req,
+                "keycloak/admin-memberships",
+                group_name=f"{xr_name}-admin",
+                realm=realm,
+                admins=admins,
+            ),
+            f"{xr_name}-admin",
+        )

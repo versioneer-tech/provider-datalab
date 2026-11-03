@@ -62,7 +62,7 @@ class HelperTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
-    def test_test_ttl_override_cannot_replace_the_deployment_artifact(self):
+    def test_ttl_override_cannot_replace_deployment_artifact(self):
         artifact = ROOT / "composition.yaml"
         original = artifact.read_bytes()
         result = subprocess.run(

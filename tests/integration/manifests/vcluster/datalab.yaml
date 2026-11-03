@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: pkg.internal/v1beta2
+apiVersion: pkg.internal/v1
 kind: Datalab
 metadata:
   name: verify-vcluster
@@ -12,7 +12,6 @@ spec:
   users:
   - verify-s3
   secretName: verify-vcluster
-  sessions: []
   databases:
     pg0:
       type: postgres
@@ -21,6 +20,24 @@ spec:
       - catalog
   vclusters:
     vc0:
+      secretBindings:
+        catalog-settings:
+          export: catalog-settings
+          target:
+            namespace: connections
+            name: catalog-settings
+          keys:
+            endpoint: CATALOG_ENDPOINT
+        catalog-initialization:
+          export: catalog-initialization
+          target:
+            namespace: demo
+            name: catalog-postgres-admin
+          keys:
+            host: PGHOST
+            port: PGPORT
+            user: PGUSER
+            password: PGPASSWORD
       storage: 1Gi
       groups:
       - name: namespace-demo

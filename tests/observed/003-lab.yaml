@@ -4,22 +4,6 @@
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: workshop-s-jane
-  namespace: default
-  annotations:
-    crossplane.io/composition-resource-name: workshop-s-jane
-status:
-  atProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: Workshop
-      metadata:
-        name: s-jane
-        generation: 2
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: observe-oauth-client-secret-s-jane
   namespace: default
   annotations:
@@ -38,33 +22,6 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: workshopenvironment-s-jane
-  namespace: default
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-jane
-status:
-  atProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-jane
-      status:
-        educates:
-          namespace: s-jane
-          phase: Running
-          workshop:
-            generation: 1
-            spec:
-              session:
-                applications:
-                  vcluster:
-                    services:
-                      fromHost: []
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: observe-runtime-storage-secret-s-jane
   namespace: default
   annotations:
@@ -75,7 +32,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-jane-datalab
+        name: s-jane-storage
         namespace: s-jane
       data:
         AWS_ACCESS_KEY_ID: amFuZS1hY2Nlc3Mta2V5

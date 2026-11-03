@@ -31,8 +31,8 @@ to request these managed services:
 
 Crossplane creates the service resources. The installed database operators
 manage their workloads. Services belong to the Datalab and continue to run
-when an interactive session stops. Connection settings are supplied through
-the Datalab connection Secret.
+independently of client workloads. Connection settings are supplied through
+separate service connection Secrets.
 
 ### Keep user configuration small
 
@@ -96,7 +96,7 @@ and backup retention after Datalab deletion need separate operator provisions.
   without a separate database deployment or backup workflow.
 - The platform operator has clear responsibility for operations and the
   guarantees offered to users.
-- Service data is independent of session state. Its retention still depends
+- Service data belongs to the Datalab. Its retention depends
   on Datalab deletion and storage reclaim rules.
 - Users select from supported service settings. Other database products or
   configurations need a separate platform decision.

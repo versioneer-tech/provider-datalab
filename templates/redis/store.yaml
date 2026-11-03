@@ -5,7 +5,7 @@ apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
 metadata:
   name: ${store_name}
-  namespace: ${workshop_ns}
+  namespace: ${runtime_namespace}
   annotations:
     datalabs.pkg.internal/redis-acl-checksum: ${redis_acl_checksum}
 spec:

@@ -5,11 +5,9 @@
 set -Eeuo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
-source "${INTEGRATION_DIR}/educates.bash"
+source "${INTEGRATION_DIR}/runtime.bash"
 source "${INTEGRATION_DIR}/postgres.bash"
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${KEEP_VCLUSTER_RESOURCES:=0}"
-readonly EDUCATES_NAMESPACE=educates
 readonly VCLUSTER_NAMESPACE=verify-vcluster
 readonly CONTOUR_VERSION=v1.33.7
 work_directory="$(mktemp -d /tmp/datalab-vcluster.XXXXXX)"
@@ -50,7 +48,6 @@ CATALOG
 
 install_prerequisites() {
   create_ingress_certificate
-  install_educates
   install_pgo
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
@@ -101,6 +98,7 @@ install_prerequisites() {
   kube wait deployment --namespace projectcontour --selector gateway.networking.k8s.io/gateway-name=verify-vcluster \
     --for=condition=Available --timeout=10m
   kube apply -f "${MANIFEST_DIR}/vcluster/environmentconfig.yaml"
+  kube apply -f "${MANIFEST_DIR}/vcluster/secret-export.yaml"
   kube patch environmentconfig/datalab-vcluster-it --type=merge \
     --patch "$(jq -n --rawfile ca "${work_directory}/issuer.crt" --rawfile gateway_ca "${work_directory}/gateway.crt" '{data:{vcluster:{issuerCA:$ca},ingress:{certificateAuthority:$gateway_ca}}}')"
 }
@@ -122,7 +120,7 @@ verify_vcluster() {
     ((SECONDS < deadline)) || return 1
     sleep 5
   done
-  wait_for_connection_secret verify-vcluster-datalab verify-vcluster 600 POSTGRES_PG0_PASSWORD POSTGRES_PG0_HOST
+  wait_for_connection_secret verify-vcluster-postgres-pg0 verify-vcluster 600 password host
   for profile in \
     verify-vcluster-vcluster-vc0-cluster-admin-094bd1c6b0 \
     verify-vcluster-vcluster-vc0-namespace-demo-6e6b6feb99 \
@@ -130,9 +128,10 @@ verify_vcluster() {
     wait_for_connection_secret "${profile}" verify-vcluster 600 kubeconfig
   done
   kube wait datalab/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
+  kube wait datalab/verify-vcluster --namespace workspace --for=condition=SecretBindingsReady --timeout=15m
   kube get datalab/verify-vcluster --namespace workspace -o json | python3 -c '
 import json, sys
-connections = json.load(sys.stdin)["status"]["connections"]
+connections = [c for c in json.load(sys.stdin)["status"]["connections"] if c["type"] == "vcluster"]
 assert len(connections) == 3 and all(c["ready"] for c in connections)
 assert {c["instance"] for c in connections} == {"vc0", "vc1"}
 assert all(set(c) <= {"name", "type", "instance", "group", "targetNamespace", "role", "endpoint", "ready", "secretRef"} for c in connections)
@@ -167,7 +166,24 @@ PVC
   kube wait pod/verify-vcluster-client --namespace workspace --for=condition=Ready --timeout=5m
   cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
   kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --binding-version initial-endpoint
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}"
+  kube patch secret/verify-vcluster-export --namespace workspace --type=merge \
+    --patch '{"stringData":{"endpoint":"rotated-endpoint"}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --binding-version rotated-endpoint
+  kube patch datalab/verify-vcluster --namespace workspace --type=json \
+    --patch '[{"op":"remove","path":"/spec/vclusters/vc0/secretBindings/catalog-initialization"}]'
+  kube patch environmentconfig/datalab-vcluster-it --type=json \
+    --patch '[{"op":"remove","path":"/data/secretExports/catalog-settings"}]'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --bindings-removed
+  kube get secret/verify-vcluster-export --namespace workspace -o json | python3 -c '
+import base64, json, sys
+assert {key: base64.b64decode(value).decode() for key, value in json.load(sys.stdin)["data"].items()} == {
+    "endpoint": "rotated-endpoint", "unshared": "source-only"}
+print("PASS binding cleanup leaves its host source unchanged")'
+  kube patch datalab/verify-vcluster --namespace workspace --type=json \
+    --patch '[{"op":"remove","path":"/spec/vclusters/vc0/secretBindings/catalog-settings"}]'
+  kube wait datalab/verify-vcluster --namespace workspace --for=condition=SecretBindingsReady --timeout=5m
   kube rollout restart statefulset/vcluster-vc0 --namespace "${runtime_namespace}"
   kube rollout status statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --check-only
@@ -185,22 +201,36 @@ PVC
   printf 'PASS PostgreSQL remains ready after removing vc0\n'
 }
 
-verify_name_admission() {
+verify_api_admission() {
   python3 - "${MANIFEST_DIR}/vcluster/datalab.yaml" "${PROVIDER_DATALAB_KUBECONFIG}" "${KUBECTL_CONTEXT}" <<'ADMISSION'
 from copy import deepcopy
 from pathlib import Path
 import subprocess, sys, yaml
 source = yaml.safe_load(Path(sys.argv[1]).read_text())
+command = ['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3],
+           'apply', '--dry-run=server', '-o', 'json', '-f', '-']
+for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+    for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
+        value = deepcopy(source)
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        value['spec'][field] = {key: config}
+        result = subprocess.run(command, input=yaml.safe_dump(value), text=True, capture_output=True)
+        assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
+print('PASS v1 admission rejects invalid instance names for all maps')
+def preserved(expected, actual):
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(key in actual and preserved(value, actual[key]) for key, value in expected.items())
+    return expected == actual
+
 for version in ('v1beta1', 'v1beta2'):
-    source['apiVersion'] = 'pkg.internal/' + version
-    for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
-        for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
-            value = deepcopy(source)
-            config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
-            value['spec'][field] = {key: config}
-            result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
-            assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
-print('PASS Kubernetes admission rejects invalid instance names for all maps')
+    value = deepcopy(source)
+    value['apiVersion'] = 'pkg.internal/' + version
+    value['metadata']['name'] = 'verify-api-' + version
+    value['spec']['migrationCheck'] = {'nested': ['preserved', 1]}
+    result = subprocess.run(command, input=yaml.safe_dump(value), text=True, capture_output=True, check=True)
+    actual = yaml.safe_load(result.stdout)['spec']
+    assert preserved(value['spec'], actual), version
+print('PASS beta admission preserves all submitted spec fields')
 ADMISSION
 }
 
@@ -208,7 +238,7 @@ main() {
   require_cluster
   install_prerequisites
   build_catalog_image
-  verify_name_admission
+  verify_api_admission
   verify_vcluster
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete pod/verify-vcluster-client configmap/verify-vcluster-client --namespace workspace --ignore-not-found
@@ -216,6 +246,7 @@ main() {
     kube wait datalab/verify-vcluster --namespace workspace --for=delete --timeout=10m
     kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=10m
     stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
+    kube delete -f "${MANIFEST_DIR}/vcluster/secret-export.yaml"
   fi
 }
 main "$@"

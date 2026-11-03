@@ -5,7 +5,7 @@ apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
   name: ${mongo_resource_name}
-  namespace: ${workshop_ns}
+  namespace: ${runtime_namespace}
 spec:
   members: 1
   type: ReplicaSet
