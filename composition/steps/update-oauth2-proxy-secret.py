@@ -1,6 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import base64 as _base64
 import hashlib as _hashlib
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -48,9 +49,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         "oauth2-client-secret/manifest",
         secret_name=secret_name,
         workshop_ns=workshop_namespace,
-        client_id=client_id,
-        client_secret=client_secret,
-        cookie_secret=cookie_secret,
+        data={
+            key: _base64.b64encode(value.encode("utf-8")).decode("ascii")
+            for key, value in {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "cookie_secret": cookie_secret,
+            }.items()
+        },
     )
     rsp.desired.resources[key].resource.update(
         _render_template(

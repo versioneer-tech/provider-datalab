@@ -7,6 +7,7 @@
 import argparse
 import base64
 from copy import deepcopy
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -163,6 +164,14 @@ def main():
         first = oauth_render('initial-client-secret')
         second = oauth_render('rotated-client-secret')
         for output, secret in ((first, 'initial-client-secret'), (second, 'rotated-client-secret')):
+            projected = yaml.safe_load(resource(output, 'oauth2-client-secret-s-joe'))['spec']['forProvider']['manifest']
+            assert 'stringData' not in projected
+            decoded = {key: base64.b64decode(value).decode() for key, value in projected['data'].items()}
+            assert decoded == {
+                'client_id': 's-joe',
+                'client_secret': secret,
+                'cookie_secret': hashlib.sha256(secret.encode()).hexdigest()[:32],
+            }
             generated = resource(output, 's-joe-datalab')
             assert 'OAUTH2_CLIENT_ID: s-joe' in generated
             assert f'OAUTH2_CLIENT_SECRET: {secret}' in generated

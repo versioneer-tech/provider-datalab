@@ -9,6 +9,7 @@ import shlex as _shlex
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _b64get_any,
     _boolish,
     _extract_manifest,
     _safe_str,
@@ -280,7 +281,9 @@ mv "$work_database" "$database"
         oauth_manifest = (
             (oauth_object.get("spec") or {}).get("forProvider") or {}
         ).get("manifest") or {}
-        cookie_secret = (oauth_manifest.get("stringData") or {}).get("cookie_secret")
+        cookie_secret = _b64get_any(
+            oauth_manifest.get("data") or {}, ["cookie_secret"]
+        )
         if cookie_secret:
             # The cookie cipher is built at startup, even when a Secret file is used.
             oauth_cookie_checksum = _hashlib.sha256(

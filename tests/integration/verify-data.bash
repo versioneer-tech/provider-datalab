@@ -169,6 +169,12 @@ show_data_diagnostics() {
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${ENABLED_DATALAB}" || true
+  kube get "datalab.pkg.internal/${ENABLED_DATALAB}" \
+    --namespace "${WORKSPACE_NAMESPACE}" \
+    -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.reason}{": "}{.message}{"\n"}{end}' || true
+  kube get events --namespace "${WORKSPACE_NAMESPACE}" \
+    --field-selector "involvedObject.name=${ENABLED_DATALAB}" \
+    --sort-by=.lastTimestamp || true
   if [[ -n "${enabled_runtime_namespace}" ]]; then
     kube get deployment,service,networkpolicy,pod,pvc \
       --namespace "${enabled_runtime_namespace}" || true
@@ -207,7 +213,7 @@ main() {
   apply_data_datalabs
 
   if ! enabled_runtime_namespace="$(wait_for_runtime_namespace "${ENABLED_DATALAB}")" ||
-    ! kube wait deployment/package-r --namespace "${enabled_runtime_namespace}" --for=create --timeout=5m ||
+    ! kube wait deployment/package-r --namespace "${enabled_runtime_namespace}" --for=create --timeout=10m ||
     ! kube rollout status deployment/package-r --namespace "${enabled_runtime_namespace}" --timeout=10m ||
     ! verify_credential_rotation "${enabled_runtime_namespace}" ||
     ! verify_package_access "${enabled_runtime_namespace}" false ||

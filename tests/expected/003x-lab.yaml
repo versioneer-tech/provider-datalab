@@ -1962,10 +1962,10 @@ spec:
       metadata:
         name: s-jane-oauth2-client
         namespace: s-jane
-      stringData:
-        client_id: s-jane
-        client_secret: sample-oauth2-client-secret
-        cookie_secret: 26eca712832c3e62dedb9c72fe8332dd
+      data:
+        client_id: cy1qYW5l
+        client_secret: c2FtcGxlLW9hdXRoMi1jbGllbnQtc2VjcmV0
+        cookie_secret: MjZlY2E3MTI4MzJjM2U2MmRlZGI5YzcyZmU4MzMyZGQ=
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig

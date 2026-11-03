@@ -7,7 +7,4 @@ metadata:
   name: ${secret_name}
   namespace: ${workshop_ns}
 type: Opaque
-stringData:
-  client_id: ${client_id}
-  client_secret: ${client_secret}
-  cookie_secret: ${cookie_secret}
+data: ${data}

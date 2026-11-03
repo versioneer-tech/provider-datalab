@@ -1370,6 +1370,7 @@ spec:
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
+        import base64 as _base64
         import hashlib as _hashlib
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -1410,9 +1411,14 @@ spec:
                 "oauth2-client-secret/manifest",
                 secret_name=secret_name,
                 workshop_ns=workshop_namespace,
-                client_id=client_id,
-                client_secret=client_secret,
-                cookie_secret=cookie_secret,
+                data={
+                    key: _base64.b64encode(value.encode("utf-8")).decode("ascii")
+                    for key, value in {
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "cookie_secret": cookie_secret,
+                    }.items()
+                },
             )
             rsp.desired.resources[key].resource.update(
                 _render_template(
@@ -1448,10 +1454,7 @@ spec:
             name: ${secret_name}
             namespace: ${workshop_ns}
           type: Opaque
-          stringData:
-            client_id: ${client_id}
-            client_secret: ${client_secret}
-            cookie_secret: ${cookie_secret}
+          data: ${data}
   - step: update-educates-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -2210,6 +2213,8 @@ spec:
 
             return fill(template)
 
+        import base64
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -2240,6 +2245,19 @@ spec:
         def _extract_manifest(observed_resource):
             manifest, raw_manifest = _observed_manifests(observed_resource)
             return manifest or raw_manifest
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -2517,7 +2535,9 @@ spec:
                 oauth_manifest = (
                     (oauth_object.get("spec") or {}).get("forProvider") or {}
                 ).get("manifest") or {}
-                cookie_secret = (oauth_manifest.get("stringData") or {}).get("cookie_secret")
+                cookie_secret = _b64get_any(
+                    oauth_manifest.get("data") or {}, ["cookie_secret"]
+                )
                 if cookie_secret:
                     # The cookie cipher is built at startup, even when a Secret file is used.
                     oauth_cookie_checksum = _hashlib.sha256(

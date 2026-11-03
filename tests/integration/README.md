@@ -68,6 +68,9 @@ the failed operation and HTTP status without printing credentials.
 
 The Data profile reuses the Educates installation and seeds one disposable
 MinIO bucket for file operations. It tests access through the runtime Service.
+It allows ten minutes for deployment creation. The five-minute composition
+response TTL and startup watch throttling can delay resource generation after
+the runtime Secret observer is ready.
 Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 
 Integration fixtures also use only `datalab` and `datalab-custom`; profiles
