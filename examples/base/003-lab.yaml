@@ -22,3 +22,13 @@ spec:
       - analytics
       storage: 1Gi
       backupStorage: 3Gi
+  vclusters:
+    vc0:
+      storage: 1Gi
+      groups:
+      - name: namespace-demo
+        namespace: demo
+        role: edit
+      - name: cluster-admin
+        namespace: "*"
+        role: cluster-admin

@@ -114,9 +114,9 @@ def set_response_ttl(script, seconds):
     return "".join(lines)
 
 
-def build(root=ROOT):
+def build(root=ROOT, response_ttl=None):
     settings = yaml.safe_load((root / "composition/settings.yaml").read_text())
-    ttl = settings["responseTTL"]
+    ttl = settings["responseTTL"] if response_ttl is None else response_ttl
     seconds = response_ttl_seconds(ttl)
     composition = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
     helper_source = (root / "composition/helpers.py").read_text()
@@ -166,9 +166,15 @@ def main():
     parser.add_argument(
         "--check", action="store_true", help="Reject a stale composition.yaml."
     )
+    parser.add_argument(
+        "--response-ttl", help="Override the response TTL for a test build."
+    )
+    parser.add_argument("--output", type=Path, default=ROOT / "composition.yaml")
     args = parser.parse_args()
-    result = build()
-    target = ROOT / "composition.yaml"
+    if args.response_ttl and args.output == ROOT / "composition.yaml":
+        parser.error("--response-ttl requires a separate --output file")
+    result = build(response_ttl=args.response_ttl)
+    target = args.output
     if args.check:
         if not target.is_file() or target.read_text() != result:
             print(

@@ -1,0 +1,18 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+anonymous:
+  enabled: false
+jwt:
+- issuer: ${jwt_issuer}
+  claimValidationRules:
+  - expression: ${jwt_0_claimValidationRules_0_expression}
+    message: A configured Datalab vcluster role is required.
+  claimMappings:
+    username:
+      claim: sub
+      prefix: ${jwt_0_claimMappings_username_prefix}
+    groups:
+      expression: ${jwt_0_claimMappings_groups_expression}

@@ -23,6 +23,93 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+              properties:
+                vclusters:
+                  type: object
+                  default: {}
+                  maxProperties: 20
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
+                  additionalProperties:
+                    type: object
+                    description: Virtual Kubernetes clusters keyed by instance name.
+                    properties:
+                      groups:
+                        type: array
+                        description: Access profiles with separate kubeconfigs and Kubernetes RBAC.
+                        maxItems: 20
+                        x-kubernetes-list-type: map
+                        x-kubernetes-list-map-keys:
+                        - name
+                        items:
+                          type: object
+                          required:
+                          - name
+                          - namespace
+                          - role
+                          x-kubernetes-validations:
+                          - rule: (self.namespace == "*") == (self.role == "cluster-admin")
+                            message: cluster-admin requires namespace '*'; other roles require a namespace.
+                          properties:
+                            name:
+                              type: string
+                              description: Profile name used for its Keycloak role and connection set.
+                              maxLength: 40
+                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                            namespace:
+                              type: string
+                              description: Virtual namespace to create, or '*' for virtual cluster administration.
+                              maxLength: 63
+                              pattern: ^(\*|[a-z]([a-z0-9-]*[a-z0-9])?)$
+                              x-kubernetes-validations:
+                              - rule: self != "default" && !self.startsWith("kube-")
+                                message: Select a workload namespace, not a Kubernetes system namespace.
+                            role:
+                              type: string
+                              description: Kubernetes ClusterRole granted to this profile.
+                              enum:
+                              - view
+                              - edit
+                              - admin
+                              - cluster-admin
+                        minItems: 1
+                      storage:
+                        type: string
+                        description: Control-plane PVC size. The environment default is used when omitted.
+                    required:
+                    - groups
+                databases:
+                  type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
+                  additionalProperties:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                documentStores:
+                  type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
+                  additionalProperties:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                cacheStores:
+                  type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
+                  additionalProperties:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
     - name: v1beta2
       served: true
       referenceable: true
@@ -96,8 +183,69 @@ spec:
                           - stopped
                         default: started
                   default: []
+                vclusters:
+                  type: object
+                  default: {}
+                  maxProperties: 20
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
+                  additionalProperties:
+                    type: object
+                    description: Virtual Kubernetes clusters keyed by instance name.
+                    properties:
+                      groups:
+                        type: array
+                        description: Access profiles with separate kubeconfigs and Kubernetes RBAC.
+                        maxItems: 20
+                        x-kubernetes-list-type: map
+                        x-kubernetes-list-map-keys:
+                        - name
+                        items:
+                          type: object
+                          required:
+                          - name
+                          - namespace
+                          - role
+                          x-kubernetes-validations:
+                          - rule: (self.namespace == "*") == (self.role == "cluster-admin")
+                            message: cluster-admin requires namespace '*'; other roles require a namespace.
+                          properties:
+                            name:
+                              type: string
+                              description: Profile name used for its Keycloak role and connection set.
+                              maxLength: 40
+                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                            namespace:
+                              type: string
+                              description: Virtual namespace to create, or '*' for virtual cluster administration.
+                              maxLength: 63
+                              pattern: ^(\*|[a-z]([a-z0-9-]*[a-z0-9])?)$
+                              x-kubernetes-validations:
+                              - rule: self != "default" && !self.startsWith("kube-")
+                                message: Select a workload namespace, not a Kubernetes system namespace.
+                            role:
+                              type: string
+                              description: Kubernetes ClusterRole granted to this profile.
+                              enum:
+                              - view
+                              - edit
+                              - admin
+                              - cluster-admin
+                        minItems: 1
+                      storage:
+                        type: string
+                        description: Control-plane PVC size. The environment default is used when omitted.
+                    required:
+                    - groups
                 databases:
                   type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
                   description: >-
                     Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab.
                     Each host defines a data volume size and an optional pgBackRest repository size, plus a list of
@@ -137,6 +285,11 @@ spec:
                   default: {}
                 documentStores:
                   type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
                   description: >-
                     Optional document stores for this datalab, implemented via MongoDB
                     and managed through the MongoDB Kubernetes operator.
@@ -167,6 +320,11 @@ spec:
                       - storage
                 cacheStores:
                   type: object
+                  maxProperties: 100
+                  x-kubernetes-validations:
+                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
+                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
+                      end with a letter or digit, and have at most 63 characters.
                   description: >-
                     Optional cache stores for this datalab, implemented via Redis
                     and managed through the Redis Kubernetes operator.
@@ -223,7 +381,7 @@ spec:
                         description: Public URL of the active session.
                 connections:
                   type: array
-                  description: Reserved connection sets. The Educates runtime does not populate this field.
+                  description: Connection sets for the declared virtual clusters.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [name]
                   items:
@@ -235,6 +393,8 @@ spec:
                       type:
                         type: string
                         enum: [s3, postgres, mongo, redis, vcluster]
+                      instance:
+                        type: string
                       group:
                         type: string
                       targetNamespace:

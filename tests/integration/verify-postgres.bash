@@ -8,11 +8,11 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${PGO_VERSION:=6.0.2}"
+# shellcheck source=postgres.bash
+source "${INTEGRATION_DIR}/postgres.bash"
 : "${POSTGRES_CLIENT_IMAGE:=postgres:17}"
 : "${KEEP_POSTGRES_RESOURCES:=0}"
 
-readonly PGO_NAMESPACE=postgres-operator
 readonly DATALAB_NAME=verify-postgres
 readonly POSTGRES_NAMESPACE="${DATALAB_NAME}"
 readonly POSTGRES_CLUSTER=pg0
@@ -21,27 +21,6 @@ readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
 readonly POSTGRES_URL_KEY=POSTGRES_PG0_VERIFY_URL
 readonly PROBE_NAME=verify-postgres
 
-install_pgo() {
-  require_command helm
-  if helm_release_matches pgo "${PGO_NAMESPACE}" "pgo-${PGO_VERSION}"; then
-    kube rollout status deployment/pgo --namespace "${PGO_NAMESPACE}" --timeout=5m
-    return
-  fi
-  log "Installing Crunchy PGO ${PGO_VERSION}"
-  apply_operator_crds oci://registry.developers.crunchydata.com/crunchydata/pgo "${PGO_VERSION}"
-  helm_it upgrade --install pgo \
-    oci://registry.developers.crunchydata.com/crunchydata/pgo \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-    --kube-context "${KUBECTL_CONTEXT}" \
-    --namespace "${PGO_NAMESPACE}" \
-    --create-namespace \
-    --version "${PGO_VERSION}" \
-    --set singleNamespace=false \
-    --wait \
-    --timeout 10m
-  kube rollout status deployment/pgo \
-    --namespace "${PGO_NAMESPACE}" --timeout=5m
-}
 
 apply_postgres_datalab() {
   log 'Applying the PostgreSQL verification Datalab'
@@ -121,6 +100,7 @@ run_postgres_probe() {
   local url_key="${1:-${POSTGRES_URL_KEY}}"
 
   log 'Running an in-cluster write/read probe through the Datalab Secret'
+  resource_budget
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
   render_template "${MANIFEST_DIR}/postgres/client.yaml" \
@@ -145,9 +125,11 @@ cleanup_successful_verification() {
   if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=5m; then
     kube delete namespace "${POSTGRES_NAMESPACE}" \
-      --ignore-not-found --wait=true
+      --ignore-not-found --wait=true --timeout=5m
+    stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
   else
     printf 'Datalab cleanup is still running; resources were kept for diagnosis.\n' >&2
+    return 1
   fi
 }
 

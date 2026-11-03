@@ -1,0 +1,15 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: ${virtual_provider}
+  namespace: ${claim_namespace}
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      name: ${service_account}
+      namespace: ${namespace}
+      key: config

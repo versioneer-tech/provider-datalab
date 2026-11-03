@@ -4,6 +4,8 @@
 import runpy
 import re
 import subprocess
+import json
+import sys
 import unittest
 from pathlib import Path
 
@@ -60,6 +62,62 @@ class HelperTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
+    def test_test_ttl_override_cannot_replace_the_deployment_artifact(self):
+        artifact = ROOT / "composition.yaml"
+        original = artifact.read_bytes()
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/build-composition.py"), "--response-ttl", "1m"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a separate --output", result.stderr)
+        self.assertEqual(artifact.read_bytes(), original)
+
+    def test_operator_with_managed_resources_stays_running(self):
+        script = '''
+source "$1"
+kube() {
+  if [[ "$1" == get ]]; then printf '{"items":[{"metadata":{"name":"retained"}}]}';
+  else printf 'unexpected mutation: %s\\n' "$*"; fi
+}
+stop_unused_operator database operator databases.example.org
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True, check=True)
+        self.assertIn("Keeping operator running", result.stdout)
+        self.assertNotIn("unexpected mutation", result.stdout)
+
+    def test_scheduling_failure_reports_before_execution_wait(self):
+        script = '''
+source "$1"
+kube() { [[ "$*" != *condition=PodScheduled* ]]; }
+scheduling_diagnostics() { printf 'scheduling diagnostics %s/%s\\n' "$1" "$2"; }
+wait_for_pod_scheduling database backup
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("execution has not started", result.stderr)
+        self.assertIn("scheduling diagnostics database/backup", result.stdout)
+
+    def test_cpu_report_counts_init_requests_and_excludes_finished_pods(self):
+        data = {"nodes": [{"metadata": {"name": "node"}, "status": {"allocatable": {"cpu": "4"}}}],
+                "pods": [
+                    {"metadata": {"namespace": "database"}, "status": {"phase": "Running"},
+                     "spec": {"nodeName": "node", "containers": [{"resources": {"requests": {"cpu": "200m"}}}],
+                              "initContainers": [{"resources": {"requests": {"cpu": "800m"}}}]}},
+                    {"metadata": {"namespace": "finished"}, "status": {"phase": "Succeeded"},
+                     "spec": {"nodeName": "node", "containers": [{"resources": {"requests": {"cpu": "2"}}}]}},
+                    {"metadata": {"namespace": "backup"}, "status": {"phase": "Pending"},
+                     "spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]}},
+                ]}
+        result = subprocess.run([sys.executable, str(ROOT / "tests/integration/resource-budget.py")],
+                                input=json.dumps(data), capture_output=True, text=True, check=True)
+        self.assertIn("database: 800m", result.stdout)
+        self.assertIn("800m requested, 4000m allocatable, 3200m free", result.stdout)
+        self.assertIn("unscheduled Pods: 100m requested", result.stdout)
+        self.assertNotIn("finished:", result.stdout)
+
     def test_duration_units(self):
         for value, seconds in (("30s", 30), ("5m", 300), ("1h", 3600)):
             with self.subTest(value=value):

@@ -21,7 +21,40 @@ spec:
     state: started
   users:
   - jane
+  vclusters:
+    vc0:
+      groups:
+      - name: namespace-demo
+        namespace: demo
+        role: edit
+      - name: cluster-admin
+        namespace: '*'
+        role: cluster-admin
+      storage: 1Gi
 status:
+  connections:
+  - endpoint: https://s-jane.lab.acme.com/.vc0
+    group: cluster-admin
+    instance: vc0
+    name: vcluster-vc0-cluster-admin-7ad833319f
+    ready: false
+    role: cluster-admin
+    secretRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      namespace: default
+    targetNamespace: '*'
+    type: vcluster
+  - endpoint: https://s-jane.lab.acme.com/.vc0
+    group: namespace-demo
+    instance: vc0
+    name: vcluster-vc0-namespace-demo-b2157b3b79
+    ready: false
+    role: edit
+    secretRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      namespace: default
+    targetNamespace: demo
+    type: vcluster
   sessions:
     default:
       state: started
@@ -1408,6 +1441,462 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-036582816298-s-jane-keycloak-vcluster-eed337aa4e
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-0a70f7471fe5-s-jane-keycloak-vcluster-4b8c0c4052
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-15d1c4085075-s-jane-keycloak-vcluster-e5ab8a5d25
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-264d7aa2d983-s-jane-keycloak-vcluster-b947944fb5
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-28bfd2d4fe57-s-jane-keycloak-client-s-3c82ddfc73
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-3c6e02cc097a-s-jane-keycloak-client-s-b486723db1
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-459948876b3c-s-jane-keycloak-vcluster-50bcbc25c0
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-5acf551231e7-s-jane-keycloak-vcluster-3a5c390558
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: ProtocolMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-6f3132386097-s-jane-keycloak-vcluster-7e35177ba8
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-8db7afd0ac66-s-jane-keycloak-vcluster-65af792f1b
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-a74cbed9f0d0-s-jane-keycloak-client-s-3d3bf3e693
+  namespace: default
+spec:
+  by:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientServiceAccountRole
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-aa3ba4b97be0-s-jane-keycloak-vcluster-711d321e0d
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: ProtocolMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-aa57c6e58a82-s-jane-keycloak-vcluster-46185af777
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-d24632e4cc66-s-jane-keycloak-client-s-0792df608a
+  namespace: default
+spec:
+  by:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane
+  replayDeletion: true
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientServiceAccountRole
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    realmId: acme
+    roleRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    serviceAccountUserClientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientServiceAccountRole
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    realmId: acme
+    roleRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    serviceAccountUserClientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    config:
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      included.client.audience: s-jane
+    name: datalab-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    config:
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      included.client.audience: s-jane
+    name: datalab-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    accessType: CONFIDENTIAL
+    clientId: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    directAccessGrantsEnabled: false
+    fullScopeAllowed: false
+    implicitFlowEnabled: false
+    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    realmId: acme
+    serviceAccountsEnabled: true
+    standardFlowEnabled: false
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+  writeConnectionSecretToRef:
+    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651-oauth
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    accessType: CONFIDENTIAL
+    clientId: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    directAccessGrantsEnabled: false
+    fullScopeAllowed: false
+    implicitFlowEnabled: false
+    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    realmId: acme
+    serviceAccountsEnabled: true
+    standardFlowEnabled: false
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+  writeConnectionSecretToRef:
+    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-oauth
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-role-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    name: vcluster:vc0:cluster-admin
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-role-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    name: vcluster:vc0:namespace-demo
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -1454,14 +1943,14 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
-      kind: Secret
-      metadata:
-        name: s-jane-oauth2-client
-        namespace: s-jane
       data:
         client_id: cy1qYW5l
         client_secret: c2FtcGxlLW9hdXRoMi1jbGllbnQtc2VjcmV0
         cookie_secret: MjZlY2E3MTI4MzJjM2U2MmRlZGI5YzcyZmU4MzMyZGQ=
+      kind: Secret
+      metadata:
+        name: s-jane-oauth2-client
+        namespace: s-jane
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1599,6 +2088,1797 @@ spec:
   readiness:
     policy: SuccessfulCreate
   watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: datalab-namespace-demo-edit
+        namespace: demo
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: edit
+      subjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: Group
+        name: datalab:s-jane:vcluster:vc0:namespace-demo
+  providerConfigRef:
+    kind: ProviderConfig
+    name: s-jane-vcluster-vc0-25fc5fbd42
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-access-binding-bb77db584a9b-72f1bd92ac
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: datalab-cluster-admin-cluster-admin
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: Group
+        name: datalab:s-jane:vcluster:vc0:cluster-admin
+  providerConfigRef:
+    kind: ProviderConfig
+    name: s-jane-vcluster-vc0-25fc5fbd42
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-access-namespace-demo-443e6d5c64
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: demo
+  managementPolicies:
+  - Observe
+  - Create
+  - Update
+  providerConfigRef:
+    kind: ProviderConfig
+    name: s-jane-vcluster-vc0-25fc5fbd42
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-authentication-51c647132c
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        authentication.json: '{"anonymous": {"enabled": false}, "apiVersion": "apiserver.config.k8s.io/v1", "jwt":
+          [{"claimMappings": {"groups": {"expression": "claims.resource_access[\"s-jane\"].roles.filter(r, r in
+          [\"vcluster:vc0:cluster-admin\", \"vcluster:vc0:namespace-demo\"]).map(r, ''datalab:s-jane:'' + r)"},
+          "username": {"claim": "sub", "prefix": "datalab:s-jane:"}}, "claimValidationRules": [{"expression": "has(claims.resource_access)
+          && \"s-jane\" in claims.resource_access && has(claims.resource_access[\"s-jane\"].roles) && claims.resource_access[\"s-jane\"].roles.exists(r,
+          r in [\"vcluster:vc0:cluster-admin\", \"vcluster:vc0:namespace-demo\"])", "message": "A configured Datalab
+          vcluster role is required."}], "issuer": {"audienceMatchPolicy": "MatchAny", "audiences": ["s-jane"],
+          "url": "https://identity.acme.com/realms/acme"}}], "kind": "AuthenticationConfiguration"}'
+      kind: ConfigMap
+      metadata:
+        name: vcluster-vc0-authentication
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-backend-ca-743e8e9d1a
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        ca.crt: ''
+      kind: ConfigMap
+      metadata:
+        name: vcluster-vc0-ca
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-backend-tls-85ddc6b9ff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: BackendTLSPolicy
+      metadata:
+        name: vcluster-vc0
+        namespace: s-jane
+      spec:
+        targetRefs:
+        - group: ''
+          kind: Service
+          name: vcluster-vc0
+        validation:
+          caCertificateRefs:
+          - group: ''
+            kind: ConfigMap
+            name: vcluster-vc0-ca
+          hostname: vcluster-vc0.s-jane.svc
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.ancestors) && object.status.ancestors.exists(p, p.ancestorRef.name
+      == "default" && has(p.ancestorRef.namespace) && p.ancestorRef.namespace == "contour" && has(p.conditions)
+      && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-config-c335acea28
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: vc-config-vcluster-vc0
+        namespace: s-jane
+      stringData:
+        config.yaml: '{"controlPlane": {"advanced": {"cloudControllerManager": {"enabled": true}, "defaultImageRegistry":
+          "", "globalMetadata": {"annotations": {}}, "headlessService": {"annotations": {}, "labels": {}}, "konnectivity":
+          {"agent": {"enabled": true, "extraArgs": [], "extraEnv": [], "image": "", "imagePullPolicy": "", "nodeSelector":
+          {}, "replicas": 1.0, "tolerations": []}, "server": {"enabled": true, "extraArgs": []}}, "kubeVip": {"enabled":
+          false}, "podDisruptionBudget": {"enabled": false}, "registry": {"anonymousPull": true, "config": {}, "enabled":
+          false}, "serviceAccount": {"annotations": {}, "enabled": true, "imagePullSecrets": [], "labels": {}, "name":
+          ""}, "virtualScheduler": {"enabled": false}, "workloadServiceAccount": {"annotations": {}, "enabled":
+          true, "imagePullSecrets": [], "labels": {}, "name": ""}}, "backingStore": {"database": {"embedded": {"enabled":
+          false, "extraArgs": []}, "external": {"caFile": "", "certFile": "", "connector": "", "dataSource": "",
+          "enabled": false, "extraArgs": [], "identityProvider": "", "keyFile": ""}}, "etcd": {"deploy": {"enabled":
+          false, "headlessService": {"annotations": {}}, "service": {"annotations": {}, "enabled": true}, "statefulSet":
+          {"annotations": {}, "enableServiceLinks": true, "enabled": true, "env": [], "extraArgs": [], "highAvailability":
+          {"replicas": 1.0}, "image": {"registry": "registry.k8s.io", "repository": "etcd", "tag": "3.6.8-0"}, "imagePullPolicy":
+          "", "labels": {}, "persistence": {"addVolumeMounts": [], "addVolumes": [], "volumeClaim": {"accessModes":
+          ["ReadWriteOnce"], "enabled": true, "retentionPolicy": "Retain", "size": "5Gi", "storageClass": ""}, "volumeClaimTemplates":
+          []}, "pods": {"annotations": {}, "labels": {}}, "resources": {"requests": {"cpu": "20m", "memory": "150Mi"}},
+          "scheduling": {"affinity": {}, "nodeSelector": {}, "podManagementPolicy": "Parallel", "priorityClassName":
+          "", "tolerations": [], "topologySpreadConstraints": []}, "security": {"containerSecurityContext": {},
+          "podSecurityContext": {}}}}, "embedded": {"enabled": false, "extraArgs": [], "migrateFromDeployedEtcd":
+          false}, "external": {"enabled": false, "endpoint": "", "tls": {"caFile": "", "certFile": "", "keyFile":
+          ""}}}}, "coredns": {"deployment": {"affinity": {}, "annotations": {}, "image": "", "labels": {}, "nodeSelector":
+          {}, "pods": {"annotations": {}, "labels": {}}, "replicas": 1.0, "resources": {"limits": {"cpu": "1000m",
+          "memory": "170Mi"}, "requests": {"cpu": "20m", "memory": "64Mi"}}, "tolerations": [], "topologySpreadConstraints":
+          [{"labelSelector": {"matchLabels": {"k8s-app": "vcluster-kube-dns"}}, "maxSkew": 1.0, "topologyKey": "kubernetes.io/hostname",
+          "whenUnsatisfiable": "DoNotSchedule"}]}, "embedded": false, "enabled": true, "overwriteConfig": "", "overwriteManifests":
+          "", "priorityClassName": "", "security": {"containerSecurityContext": {}, "podSecurityContext": {}}, "service":
+          {"annotations": {}, "labels": {}, "spec": {"type": "ClusterIP"}}}, "distro": {"k8s": {"apiServer": {"command":
+          [], "enabled": true, "extraArgs": ["--authentication-config=/etc/datalab/authentication.json"]}, "controllerManager":
+          {"command": [], "enabled": true, "extraArgs": []}, "enabled": true, "env": [], "image": {"registry": "ghcr.io",
+          "repository": "loft-sh/kubernetes", "tag": "v1.36.0"}, "imagePullPolicy": "", "resources": {"limits":
+          {"cpu": "100m", "memory": "256Mi"}, "requests": {"cpu": "40m", "memory": "64Mi"}}, "scheduler": {"command":
+          [], "enabled": false, "extraArgs": []}, "securityContext": {}, "version": ""}}, "ingress": {"annotations":
+          {"nginx.ingress.kubernetes.io/backend-protocol": "HTTPS", "nginx.ingress.kubernetes.io/ssl-passthrough":
+          "true", "nginx.ingress.kubernetes.io/ssl-redirect": "true"}, "enabled": false, "host": "my-host.com",
+          "labels": {}, "pathType": "ImplementationSpecific", "spec": {"tls": []}}, "proxy": {"bindAddress": "0.0.0.0",
+          "extraSANs": ["vcluster-vc0.s-jane.svc"], "port": 8443.0}, "service": {"annotations": {}, "enabled": true,
+          "httpsNodePort": 0.0, "kubeletNodePort": 0.0, "labels": {}, "spec": {"type": "ClusterIP"}}, "serviceMonitor":
+          {"annotations": {}, "enabled": false, "labels": {}}, "standalone": {"dataDir": "/var/lib/vcluster", "joinNode":
+          {"containerd": {"enabled": true}, "enabled": true}}, "statefulSet": {"annotations": {}, "args": [], "command":
+          [], "enableServiceLinks": true, "env": [], "highAvailability": {"leaseDuration": 60.0, "renewDeadline":
+          40.0, "replicas": 1.0, "retryPeriod": 15.0}, "hostAliases": [], "image": {"registry": "ghcr.io", "repository":
+          "loft-sh/vcluster-oss", "tag": ""}, "imagePullPolicy": "", "initContainers": [], "labels": {}, "persistence":
+          {"addVolumeMounts": [{"mountPath": "/etc/datalab", "name": "authentication", "readOnly": true}], "addVolumes":
+          [{"configMap": {"name": "vcluster-vc0-authentication"}, "name": "authentication"}], "binariesVolume":
+          [{"emptyDir": {}, "name": "binaries"}], "dataVolume": [], "volumeClaim": {"accessModes": ["ReadWriteOnce"],
+          "enabled": true, "retentionPolicy": "Retain", "size": "1Gi", "storageClass": "sbs-default"}, "volumeClaimTemplates":
+          []}, "pods": {"annotations": {}, "labels": {}}, "probes": {"livenessProbe": {"enabled": true, "failureThreshold":
+          60.0, "initialDelaySeconds": 60.0, "periodSeconds": 2.0, "timeoutSeconds": 3.0}, "readinessProbe": {"enabled":
+          true, "failureThreshold": 60.0, "periodSeconds": 2.0, "timeoutSeconds": 3.0}, "startupProbe": {"enabled":
+          true, "failureThreshold": 300.0, "periodSeconds": 6.0, "timeoutSeconds": 3.0}}, "resources": {"limits":
+          {"ephemeral-storage": "10Gi", "memory": "4Gi"}, "requests": {"cpu": "200m", "ephemeral-storage": "1Gi",
+          "memory": "256Mi"}}, "scheduling": {"affinity": {}, "nodeSelector": {}, "podManagementPolicy": "Parallel",
+          "priorityClassName": "", "tolerations": [], "topologySpreadConstraints": []}, "security": {"containerSecurityContext":
+          {"allowPrivilegeEscalation": false, "runAsGroup": 0.0, "runAsUser": 0.0}, "podSecurityContext": {}}, "sidecarContainers":
+          [], "workingDir": ""}, "tlsRoute": {"annotations": {}, "apiVersion": "gateway.networking.k8s.io/v1", "enabled":
+          false, "host": "my-host.com", "labels": {}, "parentRefs": [], "spec": {}}}, "deploy": {"cni": {"flannel":
+          {"enabled": true}}, "ingressNginx": {"defaultIngressClass": true, "enabled": false}, "kubeProxy": {"config":
+          {}, "enabled": true, "extraArgs": [], "extraEnv": [], "image": "", "imagePullPolicy": "", "nodeSelector":
+          {}, "tolerations": []}, "localPathProvisioner": {"enabled": true}, "metallb": {"enabled": false, "ipAddressPool":
+          {"addresses": [], "l2Advertisement": true}}, "metricsServer": {"enabled": false}}, "experimental": {"deploy":
+          {"host": {"manifests": "", "manifestsTemplate": ""}, "vcluster": {"helm": [], "manifests": "", "manifestsTemplate":
+          ""}}, "docker": {"loadBalancer": {"enabled": true, "forwardPorts": true}, "registryProxy": {"enabled":
+          true}}, "nodeMonitors": [], "proxy": {"customResources": {}}, "syncSettings": {"setOwner": true}}, "exportKubeConfig":
+          {"additionalSecrets": [], "context": "s-jane-vc0-74d85832df", "insecure": false, "secret": {"name": "",
+          "namespace": ""}, "server": "https://vcluster-vc0.s-jane:443", "serviceAccount": {"clusterRole": "", "name":
+          "", "namespace": ""}}, "integrations": {"certManager": {"enabled": false, "sync": {"fromHost": {"clusterIssuers":
+          {"enabled": true, "selector": {"labels": {}}}}, "toHost": {"certificates": {"enabled": true}, "issuers":
+          {"enabled": true}}}}, "externalSecrets": {"enabled": false, "sync": {"fromHost": {"clusterStores": {"enabled":
+          false, "selector": {"matchLabels": {}}}}, "toHost": {"externalSecrets": {"selector": {"matchLabels": {}}},
+          "stores": {"enabled": false, "selector": {"matchLabels": {}}}}}, "webhook": {"enabled": false}}, "istio":
+          {"enabled": false, "sync": {"toHost": {"destinationRules": {"enabled": true}, "gateways": {"enabled":
+          true}, "virtualServices": {"enabled": true}}}}, "kubeVirt": {"enabled": false, "sync": {"dataVolumes":
+          {"enabled": false}, "virtualMachineClones": {"enabled": true}, "virtualMachineInstanceMigrations": {"enabled":
+          true}, "virtualMachineInstances": {"enabled": true}, "virtualMachinePools": {"enabled": true}, "virtualMachines":
+          {"enabled": true}}, "webhook": {"enabled": true}}, "metricsServer": {"enabled": false, "nodes": true,
+          "pods": true}}, "logging": {"encoding": "console"}, "networking": {"advanced": {"clusterDomain": "cluster.local",
+          "fallbackHostCluster": true, "proxyKubelets": {"byHostname": true, "byIP": true}}, "podCIDR": "10.244.0.0/16",
+          "replicateServices": {"fromHost": [], "toHost": []}, "resolveDNS": []}, "plugins": {}, "policies": {"centralAdmission":
+          {"mutatingWebhooks": [], "validatingWebhooks": []}, "limitRange": {"annotations": {}, "default": {"cpu":
+          "1", "ephemeral-storage": "8Gi", "memory": "512Mi"}, "defaultRequest": {"cpu": "100m", "ephemeral-storage":
+          "3Gi", "memory": "128Mi"}, "enabled": true, "labels": {}, "max": {}, "min": {}}, "networkPolicy": {"annotations":
+          {}, "controlPlane": {"egress": [], "ingress": []}, "enabled": true, "fallbackDns": "8.8.8.8", "labels":
+          {}, "workload": {"egress": [], "ingress": [], "publicEgress": {"cidr": "0.0.0.0/0", "enabled": false,
+          "except": ["100.64.0.0/10", "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]}}}, "resourceQuota":
+          {"annotations": {}, "enabled": false, "labels": {}, "quota": {"count/configmaps": 100.0, "count/endpoints":
+          40.0, "count/persistentvolumeclaims": 20.0, "count/pods": 20.0, "count/secrets": 100.0, "count/services":
+          20.0, "limits.cpu": 20.0, "limits.ephemeral-storage": "160Gi", "limits.memory": "40Gi", "requests.cpu":
+          10.0, "requests.ephemeral-storage": "60Gi", "requests.memory": "20Gi", "requests.storage": "100Gi", "services.loadbalancers":
+          1.0, "services.nodeports": 0.0}, "scopeSelector": {"matchExpressions": []}, "scopes": []}}, "privateNodes":
+          {"autoNodes": [], "autoUpgrade": {"concurrency": 1.0, "containerSecurityContext": {}, "enabled": true,
+          "podSecurityContext": {}}, "daemon": {"controlPlaneLoadBalancer": {"enabled": false, "kubeProxy": true,
+          "port": 11343.0}, "enabled": false}, "enabled": false, "joinNode": {"containerd": {"enabled": true}},
+          "kubelet": {"config": {}}, "vpn": {"enabled": false, "nodeToNode": {"enabled": false}}}, "rbac": {"clusterRole":
+          {"enabled": false, "extraRules": [], "overwriteRules": []}, "role": {"enabled": true, "extraRules": [],
+          "overwriteRules": []}}, "sync": {"fromHost": {"configMaps": {"enabled": false, "mappings": {"byName":
+          {}}}, "csiDrivers": {"enabled": "auto"}, "csiNodes": {"enabled": "auto"}, "csiStorageCapacities": {"enabled":
+          "auto"}, "deviceClasses": {"enabled": false}, "events": {"enabled": true}, "gatewayClasses": {"enabled":
+          false}, "gateways": {"allowedRoutes": {"defaultVirtualNamespacePolicy": {}, "overrides": []}, "enabled":
+          false, "mappings": {"byName": {}}, "metadata": {"exposeSourceGateway": false}, "sanitize": {"certificateRefs":
+          true, "infrastructure": true}, "selector": {}, "status": {"exposeAddresses": false}}, "ingressClasses":
+          {"enabled": false}, "nodes": {"clearImageStatus": false, "enabled": false, "selector": {"all": false,
+          "labels": {}}, "syncBackChanges": false}, "priorityClasses": {"enabled": false}, "runtimeClasses": {"enabled":
+          false}, "secrets": {"enabled": false, "mappings": {"byName": {}}}, "storageClasses": {"enabled": false}},
+          "toHost": {"configMaps": {"all": false, "enabled": true}, "endpointSlices": {"enabled": true}, "endpoints":
+          {"enabled": true}, "gatewayApi": {"backendTLSPolicies": {"enabled": false}, "enabled": false, "gateways":
+          {"enabled": false}, "httpRoutes": {"enabled": false}, "referenceGrants": {"enabled": "auto"}, "tlsRoutes":
+          {"enabled": false}}, "ingresses": {"enabled": false}, "namespaces": {"enabled": false, "mappingsOnly":
+          false}, "networkPolicies": {"enabled": false}, "persistentVolumeClaims": {"enabled": true}, "persistentVolumes":
+          {"enabled": false}, "podDisruptionBudgets": {"enabled": false}, "pods": {"enabled": true, "enforceTolerations":
+          [], "hybridScheduling": {"enabled": false, "hostSchedulers": []}, "priorityClassName": "", "rewriteHosts":
+          {"enabled": true, "initContainer": {"image": {"registry": "mirror.gcr.io", "repository": "library/alpine",
+          "tag": "3.20"}, "resources": {"limits": {"cpu": "30m", "memory": "64Mi"}, "requests": {"cpu": "30m", "memory":
+          "64Mi"}}}}, "runtimeClassName": "", "translateImage": {}, "useSecretsForSATokens": false}, "priorityClasses":
+          {"enabled": false}, "resourceClaimTemplates": {"enabled": false}, "resourceClaims": {"enabled": false},
+          "secrets": {"all": false, "enabled": true}, "serviceAccounts": {"enabled": false}, "services": {"enabled":
+          true}, "storageClasses": {"enabled": false}}}, "telemetry": {"enabled": false}}'
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-control-plane-networkpolicy-a5f99e08ce
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        annotations: {}
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-cp-vcluster-vc0
+        namespace: s-jane
+      spec:
+        egress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 8443
+            protocol: TCP
+          - port: 6443
+            protocol: TCP
+        - to:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        - to:
+          - podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: vcluster-vc0
+        - to:
+          - namespaceSelector: {}
+            podSelector:
+              matchLabels:
+                app: loft
+        - ports:
+          - port: 8080
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: keycloak
+        ingress:
+        - ports:
+          - port: 8443
+            protocol: TCP
+        - from:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        - from:
+          - podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: vcluster-vc0
+          ports:
+          - port: 1053
+            protocol: UDP
+          - port: 1053
+            protocol: TCP
+          - port: 8443
+            protocol: TCP
+        - from:
+          - podSelector:
+              matchLabels:
+                app: vcluster-snapshot
+        - from:
+          - namespaceSelector: {}
+            podSelector:
+              matchLabels:
+                app: loft
+        podSelector:
+          matchLabels:
+            release: vcluster-vc0
+        policyTypes:
+        - Egress
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-data-3be245339b
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data-vcluster-vc0-0
+        namespace: s-jane
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: sbs-default
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-dns-networkpolicy-a953f603fa
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        annotations: {}
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-dns-vcluster-vc0
+        namespace: s-jane
+      spec:
+        egress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        - ports:
+          - port: 8443
+            protocol: TCP
+          to:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: vcluster-vc0
+          ports:
+          - port: 1053
+            protocol: TCP
+          - port: 1053
+            protocol: UDP
+        podSelector:
+          matchLabels:
+            k8s-app: vcluster-kube-dns
+            vcluster.loft.sh/managed-by: vcluster-vc0
+        policyTypes:
+        - Egress
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-headless-service-f521f78f31
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vcluster-vc0-headless
+        namespace: s-jane
+      spec:
+        clusterIP: None
+        ports:
+        - name: https
+          port: 443
+          protocol: TCP
+          targetPort: 8443
+        publishNotReadyAddresses: true
+        selector:
+          app: vcluster-vc0
+          release: vcluster-vc0
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-limitrange-165b42bb47
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-vcluster-vc0
+        namespace: s-jane
+      spec:
+        limits:
+        - default:
+            cpu: '1'
+            ephemeral-storage: 8Gi
+            memory: 512Mi
+          defaultRequest:
+            cpu: 100m
+            ephemeral-storage: 3Gi
+            memory: 128Mi
+          type: Container
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-observe-client-cluster-admin-5a8aa8c854
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651-oauth
+        namespace: default
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-observe-client-namespace-demo-d6f93fb96e
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-oauth
+        namespace: default
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-observe-storageclass-366ac64d70f-abbff524b7
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: sbs-default
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-observe-storageclass-fb2f39102c0-e9d13ca317
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: sbs-default-retain
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-role-c912586168
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-vcluster-vc0
+        namespace: s-jane
+      rules:
+      - apiGroups:
+        - ''
+        resources:
+        - configmaps
+        - secrets
+        - services
+        - pods
+        - pods/attach
+        - pods/portforward
+        - pods/exec
+        - persistentvolumeclaims
+        verbs:
+        - create
+        - delete
+        - patch
+        - update
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - ''
+        resources:
+        - pods/status
+        - pods/ephemeralcontainers
+        verbs:
+        - patch
+        - update
+      - apiGroups:
+        - ''
+        resources:
+        - pods/resize
+        verbs:
+        - patch
+        - update
+      - apiGroups:
+        - apps
+        resources:
+        - statefulsets
+        - replicasets
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+        - patch
+        - update
+      - apiGroups:
+        - ''
+        resources:
+        - endpoints
+        - pods/log
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - ''
+        resources:
+        - events
+        verbs:
+        - create
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - events.k8s.io
+        resources:
+        - events
+        verbs:
+        - create
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - ''
+        resources:
+        - endpoints
+        verbs:
+        - create
+        - delete
+        - patch
+        - update
+      - apiGroups:
+        - discovery.k8s.io
+        resources:
+        - endpointslices
+        verbs:
+        - create
+        - list
+        - get
+        - delete
+        - patch
+        - update
+        - watch
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-rolebinding-6dafdca14b
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-vcluster-vc0
+        namespace: s-jane
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: vc-vcluster-vc0
+      subjects:
+      - kind: ServiceAccount
+        name: vc-vcluster-vc0
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-route-9e9b072fd7
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      metadata:
+        name: vcluster-vc0
+        namespace: s-jane
+      spec:
+        hostnames:
+        - s-jane.lab.acme.com
+        parentRefs:
+        - name: default
+          namespace: contour
+          sectionName: workspaces-https
+        rules:
+        - backendRefs:
+          - name: vcluster-vc0
+            port: 443
+          filters:
+          - type: URLRewrite
+            urlRewrite:
+              path:
+                replacePrefixMatch: /
+                type: ReplacePrefixMatch
+          matches:
+          - path:
+              type: PathPrefix
+              value: /.vc0
+          timeouts:
+            backendRequest: 0s
+            request: 0s
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p, p.parentRef.name
+      == "default" && has(p.parentRef.namespace) && p.parentRef.namespace == "contour" && has(p.parentRef.sectionName)
+      && p.parentRef.sectionName == "workspaces-https" && has(p.conditions) && p.conditions.exists(c, c.type ==
+      'Accepted' && c.status == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c,
+      c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-service-369a6f86f9
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+          vcluster.loft.sh/service: 'true'
+        name: vcluster-vc0
+        namespace: s-jane
+      spec:
+        ports:
+        - name: https
+          nodePort: 0
+          port: 443
+          protocol: TCP
+          targetPort: 8443
+        - name: kubelet
+          nodePort: 0
+          port: 10250
+          protocol: TCP
+          targetPort: 8443
+        selector:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        type: ClusterIP
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-serviceaccount-3b6ffc59ee
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-vcluster-vc0
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-snapshot-networkpolicy-52c4884d06
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        annotations: {}
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-snapshot-vcluster-vc0
+        namespace: s-jane
+      spec:
+        egress:
+        - to:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 8443
+            protocol: TCP
+          - port: 6443
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            app: vcluster-snapshot
+        policyTypes:
+        - Egress
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vcluster-vc0
+        namespace: s-jane
+      spec:
+        podManagementPolicy: Parallel
+        replicas: 1
+        selector:
+          matchLabels:
+            app: vcluster-vc0
+            release: vcluster-vc0
+        serviceName: vcluster-vc0-headless
+        template:
+          metadata:
+            annotations:
+              datalabs.pkg.internal/configuration-checksum: 8ab9fa308bd5cdc39820edafa771a5d81818e0edcca4cc0cc1df4d0dbb6725e6
+            labels:
+              app: vcluster-vc0
+              release: vcluster-vc0
+          spec:
+            containers:
+            - env:
+              - name: VCLUSTER_NAME
+                value: vcluster-vc0
+              - name: LOFT_LOG_ENCODING
+                value: console
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: POD_IP
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
+              - name: NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              - name: NODE_IP
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.hostIP
+              image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /healthz
+                  port: 8443
+                  scheme: HTTPS
+                initialDelaySeconds: 60
+                periodSeconds: 2
+                timeoutSeconds: 3
+              name: syncer
+              readinessProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /readyz
+                  port: 8443
+                  scheme: HTTPS
+                periodSeconds: 2
+                timeoutSeconds: 3
+              resources:
+                limits:
+                  ephemeral-storage: 10Gi
+                  memory: 4Gi
+                requests:
+                  cpu: 200m
+                  ephemeral-storage: 1Gi
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsGroup: 0
+                runAsUser: 0
+              startupProbe:
+                failureThreshold: 300
+                httpGet:
+                  path: /readyz
+                  port: 8443
+                  scheme: HTTPS
+                periodSeconds: 6
+                timeoutSeconds: 3
+              volumeMounts:
+              - mountPath: /data
+                name: data
+              - mountPath: /binaries
+                name: binaries
+              - mountPath: /pki
+                name: certs
+              - mountPath: /.cache/helm
+                name: helm-cache
+              - mountPath: /var/lib/vcluster
+                name: vcluster-config
+              - mountPath: /tmp
+                name: tmp
+              - mountPath: /etc/datalab
+                name: authentication
+                readOnly: true
+            enableServiceLinks: true
+            initContainers:
+            - args:
+              - -r
+              - /kubernetes/.
+              - /binaries/
+              command:
+              - cp
+              image: ghcr.io/loft-sh/kubernetes:v1.36.0
+              name: kubernetes
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 256Mi
+                requests:
+                  cpu: 40m
+                  memory: 64Mi
+              securityContext: {}
+              volumeMounts:
+              - mountPath: /binaries
+                name: binaries
+            serviceAccountName: vc-vcluster-vc0
+            terminationGracePeriodSeconds: 15
+            volumes:
+            - emptyDir: {}
+              name: helm-cache
+            - emptyDir: {}
+              name: binaries
+            - emptyDir: {}
+              name: tmp
+            - emptyDir: {}
+              name: certs
+            - name: vcluster-config
+              secret:
+                secretName: vc-config-vcluster-vc0
+            - configMap:
+                name: vcluster-vc0-authentication
+              name: authentication
+            - name: data
+              persistentVolumeClaim:
+                claimName: data-vcluster-vc0-0
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration ==
+      object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == object.spec.replicas
+      && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision
+      == object.status.updateRevision
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-storage-policy-5cffe87f44
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingAdmissionPolicy
+      metadata:
+        name: s-jane-vc0-storage-classes-f9d45da949
+      spec:
+        failurePolicy: Fail
+        matchConditions:
+        - expression: request.userInfo.username == "system:serviceaccount:s-jane:vc-vcluster-vc0"
+          name: vcluster-syncer
+        matchConstraints:
+          resourceRules:
+          - apiGroups:
+            - ''
+            apiVersions:
+            - v1
+            operations:
+            - CREATE
+            - UPDATE
+            resources:
+            - persistentvolumeclaims
+        validations:
+        - expression: has(object.spec.storageClassName) && object.spec.storageClassName in ["sbs-default", "sbs-default-retain"]
+          message: The PVC must use an allowed Datalab vcluster StorageClass.
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-storage-policy-binding-955fe4a063
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingAdmissionPolicyBinding
+      metadata:
+        name: s-jane-vc0-storage-classes-f9d45da949
+      spec:
+        matchResources:
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: s-jane
+        policyName: s-jane-vc0-storage-classes-f9d45da949
+        validationActions:
+        - Deny
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: ProviderConfig
+      metadata:
+        name: s-jane-vcluster-vc0-25fc5fbd42
+        namespace: default
+      spec:
+        credentials:
+          secretRef:
+            key: config
+            name: vc-vcluster-vc0
+            namespace: s-jane
+          source: Secret
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-workload-networkpolicy-ed2fc41568
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        annotations: {}
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-work-vcluster-vc0
+        namespace: s-jane
+      spec:
+        egress:
+        - ports:
+          - port: 1053
+            protocol: UDP
+          - port: 1053
+            protocol: TCP
+          - port: 8443
+            protocol: TCP
+          to:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        - to:
+          - podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: vcluster-vc0
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+              - 169.254.42.42/32
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+        - to:
+          - ipBlock:
+              cidr: ::/0
+              except:
+              - fd00:ec2::254/128
+              - fd00:42::42/128
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 9000
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: minio
+            podSelector:
+              matchLabels:
+                v1.min.io/tenant: default
+        ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                release: vcluster-vc0
+        - from:
+          - podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: vcluster-vc0
+        podSelector:
+          matchLabels:
+            vcluster.loft.sh/managed-by: vcluster-vc0
+        policyTypes:
+        - Egress
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  labels:
+    datalabs.pkg.internal/vcluster: vc0
+  name: vcluster-s-jane-vc0-workload-serviceaccount-fa5250d2b2
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        labels:
+          app: vcluster-vc0
+          release: vcluster-vc0
+        name: vc-workload-vcluster-vc0
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-authentication-s-jane-vcluster-s-378516e782
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-authentication-51c647132c
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-config-s-jane-vcluster-s-jane-vc0-5bc58d2fb4
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-config-c335acea28
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-control-6028f3c16415-s-jane-vclus-80bea9b7f1
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-binding-bb77db584a9b-72f1bd92ac
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-control-6e40bfdea757-s-jane-vclus-e7c8749f96
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-namespace-demo-443e6d5c64
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-control-77f2a3f7d157-s-jane-vclus-5111cb0ed9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-control-plane-networkpolicy-s-jan-ca08df9e30
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-control-plane-networkpolicy-a5f99e08ce
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-data-s-jane-vcluster-s-jane-vc0-d-86817e7973
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-data-3be245339b
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-dns-networkpolicy-s-jane-vcluster-057e93122b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-dns-networkpolicy-a953f603fa
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-environment-s-jane-workshopenviro-df33313565
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: workshopenvironment-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-headless-service-s-jane-vcluster-f038b256ca
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-headless-service-f521f78f31
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-limitrange-s-jane-vcluster-s-jane-34ad25bbc9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-limitrange-165b42bb47
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-provider-6028f3c16415-s-jane-vclu-b76ed79fdf
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-binding-bb77db584a9b-72f1bd92ac
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-provider-6e40bfdea757-s-jane-vclu-6e934dfeee
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-namespace-demo-443e6d5c64
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-provider-77f2a3f7d157-s-jane-vclu-57dcb07fe7
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-quota-s-jane-resourcequota-s-jane-45d9c06fa9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: resourcequota-s-jane-overall-storage
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-role-s-jane-vcluster-s-jane-vc0-r-1977f299a6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-role-c912586168
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-rolebinding-s-jane-vcluster-s-jan-103fba0947
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-rolebinding-6dafdca14b
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-service-s-jane-vcluster-s-jane-vc-ace42d3c76
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-service-369a6f86f9
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-serviceaccount-s-jane-vcluster-s-963fac006e
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-serviceaccount-3b6ffc59ee
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-snapshot-networkpolicy-s-jane-vcl-71e9df60a8
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-snapshot-networkpolicy-52c4884d06
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-storage-policy-binding-s-jane-vcl-9790bc7c12
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-storage-policy-binding-955fe4a063
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-storage-policy-s-jane-vcluster-s-dbcbeea9e3
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-storage-policy-5cffe87f44
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-workload-networkpolicy-s-jane-vcl-81307be6cb
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-workload-networkpolicy-ed2fc41568
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-workload-serviceaccount-s-jane-vc-de1a417693
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-workload-serviceaccount-fa5250d2b2
+  replayDeletion: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

@@ -1,0 +1,53 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: projectcontour.io/v1alpha1
+kind: ContourDeployment
+metadata:
+  name: verify-vcluster
+  namespace: projectcontour
+spec:
+  contour:
+    deployment:
+      replicas: 1
+  envoy:
+    workloadType: Deployment
+    deployment:
+      replicas: 1
+    networkPublishing:
+      type: ClusterIPService
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: verify-vcluster
+spec:
+  controllerName: projectcontour.io/gateway-controller
+  parametersRef:
+    group: projectcontour.io
+    kind: ContourDeployment
+    name: verify-vcluster
+    namespace: projectcontour
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: verify-vcluster
+  namespace: projectcontour
+spec:
+  gatewayClassName: verify-vcluster
+  listeners:
+  - name: https
+    hostname: '*.lab.acme.com'
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: verify-vcluster-gateway-tls
+    allowedRoutes:
+      namespaces:
+        from: All
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

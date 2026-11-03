@@ -1,0 +1,15 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    realmId: ${realm}
+    clientIdRef:
+      name: ${profile}
+    roleIdRef:
+      name: ${profile}

@@ -40,3 +40,12 @@ file. Unit tests, CI, and pre-commit reject a stale build.
 
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
+
+Integration can build a separate artifact with a shorter TTL:
+
+```bash
+python3 scripts/build-composition.py --response-ttl 1m --output /tmp/xyz-composition.yaml
+```
+
+A TTL override requires a separate output file. The build does not change
+`composition/settings.yaml` or the normal deployment artifact.

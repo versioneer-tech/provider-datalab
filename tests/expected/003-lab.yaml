@@ -21,7 +21,40 @@ spec:
     state: started
   users:
   - jane
+  vclusters:
+    vc0:
+      groups:
+      - name: namespace-demo
+        namespace: demo
+        role: edit
+      - name: cluster-admin
+        namespace: '*'
+        role: cluster-admin
+      storage: 1Gi
 status:
+  connections:
+  - endpoint: https://s-jane.lab.acme.com/.vc0
+    group: cluster-admin
+    instance: vc0
+    name: vcluster-vc0-cluster-admin-7ad833319f
+    ready: false
+    role: cluster-admin
+    secretRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      namespace: default
+    targetNamespace: '*'
+    type: vcluster
+  - endpoint: https://s-jane.lab.acme.com/.vc0
+    group: namespace-demo
+    instance: vc0
+    name: vcluster-vc0-namespace-demo-b2157b3b79
+    ready: false
+    role: edit
+    secretRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      namespace: default
+    targetNamespace: demo
+    type: vcluster
   sessions:
     default:
       state: started
@@ -528,6 +561,210 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientServiceAccountRole
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    realmId: acme
+    roleRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    serviceAccountUserClientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientServiceAccountRole
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    realmId: acme
+    roleRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    serviceAccountUserClientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    config:
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      included.client.audience: s-jane
+    name: datalab-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    config:
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      included.client.audience: s-jane
+    name: datalab-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    accessType: CONFIDENTIAL
+    clientId: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    directAccessGrantsEnabled: false
+    fullScopeAllowed: false
+    implicitFlowEnabled: false
+    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    realmId: acme
+    serviceAccountsEnabled: true
+    standardFlowEnabled: false
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+  writeConnectionSecretToRef:
+    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651-oauth
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    accessType: CONFIDENTIAL
+    clientId: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    directAccessGrantsEnabled: false
+    fullScopeAllowed: false
+    implicitFlowEnabled: false
+    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    realmId: acme
+    serviceAccountsEnabled: true
+    standardFlowEnabled: false
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+  writeConnectionSecretToRef:
+    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-oauth
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-role-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    name: vcluster:vc0:cluster-admin
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+kind: Role
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-role-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+    name: vcluster:vc0:namespace-demo
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

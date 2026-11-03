@@ -1,0 +1,37 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: verify-vcluster
+  namespace: workspace
+  annotations:
+    datalabs.pkg.internal/environment: datalab-vcluster-it
+spec:
+  users:
+  - verify-s3
+  secretName: verify-vcluster
+  sessions: []
+  databases:
+    pg0:
+      type: postgres
+      storage: 1Gi
+      names:
+      - catalog
+  vclusters:
+    vc0:
+      storage: 1Gi
+      groups:
+      - name: namespace-demo
+        namespace: demo
+        role: edit
+      - name: cluster-admin
+        namespace: '*'
+        role: cluster-admin
+    vc1:
+      storage: 1Gi
+      groups:
+      - name: cluster-admin
+        namespace: '*'
+        role: cluster-admin

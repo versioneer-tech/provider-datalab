@@ -88,6 +88,11 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-custom
 data:
+  vcluster:
+    storage: 5Gi
+    storageClasses:
+      allowed: [sbs-default, sbs-default-retain]
+      default: sbs-default
   iam:
     realm: acme
     issuerURL: https://identity.acme.com/realms/acme

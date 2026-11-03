@@ -1,0 +1,25 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: s-joe
+  namespace: workspace
+spec:
+  users: [joe]
+  databases:
+    pg0:
+      type: postgres
+      names: [catalog]
+      storage: 5Gi
+  vclusters:
+    vc0:
+      storage: 5Gi
+      groups:
+      - name: namespace-demo
+        namespace: demo
+        role: edit
+      - name: cluster-admin
+        namespace: "*"
+        role: cluster-admin

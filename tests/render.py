@@ -44,7 +44,7 @@ def environment():
 
 
 def render(args, environment, source="examples/base/001-lab.yaml",
-           observed="tests/observed/001-lab.yaml", error=None):
+           observed="tests/observed/001-lab.yaml", error=None, include_composite=False):
     with tempfile.TemporaryDirectory(prefix="test-render-") as directory:
         work = Path(directory)
         paths = []
@@ -69,6 +69,8 @@ def render(args, environment, source="examples/base/001-lab.yaml",
     resources = {}
     for item in yaml.safe_load_all(result.stdout):
         if item["kind"] == "Datalab":
+            if include_composite:
+                resources["composite"] = item
             continue
         name = item["metadata"]["annotations"]["crossplane.io/composition-resource-name"]
         assert name not in resources, f"Duplicate resource: {name}"

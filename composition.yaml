@@ -726,6 +726,10 @@ spec:
 
             return fill(template)
 
+        import hashlib
+
+        import json
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -751,6 +755,22 @@ spec:
             if isinstance(session, dict):
                 return _safe_str(session.get("name") or "")
             return _string_value(session) if stringify_none else _safe_str(session)
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+        def _vcluster_profile(name, instance, group):
+            return _resource_name(name, "vcluster", instance, group, limit=55)
+
+        def _vcluster_role(instance, group):
+            return f"vcluster:{instance}:{group}"
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -807,6 +827,8 @@ spec:
             )
             s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
             if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
+                extra_audiences = _distinct([*extra_audiences, xr_name])
+            if spec.get("vclusters"):
                 extra_audiences = _distinct([*extra_audiences, xr_name])
             domain = ingress_env.get("domain", "default")
             url = f"https://{xr_name}.{domain}"
@@ -1009,6 +1031,86 @@ spec:
                 ),
                 f"{xr_name}-ws-api",
             )
+
+            for instance, config in sorted((spec.get("vclusters") or {}).items()):
+                for group in sorted(config["groups"], key=lambda item: item["name"]):
+                    profile = _vcluster_profile(xr_name, instance, group["name"])
+                    role_name = _vcluster_role(instance, group["name"])
+                    put(
+                        "keycloak-vcluster-role",
+                        _render_template(
+                            req,
+                            "vcluster/identity-role",
+                            realm=realm,
+                            role_name=role_name,
+                            xr_name=xr_name,
+                        ),
+                        profile,
+                    )
+                    put(
+                        "keycloak-vcluster-client",
+                        _render_template(
+                            req,
+                            "vcluster/identity-client",
+                            realm=realm,
+                            profile=profile,
+                            spec_writeConnectionSecretToRef_name=f"{profile}-oauth",
+                        ),
+                        profile,
+                    )
+                    put(
+                        "keycloak-vcluster-scope",
+                        _render_template(
+                            req, "vcluster/identity-scope", realm=realm, profile=profile
+                        ),
+                        profile,
+                    )
+                    state = (getattr(req.observed, "resources", {}) or {}).get(
+                        f"keycloak-vcluster-client-{profile}"
+                    )
+                    client_state = _to_dict(state.resource) if state else {}
+                    client_identity = (client_state.get("status") or {}).get("atProvider") or {}
+                    resolved = {}
+                    owner_state = (getattr(req.observed, "resources", {}) or {}).get(
+                        f"keycloak-client-{xr_name}"
+                    )
+                    owner_identity = (
+                        _to_dict(owner_state.resource).get("status", {}).get("atProvider", {})
+                        if owner_state
+                        else {}
+                    )
+                    if owner_identity.get("id") and client_identity.get("serviceAccountUserId"):
+                        resolved = {
+                            "clientId": owner_identity["id"],
+                            "serviceAccountUserId": client_identity["serviceAccountUserId"],
+                            "role": role_name,
+                        }
+                    put(
+                        "keycloak-vcluster-assignment",
+                        _render_template(
+                            req,
+                            "vcluster/identity-assignment",
+                            spec_forProvider={
+                                "realmId": realm,
+                                "clientIdRef": {"name": xr_name},
+                                "roleRef": {"name": profile},
+                                "serviceAccountUserClientIdRef": {"name": profile},
+                                **resolved,
+                            },
+                        ),
+                        profile,
+                    )
+                    put(
+                        "keycloak-vcluster-audience",
+                        _render_template(
+                            req,
+                            "vcluster/identity-audience",
+                            realm=realm,
+                            profile=profile,
+                            xr_name=xr_name,
+                        ),
+                        profile,
+                    )
 
             users = list(spec.get("users", []) or [])
             userOverrides = spec.get("userOverrides", {}) or {}
@@ -1260,6 +1362,76 @@ spec:
             forProvider:
               name: ${xr_name}
               realmId: ${realm}
+        vcluster/identity-assignment:
+          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+          kind: ClientServiceAccountRole
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider: ${spec_forProvider}
+        vcluster/identity-audience:
+          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+          kind: ProtocolMapper
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              clientIdRef:
+                name: ${profile}
+              name: datalab-audience
+              protocol: openid-connect
+              protocolMapper: oidc-audience-mapper
+              config:
+                included.client.audience: ${xr_name}
+                access.token.claim: 'true'
+                id.token.claim: 'false'
+        vcluster/identity-client:
+          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+          kind: Client
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              name: ${profile}
+              clientId: ${profile}
+              accessType: CONFIDENTIAL
+              fullScopeAllowed: false
+              standardFlowEnabled: false
+              implicitFlowEnabled: false
+              directAccessGrantsEnabled: false
+              serviceAccountsEnabled: true
+            writeConnectionSecretToRef:
+              name: ${spec_writeConnectionSecretToRef_name}
+        vcluster/identity-role:
+          apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+          kind: Role
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              name: ${role_name}
+              clientIdRef:
+                name: ${xr_name}
+        vcluster/identity-scope:
+          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+          kind: RoleMapper
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              clientIdRef:
+                name: ${profile}
+              roleIdRef:
+                name: ${profile}
   - step: update-oauth2-proxy-secret
     functionRef:
       name: crossplane-contrib-function-python
@@ -2156,6 +2328,2039 @@ spec:
             name: ${persistent_pvc_name}
             namespace: ${workshop_ns}
           spec: ${persistent_pvc_spec}
+  - step: update-vclusters
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import hashlib
+
+        import json
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+        def _vcluster_profile(name, instance, group):
+            return _resource_name(name, "vcluster", instance, group, limit=55)
+
+        def _vcluster_role(instance, group):
+            return f"vcluster:{instance}:{group}"
+
+        def _runtime_namespace(req, name):
+            environment = _extract_manifest(
+                req.observed.resources.get(f"workshopenvironment-{name}")
+            )
+            return ((environment.get("status") or {}).get("educates") or {}).get(
+                "namespace"
+            ) or ""
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import base64
+        import hashlib
+        import json
+        import re
+        from crossplane.function import request, response
+
+
+        def compose(req, rsp):
+            rsp.meta.ttl.FromSeconds(300)
+            xr = _to_dict(req.observed.composite.resource)
+            instances = (xr.get("spec") or {}).get("vclusters") or {}
+            if not instances:
+                return
+            meta = xr["metadata"]
+            name = meta["name"]
+            namespace = _runtime_namespace(req, name)
+            if not namespace:
+                return
+            for instance, instance_config in sorted(instances.items()):
+                _compose_instance(
+                    req,
+                    rsp,
+                    name,
+                    meta.get("namespace") or "default",
+                    namespace,
+                    instance,
+                    instance_config,
+                )
+
+
+        def _compose_instance(
+            req, rsp, name, claim_namespace, namespace, instance, instance_config
+        ):
+            runtime = _resource_name("vcluster", instance, limit=45)
+            service_account = f"vc-{runtime}"
+            ca_name = f"{runtime}-ca"
+            template_values = {
+                "runtime": runtime,
+                "service_account": service_account,
+                "workload_account": f"vc-workload-{runtime}",
+                "config_secret": f"vc-config-{runtime}",
+                "authentication_name": f"{runtime}-authentication",
+                "headless_service": f"{runtime}-headless",
+                "data_pvc": f"data-{runtime}-0",
+                "ca_name": ca_name,
+                "control_policy": f"vc-cp-{runtime}",
+                "workload_policy": f"vc-work-{runtime}",
+                "dns_policy": f"vc-dns-{runtime}",
+                "snapshot_policy": f"vc-snapshot-{runtime}",
+                "prefix": f"/.{instance}",
+            }
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
+            config = env.get("vcluster") or {}
+            iam = env.get("iam") or {}
+            route = env.get("httpRoute") or {}
+            domain = (env.get("ingress") or {}).get("domain")
+            required = {
+                "iam.issuerURL": iam.get("issuerURL"),
+                "ingress.domain": domain,
+                **{
+                    f"httpRoute.{key}": route.get(key)
+                    for key in ("parentName", "parentNamespace", "sectionName")
+                },
+            }
+            missing = [key for key, value in required.items() if not str(value or "").strip()]
+            if missing:
+                response.fatal(
+                    rsp, "vCluster requires EnvironmentConfig data: " + ", ".join(missing)
+                )
+                return
+            if route.get("enabled") is False:
+                response.fatal(
+                    rsp,
+                    "vCluster requires EnvironmentConfig data.httpRoute.enabled to be true.",
+                )
+                return
+            issuer = str(iam["issuerURL"]).rstrip("/")
+            discovery = str(config.get("discoveryURL") or "").strip()
+            if not issuer.startswith("https://") or (
+                discovery and (not discovery.startswith("https://"))
+            ):
+                response.fatal(rsp, "vCluster issuerURL and discoveryURL must use HTTPS.")
+                return
+            hostname = f"{name}.{domain}"
+            backend_hostname = f"{runtime}.{namespace}.svc"
+            audience = json.dumps(name)
+            groups = sorted(instance_config["groups"], key=lambda item: item["name"])
+            roles = [_vcluster_role(instance, group["name"]) for group in groups]
+            role_list = json.dumps(roles)
+            jwt_issuer = {"url": issuer, "audiences": [name], "audienceMatchPolicy": "MatchAny"}
+            if discovery:
+                jwt_issuer["discoveryURL"] = discovery
+            if config.get("issuerCA"):
+                jwt_issuer["certificateAuthority"] = config["issuerCA"]
+            authentication = json.dumps(
+                _render_template(
+                    req,
+                    "vcluster/authenticationconfiguration",
+                    jwt_issuer=jwt_issuer,
+                    jwt_0_claimValidationRules_0_expression=f"has(claims.resource_access) && {audience} in claims.resource_access && has(claims.resource_access[{audience}].roles) && claims.resource_access[{audience}].roles.exists(r, r in {role_list})",
+                    jwt_0_claimMappings_username_prefix=f"datalab:{name}:",
+                    jwt_0_claimMappings_groups_expression=f"claims.resource_access[{audience}].roles.filter(r, r in {role_list}).map(r, 'datalab:{name}:' + r)",
+                    **template_values,
+                ),
+                sort_keys=True,
+            )
+
+            def emit(suffix, manifest, readiness=None):
+                key = _resource_name("vcluster", name, instance, suffix)
+                rsp.desired.resources[key].resource.update(
+                    _render_template(
+                        req,
+                        "common/object",
+                        key=key,
+                        xr_namespace=claim_namespace,
+                        manifest=manifest,
+                        readiness=readiness or {"policy": "SuccessfulCreate"},
+                        **template_values,
+                    )
+                )
+                rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.pkg.internal/vcluster": instance}
+
+            emit(
+                "authentication",
+                _render_template(
+                    req,
+                    "vcluster/authentication",
+                    namespace=namespace,
+                    authentication=authentication,
+                    **template_values,
+                ),
+            )
+            environment_manifest = (
+                _to_dict(rsp.desired.resources[f"workshop-{name}"].resource)
+                .get("spec", {})
+                .get("forProvider", {})
+                .get("manifest", {})
+            )
+            environment_objects = (
+                (environment_manifest.get("spec") or {}).get("environment") or {}
+            ).get("objects") or []
+            workload_egress = [
+                rule
+                for policy in environment_objects
+                if policy.get("kind") == "NetworkPolicy"
+                and policy.get("metadata", {}).get("name")
+                in ("allow-external-egress", "allow-internal-egress")
+                for rule in policy.get("spec", {}).get("egress", [])
+            ]
+            storage_config = config.get("storageClasses") or {}
+            storage_classes = (
+                storage_config.get("allowed") if isinstance(storage_config, dict) else None
+            )
+            if (
+                not isinstance(storage_classes, list)
+                or not storage_classes
+                or any(
+                    (not isinstance(item, str) or not item.strip() for item in storage_classes)
+                )
+                or (len(set(storage_classes)) != len(storage_classes))
+            ):
+                response.fatal(
+                    rsp,
+                    "EnvironmentConfig data.vcluster.storageClasses.allowed must be a non-empty list of unique StorageClass names.",
+                )
+                return
+            default_class = storage_config.get("default") or storage_classes[0]
+            storage_class = config.get("storageClassName") or default_class
+            if default_class not in storage_classes or storage_class not in storage_classes:
+                response.fatal(
+                    rsp,
+                    "The vcluster default and control-plane StorageClass must be in data.vcluster.storageClasses.allowed.",
+                )
+                return
+            emit(
+                "data",
+                _render_template(
+                    req,
+                    "vcluster/data",
+                    namespace=namespace,
+                    storage_class=storage_class,
+                    spec_resources_requests_storage=str(
+                        instance_config.get("storage") or config.get("storage") or "5Gi"
+                    ),
+                    **template_values,
+                ),
+            )
+            policy_name = _resource_name(namespace, instance, "storage-classes")
+            emit(
+                "storage-policy",
+                _render_template(
+                    req,
+                    "vcluster/storage-policy",
+                    policy_name=policy_name,
+                    spec_matchConditions_0_expression=f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{namespace}:{service_account}')}",
+                    spec_validations_0_expression=f"has(object.spec.storageClassName) && object.spec.storageClassName in {json.dumps(storage_classes)}",
+                    **template_values,
+                ),
+            )
+            emit(
+                "storage-policy-binding",
+                _render_template(
+                    req,
+                    "vcluster/storage-policy-binding",
+                    policy_name=policy_name,
+                    namespace=namespace,
+                    **template_values,
+                ),
+            )
+            configuration = _render_template(
+                req,
+                "vcluster/configuration",
+                namespace=namespace,
+                name=_resource_name(name, instance),
+                internal_server=f"https://{runtime}.{namespace}:443",
+                backend_hostname=backend_hostname,
+                storage=str(instance_config.get("storage") or config.get("storage") or "5Gi"),
+                storage_class=storage_class,
+                **template_values,
+            )
+            configuration_json = json.dumps(configuration, sort_keys=True)
+            checksum = hashlib.sha256(
+                (configuration_json + authentication).encode()
+            ).hexdigest()
+            emit(
+                "config",
+                _render_template(
+                    req,
+                    "vcluster/config-secret",
+                    namespace=namespace,
+                    configuration=configuration_json,
+                    **template_values,
+                ),
+            )
+            for suffix, manifest in (
+                (
+                    "serviceaccount",
+                    _render_template(
+                        req, "vcluster/serviceaccount", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "workload-serviceaccount",
+                    _render_template(
+                        req,
+                        "vcluster/workload-serviceaccount",
+                        namespace=namespace,
+                        **template_values,
+                    ),
+                ),
+                (
+                    "role",
+                    _render_template(
+                        req, "vcluster/role", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "rolebinding",
+                    _render_template(
+                        req, "vcluster/rolebinding", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "service",
+                    _render_template(
+                        req, "vcluster/service", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "headless-service",
+                    _render_template(
+                        req, "vcluster/headless-service", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "limitrange",
+                    _render_template(
+                        req, "vcluster/limitrange", namespace=namespace, **template_values
+                    ),
+                ),
+                (
+                    "control-plane-networkpolicy",
+                    _render_template(
+                        req,
+                        "vcluster/control-plane-networkpolicy",
+                        namespace=namespace,
+                        iam_namespace=iam.get("namespace") or "keycloak",
+                        **template_values,
+                    ),
+                ),
+                (
+                    "dns-networkpolicy",
+                    _render_template(
+                        req,
+                        "vcluster/dns-networkpolicy",
+                        namespace=namespace,
+                        **template_values,
+                    ),
+                ),
+                (
+                    "snapshot-networkpolicy",
+                    _render_template(
+                        req,
+                        "vcluster/snapshot-networkpolicy",
+                        namespace=namespace,
+                        **template_values,
+                    ),
+                ),
+            ):
+                emit(suffix, manifest)
+            workload_policy = _render_template(
+                req, "vcluster/workload-networkpolicy", namespace=namespace, **template_values
+            )
+            workload_policy["spec"]["egress"].extend(workload_egress)
+            emit("workload-networkpolicy", workload_policy)
+            emit(
+                "statefulset",
+                _render_template(
+                    req,
+                    "vcluster/statefulset",
+                    namespace=namespace,
+                    configuration_checksum=checksum,
+                    **template_values,
+                ),
+                {
+                    "policy": "DeriveFromCelQuery",
+                    "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration == object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == object.spec.replicas && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision == object.status.updateRevision",
+                },
+            )
+            virtual_provider = _resource_name(name, "vcluster", instance)
+            emit(
+                "virtual-providerconfig",
+                _render_template(
+                    req,
+                    "vcluster/virtual-providerconfig",
+                    virtual_provider=virtual_provider,
+                    claim_namespace=claim_namespace,
+                    namespace=namespace,
+                    **template_values,
+                ),
+            )
+
+            def virtual(suffix, manifest, preserve=False):
+                key = _resource_name("vcluster", name, instance, "access", suffix)
+                body = _render_template(
+                    req,
+                    "vcluster/body",
+                    key=key,
+                    claim_namespace=claim_namespace,
+                    virtual_provider=virtual_provider,
+                    manifest=manifest,
+                    **template_values,
+                )
+                if preserve:
+                    body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
+                body["metadata"].setdefault("labels", {})[
+                    "datalabs.pkg.internal/vcluster"
+                ] = instance
+                rsp.desired.resources[key].resource.update(body)
+
+            for storage_name in storage_classes:
+                suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
+                emit(
+                    f"observe-storageclass-{suffix}",
+                    _render_template(
+                        req,
+                        "vcluster/storageclass",
+                        storage_name=storage_name,
+                        **template_values,
+                    ),
+                )
+                key = _resource_name(
+                    "vcluster", name, instance, f"observe-storageclass-{suffix}"
+                )
+                rsp.desired.resources[key].resource["spec"]["managementPolicies"] = ["Observe"]
+                observed = req.observed.resources.get(key)
+                state = (
+                    _to_dict(observed.resource).get("status", {}).get("atProvider", {})
+                    if observed
+                    else {}
+                )
+                host_class = state.get("manifest") or state.get("raw", {}).get("manifest") or {}
+                if not host_class.get("provisioner"):
+                    continue
+                fields = {
+                    key: host_class[key]
+                    for key in (
+                        "provisioner",
+                        "parameters",
+                        "reclaimPolicy",
+                        "mountOptions",
+                        "allowVolumeExpansion",
+                        "volumeBindingMode",
+                        "allowedTopologies",
+                    )
+                    if key in host_class
+                }
+                virtual(
+                    f"storageclass-{suffix}",
+                    {
+                        **_render_template(
+                            req,
+                            "vcluster/storageclass-2",
+                            storage_name=storage_name,
+                            metadata_annotations_storageclass_kubernetes_io_is_default_class=str(
+                                storage_name == default_class
+                            ).lower(),
+                            **template_values,
+                        ),
+                        **fields,
+                    },
+                )
+            for target in sorted({group["namespace"] for group in groups} - {"*"}):
+                virtual(
+                    f"namespace-{target}",
+                    _render_template(
+                        req, "vcluster/namespace", target=target, **template_values
+                    ),
+                    preserve=True,
+                )
+            for group in groups:
+                target = group["namespace"]
+                role = group["role"]
+                suffix = hashlib.sha256(
+                    f"{group['name']}:{target}:{role}".encode()
+                ).hexdigest()[:12]
+                manifest = _render_template(
+                    req,
+                    "vcluster/manifest",
+                    kind="ClusterRoleBinding" if target == "*" else "RoleBinding",
+                    metadata_name=f"datalab-{group['name']}-{role}",
+                    role=role,
+                    subjects_0_name=f"datalab:{name}:"
+                    + _vcluster_role(instance, group["name"]),
+                    **template_values,
+                )
+                if target != "*":
+                    manifest["metadata"]["namespace"] = target
+                virtual(f"binding-{suffix}", manifest)
+            for group in groups:
+                profile = _vcluster_profile(name, instance, group["name"])
+                emit(
+                    f"observe-client-{group['name']}",
+                    _render_template(
+                        req,
+                        "vcluster/secret",
+                        metadata_name=f"{profile}-oauth",
+                        claim_namespace=claim_namespace,
+                        **template_values,
+                    ),
+                )
+                rsp.desired.resources[
+                    _resource_name(
+                        "vcluster", name, instance, f"observe-client-{group['name']}"
+                    )
+                ].resource["spec"]["managementPolicies"] = ["Observe"]
+            response.require_resources(
+                rsp,
+                name=ca_name,
+                api_version="v1",
+                kind="Secret",
+                match_name=service_account,
+                namespace=namespace,
+            )
+            ca_secret = request.get_required_resource(req, ca_name) or {}
+            ca_source = base64.b64decode(ca_secret.get("data", {}).get("config", "")).decode()
+            ca_match = re.search("certificate-authority-data:\\s*([A-Za-z0-9+/=]+)", ca_source)
+            ca = base64.b64decode(ca_match[1]).decode() if ca_match else ""
+            emit(
+                "backend-ca",
+                _render_template(
+                    req, "vcluster/backend-ca", namespace=namespace, ca=ca, **template_values
+                ),
+            )
+            parent = {
+                "name": route["parentName"],
+                "namespace": route["parentNamespace"],
+                "sectionName": route["sectionName"],
+            }
+            emit(
+                "backend-tls",
+                _render_template(
+                    req,
+                    "vcluster/backend-tls",
+                    apiVersion=(config.get("backendTLS") or {}).get("apiVersion")
+                    or "gateway.networking.k8s.io/v1",
+                    namespace=namespace,
+                    backend_hostname=backend_hostname,
+                    **template_values,
+                ),
+                {
+                    "policy": "DeriveFromCelQuery",
+                    "celQuery": f"has(object.status) && has(object.status.ancestors) && object.status.ancestors.exists(p, p.ancestorRef.name == {json.dumps(parent['name'])} && has(p.ancestorRef.namespace) && p.ancestorRef.namespace == {json.dumps(parent['namespace'])} && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == object.metadata.generation))",
+                },
+            )
+            emit(
+                "route",
+                _render_template(
+                    req,
+                    "vcluster/route",
+                    namespace=namespace,
+                    parent=parent,
+                    hostname=hostname,
+                    **template_values,
+                ),
+                {
+                    "policy": "DeriveFromCelQuery",
+                    "celQuery": f"has(object.status) && has(object.status.parents) && object.status.parents.exists(p, p.parentRef.name == {json.dumps(parent['name'])} && has(p.parentRef.namespace) && p.parentRef.namespace == {json.dumps(parent['namespace'])} && has(p.parentRef.sectionName) && p.parentRef.sectionName == {json.dumps(parent['sectionName'])} && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))",
+                },
+            )
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
+        vcluster/authentication:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ${authentication_name}
+            namespace: ${namespace}
+          data:
+            authentication.json: ${authentication}
+        vcluster/authenticationconfiguration:
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: AuthenticationConfiguration
+          anonymous:
+            enabled: false
+          jwt:
+          - issuer: ${jwt_issuer}
+            claimValidationRules:
+            - expression: ${jwt_0_claimValidationRules_0_expression}
+              message: A configured Datalab vcluster role is required.
+            claimMappings:
+              username:
+                claim: sub
+                prefix: ${jwt_0_claimMappings_username_prefix}
+              groups:
+                expression: ${jwt_0_claimMappings_groups_expression}
+        vcluster/backend-ca:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ${ca_name}
+            namespace: ${namespace}
+          data:
+            ca.crt: ${ca}
+        vcluster/backend-tls:
+          apiVersion: ${apiVersion}
+          kind: BackendTLSPolicy
+          metadata:
+            name: ${runtime}
+            namespace: ${namespace}
+          spec:
+            targetRefs:
+            - group: ''
+              kind: Service
+              name: ${runtime}
+            validation:
+              hostname: ${backend_hostname}
+              caCertificateRefs:
+              - group: ''
+                kind: ConfigMap
+                name: ${ca_name}
+        vcluster/body:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${claim_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: ${virtual_provider}
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            watch: true
+            readiness:
+              policy: SuccessfulCreate
+        vcluster/config-secret:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${config_secret}
+            namespace: ${namespace}
+          type: Opaque
+          stringData:
+            config.yaml: ${configuration}
+        vcluster/configuration:
+          controlPlane:
+            advanced:
+              cloudControllerManager:
+                enabled: true
+              defaultImageRegistry: ''
+              globalMetadata:
+                annotations: {}
+              headlessService:
+                annotations: {}
+                labels: {}
+              konnectivity:
+                agent:
+                  enabled: true
+                  extraArgs: []
+                  extraEnv: []
+                  image: ''
+                  imagePullPolicy: ''
+                  nodeSelector: {}
+                  replicas: 1
+                  tolerations: []
+                server:
+                  enabled: true
+                  extraArgs: []
+              kubeVip:
+                enabled: false
+              podDisruptionBudget:
+                enabled: false
+              registry:
+                anonymousPull: true
+                config: {}
+                enabled: false
+              serviceAccount:
+                annotations: {}
+                enabled: true
+                imagePullSecrets: []
+                labels: {}
+                name: ''
+              virtualScheduler:
+                enabled: false
+              workloadServiceAccount:
+                annotations: {}
+                enabled: true
+                imagePullSecrets: []
+                labels: {}
+                name: ''
+            backingStore:
+              database:
+                embedded:
+                  enabled: false
+                  extraArgs: []
+                external:
+                  caFile: ''
+                  certFile: ''
+                  connector: ''
+                  dataSource: ''
+                  enabled: false
+                  extraArgs: []
+                  identityProvider: ''
+                  keyFile: ''
+              etcd:
+                deploy:
+                  enabled: false
+                  headlessService:
+                    annotations: {}
+                  service:
+                    annotations: {}
+                    enabled: true
+                  statefulSet:
+                    annotations: {}
+                    enableServiceLinks: true
+                    enabled: true
+                    env: []
+                    extraArgs: []
+                    highAvailability:
+                      replicas: 1
+                    image:
+                      registry: registry.k8s.io
+                      repository: etcd
+                      tag: 3.6.8-0
+                    imagePullPolicy: ''
+                    labels: {}
+                    persistence:
+                      addVolumeMounts: []
+                      addVolumes: []
+                      volumeClaim:
+                        accessModes:
+                        - ReadWriteOnce
+                        enabled: true
+                        retentionPolicy: Retain
+                        size: 5Gi
+                        storageClass: ''
+                      volumeClaimTemplates: []
+                    pods:
+                      annotations: {}
+                      labels: {}
+                    resources:
+                      requests:
+                        cpu: 20m
+                        memory: 150Mi
+                    scheduling:
+                      affinity: {}
+                      nodeSelector: {}
+                      podManagementPolicy: Parallel
+                      priorityClassName: ''
+                      tolerations: []
+                      topologySpreadConstraints: []
+                    security:
+                      containerSecurityContext: {}
+                      podSecurityContext: {}
+                embedded:
+                  enabled: false
+                  extraArgs: []
+                  migrateFromDeployedEtcd: false
+                external:
+                  enabled: false
+                  endpoint: ''
+                  tls:
+                    caFile: ''
+                    certFile: ''
+                    keyFile: ''
+            coredns:
+              deployment:
+                affinity: {}
+                annotations: {}
+                image: ''
+                labels: {}
+                nodeSelector: {}
+                pods:
+                  annotations: {}
+                  labels: {}
+                replicas: 1
+                resources:
+                  limits:
+                    cpu: 1000m
+                    memory: 170Mi
+                  requests:
+                    cpu: 20m
+                    memory: 64Mi
+                tolerations: []
+                topologySpreadConstraints:
+                - labelSelector:
+                    matchLabels:
+                      k8s-app: vcluster-kube-dns
+                  maxSkew: 1
+                  topologyKey: kubernetes.io/hostname
+                  whenUnsatisfiable: DoNotSchedule
+              embedded: false
+              enabled: true
+              overwriteConfig: ''
+              overwriteManifests: ''
+              priorityClassName: ''
+              security:
+                containerSecurityContext: {}
+                podSecurityContext: {}
+              service:
+                annotations: {}
+                labels: {}
+                spec:
+                  type: ClusterIP
+            distro:
+              k8s:
+                apiServer:
+                  command: []
+                  enabled: true
+                  extraArgs:
+                  - --authentication-config=/etc/datalab/authentication.json
+                controllerManager:
+                  command: []
+                  enabled: true
+                  extraArgs: []
+                enabled: true
+                env: []
+                image:
+                  registry: ghcr.io
+                  repository: loft-sh/kubernetes
+                  tag: v1.36.0
+                imagePullPolicy: ''
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 256Mi
+                  requests:
+                    cpu: 40m
+                    memory: 64Mi
+                scheduler:
+                  command: []
+                  enabled: false
+                  extraArgs: []
+                securityContext: {}
+                version: ''
+            ingress:
+              annotations:
+                nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+                nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
+                nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+              enabled: false
+              host: my-host.com
+              labels: {}
+              pathType: ImplementationSpecific
+              spec:
+                tls: []
+            proxy:
+              bindAddress: 0.0.0.0
+              extraSANs:
+              - ${backend_hostname}
+              port: 8443
+            service:
+              annotations: {}
+              enabled: true
+              httpsNodePort: 0
+              kubeletNodePort: 0
+              labels: {}
+              spec:
+                type: ClusterIP
+            serviceMonitor:
+              annotations: {}
+              enabled: false
+              labels: {}
+            standalone:
+              dataDir: /var/lib/vcluster
+              joinNode:
+                containerd:
+                  enabled: true
+                enabled: true
+            statefulSet:
+              annotations: {}
+              args: []
+              command: []
+              enableServiceLinks: true
+              env: []
+              highAvailability:
+                leaseDuration: 60
+                renewDeadline: 40
+                replicas: 1
+                retryPeriod: 15
+              hostAliases: []
+              image:
+                registry: ghcr.io
+                repository: loft-sh/vcluster-oss
+                tag: ''
+              imagePullPolicy: ''
+              initContainers: []
+              labels: {}
+              persistence:
+                addVolumeMounts:
+                - mountPath: /etc/datalab
+                  name: authentication
+                  readOnly: true
+                addVolumes:
+                - configMap:
+                    name: ${authentication_name}
+                  name: authentication
+                binariesVolume:
+                - emptyDir: {}
+                  name: binaries
+                dataVolume: []
+                volumeClaim:
+                  accessModes:
+                  - ReadWriteOnce
+                  enabled: true
+                  retentionPolicy: Retain
+                  size: ${storage}
+                  storageClass: ${storage_class}
+                volumeClaimTemplates: []
+              pods:
+                annotations: {}
+                labels: {}
+              probes:
+                livenessProbe:
+                  enabled: true
+                  failureThreshold: 60
+                  initialDelaySeconds: 60
+                  periodSeconds: 2
+                  timeoutSeconds: 3
+                readinessProbe:
+                  enabled: true
+                  failureThreshold: 60
+                  periodSeconds: 2
+                  timeoutSeconds: 3
+                startupProbe:
+                  enabled: true
+                  failureThreshold: 300
+                  periodSeconds: 6
+                  timeoutSeconds: 3
+              resources:
+                limits:
+                  ephemeral-storage: 10Gi
+                  memory: 4Gi
+                requests:
+                  cpu: 200m
+                  ephemeral-storage: 1Gi
+                  memory: 256Mi
+              scheduling:
+                affinity: {}
+                nodeSelector: {}
+                podManagementPolicy: Parallel
+                priorityClassName: ''
+                tolerations: []
+                topologySpreadConstraints: []
+              security:
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  runAsGroup: 0
+                  runAsUser: 0
+                podSecurityContext: {}
+              sidecarContainers: []
+              workingDir: ''
+            tlsRoute:
+              annotations: {}
+              apiVersion: gateway.networking.k8s.io/v1
+              enabled: false
+              host: my-host.com
+              labels: {}
+              parentRefs: []
+              spec: {}
+          deploy:
+            cni:
+              flannel:
+                enabled: true
+            ingressNginx:
+              defaultIngressClass: true
+              enabled: false
+            kubeProxy:
+              config: {}
+              enabled: true
+              extraArgs: []
+              extraEnv: []
+              image: ''
+              imagePullPolicy: ''
+              nodeSelector: {}
+              tolerations: []
+            localPathProvisioner:
+              enabled: true
+            metallb:
+              enabled: false
+              ipAddressPool:
+                addresses: []
+                l2Advertisement: true
+            metricsServer:
+              enabled: false
+          experimental:
+            deploy:
+              host:
+                manifests: ''
+                manifestsTemplate: ''
+              vcluster:
+                helm: []
+                manifests: ''
+                manifestsTemplate: ''
+            docker:
+              loadBalancer:
+                enabled: true
+                forwardPorts: true
+              registryProxy:
+                enabled: true
+            nodeMonitors: []
+            proxy:
+              customResources: {}
+            syncSettings:
+              setOwner: true
+          exportKubeConfig:
+            additionalSecrets: []
+            context: ${name}
+            insecure: false
+            secret:
+              name: ''
+              namespace: ''
+            server: ${internal_server}
+            serviceAccount:
+              clusterRole: ''
+              name: ''
+              namespace: ''
+          integrations:
+            certManager:
+              enabled: false
+              sync:
+                fromHost:
+                  clusterIssuers:
+                    enabled: true
+                    selector:
+                      labels: {}
+                toHost:
+                  certificates:
+                    enabled: true
+                  issuers:
+                    enabled: true
+            externalSecrets:
+              enabled: false
+              sync:
+                fromHost:
+                  clusterStores:
+                    enabled: false
+                    selector:
+                      matchLabels: {}
+                toHost:
+                  externalSecrets:
+                    selector:
+                      matchLabels: {}
+                  stores:
+                    enabled: false
+                    selector:
+                      matchLabels: {}
+              webhook:
+                enabled: false
+            istio:
+              enabled: false
+              sync:
+                toHost:
+                  destinationRules:
+                    enabled: true
+                  gateways:
+                    enabled: true
+                  virtualServices:
+                    enabled: true
+            kubeVirt:
+              enabled: false
+              sync:
+                dataVolumes:
+                  enabled: false
+                virtualMachineClones:
+                  enabled: true
+                virtualMachineInstanceMigrations:
+                  enabled: true
+                virtualMachineInstances:
+                  enabled: true
+                virtualMachinePools:
+                  enabled: true
+                virtualMachines:
+                  enabled: true
+              webhook:
+                enabled: true
+            metricsServer:
+              enabled: false
+              nodes: true
+              pods: true
+          logging:
+            encoding: console
+          networking:
+            advanced:
+              clusterDomain: cluster.local
+              fallbackHostCluster: true
+              proxyKubelets:
+                byHostname: true
+                byIP: true
+            podCIDR: 10.244.0.0/16
+            replicateServices:
+              fromHost: []
+              toHost: []
+            resolveDNS: []
+          plugins: {}
+          policies:
+            centralAdmission:
+              mutatingWebhooks: []
+              validatingWebhooks: []
+            limitRange:
+              annotations: {}
+              default:
+                cpu: '1'
+                ephemeral-storage: 8Gi
+                memory: 512Mi
+              defaultRequest:
+                cpu: 100m
+                ephemeral-storage: 3Gi
+                memory: 128Mi
+              enabled: true
+              labels: {}
+              max: {}
+              min: {}
+            networkPolicy:
+              annotations: {}
+              controlPlane:
+                egress: []
+                ingress: []
+              enabled: true
+              fallbackDns: 8.8.8.8
+              labels: {}
+              workload:
+                egress: []
+                ingress: []
+                publicEgress:
+                  cidr: 0.0.0.0/0
+                  enabled: false
+                  except:
+                  - 100.64.0.0/10
+                  - 127.0.0.0/8
+                  - 10.0.0.0/8
+                  - 172.16.0.0/12
+                  - 192.168.0.0/16
+            resourceQuota:
+              annotations: {}
+              enabled: false
+              labels: {}
+              quota:
+                count/configmaps: 100
+                count/endpoints: 40
+                count/persistentvolumeclaims: 20
+                count/pods: 20
+                count/secrets: 100
+                count/services: 20
+                limits.cpu: 20
+                limits.ephemeral-storage: 160Gi
+                limits.memory: 40Gi
+                requests.cpu: 10
+                requests.ephemeral-storage: 60Gi
+                requests.memory: 20Gi
+                requests.storage: 100Gi
+                services.loadbalancers: 1
+                services.nodeports: 0
+              scopeSelector:
+                matchExpressions: []
+              scopes: []
+          privateNodes:
+            autoNodes: []
+            autoUpgrade:
+              concurrency: 1
+              containerSecurityContext: {}
+              enabled: true
+              podSecurityContext: {}
+            daemon:
+              controlPlaneLoadBalancer:
+                enabled: false
+                kubeProxy: true
+                port: 11343
+              enabled: false
+            enabled: false
+            joinNode:
+              containerd:
+                enabled: true
+            kubelet:
+              config: {}
+            vpn:
+              enabled: false
+              nodeToNode:
+                enabled: false
+          rbac:
+            clusterRole:
+              enabled: false
+              extraRules: []
+              overwriteRules: []
+            role:
+              enabled: true
+              extraRules: []
+              overwriteRules: []
+          sync:
+            fromHost:
+              configMaps:
+                enabled: false
+                mappings:
+                  byName: {}
+              csiDrivers:
+                enabled: auto
+              csiNodes:
+                enabled: auto
+              csiStorageCapacities:
+                enabled: auto
+              deviceClasses:
+                enabled: false
+              events:
+                enabled: true
+              gatewayClasses:
+                enabled: false
+              gateways:
+                allowedRoutes:
+                  defaultVirtualNamespacePolicy: {}
+                  overrides: []
+                enabled: false
+                mappings:
+                  byName: {}
+                metadata:
+                  exposeSourceGateway: false
+                sanitize:
+                  certificateRefs: true
+                  infrastructure: true
+                selector: {}
+                status:
+                  exposeAddresses: false
+              ingressClasses:
+                enabled: false
+              nodes:
+                clearImageStatus: false
+                enabled: false
+                selector:
+                  all: false
+                  labels: {}
+                syncBackChanges: false
+              priorityClasses:
+                enabled: false
+              runtimeClasses:
+                enabled: false
+              secrets:
+                enabled: false
+                mappings:
+                  byName: {}
+              storageClasses:
+                enabled: false
+            toHost:
+              configMaps:
+                all: false
+                enabled: true
+              endpointSlices:
+                enabled: true
+              endpoints:
+                enabled: true
+              gatewayApi:
+                backendTLSPolicies:
+                  enabled: false
+                enabled: false
+                gateways:
+                  enabled: false
+                httpRoutes:
+                  enabled: false
+                referenceGrants:
+                  enabled: auto
+                tlsRoutes:
+                  enabled: false
+              ingresses:
+                enabled: false
+              namespaces:
+                enabled: false
+                mappingsOnly: false
+              networkPolicies:
+                enabled: false
+              persistentVolumeClaims:
+                enabled: true
+              persistentVolumes:
+                enabled: false
+              podDisruptionBudgets:
+                enabled: false
+              pods:
+                enabled: true
+                enforceTolerations: []
+                hybridScheduling:
+                  enabled: false
+                  hostSchedulers: []
+                priorityClassName: ''
+                rewriteHosts:
+                  enabled: true
+                  initContainer:
+                    image:
+                      registry: mirror.gcr.io
+                      repository: library/alpine
+                      tag: '3.20'
+                    resources:
+                      limits:
+                        cpu: 30m
+                        memory: 64Mi
+                      requests:
+                        cpu: 30m
+                        memory: 64Mi
+                runtimeClassName: ''
+                translateImage: {}
+                useSecretsForSATokens: false
+              priorityClasses:
+                enabled: false
+              resourceClaimTemplates:
+                enabled: false
+              resourceClaims:
+                enabled: false
+              secrets:
+                all: false
+                enabled: true
+              serviceAccounts:
+                enabled: false
+              services:
+                enabled: true
+              storageClasses:
+                enabled: false
+          telemetry:
+            enabled: false
+        vcluster/control-plane-networkpolicy:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${control_policy}
+            namespace: ${namespace}
+            annotations: {}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            podSelector:
+              matchLabels:
+                release: ${runtime}
+            policyTypes:
+            - Egress
+            - Ingress
+            egress:
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    k8s-app: kube-dns
+            - ports:
+              - port: 443
+                protocol: TCP
+              - port: 8443
+                protocol: TCP
+              - port: 6443
+                protocol: TCP
+            - to:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            - to:
+              - podSelector:
+                  matchLabels:
+                    vcluster.loft.sh/managed-by: ${runtime}
+            - to:
+              - podSelector:
+                  matchLabels:
+                    app: loft
+                namespaceSelector: {}
+            - ports:
+              - port: 8080
+                protocol: TCP
+              to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: ${iam_namespace}
+            ingress:
+            - ports:
+              - port: 8443
+                protocol: TCP
+            - from:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            - ports:
+              - port: 1053
+                protocol: UDP
+              - port: 1053
+                protocol: TCP
+              - port: 8443
+                protocol: TCP
+              from:
+              - podSelector:
+                  matchLabels:
+                    vcluster.loft.sh/managed-by: ${runtime}
+            - from:
+              - podSelector:
+                  matchLabels:
+                    app: vcluster-snapshot
+            - from:
+              - podSelector:
+                  matchLabels:
+                    app: loft
+                namespaceSelector: {}
+        vcluster/data:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: ${data_pvc}
+            namespace: ${namespace}
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            storageClassName: ${storage_class}
+            resources:
+              requests:
+                storage: ${spec_resources_requests_storage}
+        vcluster/dns-networkpolicy:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${dns_policy}
+            namespace: ${namespace}
+            annotations: {}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            podSelector:
+              matchLabels:
+                k8s-app: vcluster-kube-dns
+                vcluster.loft.sh/managed-by: ${runtime}
+            policyTypes:
+            - Egress
+            - Ingress
+            egress:
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    k8s-app: kube-dns
+            - ports:
+              - port: 8443
+                protocol: TCP
+              to:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            ingress:
+            - ports:
+              - port: 1053
+                protocol: TCP
+              - port: 1053
+                protocol: UDP
+              from:
+              - podSelector:
+                  matchLabels:
+                    vcluster.loft.sh/managed-by: ${runtime}
+        vcluster/headless-service:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${headless_service}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            publishNotReadyAddresses: true
+            ports:
+            - name: https
+              port: 443
+              targetPort: 8443
+              protocol: TCP
+            clusterIP: None
+            selector:
+              app: ${runtime}
+              release: ${runtime}
+        vcluster/limitrange:
+          apiVersion: v1
+          kind: LimitRange
+          metadata:
+            name: ${service_account}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            limits:
+            - default:
+                cpu: '1'
+                ephemeral-storage: 8Gi
+                memory: 512Mi
+              defaultRequest:
+                cpu: 100m
+                ephemeral-storage: 3Gi
+                memory: 128Mi
+              type: Container
+        vcluster/manifest:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ${kind}
+          metadata:
+            name: ${metadata_name}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: ${role}
+          subjects:
+          - apiGroup: rbac.authorization.k8s.io
+            kind: Group
+            name: ${subjects_0_name}
+        vcluster/namespace:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ${target}
+        vcluster/role:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: ${service_account}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          rules:
+          - apiGroups:
+            - ''
+            resources:
+            - configmaps
+            - secrets
+            - services
+            - pods
+            - pods/attach
+            - pods/portforward
+            - pods/exec
+            - persistentvolumeclaims
+            verbs:
+            - create
+            - delete
+            - patch
+            - update
+            - get
+            - list
+            - watch
+          - apiGroups:
+            - ''
+            resources:
+            - pods/status
+            - pods/ephemeralcontainers
+            verbs:
+            - patch
+            - update
+          - apiGroups:
+            - ''
+            resources:
+            - pods/resize
+            verbs:
+            - patch
+            - update
+          - apiGroups:
+            - apps
+            resources:
+            - statefulsets
+            - replicasets
+            - deployments
+            verbs:
+            - get
+            - list
+            - watch
+            - patch
+            - update
+          - apiGroups:
+            - ''
+            resources:
+            - endpoints
+            - pods/log
+            verbs:
+            - get
+            - list
+            - watch
+          - apiGroups:
+            - ''
+            resources:
+            - events
+            verbs:
+            - create
+            - get
+            - list
+            - watch
+          - apiGroups:
+            - events.k8s.io
+            resources:
+            - events
+            verbs:
+            - create
+            - get
+            - list
+            - watch
+          - apiGroups:
+            - ''
+            resources:
+            - endpoints
+            verbs:
+            - create
+            - delete
+            - patch
+            - update
+          - apiGroups:
+            - discovery.k8s.io
+            resources:
+            - endpointslices
+            verbs:
+            - create
+            - list
+            - get
+            - delete
+            - patch
+            - update
+            - watch
+        vcluster/rolebinding:
+          kind: RoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: ${service_account}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          subjects:
+          - kind: ServiceAccount
+            name: ${service_account}
+            namespace: ${namespace}
+          roleRef:
+            kind: Role
+            name: ${service_account}
+            apiGroup: rbac.authorization.k8s.io
+        vcluster/route:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: ${runtime}
+            namespace: ${namespace}
+          spec:
+            parentRefs:
+            - ${parent}
+            hostnames:
+            - ${hostname}
+            rules:
+            - matches:
+              - path:
+                  type: PathPrefix
+                  value: ${prefix}
+              filters:
+              - type: URLRewrite
+                urlRewrite:
+                  path:
+                    type: ReplacePrefixMatch
+                    replacePrefixMatch: /
+              backendRefs:
+              - name: ${runtime}
+                port: 443
+              timeouts:
+                request: 0s
+                backendRequest: 0s
+        vcluster/secret:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${metadata_name}
+            namespace: ${claim_namespace}
+        vcluster/service:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${runtime}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+              vcluster.loft.sh/service: 'true'
+          spec:
+            type: ClusterIP
+            ports:
+            - name: https
+              port: 443
+              targetPort: 8443
+              nodePort: 0
+              protocol: TCP
+            - name: kubelet
+              port: 10250
+              targetPort: 8443
+              nodePort: 0
+              protocol: TCP
+            selector:
+              app: ${runtime}
+              release: ${runtime}
+        vcluster/serviceaccount:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: ${service_account}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+        vcluster/snapshot-networkpolicy:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${snapshot_policy}
+            namespace: ${namespace}
+            annotations: {}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            podSelector:
+              matchLabels:
+                app: vcluster-snapshot
+            policyTypes:
+            - Egress
+            - Ingress
+            egress:
+            - to:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    k8s-app: kube-dns
+            - ports:
+              - port: 443
+                protocol: TCP
+              - port: 8443
+                protocol: TCP
+              - port: 6443
+                protocol: TCP
+        vcluster/statefulset:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: ${runtime}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            selector:
+              matchLabels:
+                app: ${runtime}
+                release: ${runtime}
+            serviceName: ${headless_service}
+            podManagementPolicy: Parallel
+            replicas: 1
+            template:
+              metadata:
+                annotations:
+                  datalabs.pkg.internal/configuration-checksum: ${configuration_checksum}
+                labels:
+                  app: ${runtime}
+                  release: ${runtime}
+              spec:
+                terminationGracePeriodSeconds: 15
+                serviceAccountName: ${service_account}
+                volumes:
+                - name: helm-cache
+                  emptyDir: {}
+                - emptyDir: {}
+                  name: binaries
+                - name: tmp
+                  emptyDir: {}
+                - name: certs
+                  emptyDir: {}
+                - name: vcluster-config
+                  secret:
+                    secretName: ${config_secret}
+                - configMap:
+                    name: ${authentication_name}
+                  name: authentication
+                - name: data
+                  persistentVolumeClaim:
+                    claimName: ${data_pvc}
+                initContainers:
+                - name: kubernetes
+                  image: ghcr.io/loft-sh/kubernetes:v1.36.0
+                  volumeMounts:
+                  - mountPath: /binaries
+                    name: binaries
+                  command:
+                  - cp
+                  args:
+                  - -r
+                  - /kubernetes/.
+                  - /binaries/
+                  securityContext: {}
+                  resources:
+                    limits:
+                      cpu: 100m
+                      memory: 256Mi
+                    requests:
+                      cpu: 40m
+                      memory: 64Mi
+                enableServiceLinks: true
+                containers:
+                - name: syncer
+                  image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    httpGet:
+                      path: /healthz
+                      port: 8443
+                      scheme: HTTPS
+                    initialDelaySeconds: 60
+                    periodSeconds: 2
+                    timeoutSeconds: 3
+                    failureThreshold: 60
+                  readinessProbe:
+                    httpGet:
+                      path: /readyz
+                      port: 8443
+                      scheme: HTTPS
+                    periodSeconds: 2
+                    timeoutSeconds: 3
+                    failureThreshold: 60
+                  startupProbe:
+                    httpGet:
+                      path: /readyz
+                      port: 8443
+                      scheme: HTTPS
+                    periodSeconds: 6
+                    timeoutSeconds: 3
+                    failureThreshold: 300
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    runAsGroup: 0
+                    runAsUser: 0
+                  resources:
+                    limits:
+                      ephemeral-storage: 10Gi
+                      memory: 4Gi
+                    requests:
+                      cpu: 200m
+                      ephemeral-storage: 1Gi
+                      memory: 256Mi
+                  env:
+                  - name: VCLUSTER_NAME
+                    value: ${runtime}
+                  - name: LOFT_LOG_ENCODING
+                    value: console
+                  - name: POD_NAME
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.name
+                  - name: POD_IP
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.podIP
+                  - name: NODE_NAME
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: spec.nodeName
+                  - name: NODE_IP
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.hostIP
+                  volumeMounts:
+                  - name: data
+                    mountPath: /data
+                  - name: binaries
+                    mountPath: /binaries
+                  - name: certs
+                    mountPath: /pki
+                  - name: helm-cache
+                    mountPath: /.cache/helm
+                  - name: vcluster-config
+                    mountPath: /var/lib/vcluster
+                  - name: tmp
+                    mountPath: /tmp
+                  - mountPath: /etc/datalab
+                    name: authentication
+                    readOnly: true
+        vcluster/storage-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            matchConstraints:
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                resources:
+                - persistentvolumeclaims
+            matchConditions:
+            - name: vcluster-syncer
+              expression: ${spec_matchConditions_0_expression}
+            validations:
+            - expression: ${spec_validations_0_expression}
+              message: The PVC must use an allowed Datalab vcluster StorageClass.
+        vcluster/storage-policy-binding:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicyBinding
+          metadata:
+            name: ${policy_name}
+          spec:
+            policyName: ${policy_name}
+            validationActions:
+            - Deny
+            matchResources:
+              namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ${namespace}
+        vcluster/storageclass:
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: ${storage_name}
+        vcluster/storageclass-2:
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: ${storage_name}
+            annotations:
+              storageclass.kubernetes.io/is-default-class: ${metadata_annotations_storageclass_kubernetes_io_is_default_class}
+        vcluster/virtual-providerconfig:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: ProviderConfig
+          metadata:
+            name: ${virtual_provider}
+            namespace: ${claim_namespace}
+          spec:
+            credentials:
+              source: Secret
+              secretRef:
+                name: ${service_account}
+                namespace: ${namespace}
+                key: config
+        vcluster/workload-networkpolicy:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${workload_policy}
+            namespace: ${namespace}
+            annotations: {}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
+          spec:
+            podSelector:
+              matchLabels:
+                vcluster.loft.sh/managed-by: ${runtime}
+            policyTypes:
+            - Egress
+            - Ingress
+            egress:
+            - ports:
+              - port: 1053
+                protocol: UDP
+              - port: 1053
+                protocol: TCP
+              - port: 8443
+                protocol: TCP
+              to:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            - to:
+              - podSelector:
+                  matchLabels:
+                    vcluster.loft.sh/managed-by: ${runtime}
+            ingress:
+            - from:
+              - podSelector:
+                  matchLabels:
+                    release: ${runtime}
+            - from:
+              - podSelector:
+                  matchLabels:
+                    vcluster.loft.sh/managed-by: ${runtime}
+        vcluster/workload-serviceaccount:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: ${workload_account}
+            namespace: ${namespace}
+            labels:
+              app: ${runtime}
+              release: ${runtime}
   - step: update-data-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -4872,6 +7077,543 @@ spec:
             status_value = struct_pb2.Value()
             json_format.ParseDict(cur_status, status_value)
             rsp.desired.composite.resource.fields["status"].CopyFrom(status_value)
+  - step: publish-vcluster-connections
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import base64
+
+        import hashlib
+
+        import json
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+        def _vcluster_profile(name, instance, group):
+            return _resource_name(name, "vcluster", instance, group, limit=55)
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import base64
+        import hashlib
+        import json
+
+        CREDENTIAL_HELPER = "#!/usr/bin/env python3\n# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)\n# SPDX-License-Identifier: Apache-2.0\n\n\"\"\"Get a short-lived Kubernetes credential with the Datalab OAuth client.\"\"\"\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--issuer', required=True)\n    parser.add_argument('--client-id', required=True)\n    source = parser.add_mutually_exclusive_group(required=True)\n    source.add_argument('--client-secret-file')\n    source.add_argument('--client-secret-env')\n    parser.add_argument('--issuer-ca')\n    parser.add_argument('--issuer-ca-data')\n    args = parser.parse_args()\n    if not args.issuer.startswith('https://'):\n        parser.error('--issuer must use HTTPS')\n    try:\n        secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                  else os.environ[args.client_secret_env])\n        ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n        context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n        request = Request(args.issuer.rstrip('/') + '/protocol/openid-connect/token',\n                          data=urlencode({'grant_type': 'client_credentials', 'client_id': args.client_id,\n                                          'client_secret': secret}).encode())\n        with urlopen(request, context=context, timeout=30) as result:\n            token = json.load(result)\n        expires = datetime.now(timezone.utc) + timedelta(seconds=int(token['expires_in']) - 10)\n        credential = {\n            'apiVersion': 'client.authentication.k8s.io/v1', 'kind': 'ExecCredential',\n            'status': {'token': token['access_token'], 'expirationTimestamp': expires.isoformat().replace('+00:00', 'Z')},\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print('Could not obtain a Datalab API token. Check the issuer and client credential.', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == '__main__':\n    sys.exit(main())\n"
+
+
+        def compose(req, rsp):
+            rsp.meta.ttl.FromSeconds(300)
+            xr = _to_dict(req.observed.composite.resource)
+            spec = xr.get("spec") or {}
+            status = (
+                _to_dict(rsp.desired.composite.resource).get("status") or xr.get("status") or {}
+            )
+            instances = spec.get("vclusters") or {}
+            if not instances and not any(
+                c.get("type") == "vcluster" for c in status.get("connections", [])
+            ):
+                return
+            meta = xr["metadata"]
+            name = meta["name"]
+            namespace = meta.get("namespace") or "default"
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            connections = [
+                c for c in status.get("connections", []) if c.get("type") != "vcluster"
+            ]
+
+            def ready(key):
+                observed = req.observed.resources.get(key)
+                body = _to_dict(observed.resource) if observed else {}
+                return any(
+                    c.get("type") == "Ready" and c.get("status") == "True"
+                    for c in body.get("status", {}).get("conditions", [])
+                )
+
+            for instance, config in sorted(instances.items()):
+                endpoint = f"https://{name}.{env['ingress']['domain']}/.{instance}"
+                cluster = {"server": endpoint}
+                gateway_ca = (env.get("ingress") or {}).get("certificateAuthority")
+                if gateway_ca:
+                    cluster["certificate-authority-data"] = base64.b64encode(
+                        gateway_ca.encode()
+                    ).decode()
+                issuer = str((env.get("iam") or {})["issuerURL"]).rstrip("/")
+                for group in sorted(config["groups"], key=lambda item: item["name"]):
+                    profile = _vcluster_profile(name, instance, group["name"])
+                    connection_name = _resource_name("vcluster", instance, group["name"])
+                    oauth = _extract_data(
+                        req.observed.resources.get(
+                            _resource_name(
+                                "vcluster", name, instance, f"observe-client-{group['name']}"
+                            )
+                        )
+                    )
+                    secret = (
+                        _b64get_any(
+                            oauth, ("clientSecret", "client_secret", "attribute.client_secret")
+                        )
+                        or ""
+                    )
+                    args = [
+                        "-c",
+                        CREDENTIAL_HELPER,
+                        "--issuer",
+                        issuer,
+                        "--client-id",
+                        profile,
+                        "--client-secret-env",
+                        "DATALAB_CLIENT_SECRET",
+                    ]
+                    issuer_ca = (env.get("vcluster") or {}).get("issuerCA")
+                    if issuer_ca:
+                        args += [
+                            "--issuer-ca-data",
+                            base64.b64encode(issuer_ca.encode()).decode(),
+                        ]
+                    binding = hashlib.sha256(
+                        f"{group['name']}:{group['namespace']}:{group['role']}".encode()
+                    ).hexdigest()[:12]
+                    complete = bool(secret) and all(
+                        ready(key)
+                        for key in [
+                            *(
+                                _resource_name("vcluster", name, instance, suffix)
+                                for suffix in ("statefulset", "route", "backend-tls")
+                            ),
+                            _resource_name(
+                                "vcluster", name, instance, "access", f"binding-{binding}"
+                            ),
+                            *(
+                                f"keycloak-vcluster-{suffix}-{profile}"
+                                for suffix in ("assignment", "scope", "audience")
+                            ),
+                        ]
+                    )
+                    if secret:
+                        kubeconfig = _render_template(
+                            req,
+                            "vcluster/kubeconfig",
+                            name=_resource_name(name, instance),
+                            cluster=cluster,
+                            profile=profile,
+                            contexts_0_context_namespace=(
+                                "default" if group["namespace"] == "*" else group["namespace"]
+                            ),
+                            args=args,
+                            secret=secret,
+                        )
+                        key = _resource_name("connection", profile)
+                        rsp.desired.resources[key].resource.update(
+                            _render_template(
+                                req,
+                                "vcluster/connection-secret",
+                                key=key,
+                                name=name,
+                                namespace=namespace,
+                                secret_name=profile,
+                                connection_name=connection_name,
+                                values={
+                                    "kubeconfig": json.dumps(kubeconfig, indent=2),
+                                    "client-id": profile,
+                                    "client-secret": secret,
+                                    "issuer-url": issuer,
+                                },
+                            )
+                        )
+                    connections.append(
+                        {
+                            "name": connection_name,
+                            "type": "vcluster",
+                            "instance": instance,
+                            "group": group["name"],
+                            "targetNamespace": group["namespace"],
+                            "role": group["role"],
+                            "endpoint": endpoint,
+                            "ready": complete,
+                            "secretRef": {"name": profile, "namespace": namespace},
+                        }
+                    )
+            status["connections"] = connections
+            rsp.desired.composite.resource.update({"status": status})
+      templates:
+        vcluster/connection-secret:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${secret_name}
+            namespace: ${namespace}
+            labels:
+              datalabs.pkg.internal/name: ${name}
+              datalabs.pkg.internal/connection: ${connection_name}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          type: Opaque
+          stringData: ${values}
+        vcluster/kubeconfig:
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: ${name}
+            cluster: ${cluster}
+          contexts:
+          - name: ${profile}
+            context:
+              cluster: ${name}
+              user: ${profile}
+              namespace: ${contexts_0_context_namespace}
+          current-context: ${profile}
+          users:
+          - name: ${profile}
+            user:
+              exec:
+                apiVersion: client.authentication.k8s.io/v1
+                interactiveMode: Never
+                command: python3
+                args: ${args}
+                env:
+                - name: DATALAB_CLIENT_SECRET
+                  value: ${secret}
+  - step: protect-vcluster-resources
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import hashlib
+
+        import json
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import hashlib
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+        from google.protobuf import json_format
+
+
+        def compose(req, rsp):
+            rsp.meta.ttl.FromSeconds(300)
+            meta = json_format.MessageToDict(req.observed.composite.resource)["metadata"]
+            name = meta["name"]
+            namespace = meta.get("namespace", "default")
+            resources = set(req.observed.resources) | set(rsp.desired.resources)
+            objects = {
+                key: json_format.MessageToDict(value.resource)
+                for key, value in {**req.observed.resources, **rsp.desired.resources}.items()
+            }
+
+            if not any(
+                body.get("metadata", {}).get("labels", {}).get("datalabs.pkg.internal/vcluster")
+                for body in objects.values()
+            ):
+                return
+
+            def reference(key):
+                body = objects[key]
+                return _render_template(
+                    req,
+                    "protect-vcluster-resources/resource",
+                    apiVersion=body["apiVersion"],
+                    kind=body["kind"],
+                    resourceRef_name=body["metadata"]["name"],
+                )
+
+            def protect(suffix, used, by, prefix="vcluster"):
+                if used not in resources or by not in resources:
+                    return
+                key = _resource_name(prefix, "usage", suffix, name, used, by)
+                rsp.desired.resources[key].resource.update(
+                    _render_template(
+                        req,
+                        "protect-vcluster-resources/usage",
+                        key=key,
+                        namespace=namespace,
+                        spec_of=reference(used),
+                        spec_by=reference(by),
+                    )
+                )
+                rsp.desired.resources[key].ready = fnv1.READY_TRUE
+
+            # Remove a protected resource only after its Usage has cleared the in-use label.
+            indexed = {
+                (body["apiVersion"], body["kind"], body["metadata"]["name"]): key
+                for key, body in objects.items()
+            }
+            for observed in req.observed.resources.values():
+                usage = json_format.MessageToDict(observed.resource)
+                if (
+                    usage.get("kind") != "Usage"
+                    or usage.get("apiVersion") != "protection.crossplane.io/v1beta1"
+                ):
+                    continue
+                target = (usage.get("spec") or {}).get("of") or {}
+                key = indexed.get(
+                    (
+                        target.get("apiVersion"),
+                        target.get("kind"),
+                        (target.get("resourceRef") or {}).get("name"),
+                    )
+                )
+                if key is None or key in rsp.desired.resources:
+                    continue
+                body = objects[key]
+                metadata = body["metadata"]
+                rsp.desired.resources[key].resource.update(
+                    _render_template(
+                        req,
+                        "protect-vcluster-resources/resource-2",
+                        apiVersion=body["apiVersion"],
+                        kind=body["kind"],
+                        metadata_name=metadata["name"],
+                        namespace=namespace,
+                        key=key,
+                        spec=body.get("spec") or {},
+                    )
+                )
+
+                if metadata.get("labels"):
+                    rsp.desired.resources[key].resource["metadata"]["labels"] = metadata[
+                        "labels"
+                    ]
+
+            for instance in sorted(
+                {
+                    body.get("metadata", {})
+                    .get("labels", {})
+                    .get("datalabs.pkg.internal/vcluster")
+                    for body in objects.values()
+                }
+                - {None}
+            ):
+                control_plane = _resource_name("vcluster", name, instance, "statefulset")
+                protect(
+                    f"{instance}-quota", f"resourcequota-{name}-overall-storage", control_plane
+                )
+                protect(f"{instance}-environment", f"workshopenvironment-{name}", control_plane)
+                for suffix in (
+                    "authentication",
+                    "config",
+                    "data",
+                    "serviceaccount",
+                    "workload-serviceaccount",
+                    "role",
+                    "rolebinding",
+                    "service",
+                    "headless-service",
+                    "limitrange",
+                    "storage-policy",
+                    "storage-policy-binding",
+                    "control-plane-networkpolicy",
+                    "workload-networkpolicy",
+                    "dns-networkpolicy",
+                    "snapshot-networkpolicy",
+                ):
+                    protect(
+                        f"{instance}-{suffix}",
+                        _resource_name("vcluster", name, instance, suffix),
+                        control_plane,
+                    )
+                for key, body in objects.items():
+                    if body.get("metadata", {}).get("labels", {}).get(
+                        "datalabs.pkg.internal/vcluster"
+                    ) == instance and body.get("spec", {}).get("providerConfigRef", {}).get(
+                        "name"
+                    ) == _resource_name(
+                        name, "vcluster", instance
+                    ):
+                        suffix = hashlib.sha256(key.encode()).hexdigest()[:12]
+                        protect(f"{instance}-control-{suffix}", control_plane, key)
+                        protect(
+                            f"{instance}-provider-{suffix}",
+                            _resource_name(
+                                "vcluster", name, instance, "virtual-providerconfig"
+                            ),
+                            key,
+                        )
+
+            identity_refs = {
+                "clientId": ("openidclient.keycloak.m.crossplane.io/v1alpha1", "Client"),
+                "serviceAccountUserClientId": (
+                    "openidclient.keycloak.m.crossplane.io/v1alpha1",
+                    "Client",
+                ),
+                "roleId": ("role.keycloak.m.crossplane.io/v1alpha1", "Role"),
+                "role": ("role.keycloak.m.crossplane.io/v1alpha1", "Role"),
+                "groupId": ("group.keycloak.m.crossplane.io/v1alpha1", "Group"),
+            }
+            for key, body in objects.items():
+                if key.startswith(
+                    "keycloak-vcluster-"
+                ) and ".keycloak.m.crossplane.io/" in body.get("apiVersion", ""):
+                    params = body.get("spec", {}).get("forProvider", {})
+                    for field, (api_version, kind) in identity_refs.items():
+                        refs = [params.get(field + "Ref", {})]
+                        if field == "roleId":
+                            refs.extend(params.get("roleIdsRefs") or [])
+                        labels = (params.get(field + "Selector") or {}).get("matchLabels")
+                        for parent, candidate in objects.items():
+                            if (
+                                candidate.get("apiVersion") != api_version
+                                or candidate.get("kind") != kind
+                            ):
+                                continue
+                            metadata = candidate.get("metadata", {})
+                            if not any(
+                                ref.get("name") == metadata.get("name") for ref in refs
+                            ) and not (
+                                labels
+                                and all(
+                                    metadata.get("labels", {}).get(k) == v
+                                    for k, v in labels.items()
+                                )
+                            ):
+                                continue
+                            suffix = hashlib.sha256(f"{parent}:{key}".encode()).hexdigest()[:12]
+                            protect(suffix, parent, key, prefix="keycloak")
+                if body.get("kind") != "Object":
+                    continue
+                manifest = body.get("spec", {}).get("forProvider", {}).get("manifest", {})
+                if manifest.get("metadata", {}).get("namespace") == name:
+                    suffix = hashlib.sha256(key.encode()).hexdigest()[:12]
+                    protect(suffix, f"namespace-{name}", key, prefix="datalab")
+      templates:
+        protect-vcluster-resources/resource:
+          apiVersion: ${apiVersion}
+          kind: ${kind}
+          resourceRef:
+            name: ${resourceRef_name}
+        protect-vcluster-resources/resource-2:
+          apiVersion: ${apiVersion}
+          kind: ${kind}
+          metadata:
+            name: ${metadata_name}
+            namespace: ${namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec: ${spec}
+        protect-vcluster-resources/usage:
+          apiVersion: protection.crossplane.io/v1beta1
+          kind: Usage
+          metadata:
+            name: ${key}
+            namespace: ${namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            replayDeletion: true
+            of: ${spec_of}
+            by: ${spec_by}
   - step: check-resource-readiness
     functionRef:
       name: crossplane-contrib-function-auto-ready

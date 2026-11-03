@@ -98,6 +98,7 @@ Desired configuration of the datalab.
         <td>
           Optional cache stores for this datalab, implemented via Redis and managed through the Redis Kubernetes operator.<br/>
           <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -107,6 +108,7 @@ Desired configuration of the datalab.
         <td>
           Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and an optional pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
           <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -116,6 +118,7 @@ Desired configuration of the datalab.
         <td>
           Optional document stores for this datalab, implemented via MongoDB and managed through the MongoDB Kubernetes operator.<br/>
           <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -145,6 +148,16 @@ Desired configuration of the datalab.
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvclusterskey">vclusters</a></b></td>
+        <td>map[string]object</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
+            <i>Default</i>: map[]<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -166,15 +179,6 @@ Desired configuration of the datalab.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the Redis backup PVC as a Kubernetes quantity. A positive value enables daily full RDB snapshots. Zero or an omitted value disables backups.<br/>
-          <br/>
-            <i>Default</i>: 0<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b>storage</b></td>
         <td>string</td>
         <td>
@@ -191,6 +195,15 @@ Desired configuration of the datalab.
             <i>Default</i>: redis<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the Redis backup PVC as a Kubernetes quantity. A positive value enables daily full RDB snapshots. Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -371,6 +384,85 @@ Desired configuration of the datalab.
 </table>
 
 
+### Datalab.spec.vclusters[key]
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+Virtual Kubernetes clusters keyed by instance name.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b><a href="#datalabspecvclusterskeygroupsindex">groups</a></b></td>
+        <td>[]object</td>
+        <td>
+          Access profiles with separate kubeconfigs and Kubernetes RBAC.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>storage</b></td>
+        <td>string</td>
+        <td>
+          Control-plane PVC size. The environment default is used when omitted.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.spec.vclusters[key].groups[index]
+<sup><sup>[↩ Parent](#datalabspecvclusterskey)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Profile name used for its Keycloak role and connection set.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          Virtual namespace to create, or '*' for virtual cluster administration.<br/>
+          <br/>
+            <i>Validations</i>:<li>self != "default" && !self.startsWith("kube-"): Select a workload namespace, not a Kubernetes system namespace.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>role</b></td>
+        <td>enum</td>
+        <td>
+          Kubernetes ClusterRole granted to this profile.<br/>
+          <br/>
+            <i>Enum</i>: view, edit, admin, cluster-admin<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
 ### Datalab.status
 <sup><sup>[↩ Parent](#datalab)</sup></sup>
 
@@ -391,7 +483,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
         <td>[]object</td>
         <td>
-          Reserved connection sets. The Educates runtime does not populate this field.<br/>
+          Connection sets for the declared virtual clusters.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -460,6 +552,13 @@ Current observed state of the datalab.
         <td>false</td>
       </tr><tr>
         <td><b>group</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>instance</b></td>
         <td>string</td>
         <td>
           <br/>

@@ -1,0 +1,30 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ${runtime}
+  namespace: ${namespace}
+spec:
+  parentRefs:
+  - ${parent}
+  hostnames:
+  - ${hostname}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: ${prefix}
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: ${runtime}
+      port: 443
+    timeouts:
+      request: 0s
+      backendRequest: 0s

@@ -130,6 +130,38 @@ wait_for_provider_runtime() {
     --for=condition=RuntimeHealthy --timeout=20m
 }
 
+start_operator() {
+  local namespace="$1" deployment="$2"
+  kube scale "deployment/${deployment}" --namespace "${namespace}" --replicas=1
+  kube rollout status "deployment/${deployment}" --namespace "${namespace}" --timeout=5m
+}
+
+stop_unused_operator() {
+  local namespace="$1" deployment="$2" resource_type="$3" selector
+  if ! kube get "${resource_type}" --all-namespaces -o json | jq -e '.items | length == 0' >/dev/null; then
+    log "Keeping ${deployment} running because managed resources remain"
+    return
+  fi
+  selector="$(kube get "deployment/${deployment}" --namespace "${namespace}" \
+    -o jsonpath='{.spec.selector.matchLabels}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')"
+  [[ -n "${selector}" ]] || return 1
+  kube scale "deployment/${deployment}" --namespace "${namespace}" --replicas=0
+  kube wait pod --namespace "${namespace}" --selector "${selector}" --for=delete --timeout=2m
+}
+
+park_unused_operators() {
+  local namespace deployment resource_type
+  while read -r namespace deployment resource_type; do
+    if kube get "deployment/${deployment}" --namespace "${namespace}" >/dev/null 2>&1; then
+      stop_unused_operator "${namespace}" "${deployment}" "${resource_type}"
+    fi
+  done <<'OPERATORS'
+postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
+mongodb-operator mongodb-kubernetes-operator mongodbcommunity.mongodbcommunity.mongodb.com
+redis-operator redis-operator redis.redis.redis.opstreelabs.in
+OPERATORS
+}
+
 wait_for_crd_established() {
   local name="$1"
   local deadline=$((SECONDS + 120))
@@ -149,11 +181,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis)
+    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-vcluster>\n' "$2" >&2
       exit 1
       ;;
   esac
@@ -211,7 +243,9 @@ wait_for_connection_secret() {
 }
 
 wait_for_probe() {
-  local namespace="$1" pod="$2" deadline=$((SECONDS + 300))
+  local namespace="$1" pod="$2" deadline
+  wait_for_pod_scheduling "${namespace}" "${pod}" || return 1
+  deadline=$((SECONDS + 300))
   while true; do
     case "$(kube get "pod/${pod}" --namespace "${namespace}" -o jsonpath='{.status.phase}' 2>/dev/null || true)" in
       Succeeded) kube logs "pod/${pod}" --namespace "${namespace}"; return ;;
@@ -223,4 +257,54 @@ wait_for_probe() {
   kube logs "pod/${pod}" --namespace "${namespace}" || true
   kube describe "pod/${pod}" --namespace "${namespace}" || true
   return 1
+}
+
+resource_budget() (
+  local directory
+  directory="$(mktemp -d /tmp/xyz-resource-budget.XXXXXX)"
+  trap 'rm -rf "${directory}"' EXIT
+  kube get nodes -o json | jq '[.items[] | {metadata: {name: .metadata.name}, status: {allocatable: .status.allocatable}}]' >"${directory}/nodes.json"
+  kube get pods --all-namespaces -o json | jq '[.items[] | {
+    metadata: {namespace: .metadata.namespace}, status: {phase: .status.phase},
+    spec: {nodeName: .spec.nodeName, overhead: (.spec.overhead // {}),
+      containers: [.spec.containers[] | {resources: .resources}],
+      initContainers: [.spec.initContainers[]? | {resources: .resources, restartPolicy: .restartPolicy}]}}]' >"${directory}/pods.json"
+  jq -n --slurpfile nodes "${directory}/nodes.json" --slurpfile pods "${directory}/pods.json" \
+    '{nodes: $nodes[0], pods: $pods[0]}' | python3 "${INTEGRATION_DIR}/resource-budget.py"
+)
+
+scheduling_diagnostics() {
+  local namespace="$1" pod="${2:-}"
+  if [[ -n "${pod}" ]]; then
+    kube describe "pod/${pod}" --namespace "${namespace}" || true
+  fi
+  kube get events --namespace "${namespace}" --sort-by=.lastTimestamp | tail -30 || true
+  resource_budget || true
+  kube describe nodes | sed -n '/Allocated resources:/,/Events:/p' || true
+}
+
+wait_for_pod_scheduling() {
+  local namespace="$1" pod="$2"
+  if ! kube wait "pod/${pod}" --namespace "${namespace}" --for=create --timeout=90s \
+    || ! kube wait "pod/${pod}" --namespace "${namespace}" --for=condition=PodScheduled --timeout=90s; then
+    printf 'Pod %s/%s did not schedule; execution has not started.\n' "${namespace}" "${pod}" >&2
+    scheduling_diagnostics "${namespace}" "${pod}"
+    return 1
+  fi
+}
+
+wait_for_job_scheduling() {
+  local namespace="$1" job="$2" pod="" deadline=$((SECONDS + 90))
+  resource_budget
+  until [[ -n "${pod}" ]]; do
+    pod="$(kube get pod --namespace "${namespace}" --selector "batch.kubernetes.io/job-name=${job}" \
+      -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if ((SECONDS >= deadline)); then
+      printf 'Job %s/%s did not create a Pod.\n' "${namespace}" "${job}" >&2
+      scheduling_diagnostics "${namespace}"
+      return 1
+    fi
+    [[ -n "${pod}" ]] || sleep 2
+  done
+  wait_for_pod_scheduling "${namespace}" "${pod}"
 }

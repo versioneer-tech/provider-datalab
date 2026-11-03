@@ -1,0 +1,50 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: verify-vcluster-client
+  namespace: workspace
+spec:
+  automountServiceAccountToken: false
+  containers:
+  - name: client
+    image: python:3.13-alpine
+    command: [sleep, infinity]
+    volumeMounts:
+    - name: test
+      mountPath: /test
+      readOnly: true
+    - name: administrator
+      mountPath: /profiles/administrator
+      readOnly: true
+    - name: editor
+      mountPath: /profiles/editor
+      readOnly: true
+    - name: other
+      mountPath: /profiles/other
+      readOnly: true
+    - name: postgres
+      mountPath: /postgres
+      readOnly: true
+  volumes:
+  - name: test
+    configMap:
+      name: verify-vcluster-client
+  - name: administrator
+    secret:
+      secretName: verify-vcluster-vcluster-vc0-cluster-admin-094bd1c6b0
+      defaultMode: 256
+  - name: editor
+    secret:
+      secretName: verify-vcluster-vcluster-vc0-namespace-demo-6e6b6feb99
+      defaultMode: 256
+  - name: other
+    secret:
+      secretName: verify-vcluster-vcluster-vc1-cluster-admin-9da2539b9a
+      defaultMode: 256
+  - name: postgres
+    secret:
+      secretName: verify-vcluster-datalab
+      defaultMode: 256

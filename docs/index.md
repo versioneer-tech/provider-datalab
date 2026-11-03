@@ -4,7 +4,7 @@ Provider Datalab creates shared data workspaces on Kubernetes. Teams declare
 users, sessions, and managed services in a `Datalab` resource. Crossplane
 creates the resources from the platform's EnvironmentConfig.
 
-Educates provides session editors, terminals, and persistent workspaces.
+Sessions provide editors, terminals, and persistent workspaces.
 The shared Data service, packageR, provides object-storage browsing and file
 sharing. Datalabs can also request PostgreSQL, MongoDB, and Redis.
 

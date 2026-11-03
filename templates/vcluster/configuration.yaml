@@ -1,0 +1,672 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+controlPlane:
+  advanced:
+    cloudControllerManager:
+      enabled: true
+    defaultImageRegistry: ''
+    globalMetadata:
+      annotations: {}
+    headlessService:
+      annotations: {}
+      labels: {}
+    konnectivity:
+      agent:
+        enabled: true
+        extraArgs: []
+        extraEnv: []
+        image: ''
+        imagePullPolicy: ''
+        nodeSelector: {}
+        replicas: 1
+        tolerations: []
+      server:
+        enabled: true
+        extraArgs: []
+    kubeVip:
+      enabled: false
+    podDisruptionBudget:
+      enabled: false
+    registry:
+      anonymousPull: true
+      config: {}
+      enabled: false
+    serviceAccount:
+      annotations: {}
+      enabled: true
+      imagePullSecrets: []
+      labels: {}
+      name: ''
+    virtualScheduler:
+      enabled: false
+    workloadServiceAccount:
+      annotations: {}
+      enabled: true
+      imagePullSecrets: []
+      labels: {}
+      name: ''
+  backingStore:
+    database:
+      embedded:
+        enabled: false
+        extraArgs: []
+      external:
+        caFile: ''
+        certFile: ''
+        connector: ''
+        dataSource: ''
+        enabled: false
+        extraArgs: []
+        identityProvider: ''
+        keyFile: ''
+    etcd:
+      deploy:
+        enabled: false
+        headlessService:
+          annotations: {}
+        service:
+          annotations: {}
+          enabled: true
+        statefulSet:
+          annotations: {}
+          enableServiceLinks: true
+          enabled: true
+          env: []
+          extraArgs: []
+          highAvailability:
+            replicas: 1
+          image:
+            registry: registry.k8s.io
+            repository: etcd
+            tag: 3.6.8-0
+          imagePullPolicy: ''
+          labels: {}
+          persistence:
+            addVolumeMounts: []
+            addVolumes: []
+            volumeClaim:
+              accessModes:
+              - ReadWriteOnce
+              enabled: true
+              retentionPolicy: Retain
+              size: 5Gi
+              storageClass: ''
+            volumeClaimTemplates: []
+          pods:
+            annotations: {}
+            labels: {}
+          resources:
+            requests:
+              cpu: 20m
+              memory: 150Mi
+          scheduling:
+            affinity: {}
+            nodeSelector: {}
+            podManagementPolicy: Parallel
+            priorityClassName: ''
+            tolerations: []
+            topologySpreadConstraints: []
+          security:
+            containerSecurityContext: {}
+            podSecurityContext: {}
+      embedded:
+        enabled: false
+        extraArgs: []
+        migrateFromDeployedEtcd: false
+      external:
+        enabled: false
+        endpoint: ''
+        tls:
+          caFile: ''
+          certFile: ''
+          keyFile: ''
+  coredns:
+    deployment:
+      affinity: {}
+      annotations: {}
+      image: ''
+      labels: {}
+      nodeSelector: {}
+      pods:
+        annotations: {}
+        labels: {}
+      replicas: 1
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 170Mi
+        requests:
+          cpu: 20m
+          memory: 64Mi
+      tolerations: []
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            k8s-app: vcluster-kube-dns
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+    embedded: false
+    enabled: true
+    overwriteConfig: ''
+    overwriteManifests: ''
+    priorityClassName: ''
+    security:
+      containerSecurityContext: {}
+      podSecurityContext: {}
+    service:
+      annotations: {}
+      labels: {}
+      spec:
+        type: ClusterIP
+  distro:
+    k8s:
+      apiServer:
+        command: []
+        enabled: true
+        extraArgs:
+        - --authentication-config=/etc/datalab/authentication.json
+      controllerManager:
+        command: []
+        enabled: true
+        extraArgs: []
+      enabled: true
+      env: []
+      image:
+        registry: ghcr.io
+        repository: loft-sh/kubernetes
+        tag: v1.36.0
+      imagePullPolicy: ''
+      resources:
+        limits:
+          cpu: 100m
+          memory: 256Mi
+        requests:
+          cpu: 40m
+          memory: 64Mi
+      scheduler:
+        command: []
+        enabled: false
+        extraArgs: []
+      securityContext: {}
+      version: ''
+  ingress:
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+      nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
+      nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    enabled: false
+    host: my-host.com
+    labels: {}
+    pathType: ImplementationSpecific
+    spec:
+      tls: []
+  proxy:
+    bindAddress: 0.0.0.0
+    extraSANs:
+    - ${backend_hostname}
+    port: 8443
+  service:
+    annotations: {}
+    enabled: true
+    httpsNodePort: 0
+    kubeletNodePort: 0
+    labels: {}
+    spec:
+      type: ClusterIP
+  serviceMonitor:
+    annotations: {}
+    enabled: false
+    labels: {}
+  standalone:
+    dataDir: /var/lib/vcluster
+    joinNode:
+      containerd:
+        enabled: true
+      enabled: true
+  statefulSet:
+    annotations: {}
+    args: []
+    command: []
+    enableServiceLinks: true
+    env: []
+    highAvailability:
+      leaseDuration: 60
+      renewDeadline: 40
+      replicas: 1
+      retryPeriod: 15
+    hostAliases: []
+    image:
+      registry: ghcr.io
+      repository: loft-sh/vcluster-oss
+      tag: ''
+    imagePullPolicy: ''
+    initContainers: []
+    labels: {}
+    persistence:
+      addVolumeMounts:
+      - mountPath: /etc/datalab
+        name: authentication
+        readOnly: true
+      addVolumes:
+      - configMap:
+          name: ${authentication_name}
+        name: authentication
+      binariesVolume:
+      - emptyDir: {}
+        name: binaries
+      dataVolume: []
+      volumeClaim:
+        accessModes:
+        - ReadWriteOnce
+        enabled: true
+        retentionPolicy: Retain
+        size: ${storage}
+        storageClass: ${storage_class}
+      volumeClaimTemplates: []
+    pods:
+      annotations: {}
+      labels: {}
+    probes:
+      livenessProbe:
+        enabled: true
+        failureThreshold: 60
+        initialDelaySeconds: 60
+        periodSeconds: 2
+        timeoutSeconds: 3
+      readinessProbe:
+        enabled: true
+        failureThreshold: 60
+        periodSeconds: 2
+        timeoutSeconds: 3
+      startupProbe:
+        enabled: true
+        failureThreshold: 300
+        periodSeconds: 6
+        timeoutSeconds: 3
+    resources:
+      limits:
+        ephemeral-storage: 10Gi
+        memory: 4Gi
+      requests:
+        cpu: 200m
+        ephemeral-storage: 1Gi
+        memory: 256Mi
+    scheduling:
+      affinity: {}
+      nodeSelector: {}
+      podManagementPolicy: Parallel
+      priorityClassName: ''
+      tolerations: []
+      topologySpreadConstraints: []
+    security:
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        runAsGroup: 0
+        runAsUser: 0
+      podSecurityContext: {}
+    sidecarContainers: []
+    workingDir: ''
+  tlsRoute:
+    annotations: {}
+    apiVersion: gateway.networking.k8s.io/v1
+    enabled: false
+    host: my-host.com
+    labels: {}
+    parentRefs: []
+    spec: {}
+deploy:
+  cni:
+    flannel:
+      enabled: true
+  ingressNginx:
+    defaultIngressClass: true
+    enabled: false
+  kubeProxy:
+    config: {}
+    enabled: true
+    extraArgs: []
+    extraEnv: []
+    image: ''
+    imagePullPolicy: ''
+    nodeSelector: {}
+    tolerations: []
+  localPathProvisioner:
+    enabled: true
+  metallb:
+    enabled: false
+    ipAddressPool:
+      addresses: []
+      l2Advertisement: true
+  metricsServer:
+    enabled: false
+experimental:
+  deploy:
+    host:
+      manifests: ''
+      manifestsTemplate: ''
+    vcluster:
+      helm: []
+      manifests: ''
+      manifestsTemplate: ''
+  docker:
+    loadBalancer:
+      enabled: true
+      forwardPorts: true
+    registryProxy:
+      enabled: true
+  nodeMonitors: []
+  proxy:
+    customResources: {}
+  syncSettings:
+    setOwner: true
+exportKubeConfig:
+  additionalSecrets: []
+  context: ${name}
+  insecure: false
+  secret:
+    name: ''
+    namespace: ''
+  server: ${internal_server}
+  serviceAccount:
+    clusterRole: ''
+    name: ''
+    namespace: ''
+integrations:
+  certManager:
+    enabled: false
+    sync:
+      fromHost:
+        clusterIssuers:
+          enabled: true
+          selector:
+            labels: {}
+      toHost:
+        certificates:
+          enabled: true
+        issuers:
+          enabled: true
+  externalSecrets:
+    enabled: false
+    sync:
+      fromHost:
+        clusterStores:
+          enabled: false
+          selector:
+            matchLabels: {}
+      toHost:
+        externalSecrets:
+          selector:
+            matchLabels: {}
+        stores:
+          enabled: false
+          selector:
+            matchLabels: {}
+    webhook:
+      enabled: false
+  istio:
+    enabled: false
+    sync:
+      toHost:
+        destinationRules:
+          enabled: true
+        gateways:
+          enabled: true
+        virtualServices:
+          enabled: true
+  kubeVirt:
+    enabled: false
+    sync:
+      dataVolumes:
+        enabled: false
+      virtualMachineClones:
+        enabled: true
+      virtualMachineInstanceMigrations:
+        enabled: true
+      virtualMachineInstances:
+        enabled: true
+      virtualMachinePools:
+        enabled: true
+      virtualMachines:
+        enabled: true
+    webhook:
+      enabled: true
+  metricsServer:
+    enabled: false
+    nodes: true
+    pods: true
+logging:
+  encoding: console
+networking:
+  advanced:
+    clusterDomain: cluster.local
+    fallbackHostCluster: true
+    proxyKubelets:
+      byHostname: true
+      byIP: true
+  podCIDR: 10.244.0.0/16
+  replicateServices:
+    fromHost: []
+    toHost: []
+  resolveDNS: []
+plugins: {}
+policies:
+  centralAdmission:
+    mutatingWebhooks: []
+    validatingWebhooks: []
+  limitRange:
+    annotations: {}
+    default:
+      cpu: '1'
+      ephemeral-storage: 8Gi
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      ephemeral-storage: 3Gi
+      memory: 128Mi
+    enabled: true
+    labels: {}
+    max: {}
+    min: {}
+  networkPolicy:
+    annotations: {}
+    controlPlane:
+      egress: []
+      ingress: []
+    enabled: true
+    fallbackDns: 8.8.8.8
+    labels: {}
+    workload:
+      egress: []
+      ingress: []
+      publicEgress:
+        cidr: 0.0.0.0/0
+        enabled: false
+        except:
+        - 100.64.0.0/10
+        - 127.0.0.0/8
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+  resourceQuota:
+    annotations: {}
+    enabled: false
+    labels: {}
+    quota:
+      count/configmaps: 100
+      count/endpoints: 40
+      count/persistentvolumeclaims: 20
+      count/pods: 20
+      count/secrets: 100
+      count/services: 20
+      limits.cpu: 20
+      limits.ephemeral-storage: 160Gi
+      limits.memory: 40Gi
+      requests.cpu: 10
+      requests.ephemeral-storage: 60Gi
+      requests.memory: 20Gi
+      requests.storage: 100Gi
+      services.loadbalancers: 1
+      services.nodeports: 0
+    scopeSelector:
+      matchExpressions: []
+    scopes: []
+privateNodes:
+  autoNodes: []
+  autoUpgrade:
+    concurrency: 1
+    containerSecurityContext: {}
+    enabled: true
+    podSecurityContext: {}
+  daemon:
+    controlPlaneLoadBalancer:
+      enabled: false
+      kubeProxy: true
+      port: 11343
+    enabled: false
+  enabled: false
+  joinNode:
+    containerd:
+      enabled: true
+  kubelet:
+    config: {}
+  vpn:
+    enabled: false
+    nodeToNode:
+      enabled: false
+rbac:
+  clusterRole:
+    enabled: false
+    extraRules: []
+    overwriteRules: []
+  role:
+    enabled: true
+    extraRules: []
+    overwriteRules: []
+sync:
+  fromHost:
+    configMaps:
+      enabled: false
+      mappings:
+        byName: {}
+    csiDrivers:
+      enabled: auto
+    csiNodes:
+      enabled: auto
+    csiStorageCapacities:
+      enabled: auto
+    deviceClasses:
+      enabled: false
+    events:
+      enabled: true
+    gatewayClasses:
+      enabled: false
+    gateways:
+      allowedRoutes:
+        defaultVirtualNamespacePolicy: {}
+        overrides: []
+      enabled: false
+      mappings:
+        byName: {}
+      metadata:
+        exposeSourceGateway: false
+      sanitize:
+        certificateRefs: true
+        infrastructure: true
+      selector: {}
+      status:
+        exposeAddresses: false
+    ingressClasses:
+      enabled: false
+    nodes:
+      clearImageStatus: false
+      enabled: false
+      selector:
+        all: false
+        labels: {}
+      syncBackChanges: false
+    priorityClasses:
+      enabled: false
+    runtimeClasses:
+      enabled: false
+    secrets:
+      enabled: false
+      mappings:
+        byName: {}
+    storageClasses:
+      enabled: false
+  toHost:
+    configMaps:
+      all: false
+      enabled: true
+    endpointSlices:
+      enabled: true
+    endpoints:
+      enabled: true
+    gatewayApi:
+      backendTLSPolicies:
+        enabled: false
+      enabled: false
+      gateways:
+        enabled: false
+      httpRoutes:
+        enabled: false
+      referenceGrants:
+        enabled: auto
+      tlsRoutes:
+        enabled: false
+    ingresses:
+      enabled: false
+    namespaces:
+      enabled: false
+      mappingsOnly: false
+    networkPolicies:
+      enabled: false
+    persistentVolumeClaims:
+      enabled: true
+    persistentVolumes:
+      enabled: false
+    podDisruptionBudgets:
+      enabled: false
+    pods:
+      enabled: true
+      enforceTolerations: []
+      hybridScheduling:
+        enabled: false
+        hostSchedulers: []
+      priorityClassName: ''
+      rewriteHosts:
+        enabled: true
+        initContainer:
+          image:
+            registry: mirror.gcr.io
+            repository: library/alpine
+            tag: '3.20'
+          resources:
+            limits:
+              cpu: 30m
+              memory: 64Mi
+            requests:
+              cpu: 30m
+              memory: 64Mi
+      runtimeClassName: ''
+      translateImage: {}
+      useSecretsForSATokens: false
+    priorityClasses:
+      enabled: false
+    resourceClaimTemplates:
+      enabled: false
+    resourceClaims:
+      enabled: false
+    secrets:
+      all: false
+      enabled: true
+    serviceAccounts:
+      enabled: false
+    services:
+      enabled: true
+    storageClasses:
+      enabled: false
+telemetry:
+  enabled: false

@@ -68,6 +68,7 @@ class ResponseTTLTests(unittest.TestCase):
                 (root / "composition/settings.yaml").write_text(
                     yaml.safe_dump({"responseTTL": value})
                 )
+
                 composition = yaml.safe_load(BUILDER["build"](root))
                 pipeline = composition["spec"]["pipeline"]
                 cases.append(
@@ -76,6 +77,11 @@ class ResponseTTLTests(unittest.TestCase):
                         "pipeline": pipeline,
                     }
                 )
+
+            settings = (root / "composition/settings.yaml").read_text()
+            composition = yaml.safe_load(BUILDER["build"](root, response_ttl="1m"))
+            cases.append({"seconds": 60, "pipeline": composition["spec"]["pipeline"]})
+            self.assertEqual((root / "composition/settings.yaml").read_text(), settings)
 
             pipeline = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
             pipeline["spec"]["pipeline"].append(

@@ -35,9 +35,11 @@ spec:
 
 The platform operator sets identity, network, storage, and security rules.
 
-Educates provides a browser editor, terminal, and persistent session workspace.
+Sessions provide a browser editor, terminal, and persistent workspace.
 The shared Data service, packageR, lets users browse and share object storage.
-Datalabs can also request PostgreSQL, MongoDB, and Redis stores.
+Datalabs can also request PostgreSQL, MongoDB, Redis, and named virtual Kubernetes
+clusters. Each virtual API uses `https://<datalab>.<domain>/.<instance>`, such as
+`https://s-joe.lab.acme.com/.vc0`.
 
 The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
 Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
@@ -53,6 +55,7 @@ for the required resource APIs.
 - [Examples](examples/base): complete Datalab manifests.
 - [Authentication](docs/how-to-guides/authentication.md): Keycloak roles and session ingress protection.
 - [S3 client access](docs/how-to-guides/s3-access.md): read data with AWS tools.
+- [Virtual clusters](docs/how-to-guides/vcluster.md): access profiles and a PostgreSQL-backed STAC catalog.
 - [Additional services](docs/how-to-guides/additional_services.md): run Dask, MLflow, or psql from a workspace.
 - [Security](docs/security/index.md): access rules and operator responsibilities.
 - [API reference](docs/reference-guides/api.md): Datalab fields and service types.

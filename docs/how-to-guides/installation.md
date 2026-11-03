@@ -6,14 +6,15 @@ platform's GitOps and Secret tools.
 
 ## Prerequisites
 
-The cluster needs Crossplane, Educates, an ingress controller, Keycloak, and
-an S3-compatible object store. The CNI must enforce Kubernetes NetworkPolicy.
+The cluster needs Crossplane, the Educates session runtime, an ingress
+controller, Keycloak, and an S3-compatible object store. The CNI must enforce
+Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
-Install Educates with its CRDs and controller RBAC before creating Datalabs.
-Follow the [Educates installation guide](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html).
-The Educates ingress class, domain, and TLS Secret must match the settings
+Install the session runtime with its CRDs and controller RBAC before creating
+Datalabs. Follow the [runtime installation guide](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html).
+The runtime ingress class, domain, and TLS Secret must match the settings
 below.
 
 Install the operators for the managed stores you plan to offer. Provider
@@ -48,6 +49,11 @@ Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
 `TLSRoute` in `gateway.networking.k8s.io/v1` and direct TLS with SNI.
 
+For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
+issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
+ValidatingAdmissionPolicy and BackendTLSPolicy support. See
+[virtual cluster setup](vcluster.md#platform-settings).
+
 ## 1. Choose the claim namespace
 
 This guide uses `workspace` for Datalab resources and their namespaced
@@ -59,8 +65,8 @@ kubectl create namespace datalab
 ```
 
 Input storage Secrets live in `datalab`, as set by `storage.secretNamespace`
-in the environment examples. Educates creates a runtime namespace for each
-Datalab.
+in the environment examples. Each Datalab also has a separate namespace for
+its runtime and shared services.
 
 ## 2. Install provider dependencies
 
@@ -97,7 +103,7 @@ release tag you want to install.
 apiVersion: pkg.crossplane.io/v1
 kind: Configuration
 metadata:
-  name: datalab-educates
+  name: datalab
 spec:
   package: ghcr.io/versioneer-tech/provider-datalab:<!version!>
   skipDependencyResolution: true
@@ -186,7 +192,7 @@ sessions.
 
 Enable either `ingress.enabled` or `httpRoute.enabled` for a permanent Data
 address. Enabling both stops reconciliation. With neither enabled, Data is
-available through a session's Educates-authenticated ingress.
+available through a session's authenticated ingress.
 
 For Gateway API exposure, replace the example's `ingress.enabled: true` with
 `false` and add:
@@ -203,7 +209,7 @@ data:
 
 The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
 routes from runtime namespaces. It manages the permanent Data certificate.
-Keep the session ingress class and TLS Secret set for Educates. For the
+Keep the ingress class and TLS Secret set for the session runtime. For the
 optional read-only S3 endpoint, see [S3 client access](s3-access.md).
 
 packageR permits all browser origins (`*`) for public catalog access.
@@ -230,14 +236,14 @@ fields, but extra fields in `spec` do not override these settings.
 
 | Setting | Default | Use |
 | --- | --- | --- |
-| `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started Educates session. |
+| `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started session. |
 | `defaults.registry.enabled` | `true` | Session Docker registry. |
 | `defaults.registry.storage` | `5Gi` | Registry volume size. |
 | `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |
 | `defaults.data.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
 | `defaults.quota.memory` | `2Gi` | Session memory request. |
 | `defaults.quota.storage` | `1Gi` | Workspace PVC size. |
-| `defaults.quota.budget` | `medium` | Educates namespace budget. |
+| `defaults.quota.budget` | `medium` | Session namespace budget. |
 | `defaults.overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the environment namespace. |
 | `defaults.security.policy` | `baseline` | Pod security level: `restricted`, `baseline`, or `privileged`. |
 | `defaults.security.kubernetesAccess` | `true` | Session Kubernetes service account token. |
@@ -245,11 +251,11 @@ fields, but extra fields in `spec` do not override these settings.
 | `defaults.security.externalEgress` | `true` | Broad egress to the configured external CIDRs. |
 | `defaults.persistence.storageClassName` | First allowed class, or cluster default | Workspace StorageClass; a value outside the allowlist falls back to its first entry. |
 | `defaults.files` | `[]` | Workshop file bundles. |
-| `packages` | `[]` | Educates extension packages. |
+| `packages` | `[]` | Session extension packages. |
 
-File bundles and extension packages are passed to Educates unchanged.
-Set Data enablement before creating Datalabs because Educates saves each
-environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
+File bundles and extension packages are passed to the session runtime
+unchanged. Set Data enablement before creating Datalabs because the runtime
+saves each environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
 for a file bundle example.
 
 #### Identity and endpoints
@@ -284,6 +290,14 @@ for a file bundle example.
 | `storage.forcePathStyle` | `true` | Path-style S3 requests. |
 | `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
 | `storageClasses.allowed` | `[]` | Allowed workspace StorageClasses; an empty list permits any configured class. |
+| `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
+| `vcluster.storageClasses.allowed` | Required when virtual clusters are declared | Host classes exposed to virtual workloads. |
+| `vcluster.storageClasses.default` | First allowed class | Virtual workload default class. |
+| `vcluster.storageClassName` | Virtual default class | Control-plane StorageClass; must be allowed. |
+| `vcluster.issuerCA` | System trust | PEM CA for the HTTPS issuer. |
+| `vcluster.discoveryURL` | Issuer discovery | Optional HTTPS discovery address. |
+| `vcluster.backendTLS.apiVersion` | `gateway.networking.k8s.io/v1` | BackendTLSPolicy API served by the Gateway. |
+| `ingress.certificateAuthority` | System trust | PEM Gateway CA embedded in profile kubeconfigs. |
 | `database.storageClassName` | Cluster default | PostgreSQL data StorageClass. |
 | `database.backupStorageClassName` | Cluster default | PostgreSQL backup StorageClass. |
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |

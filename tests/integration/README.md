@@ -30,6 +30,7 @@ tests/unit.bash
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
 | `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | Document write and read through the generated connection Secret. Runs the backup CronJob and restores its archive with oplog replay into an isolated local MongoDB process. Checks the restored probe document. |
 | `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | Key write and read through the generated connection Secret. Enables backups on the running store, runs the CronJob, and checks the restored value in an isolated Redis process. Disables backups and checks that the backup PVC remains and Redis still accepts writes. |
+| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, profile isolation, streaming, PVC persistence, role downgrade and revocation, independent removal, and a PostgreSQL-backed STAC catalog. |
 
 All Datalabs use a matching profile-named prerequisite Secret. The Data
 fixture and the S3 fixture enable Data, and only the registry fixture starts a
@@ -50,6 +51,7 @@ tests/integration/run.bash verify-s3
 tests/integration/run.bash verify-postgres
 tests/integration/run.bash verify-mongo
 tests/integration/run.bash verify-redis
+tests/integration/run.bash verify-vcluster
 ```
 
 The network profile uses controlled HTTP targets to test generated policies.
@@ -59,18 +61,18 @@ fail with a connection error or timeout; an HTTP, DNS, or command error fails
 the check. The external connectivity target is `https://www.iana.org/`.
 Set `KEEP_NETWORK_RESOURCES=1` to retain successful resources.
 
-The registry profile installs Kyverno because the Educates runtime applies
-Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
-`2.2.1`, which contains Educates `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
+The registry profile installs Kyverno because the session runtime applies
+Kyverno policies. It then installs the EOEPCA+ dependency chart `2.2.1`, which
+contains the Educates session runtime `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
 retain successful resources.
 The registry probe allows time for the HTTP service to start. It reports
 the failed operation and HTTP status without printing credentials.
 
-The Data profile reuses the Educates installation and seeds one disposable
-MinIO bucket for file operations. It tests access through the runtime Service.
-It allows ten minutes for deployment creation. The five-minute composition
-response TTL and startup watch throttling can delay resource generation after
-the runtime Secret observer is ready.
+The Data profile reuses the session runtime installation and seeds one
+disposable MinIO bucket for file operations. It tests access through the
+runtime Service.
+It allows ten minutes for deployment creation. Startup watch throttling can
+delay resource generation after the runtime Secret observer is ready.
 Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 
 Integration fixtures also use only `datalab` and `datalab-custom`; profiles
@@ -95,7 +97,8 @@ Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
 The PostgreSQL profile installs Crunchy PGO `6.0.2`.
 Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
-resources. PGO remains installed after the profile finishes.
+resources. PGO remains installed after the profile finishes. Successful cleanup scales
+its Deployment to zero. The next profile scales it to one before use.
 
 The managed-store profiles use these fixed operator releases to check the
 resources emitted by the composition:
@@ -106,7 +109,9 @@ resources emitted by the composition:
   `redis.redis.opstreelabs.in/v1beta2`.
 
 Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB or Redis
-resources. Each operator remains installed after its profile finishes.
+resources. Each operator remains installed after its profile finishes. Successful
+cleanup scales it to zero after the Datalab, namespace, workloads, and finalizers
+are removed. Retained resources or a cleanup failure keep the operator running.
 Before an operator install or upgrade, the harness applies the CRDs from
 the selected chart. Helm does not update existing CRDs during an upgrade.
 
@@ -125,7 +130,7 @@ REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
 ## GitHub Actions
 
 Pull requests to `main`, pushes to `main`, and manual workflow runs execute the
-unit suite and all seven integration profiles. The profiles share one Kind
+unit suite and all eight integration profiles. The profiles share one Kind
 cluster in the job. Tag publication does not run the tests again. A release tag
 must point to a commit that passed the main-branch workflow.
 
@@ -140,8 +145,41 @@ KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
 
 Platform setup creates a fresh disposable TLS certificate for `*.lab.acme.com`.
 
-The pinned Educates controllers receive read-only CRD discovery permissions
+The session runtime controllers receive read-only CRD discovery permissions
 from `manifests/educates-rbac.yaml` before startup. The harness checks both
 controller rollouts before it creates a Datalab runtime. Controllers request
 CPU and memory so they receive a CPU share under local load. Their health
 probes allow five minutes for cold starts.
+
+The vcluster profile installs the session runtime, PGO, Keycloak, and Contour.
+It builds the catalog image, loads it into Kind, and deploys the STAC workload
+through the public virtual Kubernetes API. The migration Job installs PgSTAC in a
+Datalab PostgreSQL database. The API uses a separate database login. The test
+adds a collection and item, runs a spatial search, restarts the API, and checks
+the catalog again after a control-plane restart. It then removes one virtual
+cluster and checks that the other cluster and PostgreSQL remain available.
+
+## Test resource budget
+
+All profiles in a full run use one Kind cluster. CI creates a fresh cluster;
+local runs reuse the dedicated cluster. The platform setup scales unused
+PostgreSQL, MongoDB, and Redis operators to zero. Each database profile scales
+its operator to one and waits for readiness, including when it reuses a Helm
+release. Successful cleanup waits for resource deletion before scaling it down.
+An operator stays running if resources remain or cleanup fails. Crossplane,
+providers, storage, Educates, and identity services remain available.
+
+Integration uses a temporary composition with a `1m` response TTL. The generated
+deployment artifact and its `5m` default remain unchanged. This reduces periodic
+reconciliation waits; it does not change image pull or workload startup time.
+
+The runner and CI report CPU requests at profile boundaries. Backup and probe
+checks also report requests before they run. The report includes active Pod
+requests, init-container requirements, unscheduled requests, and node allocation.
+Use `tests/integration/resource-budget.bash` to read the current budget.
+This reports scheduler reservations, not measured CPU use.
+
+A probe or backup Pod has 90 seconds to schedule before its execution wait.
+An unscheduled Pod reports its events, CPU request budget, and node allocation.
+The longer backup completion wait starts only after scheduling succeeds. The
+full suite retains MongoDB and Redis backup and restore checks.

@@ -64,25 +64,44 @@ jobs:
           kube apply -f tests/integration/manifests/s3/keycloak.yaml
 
       - name: Verify Datalab network policy
-        run: tests/integration/verify-network.bash
+        run: |
+          tests/integration/verify-network.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab registry
-        run: tests/integration/verify-registry.bash
+        run: |
+          tests/integration/verify-registry.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab Data service
-        run: tests/integration/verify-data.bash
+        run: |
+          tests/integration/verify-data.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab S3 endpoint
-        run: tests/integration/verify-s3.bash
+        run: |
+          tests/integration/verify-s3.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab PostgreSQL
-        run: tests/integration/verify-postgres.bash
+        run: |
+          tests/integration/verify-postgres.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab MongoDB
-        run: tests/integration/verify-mongo.bash
+        run: |
+          tests/integration/verify-mongo.bash
+          tests/integration/resource-budget.bash
 
       - name: Verify Datalab Redis
-        run: tests/integration/verify-redis.bash
+        run: |
+          tests/integration/verify-redis.bash
+          tests/integration/resource-budget.bash
+
+      - name: Verify Datalab virtual clusters and STAC catalog
+        run: |
+          tests/integration/verify-vcluster.bash
+          tests/integration/resource-budget.bash
 
       - name: Collect integration diagnostics
         if: failure()

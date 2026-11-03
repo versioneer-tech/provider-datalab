@@ -1,0 +1,74 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: catalog-migrate
+  namespace: demo
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+      - name: migrate
+        image: __CATALOG_IMAGE__
+        imagePullPolicy: IfNotPresent
+        command: [python, /opt/catalog/migrate.py]
+        envFrom:
+        - secretRef:
+            name: catalog-postgres-admin
+        env:
+        - name: CATALOG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: catalog-postgres
+              key: PGPASSWORD
+        resources:
+          requests: {cpu: 50m, memory: 128Mi}
+          limits: {memory: 512Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: catalog}
+  template:
+    metadata:
+      labels: {app: catalog}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: api
+        image: __CATALOG_IMAGE__
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - secretRef:
+            name: catalog-postgres
+        env:
+        - {name: ENABLE_TRANSACTIONS_EXTENSIONS, value: "true"}
+        - {name: STAC_FASTAPI_TITLE, value: Datalab STAC catalog}
+        readinessProbe:
+          httpGet: {path: /, port: 8080}
+          initialDelaySeconds: 3
+        resources:
+          requests: {cpu: 50m, memory: 128Mi}
+          limits: {memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: demo
+spec:
+  selector: {app: catalog}
+  ports:
+  - {name: http, port: 8080, targetPort: 8080}

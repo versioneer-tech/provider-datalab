@@ -17,9 +17,9 @@ spec:
     state: stopped
 ```
 
-The state defaults to `started`. A started session has an Educates
-`WorkshopSession` and a workspace Pod. A stopped session keeps its PVC without
-a running workspace. Change its state to `started` to use the same PVC again.
+The state defaults to `started`. A started session has a workspace Pod.
+A stopped session keeps its PVC without a running workspace. Change its state
+to `started` to use the same PVC again.
 Several sessions can run at once; each has its own Pod and PVC and shares the
 Datalab's credentials and managed services.
 
@@ -204,7 +204,8 @@ kubectl describe datalab s-jeff -n workspace
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
 Session state, phase, messages, and URLs remain in `status.sessions`.
-`status.connections` is reserved and is not populated by this Educates runtime.
+Virtual cluster access profiles are reported in `status.connections`. See
+[API access](vcluster.md#api-access) for endpoints and Secret references.
 
 ### Connect to databases
 

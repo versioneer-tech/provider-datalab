@@ -1,0 +1,65 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-vcluster-it
+data:
+  iam:
+    realm: integration
+    namespace: keycloak
+    internalURL: http://keycloak.keycloak:8080/realms/integration
+    issuerURL: https://keycloak.keycloak:8443/realms/integration
+  ingress:
+    class: nginx
+    domain: lab.acme.com
+    secret: wildcard-tls
+  httpRoute:
+    enabled: true
+    parentName: verify-vcluster
+    parentNamespace: projectcontour
+    sectionName: https
+  vcluster:
+    storage: 1Gi
+    backendTLS:
+      apiVersion: gateway.networking.k8s.io/v1alpha3
+    storageClasses:
+      allowed:
+      - standard
+      default: standard
+  storage:
+    endpoint: http://default-hl.minio:9000
+    secretNamespace: workspace
+    forcePathStyle: true
+  network:
+    internalEgress:
+    - namespace: kube-system
+      podSelector:
+        matchLabels:
+          component: kube-apiserver
+      ports:
+      - {port: 6443, protocol: TCP}
+      - {port: 443, protocol: TCP}
+    serviceCIDR: 10.96.0.0/16
+    podCIDRs:
+    - 10.244.0.0/16
+    externalEgressCIDRs:
+    - 0.0.0.0/0
+    blacklistIPs:
+    - 169.254.169.254/32
+  storageClasses:
+    allowed: [standard]
+  defaults:
+    vcluster:
+      enabled: false
+    data:
+      enabled: false
+    registry:
+      enabled: false
+    overallQuota:
+      storage: 20Gi
+    security:
+      policy: baseline
+      kubernetesAccess: false
+      externalEgress: false

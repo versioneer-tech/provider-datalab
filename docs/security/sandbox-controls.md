@@ -1,8 +1,8 @@
 # Network policies
 
-Provider Datalab creates egress policies through the Educates environment and
-Data policies directly in the runtime namespace. The cluster CNI must enforce
-Kubernetes NetworkPolicy for these rules to take effect.
+Provider Datalab creates egress and Data policies in the Datalab namespace.
+The cluster CNI must enforce Kubernetes NetworkPolicy for these rules to take
+effect.
 
 ## Generated egress policies
 
@@ -38,7 +38,7 @@ Standard NetworkPolicy cannot express ordered deny rules or DNS-name rules.
 
 ## Data service policies
 
-For session access, packageR accepts port 8888 from Educates workshop Pods.
+For session access, packageR accepts port 8888 from session Pods.
 For permanent access, its OAuth proxy accepts port 4180. See
 [Data and sharing](../how-to-guides/usage_concepts.md#data-and-sharing) for
 browser access and public links.

@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+import json
 import re
 from decimal import Decimal
 
@@ -103,3 +104,31 @@ def _session_state(session):
         else "started"
     )
     return {"running": "started", "paused": "stopped"}.get(state, state)
+
+
+def _resource_name(*parts, limit=63):
+    name = "-".join(parts)
+    if len(name) <= limit and (
+        len(parts) == 1 or all("-" not in part for part in parts)
+    ):
+        return name
+    # Keep component boundaries distinct when instance and profile names have hyphens.
+    digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+    return name[: limit - 11].rstrip("-") + "-" + digest
+
+
+def _vcluster_profile(name, instance, group):
+    return _resource_name(name, "vcluster", instance, group, limit=55)
+
+
+def _vcluster_role(instance, group):
+    return f"vcluster:{instance}:{group}"
+
+
+def _runtime_namespace(req, name):
+    environment = _extract_manifest(
+        req.observed.resources.get(f"workshopenvironment-{name}")
+    )
+    return ((environment.get("status") or {}).get("educates") or {}).get(
+        "namespace"
+    ) or ""

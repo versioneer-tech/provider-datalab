@@ -1,0 +1,28 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-control-plane
+  namespace: verify-vcluster
+spec:
+  podSelector:
+    matchLabels:
+      postgres-operator.crunchydata.com/cluster: pg0
+  policyTypes: [Egress]
+  egress:
+  # Host-network API endpoints do not always match namespace selectors.
+  - ports:
+    - {protocol: TCP, port: 443}
+    - {protocol: TCP, port: 6443}
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - {protocol: TCP, port: 53}
+    - {protocol: UDP, port: 53}

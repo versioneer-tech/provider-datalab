@@ -43,7 +43,12 @@ install_datalab() {
   kube apply -f "${REPO_ROOT}/dependencies/03-providerConfigs.yaml"
   kube apply -f "${REPO_ROOT}/xrd.yaml"
   wait_for_crd_established datalabs.pkg.internal
-  kube apply -f "${REPO_ROOT}/composition.yaml"
+  local composition_directory
+  composition_directory="$(mktemp -d /tmp/xyz-integration-composition.XXXXXX)"
+  python3 "${REPO_ROOT}/scripts/build-composition.py" --response-ttl 1m \
+    --output "${composition_directory}/composition.yaml"
+  kube apply -f "${composition_directory}/composition.yaml"
+  rm -rf "${composition_directory}"
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
 }
 
@@ -70,6 +75,8 @@ main() {
   kube apply -f "${MANIFEST_DIR}/storage-secrets.yaml"
   kube rollout status deployment/default --namespace minio --timeout=5m
   wait_for_packages
+  park_unused_operators
+  resource_budget
   kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io
 }
 

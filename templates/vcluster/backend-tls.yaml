@@ -1,0 +1,19 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: ${apiVersion}
+kind: BackendTLSPolicy
+metadata:
+  name: ${runtime}
+  namespace: ${namespace}
+spec:
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: ${runtime}
+  validation:
+    hostname: ${backend_hostname}
+    caCertificateRefs:
+    - group: ''
+      kind: ConfigMap
+      name: ${ca_name}

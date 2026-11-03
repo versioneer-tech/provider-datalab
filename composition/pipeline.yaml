@@ -62,6 +62,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-educates-objects.py
+  - step: update-vclusters
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-vclusters.py
   - step: update-data-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -97,6 +104,20 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-session-status.py
+  - step: publish-vcluster-connections
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/publish-vcluster-connections.py
+  - step: protect-vcluster-resources
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/protect-vcluster-resources.py
   - step: check-resource-readiness
     functionRef:
       name: crossplane-contrib-function-auto-ready

@@ -9,7 +9,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
 
 if [[ "${1:-}" == all ]]; then
-  profiles=(verify-network verify-registry verify-data verify-s3 verify-postgres verify-mongo verify-redis)
+  profiles=(verify-network verify-registry verify-data verify-s3 verify-postgres verify-mongo verify-redis verify-vcluster)
 else
   profiles=("$(selected_profile "${1:-}" "$0")")
 fi
@@ -24,6 +24,8 @@ printf 'Platform setup passed in %s seconds.\n' "$((SECONDS - started))"
 
 for profile in "${profiles[@]}"; do
   started=${SECONDS}
+  resource_budget
   "${INTEGRATION_DIR}/${profile}.bash"
+  resource_budget
   printf '\nIntegration profile %s passed in %s seconds.\n' "${profile}" "$((SECONDS - started))"
 done

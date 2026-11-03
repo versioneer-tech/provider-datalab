@@ -4,9 +4,9 @@ A session can use the credentials, volumes, Kubernetes permissions, and
 network access available to its Pod. The platform operator decides who may
 use them and sets the [EnvironmentConfig](../how-to-guides/installation.md#environmentconfig-values-and-defaults).
 
-Provider Datalab passes session settings to Educates and creates network
-policies. The cluster must enforce these controls through its CNI, admission
-rules, Pod security, and RBAC.
+Provider Datalab configures sessions and creates network policies. The cluster
+must enforce these controls through its CNI, admission rules, Pod security,
+and RBAC.
 
 | Control | Details |
 | --- | --- |

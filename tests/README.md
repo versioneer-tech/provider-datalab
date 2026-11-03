@@ -19,7 +19,8 @@ checks also reject an invalid snapshot before it replaces an older backup.
 The TTL checks run generated Python steps in the same function container
 and call auto-ready through its function service.
 They check the default and a changed build setting with store-enabled and
-early-return inputs. They also reject invalid durations and functions whose
+early-return inputs. They check the separate one-minute integration build without changing the
+deployment default. They also reject invalid durations and functions whose
 TTL is not configured by the build. Render checks do not measure live timing.
 
 ## Run the suite
@@ -62,8 +63,13 @@ the environment settings.
 | --- | --- | --- |
 | `001` | `datalab` | Data without sessions, default environment, credential rotation |
 | `002` | `datalab` | Default environment selection, writable Data, managed stores |
-| `003` | `datalab-custom` | vCluster session, read-only Data, PostgreSQL |
+| `003` | `datalab-custom` | vCluster session, named virtual cluster, read-only Data, PostgreSQL |
 | `004` | `datalab-custom` | Started and stopped sessions, file bundles, workspace PVCs |
 
 For API or composition changes, use an existing scenario when it covers the
 required behavior. Add a scenario only for a missing observable outcome.
+
+Virtual cluster checks cover two independent instances, profile Secrets,
+instance removal and session coexistence. Kubernetes admission checks invalid
+store names in the integration profile. Live routing,
+streaming, persistence, and the STAC catalog are checked by `verify-vcluster`.

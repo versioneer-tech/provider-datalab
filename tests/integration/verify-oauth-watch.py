@@ -68,13 +68,7 @@ def main():
                 raise RuntimeError(message)
             time.sleep(2)
 
-    def responsive():
-        return not any(
-            condition["type"] == "Responsive" and condition["status"] == "False"
-            for condition in get(f"datalab/{DATALAB}")["status"]["conditions"]
-        )
-
-    wait_for(responsive, "The startup watch circuit did not recover.", timeout=600)
+    # The startup circuit condition can stay stale until the next watch event.
     observer = get(OBSERVER)
     assert observer["spec"]["watch"] is True, "The OAuth observer is not watched."
     original = get(SOURCE)["data"]

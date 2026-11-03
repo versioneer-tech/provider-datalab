@@ -1,0 +1,21 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: Client
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    realmId: ${realm}
+    name: ${profile}
+    clientId: ${profile}
+    accessType: CONFIDENTIAL
+    fullScopeAllowed: false
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+  writeConnectionSecretToRef:
+    name: ${spec_writeConnectionSecretToRef_name}

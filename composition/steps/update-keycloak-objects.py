@@ -8,6 +8,8 @@ from composition.helpers import (
     _safe_str,
     _session_name,
     _to_dict,
+    _vcluster_profile,
+    _vcluster_role,
 )
 from composition.render import _render_template
 
@@ -59,6 +61,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     )
     s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
     if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
+        extra_audiences = _distinct([*extra_audiences, xr_name])
+    if spec.get("vclusters"):
         extra_audiences = _distinct([*extra_audiences, xr_name])
     domain = ingress_env.get("domain", "default")
     url = f"https://{xr_name}.{domain}"
@@ -261,6 +265,86 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         ),
         f"{xr_name}-ws-api",
     )
+
+    for instance, config in sorted((spec.get("vclusters") or {}).items()):
+        for group in sorted(config["groups"], key=lambda item: item["name"]):
+            profile = _vcluster_profile(xr_name, instance, group["name"])
+            role_name = _vcluster_role(instance, group["name"])
+            put(
+                "keycloak-vcluster-role",
+                _render_template(
+                    req,
+                    "vcluster/identity-role",
+                    realm=realm,
+                    role_name=role_name,
+                    xr_name=xr_name,
+                ),
+                profile,
+            )
+            put(
+                "keycloak-vcluster-client",
+                _render_template(
+                    req,
+                    "vcluster/identity-client",
+                    realm=realm,
+                    profile=profile,
+                    spec_writeConnectionSecretToRef_name=f"{profile}-oauth",
+                ),
+                profile,
+            )
+            put(
+                "keycloak-vcluster-scope",
+                _render_template(
+                    req, "vcluster/identity-scope", realm=realm, profile=profile
+                ),
+                profile,
+            )
+            state = (getattr(req.observed, "resources", {}) or {}).get(
+                f"keycloak-vcluster-client-{profile}"
+            )
+            client_state = _to_dict(state.resource) if state else {}
+            client_identity = (client_state.get("status") or {}).get("atProvider") or {}
+            resolved = {}
+            owner_state = (getattr(req.observed, "resources", {}) or {}).get(
+                f"keycloak-client-{xr_name}"
+            )
+            owner_identity = (
+                _to_dict(owner_state.resource).get("status", {}).get("atProvider", {})
+                if owner_state
+                else {}
+            )
+            if owner_identity.get("id") and client_identity.get("serviceAccountUserId"):
+                resolved = {
+                    "clientId": owner_identity["id"],
+                    "serviceAccountUserId": client_identity["serviceAccountUserId"],
+                    "role": role_name,
+                }
+            put(
+                "keycloak-vcluster-assignment",
+                _render_template(
+                    req,
+                    "vcluster/identity-assignment",
+                    spec_forProvider={
+                        "realmId": realm,
+                        "clientIdRef": {"name": xr_name},
+                        "roleRef": {"name": profile},
+                        "serviceAccountUserClientIdRef": {"name": profile},
+                        **resolved,
+                    },
+                ),
+                profile,
+            )
+            put(
+                "keycloak-vcluster-audience",
+                _render_template(
+                    req,
+                    "vcluster/identity-audience",
+                    realm=realm,
+                    profile=profile,
+                    xr_name=xr_name,
+                ),
+                profile,
+            )
 
     users = list(spec.get("users", []) or [])
     userOverrides = spec.get("userOverrides", {}) or {}

@@ -1,0 +1,146 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ${runtime}
+  namespace: ${namespace}
+  labels:
+    app: ${runtime}
+    release: ${runtime}
+spec:
+  selector:
+    matchLabels:
+      app: ${runtime}
+      release: ${runtime}
+  serviceName: ${headless_service}
+  podManagementPolicy: Parallel
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        datalabs.pkg.internal/configuration-checksum: ${configuration_checksum}
+      labels:
+        app: ${runtime}
+        release: ${runtime}
+    spec:
+      terminationGracePeriodSeconds: 15
+      serviceAccountName: ${service_account}
+      volumes:
+      - name: helm-cache
+        emptyDir: {}
+      - emptyDir: {}
+        name: binaries
+      - name: tmp
+        emptyDir: {}
+      - name: certs
+        emptyDir: {}
+      - name: vcluster-config
+        secret:
+          secretName: ${config_secret}
+      - configMap:
+          name: ${authentication_name}
+        name: authentication
+      - name: data
+        persistentVolumeClaim:
+          claimName: ${data_pvc}
+      initContainers:
+      - name: kubernetes
+        image: ghcr.io/loft-sh/kubernetes:v1.36.0
+        volumeMounts:
+        - mountPath: /binaries
+          name: binaries
+        command:
+        - cp
+        args:
+        - -r
+        - /kubernetes/.
+        - /binaries/
+        securityContext: {}
+        resources:
+          limits:
+            cpu: 100m
+            memory: 256Mi
+          requests:
+            cpu: 40m
+            memory: 64Mi
+      enableServiceLinks: true
+      containers:
+      - name: syncer
+        image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8443
+            scheme: HTTPS
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 60
+        startupProbe:
+          httpGet:
+            path: /readyz
+            port: 8443
+            scheme: HTTPS
+          periodSeconds: 6
+          timeoutSeconds: 3
+          failureThreshold: 300
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsGroup: 0
+          runAsUser: 0
+        resources:
+          limits:
+            ephemeral-storage: 10Gi
+            memory: 4Gi
+          requests:
+            cpu: 200m
+            ephemeral-storage: 1Gi
+            memory: 256Mi
+        env:
+        - name: VCLUSTER_NAME
+          value: ${runtime}
+        - name: LOFT_LOG_ENCODING
+          value: console
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: binaries
+          mountPath: /binaries
+        - name: certs
+          mountPath: /pki
+        - name: helm-cache
+          mountPath: /.cache/helm
+        - name: vcluster-config
+          mountPath: /var/lib/vcluster
+        - name: tmp
+          mountPath: /tmp
+        - mountPath: /etc/datalab
+          name: authentication
+          readOnly: true

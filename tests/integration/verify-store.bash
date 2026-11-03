@@ -107,9 +107,7 @@ install_operator() {
     mongo) install_mongo_operator ;;
     redis) install_redis_operator ;;
   esac
-  kube wait "deployment/${OPERATOR_DEPLOYMENT}" \
-    --namespace "${OPERATOR_NAMESPACE}" \
-    --for=condition=Available --timeout=5m
+  start_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}"
   wait_for_crd_established "${RESOURCE_TYPE}"
 }
 
@@ -180,6 +178,7 @@ verify_mongo_backup() {
     --ignore-not-found --wait=true
   kube create job "${backup_job}" --from=cronjob/mongodb-verify-backup \
     --namespace "${STORE_NAMESPACE}"
+  wait_for_job_scheduling "${STORE_NAMESPACE}" "${backup_job}" || return 1
   if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
     --for=condition=Complete --timeout=10m; then
     kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
@@ -224,6 +223,7 @@ verify_redis_backup() {
     --ignore-not-found --wait=true
   kube create job "${backup_job}" --from=cronjob/redis-verify-backup \
     --namespace "${STORE_NAMESPACE}"
+  wait_for_job_scheduling "${STORE_NAMESPACE}" "${backup_job}" || return 1
   if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
     --for=condition=Complete --timeout=10m; then
     kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
@@ -266,10 +266,12 @@ cleanup_successful_verification() {
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
-    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true
+    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true --timeout=5m
+    stop_unused_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}" "${RESOURCE_TYPE}"
   else
     printf '%s cleanup is still running; resources were kept for diagnosis.\n' \
       "${store_type}" >&2
+    return 1
   fi
 }
 

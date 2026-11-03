@@ -17,6 +17,7 @@ if ! kind_cluster_exists; then
 fi
 
 require_cluster
+resource_budget || true
 
 kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io || true
 kube get datalabs.pkg.internal --all-namespaces || true

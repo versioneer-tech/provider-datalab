@@ -1,0 +1,14 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: ${key}
+  namespace: ${namespace}
+  annotations:
+    crossplane.io/composition-resource-name: ${key}
+spec:
+  replayDeletion: true
+  of: ${spec_of}
+  by: ${spec_by}

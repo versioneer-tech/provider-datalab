@@ -32,7 +32,7 @@ the required audience and roles too.
 ## Generated session resources
 
 For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
-`lab.acme.com`. Educates then creates session ingress hosts such as:
+`lab.acme.com`. The session ingress hosts include:
 
 ```text
 s-jane-default.lab.acme.com
@@ -75,7 +75,7 @@ policy should require `ws_api` and any configured audience.
 
 Set the ingress class, domain, and TLS Secret in the
 [EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
-values in the Educates installation, for example:
+values in the session runtime installation, for example:
 
 ```yaml
 clusterIngressDomain: lab.acme.com
