@@ -174,6 +174,7 @@ verify_connection() {
 run_network_checks() {
   local open_service closed_service peer_service
   local minio_service vcluster_service
+  local external_ip external_target
 
   open_service="$(service_ip "${NS_OPEN}")"
   closed_service="$(service_ip "${NS_CLOSED}")"
@@ -181,6 +182,12 @@ run_network_checks() {
   minio_service="$(kube get service/default-hl --namespace minio \
     -o jsonpath='{.spec.clusterIP}')"
   vcluster_service="$(vcluster_service_ip)"
+
+  # The closed environment can block DNS as well as external traffic.
+  external_ip="$(kube exec --namespace "${NS_OPEN}" client -- curl -4 -fsS \
+    --connect-timeout 5 --max-time 15 --output /dev/null --write-out '%{remote_ip}' "${NETWORK_EXTERNAL_URL}")"
+  external_target="$(python3 -c 'import sys; from urllib.parse import urlsplit; u = urlsplit(sys.argv[1]); print("{}:{}".format(u.hostname, u.port or {"http": 80, "https": 443}[u.scheme]))' "${NETWORK_EXTERNAL_URL}")"
+  [[ -n "${external_ip}" ]]
 
   verify_connection 'open: same-namespace Service IP' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${open_service}/ >/dev/null"
@@ -200,7 +207,7 @@ run_network_checks() {
   verify_connection 'closed: vCluster Service IP' "${NS_CLOSED}" block \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_service}:443/ >/dev/null"
   verify_connection 'closed: external URL' "${NS_CLOSED}" block \
-    "curl -fsS --connect-timeout 5 --max-time 15 ${NETWORK_EXTERNAL_URL} >/dev/null"
+    "curl -4 -fsS --resolve ${external_target}:${external_ip} --connect-timeout 5 --max-time 15 ${NETWORK_EXTERNAL_URL} >/dev/null"
   verify_connection 'closed: configured MinIO backend' "${NS_CLOSED}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${minio_service}:9000/minio/health/ready >/dev/null"
 
@@ -225,6 +232,7 @@ cleanup_successful_verification() {
 main() {
   require_cluster
   require_command jq
+  require_command python3
   apply_verification_resources
   wait_for_verification_resources
   run_network_checks
