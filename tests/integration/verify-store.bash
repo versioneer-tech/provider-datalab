@@ -77,6 +77,10 @@ install_mongo_operator() {
     --version "${MONGODB_OPERATOR_VERSION}" \
     --set-string 'operator.watchNamespace=*' \
     --set 'operator.watchedResources={mongodbcommunity}' \
+    --set operator.resources.requests.cpu=100m \
+    --set operator.resources.requests.memory=128Mi \
+    --set operator.resources.limits.cpu=500m \
+    --set operator.resources.limits.memory=512Mi \
     --wait \
     --timeout 10m
 }
@@ -97,6 +101,10 @@ install_redis_operator() {
     --create-namespace \
     --version "${REDIS_OPERATOR_CHART_VERSION}" \
     --set issuer.create=false \
+    --set resources.requests.cpu=100m \
+    --set resources.requests.memory=128Mi \
+    --set resources.limits.cpu=500m \
+    --set resources.limits.memory=512Mi \
     --wait \
     --timeout 10m
 }
@@ -107,6 +115,9 @@ install_operator() {
     mongo) install_mongo_operator ;;
     redis) install_redis_operator ;;
   esac
+  kube set resources "deployment/${OPERATOR_DEPLOYMENT}" --namespace "${OPERATOR_NAMESPACE}" \
+    --containers "${OPERATOR_DEPLOYMENT}" \
+    --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=512Mi
   start_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}"
   wait_for_crd_established "${RESOURCE_TYPE}"
 }
@@ -266,7 +277,7 @@ cleanup_successful_verification() {
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
-    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true --timeout=5m
+    kube delete namespace "${STORE_NAMESPACE}" --ignore-not-found --wait=true --timeout=10m
     stop_unused_operator "${OPERATOR_NAMESPACE}" "${OPERATOR_DEPLOYMENT}" "${RESOURCE_TYPE}"
   else
     printf '%s cleanup is still running; resources were kept for diagnosis.\n' \
