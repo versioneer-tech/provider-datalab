@@ -44,7 +44,7 @@ The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 Integration can build a separate artifact with a shorter TTL:
 
 ```bash
-python3 scripts/build-composition.py --response-ttl 1m --output /tmp/xyz-composition.yaml
+python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
 ```
 
 A TTL override requires a separate output file. The build does not change

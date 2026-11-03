@@ -261,7 +261,7 @@ wait_for_probe() {
 
 resource_budget() (
   local directory
-  directory="$(mktemp -d /tmp/xyz-resource-budget.XXXXXX)"
+  directory="$(mktemp -d /tmp/datalab-resource-budget.XXXXXX)"
   trap 'rm -rf "${directory}"' EXIT
   kube get nodes -o json | jq '[.items[] | {metadata: {name: .metadata.name}, status: {allocatable: .status.allocatable}}]' >"${directory}/nodes.json"
   kube get pods --all-namespaces -o json | jq '[.items[] | {

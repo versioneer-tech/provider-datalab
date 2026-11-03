@@ -12,7 +12,7 @@ source "${INTEGRATION_DIR}/postgres.bash"
 readonly EDUCATES_NAMESPACE=educates
 readonly VCLUSTER_NAMESPACE=verify-vcluster
 readonly CONTOUR_VERSION=v1.33.7
-work_directory="$(mktemp -d /tmp/xyz-vcluster.XXXXXX)"
+work_directory="$(mktemp -d /tmp/datalab-vcluster.XXXXXX)"
 trap 'rm -rf "${work_directory}"' EXIT
 
 report_failure() {
@@ -142,10 +142,10 @@ print("PASS connection status contains ready profile references without credenti
       -f - >"${work_directory}/storage-admission.log" 2>&1 <<PVC
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata: {name: xyz-disallowed, namespace: ${runtime_namespace}}
+metadata: {name: unapproved-storage-probe, namespace: ${runtime_namespace}}
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: xyz-disallowed
+  storageClassName: unapproved-storage
   resources: {requests: {storage: 1Mi}}
 PVC
     then

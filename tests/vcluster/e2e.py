@@ -261,7 +261,7 @@ def admin_token():
 
 def negative_token(label, roles, audience=LAB, lifetime=None):
     admin = admin_token()
-    client = "xyz-" + label
+    client = "vcluster-test-" + label
     clients = identity(
         "/admin/realms/integration/clients?clientId=" + client, token=admin
     )
@@ -276,7 +276,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
         "/admin/realms/integration/clients",
         {
             "clientId": client,
-            "secret": "xyz-test-secret",
+            "secret": "vcluster-test-secret",
             "enabled": True,
             "serviceAccountsEnabled": True,
             "standardFlowEnabled": False,
@@ -284,7 +284,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
             "attributes": {"access.token.lifespan": str(lifetime)} if lifetime else {},
             "protocolMappers": [
                 {
-                    "name": "xyz-roles",
+                    "name": "test-roles",
                     "protocol": "openid-connect",
                     "protocolMapper": "oidc-hardcoded-claim-mapper",
                     "config": {
@@ -296,7 +296,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
                     },
                 },
                 {
-                    "name": "xyz-audience",
+                    "name": "test-audience",
                     "protocol": "openid-connect",
                     "protocolMapper": "oidc-audience-mapper",
                     "config": {
@@ -308,7 +308,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
         },
         token=admin,
     )
-    return token(client, "xyz-test-secret")
+    return token(client, "vcluster-test-secret")
 
 
 def main():
@@ -389,7 +389,7 @@ def main():
         other = profile_token("other", "vc1")
         assert (
             api(
-                "/api/v1/namespaces/default/configmaps/xyz-instance",
+                "/api/v1/namespaces/default/configmaps/instance-probe",
                 other,
                 instance="vc1",
             )["data"]["instance"]
@@ -412,14 +412,14 @@ def main():
         return
 
     bearer = profile_token("administrator")
-    marker = Path("/tmp/xyz-editor-token")
+    marker = Path("/tmp/vcluster-editor-token")
     if args.read_only or args.revoked:
         editor = marker.read_text()
         deadline = time.monotonic() + 180
         while True:
             try:
                 api(
-                    "/api/v1/namespaces/demo/configmaps/xyz-editor",
+                    "/api/v1/namespaces/demo/configmaps/editor-probe",
                     editor,
                     expected=(401, 403) if args.revoked else 200,
                 )
@@ -430,7 +430,7 @@ def main():
                     body={
                         "apiVersion": "v1",
                         "kind": "ConfigMap",
-                        "metadata": {"name": "xyz-denied"},
+                        "metadata": {"name": "denied-probe"},
                     },
                     expected=(401, 403),
                 )
@@ -445,7 +445,7 @@ def main():
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(3)
-        api("/api/v1/namespaces/demo/configmaps/xyz-editor", bearer)
+        api("/api/v1/namespaces/demo/configmaps/editor-probe", bearer)
         print(
             (
                 "PASS revoked profile with retained namespace data"
@@ -516,7 +516,7 @@ def main():
                     "volumes": [
                         {
                             "name": "data",
-                            "persistentVolumeClaim": {"claimName": "xyz-data"},
+                            "persistentVolumeClaim": {"claimName": "workload-data"},
                         }
                     ],
                 },
@@ -532,14 +532,14 @@ def main():
             assert time.monotonic() < deadline, "PVC workload did not start"
             time.sleep(3)
 
-    path = "/api/v1/namespaces/default/configmaps/xyz-marker"
+    path = "/api/v1/namespaces/default/configmaps/restart-marker"
     if args.check_only:
         assert api(path, bearer)["data"]["marker"] == "persistent"
-        volume_pod("xyz-volume-reader", "cat /data/marker && echo && sleep 3600")
+        volume_pod("volume-reader", "cat /data/marker && echo && sleep 3600")
         deadline = time.monotonic() + 60
         while (
             api(
-                "/api/v1/namespaces/demo/pods/xyz-volume-reader/log", editor, raw=True
+                "/api/v1/namespaces/demo/pods/volume-reader/log", editor, raw=True
             ).strip()
             != "persistent"
         ):
@@ -561,19 +561,19 @@ def main():
             body={
                 "apiVersion": "v1",
                 "kind": "ConfigMap",
-                "metadata": {"name": "xyz-instance"},
+                "metadata": {"name": "instance-probe"},
                 "data": {"instance": instance},
             },
         )
     assert (
-        api("/api/v1/namespaces/default/configmaps/xyz-instance", bearer)["data"][
+        api("/api/v1/namespaces/default/configmaps/instance-probe", bearer)["data"][
             "instance"
         ]
         == "vc0"
     )
     assert (
         api(
-            "/api/v1/namespaces/default/configmaps/xyz-instance", other, instance="vc1"
+            "/api/v1/namespaces/default/configmaps/instance-probe", other, instance="vc1"
         )["data"]["instance"]
         == "vc1"
     )
@@ -597,14 +597,14 @@ def main():
         {
             "apiVersion": "v1",
             "kind": "ConfigMap",
-            "metadata": {"name": "xyz-marker"},
+            "metadata": {"name": "restart-marker"},
             "data": {"marker": "persistent"},
         },
         method="POST",
         expected=201,
     )
     api(
-        "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/checks.xyz.internal",
+        "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/checks.vcluster-test.internal",
         bearer,
         method="DELETE",
         expected=(200, 404),
@@ -615,9 +615,9 @@ def main():
         {
             "apiVersion": "apiextensions.k8s.io/v1",
             "kind": "CustomResourceDefinition",
-            "metadata": {"name": "checks.xyz.internal"},
+            "metadata": {"name": "checks.vcluster-test.internal"},
             "spec": {
-                "group": "xyz.internal",
+                "group": "vcluster-test.internal",
                 "scope": "Namespaced",
                 "names": {"plural": "checks", "singular": "check", "kind": "Check"},
                 "versions": [
@@ -634,7 +634,7 @@ def main():
         expected=201,
     )
     api(
-        "/api/v1/namespaces/default/pods/xyz-workload",
+        "/api/v1/namespaces/default/pods/admin-workload",
         bearer,
         method="DELETE",
         expected=(200, 404),
@@ -645,7 +645,7 @@ def main():
         {
             "apiVersion": "v1",
             "kind": "Pod",
-            "metadata": {"name": "xyz-workload"},
+            "metadata": {"name": "admin-workload"},
             "spec": {
                 "containers": [
                     {
@@ -673,7 +673,7 @@ def main():
     )
     deadline = time.monotonic() + 300
     while (
-        api("/api/v1/namespaces/default/pods/xyz-workload", bearer)
+        api("/api/v1/namespaces/default/pods/admin-workload", bearer)
         .get("status", {})
         .get("phase")
         != "Running"
@@ -690,7 +690,7 @@ def main():
         {
             "apiVersion": "v1",
             "kind": "ConfigMap",
-            "metadata": {"name": "xyz-editor"},
+            "metadata": {"name": "editor-probe"},
             "data": {"marker": "retained"},
         },
         method="POST",
@@ -704,7 +704,7 @@ def main():
         body={
             "apiVersion": "v1",
             "kind": "Namespace",
-            "metadata": {"name": "xyz-denied"},
+            "metadata": {"name": "denied-probe"},
         },
         expected=403,
     )
@@ -716,7 +716,7 @@ def main():
         body={
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "ClusterRoleBinding",
-            "metadata": {"name": "xyz-denied"},
+            "metadata": {"name": "denied-probe"},
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
@@ -740,7 +740,7 @@ def main():
         body={
             "apiVersion": "v1",
             "kind": "PersistentVolumeClaim",
-            "metadata": {"name": "xyz-data"},
+            "metadata": {"name": "workload-data"},
             "spec": {
                 "accessModes": ["ReadWriteOnce"],
                 "storageClassName": "standard",
@@ -749,11 +749,11 @@ def main():
         },
     )
     volume_pod(
-        "xyz-volume-writer",
-        "printf persistent > /data/marker; echo xyz-log; mkdir -p /www; echo xyz-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
+        "volume-writer",
+        "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
     )
     assert (
-        api("/api/v1/namespaces/demo/persistentvolumeclaims/xyz-data", editor)[
+        api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)[
             "status"
         ]["phase"]
         == "Bound"
@@ -801,7 +801,7 @@ def main():
     config["clusters"][0]["cluster"][
         "proxy-url"
     ] = f"http://127.0.0.1:{proxy.server_port}"
-    kubeconfig = Path("/tmp/xyz-kubeconfig")
+    kubeconfig = Path("/tmp/vcluster-kubeconfig")
     kubeconfig.write_text(json.dumps(config))
     kubeconfig.chmod(0o600)
     command = [
@@ -815,26 +815,26 @@ def main():
     ]
     try:
         result = subprocess.run(
-            [*command, "exec", "xyz-volume-writer", "--", "printf", "xyz-exec"],
+            [*command, "exec", "volume-writer", "--", "printf", "stream-exec"],
             capture_output=True,
             text=True,
             timeout=60,
         )
-        assert result.returncode == 0 and result.stdout == "xyz-exec", result.stderr
+        assert result.returncode == 0 and result.stdout == "stream-exec", result.stderr
         result = subprocess.run(
-            [*command, "logs", "xyz-volume-writer"],
+            [*command, "logs", "volume-writer"],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        assert result.returncode == 0 and "xyz-log" in result.stdout, result.stderr
+        assert result.returncode == 0 and "stream-log" in result.stdout, result.stderr
         events = api(
             "/api/v1/namespaces/demo/configmaps?watch=true&timeoutSeconds=2",
             editor,
             raw=True,
         )
         assert any(
-            json.loads(line)["object"]["metadata"]["name"] == "xyz-editor"
+            json.loads(line)["object"]["metadata"]["name"] == "editor-probe"
             for line in events.splitlines()
             if line.strip()
         ), events
@@ -842,7 +842,7 @@ def main():
             listener.bind(("127.0.0.1", 0))
             port = listener.getsockname()[1]
         forward = subprocess.Popen(
-            [*command, "port-forward", "pod/xyz-volume-writer", f"{port}:8080"],
+            [*command, "port-forward", "pod/volume-writer", f"{port}:8080"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -852,7 +852,7 @@ def main():
             while True:
                 try:
                     with urlopen(f"http://127.0.0.1:{port}/", timeout=3) as response:
-                        assert response.read().strip() == b"xyz-forward"
+                        assert response.read().strip() == b"stream-forward"
                     break
                 except OSError:
                     if forward.poll() is not None or time.monotonic() > deadline:

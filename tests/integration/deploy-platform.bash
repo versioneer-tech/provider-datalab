@@ -44,7 +44,7 @@ install_datalab() {
   kube apply -f "${REPO_ROOT}/xrd.yaml"
   wait_for_crd_established datalabs.pkg.internal
   local composition_directory
-  composition_directory="$(mktemp -d /tmp/xyz-integration-composition.XXXXXX)"
+  composition_directory="$(mktemp -d /tmp/datalab-it-composition.XXXXXX)"
   python3 "${REPO_ROOT}/scripts/build-composition.py" --response-ttl 1m \
     --output "${composition_directory}/composition.yaml"
   kube apply -f "${composition_directory}/composition.yaml"
