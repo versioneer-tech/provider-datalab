@@ -7,6 +7,7 @@ set -euo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
+source "${INTEGRATION_DIR}/educates.bash"
 
 install_crossplane() {
   require_command helm
@@ -60,6 +61,7 @@ main() {
   require_cluster
 
   kube apply -f "${MANIFEST_DIR}/namespaces.yaml"
+  create_ingress_certificate
   install_crossplane
   install_datalab
   kube apply -f "${MANIFEST_DIR}/provider-configs/kubernetes.yaml"

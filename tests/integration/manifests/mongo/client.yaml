@@ -24,7 +24,7 @@ spec:
         - -c
         - |
           set -eu
-          expected="$(date +%s)"
+          expected=__PROBE_VALUE__
           actual="$(mongosh "${MONGO_URI}" --quiet --eval \
             "const dbh=db.getSiblingDB('verify'); dbh.probe_checks.updateOne({_id:'probe'},{\$set:{value:'${expected}'}},{upsert:true}); const doc=dbh.probe_checks.findOne({_id:'probe'}); if (!doc) quit(2); print(doc.value);" \
             | tail -n 1 | tr -d '[:space:]')"

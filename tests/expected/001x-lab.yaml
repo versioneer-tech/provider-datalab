@@ -7,147 +7,14 @@ kind: Datalab
 metadata:
   name: s-joe
 spec:
-  crossplane:
-    resourceRefs:
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-joe-ws-access
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-joe-ws-admin
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-joe-ws-api
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-joe-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-joe
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-joe-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-joe
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-joe-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: data-deployment-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: data-dns-networkpolicy-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: data-networkpolicy-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: data-service-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-oauth-client-secret-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-runtime-storage-secret-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-storage-secret-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: resourcequota-s-joe-overall-storage
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshop-s-joe
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopenvironment-s-joe
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: ClientServiceAccountRole
-      name: s-joe-ws-api
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: Client
-      name: s-joe
-      namespace: default
-    - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
-      kind: GroupMembershipProtocolMapper
-      name: s-joe
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-joe-ws-access
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-joe-ws-admin
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-joe-ws-api
-      namespace: default
-    - apiVersion: v1
-      kind: Secret
-      name: s-joe-datalab
-      namespace: default
   users:
   - joe
-status:
-  conditions:
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: WatchCircuitClosed
-    status: "True"
-    type: Responsive
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: ReconcileSuccess
-    status: "True"
-    type: Synced
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: data-deployment-s-joe, data-dns-networkpolicy-s-joe,
-      data-networkpolicy-s-joe, and 21 more'
-    reason: Creating
-    status: "False"
-    type: Ready
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: data-deployment-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: data-deployment-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -186,11 +53,11 @@ spec:
               - name: PACKAGE_R_ADDRESS
                 value: 0.0.0.0
               - name: PACKAGE_R_PORT
-                value: "8888"
+                value: '8888'
               - name: PACKAGE_R_ROOT
                 value: /
               - name: PACKAGE_R_BUCKETS
-                value: ""
+                value: ''
               - name: XDG_CACHE_HOME
                 value: /cache
               - name: AWS_SHARED_CREDENTIALS_FILE
@@ -224,7 +91,7 @@ spec:
                 periodSeconds: 10
               resources:
                 limits:
-                  cpu: "2"
+                  cpu: '2'
                   memory: 1Gi
                 requests:
                   cpu: 100m
@@ -328,28 +195,16 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration
-      >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas
-      >= 1
+    celQuery: has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >=
+      object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1
     policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: data-dns-networkpolicy-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: data-dns-networkpolicy-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -387,19 +242,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: data-networkpolicy-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: data-networkpolicy-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -438,19 +282,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: data-service-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: data-service-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -486,16 +319,8 @@ metadata:
     crossplane.io/composition-resource-name: keycloak-client-s-joe
   labels:
     crossplane.io/claim-name: s-joe
-    crossplane.io/composite: s-joe
   name: s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     accessType: CONFIDENTIAL
@@ -527,17 +352,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-admin-s-joe-admin
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     name: s-joe-admin
@@ -551,17 +367,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     name: s-joe
@@ -575,17 +382,8 @@ kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-mapper-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     addToAccessToken: false
@@ -607,17 +405,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-admins-s-joe-admin
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -636,17 +425,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-users-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -665,17 +445,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-admin-s-joe-ws-admin
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -693,17 +464,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-api-s-joe-ws-api
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -721,17 +483,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-joe-ws-admin
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -752,17 +505,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-joe-ws-api
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -783,17 +527,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-joe-ws-access
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -814,17 +549,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-user-s-joe-ws-access
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientIdRef:
@@ -842,17 +568,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-admin-s-joe-admin
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -873,17 +590,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-user-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     groupIdRef:
@@ -904,17 +612,8 @@ kind: ClientServiceAccountRole
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-service-account-role-api-s-joe-ws-api
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     clientId: test-client-id
@@ -940,19 +639,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: observe-oauth-client-secret-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -971,19 +659,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-runtime-storage-secret-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: observe-runtime-storage-secret-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1002,19 +679,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-storage-secret-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: observe-storage-secret-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1033,19 +699,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: resourcequota-s-joe-overall-storage
-  labels:
-    crossplane.io/composite: s-joe
   name: resourcequota-s-joe-overall-storage
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1069,22 +724,13 @@ kind: Secret
 metadata:
   annotations:
     crossplane.io/composition-resource-name: secret-s-joe-datalab
-  labels:
-    crossplane.io/composite: s-joe
   name: s-joe-datalab
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 stringData:
   AWS_ACCESS_KEY_ID: joe-access-key
   AWS_ENDPOINT_URL: https://secret-s3.custom
   AWS_REGION: custom-secret-region
-  AWS_S3_FORCE_PATH_STYLE: "true"
+  AWS_S3_FORCE_PATH_STYLE: 'true'
   AWS_SECRET_ACCESS_KEY: joe-secret-key
   AWS_SESSION_TOKEN: fallback-session-token
   aws-credentials: |
@@ -1108,19 +754,8 @@ type: Opaque
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshop-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: workshop-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1167,7 +802,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       training.educates.dev/environment.name: s-joe
-                      training.educates.dev/session.objects: "true"
+                      training.educates.dev/session.objects: 'true'
                   podSelector:
                     matchLabels:
                       app: vcluster
@@ -1257,7 +892,7 @@ spec:
               enabled: true
               services:
                 fromHost: []
-              version: "1.34"
+              version: '1.34'
             workshop:
               enabled: false
           dashboards:
@@ -1295,7 +930,7 @@ spec:
             memory: 2Gi
             storage: 1Gi
         title: Default DataLab
-        version: "1.0"
+        version: '1.0'
         workshop:
           files: []
           packages:
@@ -1317,19 +952,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-joe
-  labels:
-    crossplane.io/composite: s-joe
   name: workshopenvironment-s-joe
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-joe
-    uid: 31b8ad0c-a886-53dd-b8b9-5188f2bb2235
 spec:
   forProvider:
     manifest:
@@ -1340,7 +964,7 @@ spec:
       spec:
         analytics:
           amplitude:
-            trackingId: ""
+            trackingId: ''
         cookies: {}
         environment:
           objects: []
@@ -1360,7 +984,6 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
     policy: DeriveFromCelQuery
   watch: true

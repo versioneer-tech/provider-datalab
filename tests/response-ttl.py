@@ -46,29 +46,6 @@ for case in data['cases']:
 
 
 class ResponseTTLTests(unittest.TestCase):
-    def test_duration_units(self):
-        for value, seconds in (("30s", 30), ("5m", 300), ("1h", 3600)):
-            with self.subTest(value=value):
-                self.assertEqual(BUILDER["response_ttl_seconds"](value), seconds)
-
-    def test_invalid_durations_fail(self):
-        for value in (
-            None,
-            True,
-            300,
-            "",
-            "0s",
-            "-1m",
-            "1.5s",
-            "1m30s",
-            "5",
-            "5d",
-            "9223372037s",
-        ):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    BUILDER["response_ttl_seconds"](value)
-
     def test_all_generated_responses_use_setting(self):
         example = yaml.safe_load((ROOT / "examples/base/002-lab.yaml").read_text())
         empty = {

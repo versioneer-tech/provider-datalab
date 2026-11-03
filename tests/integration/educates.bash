@@ -2,38 +2,24 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-create_ingress_certificate() {
-  local certificate private_key
-  local result=0
-
+create_ingress_certificate() (
+  set -euo pipefail
   require_command openssl
-  certificate="$(mktemp /tmp/xyz-datalab-cert.XXXXXX)"
-  private_key="$(mktemp /tmp/xyz-datalab-key.XXXXXX)"
-  if kube get secret wildcard-tls --namespace "${WORKSPACE_NAMESPACE}" \
-    -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 --decode >"${certificate}" &&
-    openssl x509 -in "${certificate}" -checkend 300 -noout >/dev/null 2>&1 &&
-    openssl x509 -in "${certificate}" -checkhost verify-data.lab.acme.com -noout >/dev/null 2>&1; then
-    rm -f "${certificate}" "${private_key}"
-    return 0
-  fi
+  directory="$(mktemp -d /tmp/test-ingress-cert.XXXXXX)"
+  trap 'rm -rf "${directory}"' EXIT
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj '/CN=*.lab.acme.com' \
     -addext 'subjectAltName=DNS:*.lab.acme.com' \
-    -keyout "${private_key}" -out "${certificate}" >/dev/null 2>&1 || result=$?
-  if ((result == 0)); then
-    kube create secret tls wildcard-tls \
-      --namespace "${WORKSPACE_NAMESPACE}" \
-      --cert "${certificate}" --key "${private_key}" \
-      --dry-run=client -o yaml | kube apply -f - || result=$?
-  fi
-  rm -f "${certificate}" "${private_key}"
-  return "${result}"
-}
+    -keyout "${directory}/key" -out "${directory}/cert" >/dev/null 2>&1
+  kube create secret tls wildcard-tls \
+    --namespace "${WORKSPACE_NAMESPACE}" \
+    --cert "${directory}/cert" --key "${directory}/key" \
+    --dry-run=client -o yaml | kube apply -f -
+)
 
 install_educates() {
   require_command helm
   install_kyverno
-  create_ingress_certificate
   kube apply -f "${MANIFEST_DIR}/educates-rbac.yaml"
   if ! helm_release_matches educates "${EDUCATES_NAMESPACE}" "workspace-dependencies-educates-${EDUCATES_DEPENDENCIES_VERSION}"; then
     log "Installing Educates dependencies ${EDUCATES_DEPENDENCIES_VERSION}"

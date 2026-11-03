@@ -1,0 +1,39 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+"""Check store settings and the PostgreSQL runtime namespace."""
+
+from pathlib import Path
+
+import yaml
+
+from render import arguments, environment, manifest, render
+
+
+def main():
+    args = arguments()
+    env = environment()
+    refs = {"parentName": "default", "parentNamespace": "contour", "sectionName": "postgres-passthrough"}
+    env["data"]["database"] = {"tlsRoute": refs}
+    stores = {"documentStore": "mongodb-community-s-jeff-prod", "cacheStore": "redis-cache-s-jeff-prod"}
+    for setting in stores:
+        env["data"][setting] = {"storageClassName": f"test-{setting}"}
+    observed = list(yaml.safe_load_all(Path("tests/observed/002-lab.yaml").read_text()))
+    for item in observed:
+        if item["metadata"]["name"] == "workshopenvironment-s-jeff":
+            item["status"]["atProvider"]["manifest"]["status"]["educates"]["namespace"] = "test-runtime"
+    resources = render(args, env, "examples/base/002-lab.yaml", observed)
+    route = manifest(resources, "db-tlsroute-s-jeff-pg0")
+    assert route["kind"] == "TLSRoute"
+    assert route["spec"]["parentRefs"] == [dict(name=refs["parentName"], namespace=refs["parentNamespace"],
+                                                sectionName=refs["sectionName"])]
+    for setting, name in stores.items():
+        store = manifest(resources, name)
+        assert f"test-{setting}" in yaml.safe_dump(store["spec"])
+    for name in ("observe-database-secret-s-jeff-pg0", "db-postgrescluster-s-jeff-pg0"):
+        assert manifest(resources, name)["metadata"]["namespace"] == "test-runtime"
+    print("PASS store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
+
+
+if __name__ == "__main__":
+    main()

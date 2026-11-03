@@ -7,10 +7,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
+if [[ "${1:-}" == fast ]]; then
+  python3 scripts/build-composition.py --check
+  exec python3 tests/helpers.py
+fi
+
 examples=(examples/base/00*-lab.yaml)
 if (($#)); then
   if (($# != 1)) || [[ ! -f "examples/base/$1-lab.yaml" ]]; then
-    printf 'Usage: %s [example number, such as 001]\n' "$0" >&2
+    printf 'Usage: %s [fast|example number, such as 001]\n' "$0" >&2
     exit 1
   fi
   examples=("examples/base/$1-lab.yaml")
@@ -65,12 +70,14 @@ started=${SECONDS}
 for file in "${examples[@]}"; do
   name="$(basename "${file}")"
   actual="${render_dir}/${name}"
-  render "${file}" >"${actual}"
+  render "${file}" >"${render_dir}/raw.yaml"
+  python3 tests/render.py "${render_dir}/raw.yaml" >"${actual}"
   dyff between "${actual}" "tests/expected/${name}" -s
   observed="tests/observed/${name}"
   if [[ -f "${observed}" ]]; then
     actual="${render_dir}/${name/-lab/x-lab}"
-    render "${file}" --observed-resources "${observed}" >"${actual}"
+    render "${file}" --observed-resources "${observed}" >"${render_dir}/raw.yaml"
+    python3 tests/render.py "${render_dir}/raw.yaml" >"${actual}"
     dyff between "${actual}" "tests/expected/${name/-lab/x-lab}" -s
   fi
 done
@@ -78,6 +85,7 @@ done
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
   python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+  python3 tests/stores.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 fi
 
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
@@ -89,6 +97,9 @@ if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
     printf 'The package-r storage Secret checksum did not change after token rotation.\n' >&2
     exit 1
   fi
-  python3 tests/s3/validate.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+  python3 tests/exposure.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+fi
+if [[ -f "${render_dir}/003x-lab.yaml" ]]; then
+  python3 tests/settings.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 fi
 printf 'Unit checks passed in %s seconds.\n' "$((SECONDS - started))"

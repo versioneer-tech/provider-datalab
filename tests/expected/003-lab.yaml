@@ -9,120 +9,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
   name: s-jane
 spec:
-  crossplane:
-    resourceRefs:
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: ProtocolMapper
-      name: s-jane-datalab-service-custom-audience
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: ProtocolMapper
-      name: s-jane-s-jane-audience
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-jane-ws-access
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-jane-ws-admin
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-jane-ws-api
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-jane-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-jane
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-jane-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-jane
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-jane-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-jane
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: db-configmap-s-jane-pg0
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: db-postgrescluster-s-jane-pg0
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: db-tlsroute-s-jane-pg0
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-database-secret-s-jane-pg0
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-oauth-client-secret-s-jane
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-storage-secret-s-jane
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: persistentvolumeclaim-s-jane-default-persistent
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: resourcequota-s-jane-overall-storage
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshop-s-jane
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopenvironment-s-jane
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopsession-s-jane-default
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: ClientServiceAccountRole
-      name: s-jane-ws-api
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: Client
-      name: s-jane
-      namespace: default
-    - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
-      kind: GroupMembershipProtocolMapper
-      name: s-jane
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-jane-ws-access
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-jane-ws-admin
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-jane-ws-api
-      namespace: default
   databases:
     pg0:
       backupStorage: 3Gi
@@ -136,21 +22,6 @@ spec:
   users:
   - jane
 status:
-  conditions:
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: WatchCircuitClosed
-    status: "True"
-    type: Responsive
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: ReconcileSuccess
-    status: "True"
-    type: Synced
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: db-configmap-s-jane-pg0, db-postgrescluster-s-jane-pg0,
-      db-tlsroute-s-jane-pg0, and 25 more'
-    reason: Creating
-    status: "False"
-    type: Ready
   sessions:
     default:
       state: started
@@ -158,19 +29,8 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: db-configmap-s-jane-pg0
-  labels:
-    crossplane.io/composite: s-jane
   name: db-configmap-s-jane-pg0
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -193,19 +53,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: db-postgrescluster-s-jane-pg0
-  labels:
-    crossplane.io/composite: s-jane
   name: db-postgrescluster-s-jane-pg0
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -219,7 +68,7 @@ spec:
           pgbackrest:
             global:
               repo1-path: /pgbackrest/repo1
-              repo1-retention-full: "4"
+              repo1-retention-full: '4'
               repo1-retention-full-type: count
             repos:
             - name: repo1
@@ -247,7 +96,7 @@ spec:
             storageClassName: sbs-default-retain
           name: primary
           replicas: 1
-        postGISVersion: "3.5"
+        postGISVersion: '3.5'
         postgresVersion: 17
         users:
         - databases:
@@ -258,29 +107,17 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.instances) && object.status.instances.exists(i,
-      i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest)
-      && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready
-      == true
+    celQuery: has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name ==
+      'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost)
+      && object.status.pgbackrest.repoHost.ready == true
     policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: db-tlsroute-s-jane-pg0
-  labels:
-    crossplane.io/composite: s-jane
   name: db-tlsroute-s-jane-pg0
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -304,10 +141,9 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p,
-      has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status
-      == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status ==
-      'True'))
+    celQuery: has(object.status) && has(object.status.parents) && object.status.parents.exists(p, has(p.conditions)
+      && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True') && p.conditions.exists(c, c.type ==
+      'ResolvedRefs' && c.status == 'True'))
     policy: DeriveFromCelQuery
   watch: true
 ---
@@ -318,16 +154,8 @@ metadata:
     crossplane.io/composition-resource-name: keycloak-client-s-jane
   labels:
     crossplane.io/claim-name: s-jane
-    crossplane.io/composite: s-jane
   name: s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     accessType: CONFIDENTIAL
@@ -369,17 +197,8 @@ kind: ProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-jane-datalab-service-custom-audience
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-datalab-service-custom-audience
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -387,11 +206,11 @@ spec:
       policy:
         resolution: Required
     config:
-      access.token.claim: "true"
-      id.token.claim: "false"
+      access.token.claim: 'true'
+      id.token.claim: 'false'
       included.client.audience: datalab-service-custom
-      introspection.token.claim: "true"
-      userinfo.token.claim: "false"
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'
     name: datalab-service-custom-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
@@ -405,17 +224,8 @@ kind: ProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-extra-audience-s-jane-s-jane-s-jane-audience
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-s-jane-audience
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -423,11 +233,11 @@ spec:
       policy:
         resolution: Required
     config:
-      access.token.claim: "true"
-      id.token.claim: "false"
+      access.token.claim: 'true'
+      id.token.claim: 'false'
       included.client.audience: s-jane
-      introspection.token.claim: "true"
-      userinfo.token.claim: "false"
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'
     name: s-jane-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
@@ -441,17 +251,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-admin-s-jane-admin
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     name: s-jane-admin
@@ -465,17 +266,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     name: s-jane
@@ -489,17 +281,8 @@ kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-mapper-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     addToAccessToken: false
@@ -521,17 +304,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-admins-s-jane-admin
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     groupIdRef:
@@ -550,17 +324,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-users-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     groupIdRef:
@@ -579,17 +344,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-admin-s-jane-ws-admin
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -607,17 +363,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-api-s-jane-ws-api
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -635,17 +382,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-jane-ws-admin
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -666,17 +404,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-jane-ws-api
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -697,17 +426,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-jane-ws-access
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -728,17 +448,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-user-s-jane-ws-access
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -756,17 +467,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-admin-s-jane-admin
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     groupIdRef:
@@ -787,17 +489,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-user-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     groupIdRef:
@@ -818,17 +511,8 @@ kind: ClientServiceAccountRole
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-service-account-role-api-s-jane-ws-api
-  labels:
-    crossplane.io/composite: s-jane
   name: s-jane-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     clientIdRef:
@@ -851,19 +535,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-database-secret-s-jane-pg0
-  labels:
-    crossplane.io/composite: s-jane
   name: observe-database-secret-s-jane-pg0
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -882,19 +555,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: observe-oauth-client-secret-s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -913,19 +575,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-storage-secret-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: observe-storage-secret-s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -944,19 +595,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: persistentvolumeclaim-s-jane-default-persistent
-  labels:
-    crossplane.io/composite: s-jane
   name: persistentvolumeclaim-s-jane-default-persistent
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -982,19 +622,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: resourcequota-s-jane-overall-storage
-  labels:
-    crossplane.io/composite: s-jane
   name: resourcequota-s-jane-overall-storage
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -1016,19 +645,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshop-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: workshop-s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -1075,7 +693,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       training.educates.dev/environment.name: s-jane
-                      training.educates.dev/session.objects: "true"
+                      training.educates.dev/session.objects: 'true'
                   podSelector:
                     matchLabels:
                       app: vcluster
@@ -1170,7 +788,7 @@ spec:
                 fromHost:
                 - from: $(workshop_namespace)/pg0-primary
                   to: $(workshop_namespace)/pg0-primary
-              version: "1.34"
+              version: '1.34'
             workshop:
               enabled: true
           dashboards:
@@ -1200,7 +818,7 @@ spec:
             volume:
               name: $(session_name)-persistent
         title: Default DataLab
-        version: "1.0"
+        version: '1.0'
         workshop:
           files:
           - git:
@@ -1230,19 +848,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-jane
-  labels:
-    crossplane.io/composite: s-jane
   name: workshopenvironment-s-jane
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -1253,7 +860,7 @@ spec:
       spec:
         analytics:
           amplitude:
-            trackingId: ""
+            trackingId: ''
         cookies: {}
         environment:
           objects: []
@@ -1273,27 +880,15 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
     policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-s-jane-default
-  labels:
-    crossplane.io/composite: s-jane
   name: workshopsession-s-jane-default
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jane
-    uid: 791f1847-08cf-5ec4-be12-97ab3e552087
 spec:
   forProvider:
     manifest:
@@ -1309,7 +904,7 @@ spec:
           - name: SESSION_NAME
             value: s-jane-default
           - name: FRAME_ANCESTORS
-            value: ""
+            value: ''
           - name: KUBECONFIG
             value: /opt/kubeconfig/config
           id: default
@@ -1320,7 +915,6 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
     policy: DeriveFromCelQuery
   watch: true

@@ -187,7 +187,7 @@ verify_mongo_backup() {
   fi
   render_template "${MANIFEST_DIR}/mongo/restore.yaml" \
     PROBE_NAME "${restore_probe}" STORE_NAMESPACE "${STORE_NAMESPACE}" \
-    CLIENT_IMAGE "${CLIENT_IMAGE}" | kube apply -f -
+    CLIENT_IMAGE "${CLIENT_IMAGE}" PROBE_VALUE "${probe_value}" | kube apply -f -
   wait_for_probe "${STORE_NAMESPACE}" "${restore_probe}"
 }
 
@@ -275,10 +275,8 @@ cleanup_successful_verification() {
 
 main() {
   require_cluster
-  if [[ "${store_type}" == redis ]]; then
-    require_command openssl
-    probe_value="$(openssl rand -hex 12)"
-  fi
+  require_command openssl
+  probe_value="$(openssl rand -hex 12)"
   install_operator
   apply_store_datalab
   if ! wait_for_store; then

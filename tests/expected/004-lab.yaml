@@ -9,108 +9,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
   name: s-john
 spec:
-  crossplane:
-    resourceRefs:
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: ProtocolMapper
-      name: s-john-datalab-service-custom-audience
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: ProtocolMapper
-      name: s-john-s-john-audience
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-john-ws-access
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-john-ws-admin
-      namespace: default
-    - apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-      kind: RoleMapper
-      name: s-john-ws-api
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-john-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Group
-      name: s-john
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-john-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Memberships
-      name: s-john
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-john-admin
-      namespace: default
-    - apiVersion: group.keycloak.m.crossplane.io/v1alpha1
-      kind: Roles
-      name: s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-oauth-client-secret-s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: observe-storage-secret-s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: persistentvolumeclaim-s-john-analysis-persistent
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: persistentvolumeclaim-s-john-default-persistent
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: resourcequota-s-john-overall-storage
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshop-s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopenvironment-s-john
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: workshopsession-s-john-default
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: ClientServiceAccountRole
-      name: s-john-ws-api
-      namespace: default
-    - apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-      kind: Client
-      name: s-john
-      namespace: default
-    - apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
-      kind: GroupMembershipProtocolMapper
-      name: s-john
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-john-ws-access
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-john-ws-admin
-      namespace: default
-    - apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-      kind: Role
-      name: s-john-ws-api
-      namespace: default
   secretName: s-john
   sessions:
   - name: default
@@ -119,21 +17,6 @@ spec:
   users:
   - john
 status:
-  conditions:
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: WatchCircuitClosed
-    status: "True"
-    type: Responsive
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    reason: ReconcileSuccess
-    status: "True"
-    type: Synced
-  - lastTransitionTime: "2024-01-01T00:00:00Z"
-    message: 'Unready resources: keycloak-client-s-john, keycloak-extra-audience-datalab-service-custom-s-john-datalab-service-custom-audience,
-      keycloak-extra-audience-s-john-s-john-s-john-audience, and 22 more'
-    reason: Creating
-    status: "False"
-    type: Ready
   sessions:
     analysis:
       state: stopped
@@ -147,16 +30,8 @@ metadata:
     crossplane.io/composition-resource-name: keycloak-client-s-john
   labels:
     crossplane.io/claim-name: s-john
-    crossplane.io/composite: s-john
   name: s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     accessType: CONFIDENTIAL
@@ -208,17 +83,8 @@ kind: ProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-extra-audience-datalab-service-custom-s-john-datalab-service-custom-audience
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-datalab-service-custom-audience
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -226,11 +92,11 @@ spec:
       policy:
         resolution: Required
     config:
-      access.token.claim: "true"
-      id.token.claim: "false"
+      access.token.claim: 'true'
+      id.token.claim: 'false'
       included.client.audience: datalab-service-custom
-      introspection.token.claim: "true"
-      userinfo.token.claim: "false"
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'
     name: datalab-service-custom-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
@@ -244,17 +110,8 @@ kind: ProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-extra-audience-s-john-s-john-s-john-audience
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-s-john-audience
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -262,11 +119,11 @@ spec:
       policy:
         resolution: Required
     config:
-      access.token.claim: "true"
-      id.token.claim: "false"
+      access.token.claim: 'true'
+      id.token.claim: 'false'
       included.client.audience: s-john
-      introspection.token.claim: "true"
-      userinfo.token.claim: "false"
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'
     name: s-john-audience
     protocol: openid-connect
     protocolMapper: oidc-audience-mapper
@@ -280,17 +137,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-admin-s-john-admin
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     name: s-john-admin
@@ -304,17 +152,8 @@ kind: Group
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-group-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     name: s-john
@@ -328,17 +167,8 @@ kind: GroupMembershipProtocolMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-mapper-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     addToAccessToken: false
@@ -360,17 +190,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-admins-s-john-admin
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     groupIdRef:
@@ -389,17 +210,8 @@ kind: Memberships
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-memberships-users-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     groupIdRef:
@@ -418,17 +230,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-admin-s-john-ws-admin
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -446,17 +249,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-api-s-john-ws-api
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -474,17 +268,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-john-ws-admin
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -505,17 +290,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-john-ws-api
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -536,17 +312,8 @@ kind: RoleMapper
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-john-ws-access
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -567,17 +334,8 @@ kind: Role
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-role-user-s-john-ws-access
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-access
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -595,17 +353,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-admin-s-john-admin
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-admin
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     groupIdRef:
@@ -626,17 +375,8 @@ kind: Roles
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-roles-user-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     groupIdRef:
@@ -657,17 +397,8 @@ kind: ClientServiceAccountRole
 metadata:
   annotations:
     crossplane.io/composition-resource-name: keycloak-service-account-role-api-s-john-ws-api
-  labels:
-    crossplane.io/composite: s-john
   name: s-john-ws-api
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     clientIdRef:
@@ -690,19 +421,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-oauth-client-secret-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: observe-oauth-client-secret-s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -721,19 +441,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: observe-storage-secret-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: observe-storage-secret-s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -752,19 +461,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-analysis-persistent
-  labels:
-    crossplane.io/composite: s-john
   name: persistentvolumeclaim-s-john-analysis-persistent
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -790,19 +488,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: persistentvolumeclaim-s-john-default-persistent
-  labels:
-    crossplane.io/composite: s-john
   name: persistentvolumeclaim-s-john-default-persistent
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -828,19 +515,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: resourcequota-s-john-overall-storage
-  labels:
-    crossplane.io/composite: s-john
   name: resourcequota-s-john-overall-storage
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -862,19 +538,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshop-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: workshop-s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -921,7 +586,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       training.educates.dev/environment.name: s-john
-                      training.educates.dev/session.objects: "true"
+                      training.educates.dev/session.objects: 'true'
                   podSelector:
                     matchLabels:
                       app: vcluster
@@ -1014,7 +679,7 @@ spec:
               enabled: true
               services:
                 fromHost: []
-              version: "1.34"
+              version: '1.34'
             workshop:
               enabled: true
           dashboards:
@@ -1044,7 +709,7 @@ spec:
             volume:
               name: $(session_name)-persistent
         title: Default DataLab
-        version: "1.0"
+        version: '1.0'
         workshop:
           files:
           - git:
@@ -1074,19 +739,8 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-john
-  labels:
-    crossplane.io/composite: s-john
   name: workshopenvironment-s-john
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -1097,7 +751,7 @@ spec:
       spec:
         analytics:
           amplitude:
-            trackingId: ""
+            trackingId: ''
         cookies: {}
         environment:
           objects: []
@@ -1117,27 +771,15 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
     policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/composition-resource-name: workshopsession-s-john-default
-  labels:
-    crossplane.io/composite: s-john
   name: workshopsession-s-john-default
   namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-john
-    uid: 84a7f8c4-468a-5af5-9db5-ed1902b1000c
 spec:
   forProvider:
     manifest:
@@ -1153,7 +795,7 @@ spec:
           - name: SESSION_NAME
             value: s-john-default
           - name: FRAME_ANCESTORS
-            value: ""
+            value: ''
           - name: KUBECONFIG
             value: /opt/kubeconfig/config
           id: default
@@ -1164,7 +806,6 @@ spec:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase
-      == 'Running'
+    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
     policy: DeriveFromCelQuery
   watch: true

@@ -138,6 +138,8 @@ KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
   kind delete cluster --name provider-datalab-it
 ```
 
+Platform setup creates a fresh disposable TLS certificate for `*.lab.acme.com`.
+
 The pinned Educates controllers receive read-only CRD discovery permissions
 from `manifests/educates-rbac.yaml` before startup. The harness checks both
 controller rollouts before it creates a Datalab runtime. Controllers request

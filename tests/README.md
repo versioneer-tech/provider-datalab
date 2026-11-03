@@ -6,8 +6,10 @@ credential rotation, network rules, and environment-controlled settings.
 It does not use a Kubernetes cluster.
 
 Credential checks preserve the generated service passwords. Harness checks
-reject false network-isolation results and replace certificates for the wrong
-hostname. Session state and PVC behavior are covered by the rendered examples.
+reject false network-isolation results. Session state and PVC behavior are
+covered by the rendered examples. Snapshots omit generated owner references,
+framework conditions, and resource references that repeat the resource list.
+They retain resource specs, readiness rules, and session status.
 
 Backup checks cover positive, zero, and omitted storage quantities for
 PostgreSQL, MongoDB, and Redis. They check that PostgreSQL stays available
@@ -22,8 +24,7 @@ TTL is not configured by the build. Render checks do not measure live timing.
 
 ## Run the suite
 
-Docker must be running. Use Crossplane CLI `v2.4.1` when updating snapshots;
-other versions can change framework status and owner metadata.
+Docker must be running for render and function checks.
 Install the [build dependencies and generate the composition](../templates/README.md)
 before running the suite. It rejects a generated composition that differs
 from its Python and YAML sources.
@@ -33,11 +34,17 @@ bash tests/unit.bash
 pre-commit run --all-files
 ```
 
+Use `bash tests/unit.bash fast` for helper, quantity schema, duration, and
+harness checks without Docker. Install `scripts/requirements.txt` first.
+
 To check one example, use `bash tests/unit.bash 001`. This example also runs
-the Data and S3 behavior checks. Example `002` also runs the backup checks.
+`exposure.py` for Data and S3 settings. Example `002` runs `backups.py` and
+`stores.py`. Example `003` runs `settings.py` for environment precedence.
+These checks share the render function in `render.py`.
 Actual renders are written to `/tmp`. Expected snapshots are tracked in
 `tests/expected/`.
-Review intended output changes before updating a snapshot. Run the full
+Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml`
+before updating its expected snapshot. Review intended output changes. Run the full
 unit suite after source changes and build the docs after documentation changes.
 See [Integration tests](integration/README.md) for cluster checks.
 

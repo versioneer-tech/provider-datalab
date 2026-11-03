@@ -28,7 +28,7 @@ spec:
       archive="$(find /backup -maxdepth 1 -name 'dump-*.archive.gz' -type f | sort | tail -n 1)"
       test -n "$archive"
       mongorestore --host=127.0.0.1 --gzip --archive="$archive" --oplogReplay
-      mongosh --quiet --eval 'const doc=db.getSiblingDB("verify").probe_checks.findOne({_id:"probe"}); if (!doc || !doc.value) quit(1);'
+      mongosh --quiet --eval 'const doc=db.getSiblingDB("verify").probe_checks.findOne({_id:"probe"}); if (!doc || doc.value !== "__PROBE_VALUE__") quit(1);'
       printf 'PASS MongoDB backup archive restored the probe document\n'
     securityContext:
       allowPrivilegeEscalation: false
