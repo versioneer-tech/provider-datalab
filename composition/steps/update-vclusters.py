@@ -253,7 +253,7 @@ def _compose_instance(
             req,
             "vcluster/config-secret",
             namespace=namespace,
-            configuration=configuration_json,
+            configuration_data=base64.b64encode(configuration_json.encode()).decode(),
             **template_values,
         ),
     )

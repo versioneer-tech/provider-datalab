@@ -2656,7 +2656,7 @@ spec:
                     req,
                     "vcluster/config-secret",
                     namespace=namespace,
-                    configuration=configuration_json,
+                    configuration_data=base64.b64encode(configuration_json.encode()).decode(),
                     **template_values,
                 ),
             )
@@ -3027,8 +3027,8 @@ spec:
             name: ${config_secret}
             namespace: ${namespace}
           type: Opaque
-          stringData:
-            config.yaml: ${configuration}
+          data:
+            config.yaml: ${configuration_data}
         vcluster/configuration:
           controlPlane:
             advanced:

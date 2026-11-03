@@ -107,7 +107,9 @@ def main():
         def key(suffix):
             return resource_name("vcluster", "s-joe", instance, suffix)
 
-        configuration_text = manifest(rendered, key("config"))["stringData"]["config.yaml"]
+        secret = manifest(rendered, key("config"))
+        assert "stringData" not in secret
+        configuration_text = base64.b64decode(secret["data"]["config.yaml"]).decode()
         configuration = json.loads(configuration_text)
         pod = manifest(rendered, key("statefulset"))["spec"]["template"]
         authentication = manifest(rendered, key("authentication"))["data"]["authentication.json"]
