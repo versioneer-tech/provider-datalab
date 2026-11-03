@@ -7269,7 +7269,7 @@ spec:
                     if secret:
                         kubeconfig = _render_template(
                             req,
-                            "vcluster/kubeconfig",
+                            "vcluster/client-config",
                             name=_resource_name(name, instance),
                             cluster=cluster,
                             profile=profile,
@@ -7313,20 +7313,7 @@ spec:
             status["connections"] = connections
             rsp.desired.composite.resource.update({"status": status})
       templates:
-        vcluster/connection-secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${secret_name}
-            namespace: ${namespace}
-            labels:
-              datalabs.pkg.internal/name: ${name}
-              datalabs.pkg.internal/connection: ${connection_name}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          type: Opaque
-          stringData: ${values}
-        vcluster/kubeconfig:
+        vcluster/client-config:
           apiVersion: v1
           kind: Config
           clusters:
@@ -7350,6 +7337,19 @@ spec:
                 env:
                 - name: DATALAB_CLIENT_SECRET
                   value: ${secret}
+        vcluster/connection-secret:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${secret_name}
+            namespace: ${namespace}
+            labels:
+              datalabs.pkg.internal/name: ${name}
+              datalabs.pkg.internal/connection: ${connection_name}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          type: Opaque
+          stringData: ${values}
   - step: protect-vcluster-resources
     functionRef:
       name: crossplane-contrib-function-python

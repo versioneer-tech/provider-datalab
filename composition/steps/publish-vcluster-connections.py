@@ -106,7 +106,7 @@ def compose(req, rsp):
             if secret:
                 kubeconfig = _render_template(
                     req,
-                    "vcluster/kubeconfig",
+                    "vcluster/client-config",
                     name=_resource_name(name, instance),
                     cluster=cluster,
                     profile=profile,
