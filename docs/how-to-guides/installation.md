@@ -290,6 +290,9 @@ for a file bundle example.
 | `storage.forcePathStyle` | `true` | Path-style S3 requests. |
 | `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
 | `storageClasses.allowed` | `[]` | Allowed workspace StorageClasses; an empty list permits any configured class. |
+| `vcluster.resources.requests` | CPU `200m`, memory `1Gi`, ephemeral storage `1Gi` | Control-plane requests; supplied fields override these defaults. |
+| `vcluster.resources.limits` | CPU `4`, memory `4Gi`, ephemeral storage `10Gi` | Control-plane limits; supplied fields override these defaults. |
+| `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
 | `vcluster.storageClasses.allowed` | Required when virtual clusters are declared | Host classes exposed to virtual workloads. |
 | `vcluster.storageClasses.default` | First allowed class | Virtual workload default class. |

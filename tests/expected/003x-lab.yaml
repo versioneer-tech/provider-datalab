@@ -2330,8 +2330,8 @@ spec:
           60.0, "initialDelaySeconds": 60.0, "periodSeconds": 2.0, "timeoutSeconds": 3.0}, "readinessProbe": {"enabled":
           true, "failureThreshold": 60.0, "periodSeconds": 2.0, "timeoutSeconds": 3.0}, "startupProbe": {"enabled":
           true, "failureThreshold": 300.0, "periodSeconds": 6.0, "timeoutSeconds": 3.0}}, "resources": {"limits":
-          {"ephemeral-storage": "10Gi", "memory": "4Gi"}, "requests": {"cpu": "200m", "ephemeral-storage": "1Gi",
-          "memory": "256Mi"}}, "scheduling": {"affinity": {}, "nodeSelector": {}, "podManagementPolicy": "Parallel",
+          {"cpu": "4", "ephemeral-storage": "10Gi", "memory": "4Gi"}, "requests": {"cpu": "200m", "ephemeral-storage":
+          "1Gi", "memory": "1Gi"}}, "scheduling": {"affinity": {}, "nodeSelector": {}, "podManagementPolicy": "Parallel",
           "priorityClassName": "", "tolerations": [], "topologySpreadConstraints": []}, "security": {"containerSecurityContext":
           {"allowPrivilegeEscalation": false, "runAsGroup": 0.0, "runAsUser": 0.0}, "podSecurityContext": {}}, "sidecarContainers":
           [], "workingDir": ""}, "tlsRoute": {"annotations": {}, "apiVersion": "gateway.networking.k8s.io/v1", "enabled":
@@ -3106,7 +3106,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/configuration-checksum: 8ab9fa308bd5cdc39820edafa771a5d81818e0edcca4cc0cc1df4d0dbb6725e6
+              datalabs.pkg.internal/configuration-checksum: 13b0608760053963c7519250c1effcab9649ad213a147ba2c65b8701c241cb88
             labels:
               app: vcluster-vc0
               release: vcluster-vc0
@@ -3155,12 +3155,13 @@ spec:
                 timeoutSeconds: 3
               resources:
                 limits:
+                  cpu: '4'
                   ephemeral-storage: 10Gi
                   memory: 4Gi
                 requests:
                   cpu: 200m
                   ephemeral-storage: 1Gi
-                  memory: 256Mi
+                  memory: 1Gi
               securityContext:
                 allowPrivilegeEscalation: false
                 runAsGroup: 0

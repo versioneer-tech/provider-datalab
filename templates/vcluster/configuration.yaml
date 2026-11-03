@@ -285,14 +285,7 @@ controlPlane:
         failureThreshold: 300
         periodSeconds: 6
         timeoutSeconds: 3
-    resources:
-      limits:
-        ephemeral-storage: 10Gi
-        memory: 4Gi
-      requests:
-        cpu: 200m
-        ephemeral-storage: 1Gi
-        memory: 256Mi
+    resources: ${resources}
     scheduling:
       affinity: {}
       nodeSelector: {}

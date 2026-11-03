@@ -218,6 +218,13 @@ def _compose_instance(
             **template_values,
         ),
     )
+    resource_config = config.get("resources") or {}
+    resources = {
+        "requests": {"cpu": "200m", "memory": "1Gi", "ephemeral-storage": "1Gi"},
+        "limits": {"cpu": "4", "memory": "4Gi", "ephemeral-storage": "10Gi"},
+    }
+    for section in resources:
+        resources[section].update(resource_config.get(section) or {})
     configuration = _render_template(
         req,
         "vcluster/configuration",
@@ -227,7 +234,14 @@ def _compose_instance(
         backend_hostname=backend_hostname,
         storage=str(instance_config.get("storage") or config.get("storage") or "5Gi"),
         storage_class=storage_class,
+        resources=resources,
         **template_values,
+    )
+    embedded = ((config.get("backingStore") or {}).get("database") or {}).get(
+        "embedded"
+    ) or {}
+    configuration["controlPlane"]["backingStore"]["database"]["embedded"].update(
+        embedded
     )
     configuration_json = json.dumps(configuration, sort_keys=True)
     checksum = hashlib.sha256(
@@ -331,6 +345,7 @@ def _compose_instance(
             "vcluster/statefulset",
             namespace=namespace,
             configuration_checksum=checksum,
+            resources=resources,
             **template_values,
         ),
         {

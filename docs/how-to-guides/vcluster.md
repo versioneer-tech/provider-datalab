@@ -56,6 +56,28 @@ workloads. A host admission policy enforces this list for each syncer.
 Control-plane, workload, database, and session PVCs share the existing
 `defaults.overallQuota.storage` limit.
 
+Set `vcluster.resources.requests` and `vcluster.resources.limits` in the
+EnvironmentConfig to change control-plane resources. Both the native vCluster
+configuration and the host StatefulSet use these values. The defaults are CPU
+`200m` and memory `1Gi` for requests, and CPU `4` and memory `4Gi` for limits.
+Ephemeral storage defaults to a `1Gi` request and a `10Gi` limit. Each supplied
+field overrides its default.
+
+For the tested two-connection SQLite settings, merge:
+
+```yaml
+data:
+  vcluster:
+    backingStore:
+      database:
+        embedded:
+          enabled: true
+          dataSource: "sqlite:///data/state.db?_journal=TRUNCATE&_locking=NORMAL&cache=shared&_busy_timeout=30000&_txlock=immediate&_synchronous=FULL"
+          extraArgs:
+          - --datastore-max-open-connections=2
+          - --datastore-max-idle-connections=1
+```
+
 Apply `dependencies/rbac.yaml`. The host must serve
 `ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding`. The Gateway
 must support HTTPRoute prefix rewriting, BackendTLSPolicy, and Kubernetes

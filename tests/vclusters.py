@@ -5,6 +5,7 @@
 
 from copy import deepcopy
 import base64
+import hashlib
 import json
 
 from helpers import load_helpers
@@ -101,6 +102,69 @@ def main():
     print(
         "PASS two virtual clusters have separate routes, identities, selectors, and session status"
     )
+
+    def settings(rendered, instance="vc0"):
+        def key(suffix):
+            return resource_name("vcluster", "s-joe", instance, suffix)
+
+        configuration_text = manifest(rendered, key("config"))["stringData"]["config.yaml"]
+        configuration = json.loads(configuration_text)
+        pod = manifest(rendered, key("statefulset"))["spec"]["template"]
+        authentication = manifest(rendered, key("authentication"))["data"]["authentication.json"]
+        checksum = pod["metadata"]["annotations"]["datalabs.pkg.internal/configuration-checksum"]
+        assert checksum == hashlib.sha256((configuration_text + authentication).encode()).hexdigest()
+        assert configuration["controlPlane"]["statefulSet"]["resources"] == pod["spec"]["containers"][0]["resources"]
+        return configuration["controlPlane"], checksum
+
+    defaults, _ = settings(resources)
+    assert defaults["backingStore"]["database"]["embedded"] == {"enabled": False, "extraArgs": []}
+    assert defaults["statefulSet"]["resources"] == {
+        "requests": {"cpu": "200m", "memory": "1Gi", "ephemeral-storage": "1Gi"},
+        "limits": {"cpu": "4", "memory": "4Gi", "ephemeral-storage": "10Gi"},
+    }
+    tuned_env = deepcopy(env)
+    embedded = {
+        "enabled": True,
+        "dataSource": "sqlite:///data/state.db?_journal=TRUNCATE&_locking=NORMAL&cache=shared&_busy_timeout=30000&_txlock=immediate&_synchronous=FULL",
+        "extraArgs": ["--datastore-max-open-connections=2", "--datastore-max-idle-connections=1"],
+    }
+    tuned_env["data"]["vcluster"]["backingStore"] = {"database": {"embedded": embedded}}
+    tuned = render(args, tuned_env, source, observed)
+    for instance in ("vc0", "vc1"):
+        control_plane, checksum = settings(tuned, instance)
+        assert control_plane["backingStore"]["database"]["embedded"] == embedded
+        assert checksum != settings(resources, instance)[1]
+    print("PASS database settings reach both configurations and change the Pod checksum")
+
+    for field, value in (
+        ("enabled", False),
+        ("dataSource", embedded["dataSource"].replace("TRUNCATE", "WAL")),
+        ("extraArgs", ["--datastore-max-open-connections=3", "--datastore-max-idle-connections=1"]),
+    ):
+        changed_env = deepcopy(tuned_env)
+        changed_env["data"]["vcluster"]["backingStore"]["database"]["embedded"][field] = value
+        changed = render(args, changed_env, source, observed)
+        control_plane, checksum = settings(changed)
+        assert control_plane["backingStore"]["database"]["embedded"][field] == value
+        assert checksum != settings(tuned)[1], field
+    for section, field, value in (
+        ("requests", "cpu", "300m"),
+        ("requests", "memory", "2Gi"),
+        ("limits", "cpu", "3"),
+        ("limits", "memory", "3Gi"),
+    ):
+        changed_env = deepcopy(tuned_env)
+        changed_env["data"]["vcluster"]["resources"] = {section: {field: value}}
+        changed = render(args, changed_env, source, observed)
+        control_plane, checksum = settings(changed)
+        expected = deepcopy(defaults["statefulSet"]["resources"])
+        expected[section][field] = value
+        assert control_plane["statefulSet"]["resources"] == expected
+        assert checksum != settings(tuned)[1], (section, field)
+    reordered_env = deepcopy(tuned_env)
+    reordered_env["data"]["vcluster"]["backingStore"]["database"]["embedded"] = dict(reversed(list(embedded.items())))
+    assert settings(render(args, reordered_env, source, observed)) == settings(tuned)
+    print("PASS each database and resource option triggers a stable configuration checksum")
 
     ready_observed = deepcopy(observed)
     for instance in ("vc0", "vc1"):

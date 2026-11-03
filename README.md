@@ -55,7 +55,7 @@ for the required resource APIs.
 - [Examples](examples/base): complete Datalab manifests.
 - [Authentication](docs/how-to-guides/authentication.md): Keycloak roles and session ingress protection.
 - [S3 client access](docs/how-to-guides/s3-access.md): read data with AWS tools.
-- [Virtual clusters](docs/how-to-guides/vcluster.md): access profiles and a PostgreSQL-backed STAC catalog.
+- [Virtual clusters](docs/how-to-guides/vcluster.md): database and resource settings, access profiles, and a PostgreSQL-backed STAC catalog.
 - [Additional services](docs/how-to-guides/additional_services.md): run Dask, MLflow, or psql from a workspace.
 - [Security](docs/security/index.md): access rules and operator responsibilities.
 - [API reference](docs/reference-guides/api.md): Datalab fields and service types.
