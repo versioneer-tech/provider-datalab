@@ -90,13 +90,6 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-redis-objects.py
-  - step: update-qdrant-objects
-    functionRef:
-      name: crossplane-contrib-function-python
-    input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      scriptFile: steps/update-qdrant-objects.py
   - step: update-session-status
     functionRef:
       name: crossplane-contrib-function-python

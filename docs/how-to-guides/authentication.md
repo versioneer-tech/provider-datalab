@@ -32,14 +32,14 @@ the required audience and roles too.
 ## Generated session resources
 
 For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
-`lab.acme.org`. Educates then creates session ingress hosts such as:
+`lab.acme.com`. Educates then creates session ingress hosts such as:
 
 ```text
-s-jane-default.lab.acme.org
-editor-s-jane-default.lab.acme.org
-s-jane-default-editor.lab.acme.org
-data-s-jane-default.lab.acme.org
-s-jane-default-data.lab.acme.org
+s-jane-default.lab.acme.com
+editor-s-jane-default.lab.acme.com
+s-jane-default-editor.lab.acme.com
+data-s-jane-default.lab.acme.com
+s-jane-default-data.lab.acme.com
 ```
 
 The generated ingresses carry labels that are suitable for platform policy:
@@ -54,12 +54,12 @@ For `s-jane`, the generated client includes redirect and web-origin entries
 for the Datalab root and each declared session host:
 
 ```text
-https://s-jane.lab.acme.org/*
-https://s-jane-default.lab.acme.org/*
-https://editor-s-jane-default.lab.acme.org/*
-https://s-jane-default-editor.lab.acme.org/*
-https://data-s-jane-default.lab.acme.org/*
-https://s-jane-default-data.lab.acme.org/*
+https://s-jane.lab.acme.com/*
+https://s-jane-default.lab.acme.com/*
+https://editor-s-jane-default.lab.acme.com/*
+https://s-jane-default-editor.lab.acme.com/*
+https://data-s-jane-default.lab.acme.com/*
+https://s-jane-default-data.lab.acme.com/*
 http://localhost:*
 ```
 
@@ -78,14 +78,14 @@ Set the ingress class, domain, and TLS Secret in the
 values in the Educates installation, for example:
 
 ```yaml
-clusterIngressDomain: lab.acme.org
+clusterIngressDomain: lab.acme.com
 clusterIngressClass: apisix
 tlsCertificateRef:
-  name: workspace-tls
+  name: wildcard-tls
   namespace: workspace
 ```
 
-Use a wildcard certificate for `*.lab.acme.org`.
+Use a wildcard certificate for `*.lab.acme.com`.
 
 ## Apply ingress policy
 
@@ -98,13 +98,13 @@ Adapt the domains, issuer, and controller settings in the linked manifests.
 ### NGINX Ingress with OAuth2 Proxy
 
 Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
-URI such as `https://auth.lab.acme.org/oauth2/callback`. Its authorization
+URI such as `https://auth.lab.acme.com/oauth2/callback`. Its authorization
 policy must check access to the Datalab named in the requested host.
 
 Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
 to add external-auth annotations to matching session Ingress objects.
 Set the proxy cookie domain to cover the session hosts, for example
-`.lab.acme.org`, and allow redirects only to that domain.
+`.lab.acme.com`, and allow redirects only to that domain.
 
 ### APISIX Ingress configured by Kyverno
 

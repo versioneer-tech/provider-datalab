@@ -1,12 +1,10 @@
 # ADR-001: Use Datalab as the Public Contract
 
+> Written: 02.12.2025. Revised: 03.11.2026.
+
 ## Status
 
 Accepted
-
-## Date
-
-2026-06-20
 
 ## Implementation
 
@@ -15,11 +13,8 @@ Implemented.
 Users create a `Datalab`. Provider Datalab turns it into a working data
 workspace and reports session information on the same resource.
 
-Educates is the core runtime used by the current implementation. Its resources
-are created and managed internally; users and client tools do not need to know
-about them.
-
-Educates also provides the browser editor and terminal.
+Educates is the first implementation of runtime sessions. It provides the
+browser editor and terminal. Its resources are created and managed internally.
 
 ## Context
 
@@ -34,17 +29,17 @@ the implementation behind it to change.
 
 ### Make `Datalab` the only public workspace resource
 
-Users and GitOps tools work with the namespaced `Datalab` resource. It describes the desired workspace,
-including its named sessions and optional capabilities.
+Users and GitOps tools work with the namespaced `Datalab` resource. It describes
+the desired workspace, including its named sessions and optional capabilities.
 
 The Datalab name, namespace, and UID form its stable identity. Generated Pod,
 Secret, and runtime-resource names are not part of the public contract.
 
-### Use Educates as the internal runtime primitive
+### Keep the runtime implementation internal
 
-Educates provides the editor, terminal, workspace Pod, session runtime, and
-optional applications. Crossplane translates a Datalab into the Educates and
-Kubernetes resources required to run it.
+The internal runtime provides the editor, terminal, workspace Pod, sessions,
+and optional applications. Crossplane translates a Datalab into the runtime
+and Kubernetes resources required to run it.
 
 This translation is an implementation detail:
 
@@ -56,7 +51,7 @@ User or GitOps tool
            -> working Datalab session
 ```
 
-Clients never create, update, discover, or depend on Educates resources
+Clients never create, update, discover, or depend on runtime resources
 directly. Crossplane owns those generated resources. This keeps one source of
 truth and lets the runtime implementation evolve without changing how users
 manage a Datalab.
@@ -79,7 +74,7 @@ operators keep control of security and infrastructure policy.
 Each session has a unique name and a desired state such as `started` or
 `stopped`. Provider Datalab creates the internal runtime for started sessions
 and reports the observed phase, message, and browser URL in
-`Datalab.status.sessions`.
+`Datalab.status.sessions`. A stopped session keeps its workspace PVC.
 
 Clients read the Datalab status. They do not look up the internal runtime.
 Diagnostic phase and message text is not a stable machine-readable lifecycle
@@ -101,15 +96,14 @@ stronger trust boundary.
 ### Add tools without changing the contract
 
 Operators can add runtime tools through extension packages. This keeps the
-Datalab API stable and avoids baking every tool into one large base image.
+Datalab API stable and avoids putting every tool in one large base image.
 
 ## Why This Design
 
 | Design choice | Reason |
 | --- | --- |
 | One Datalab API | Users have one clear object to create, review, and manage. |
-| Educates stays internal | Clients are not coupled to runtime-specific resources or names. |
-| Access runtime stays internal | The access implementation can change without creating a second user API. |
+| Runtime stays internal | Clients are not coupled to runtime-specific resources or names. |
 | Crossplane owns generated resources | Reconciliation has one owner and does not compete with user changes. |
 | User input and operator policy are separate | Self-service does not bypass platform security or infrastructure rules. |
 | Status is copied to the Datalab | Clients do not need broad access to internal resources. |
@@ -118,11 +112,10 @@ Datalab API stable and avoids baking every tool into one large base image.
 ## Consequences
 
 - Provider Datalab is self-contained: clients need only the Datalab API.
-- Educates is essential to the current implementation but is not part of the
-  client contract.
 - Changing the internal runtime does not require a second public workspace
   model.
 - Crossplane remains responsible for generated-resource ownership and cleanup.
 - Operators must validate user-selectable Secret references and other
   policy-sensitive options.
-- Some lifecycle behavior still needs live transition tests.
+- Render tests check generated resources; live tests must also check session
+  transitions and access to services.

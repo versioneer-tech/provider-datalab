@@ -38,14 +38,14 @@ spec:
   gatewayClassName: verify-s3
   listeners:
   - name: workspaces-http
-    hostname: '*.lab.local'
+    hostname: '*.lab.acme.com'
     port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
         from: All
   - name: workspaces-https
-    hostname: '*.lab.local'
+    hostname: '*.lab.acme.com'
     port: 443
     protocol: HTTPS
     tls:

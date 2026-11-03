@@ -8,7 +8,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${PGO_VERSION:=6.0.1}"
+: "${PGO_VERSION:=6.0.2}"
 : "${POSTGRES_CLIENT_IMAGE:=postgres:17}"
 : "${KEEP_POSTGRES_RESOURCES:=0}"
 
@@ -28,6 +28,7 @@ install_pgo() {
     return
   fi
   log "Installing Crunchy PGO ${PGO_VERSION}"
+  apply_operator_crds oci://registry.developers.crunchydata.com/crunchydata/pgo "${PGO_VERSION}"
   helm_it upgrade --install pgo \
     oci://registry.developers.crunchydata.com/crunchydata/pgo \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
@@ -87,9 +88,21 @@ wait_for_postgres() {
     sleep 5
   done
 
+  log 'Checking PostgreSQL with zero backup storage'
+  until kube get postgrescluster/pg1 --namespace "${POSTGRES_NAMESPACE}" -o json | \
+    jq -e '(.spec | has("backups") | not) and any(.status.instances[]?; .name == "primary" and .readyReplicas >= 1)' >/dev/null; do
+    if ((SECONDS >= deadline)); then
+      printf 'PostgreSQL without backups did not become ready.\n' >&2
+      return 1
+    fi
+    sleep 5
+  done
+  kube wait object.kubernetes.m.crossplane.io/db-postgrescluster-verify-postgres-pg1 \
+    --namespace "${WORKSPACE_NAMESPACE}" --for=condition=Ready --timeout=5m
+
   wait_for_connection_secret "${DATALAB_SECRET}" "${DATALAB_NAME}" 900 \
     POSTGRES_PG0_HOST POSTGRES_PG0_PORT POSTGRES_PG0_USER POSTGRES_PG0_PASSWORD \
-    POSTGRES_PG0_DATABASES "${POSTGRES_URL_KEY}"
+    POSTGRES_PG0_DATABASES "${POSTGRES_URL_KEY}" POSTGRES_PG1_VERIFY_URL
 
   log 'Waiting for the Datalab credentials to match the current operator Secret'
   until {
@@ -105,6 +118,7 @@ wait_for_postgres() {
 }
 
 run_postgres_probe() {
+  local url_key="${1:-${POSTGRES_URL_KEY}}"
 
   log 'Running an in-cluster write/read probe through the Datalab Secret'
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
@@ -114,7 +128,7 @@ run_postgres_probe() {
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${POSTGRES_CLIENT_IMAGE}" \
     DATALAB_SECRET "${DATALAB_SECRET}" \
-    POSTGRES_URL_KEY "${POSTGRES_URL_KEY}" | kube apply -f -
+    POSTGRES_URL_KEY "${url_key}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
 }
@@ -161,7 +175,7 @@ main() {
     show_postgres_diagnostics
     exit 1
   fi
-  if ! run_postgres_probe; then
+  if ! run_postgres_probe || ! run_postgres_probe POSTGRES_PG1_VERIFY_URL; then
     show_postgres_diagnostics
     printf 'PostgreSQL verification resources were kept for diagnosis.\n' >&2
     exit 1

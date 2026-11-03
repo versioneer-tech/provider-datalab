@@ -3,6 +3,8 @@
 
 import base64
 import hashlib
+import re
+from decimal import Decimal
 
 from google.protobuf import json_format
 
@@ -28,6 +30,17 @@ def _safe_str(value):
 def _string_value(value):
     """Keep the literal string for null values in existing resource settings."""
     return str(value).strip()
+
+
+def _backup_enabled(value):
+    quantity = str(value or "0").strip()
+    match = re.fullmatch(
+        r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
+        quantity,
+    )
+    if not match:
+        raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
+    return Decimal(match[1]) > 0
 
 
 def _observed_manifests(observed_resource):

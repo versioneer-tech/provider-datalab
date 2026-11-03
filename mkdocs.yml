@@ -22,6 +22,7 @@ nav:
     - API: reference-guides/api.md
     - Architecture:
       - ADR-001 Datalab as the Public Contract: architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md
+      - ADR-002 Managed Database Services: architecture/0002-provide-managed-database-services.md
 plugins:
   - search
   - mike

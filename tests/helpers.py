@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import runpy
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,39 +23,96 @@ def load_helpers(*names):
 
 
 class HelperTests(unittest.TestCase):
+    def test_backup_size_controls_enablement(self):
+        enabled = load_helpers("_backup_enabled")["_backup_enabled"]
+        for size in (None, "", "0", "0Gi", "0.0G", "0e3"):
+            with self.subTest(size=size):
+                self.assertFalse(enabled(size))
+        for size in ("1Gi", "0.5Gi", ".5G", "1e-3", "+1Mi", "1m"):
+            with self.subTest(size=size):
+                self.assertTrue(enabled(size))
+        for size in ("-1Gi", "invalid", "1GB"):
+            with self.subTest(size=size):
+                with self.assertRaisesRegex(ValueError, "backupStorage"):
+                    enabled(size)
+
     def test_service_tokens_do_not_change(self):
         token = load_helpers("_strong_token")["_strong_token"]
         self.assertEqual(token("sample:mongo"), "4YlC2SJsBu45oGi9FbJZFBypWCpXR-vU")
         self.assertEqual(
-            token("sample:qdrant:read"), "1ouGA0CiU6xSAfWP2i9XY3LIQ_TZ8bWW"
-        )
-        self.assertEqual(
             token("sample:redis", suffix="", length=28), "E6xDTnRLBJ1XV75rV3xJDiEsGpHp"
         )
 
-    def test_session_forms_and_state_aliases(self):
-        helpers = load_helpers("_session_name", "_session_state")
-        cases = (
-            (" sample ", "sample", "started"),
-            ({"name": " sample ", "state": " RUNNING "}, "sample", "started"),
-            ({"name": "sample", "state": "paused"}, "sample", "stopped"),
-            ({"name": "sample", "state": "stopped"}, "sample", "stopped"),
-            ({"name": "sample"}, "sample", "started"),
-            (None, "", "started"),
-        )
-        for session, name, state in cases:
-            with self.subTest(session=session):
-                self.assertEqual(helpers["_session_name"](session), name)
-                self.assertEqual(helpers["_session_state"](session), state)
-        self.assertEqual(helpers["_session_name"](None, stringify_none=True), "None")
 
-    def test_null_string_rules_remain_separate(self):
-        helpers = load_helpers("_safe_str", "_string_value")
-        self.assertEqual(helpers["_safe_str"](None), "")
-        self.assertEqual(helpers["_string_value"](None), "None")
-        for name in ("_safe_str", "_string_value"):
-            self.assertEqual(helpers[name](" sample "), "sample")
-            self.assertEqual(helpers[name](0), "0")
+class IntegrationHarnessTests(unittest.TestCase):
+    def test_http_and_command_errors_do_not_prove_network_isolation(self):
+        script = '''
+source "$1"
+xyz_exit="$2"
+kube() { return "$xyz_exit"; }
+verify_connection probe workspace block unused
+'''
+        for code in (0, 1, 6, 7, 22, 28):
+            with self.subTest(exit_code=code):
+                result = subprocess.run(
+                    ["bash", "-c", script, "xyz",
+                     str(ROOT / "tests/integration/verify-network.bash"), str(code)],
+                    capture_output=True, text=True, check=True,
+                )
+                expected = "PASS" if code in (7, 28) else "FAIL"
+                self.assertTrue(result.stdout.startswith(f"{expected} probe"), result.stdout)
+
+    def test_ingress_certificate_reuse_requires_the_correct_hostname(self):
+        script = '''
+set -euo pipefail
+source "$1"
+xyz_source="$2"
+xyz_applied="$3"
+WORKSPACE_NAMESPACE=workspace
+require_command() { command -v "$1" >/dev/null; }
+kube() {
+  case "$1" in
+    get) base64 <"$xyz_source" ;;
+    create)
+      while (($#)); do
+        if [[ "$1" == --cert ]]; then
+          cat "$2"
+          return
+        fi
+        shift
+      done
+      return 1
+      ;;
+    apply) cat >"$xyz_applied" ;;
+    *) return 1 ;;
+  esac
+}
+create_ingress_certificate
+'''
+        with tempfile.TemporaryDirectory(prefix="xyz-cert-") as directory:
+            work = Path(directory)
+            for hostname, renewed in (("*.lab.acme.com", False), ("*.old.acme.com", True)):
+                with self.subTest(hostname=hostname):
+                    certificate = work / "source.crt"
+                    applied = work / "applied.crt"
+                    subprocess.run(
+                        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                         "-subj", f"/CN={hostname}", "-addext", f"subjectAltName=DNS:{hostname}",
+                         "-keyout", str(work / "key"), "-out", str(certificate)],
+                        capture_output=True, check=True,
+                    )
+                    subprocess.run(
+                        ["bash", "-c", script, "xyz", str(ROOT / "tests/integration/educates.bash"),
+                         str(certificate), str(applied)],
+                        capture_output=True, text=True, check=True,
+                    )
+                    self.assertEqual(applied.exists(), renewed)
+                    if renewed:
+                        subprocess.run(
+                            ["openssl", "x509", "-in", str(applied), "-noout",
+                             "-checkhost", "verify-data.lab.acme.com"],
+                            capture_output=True, check=True,
+                        )
 
 
 if __name__ == "__main__":

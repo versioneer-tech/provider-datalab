@@ -27,10 +27,9 @@ tests/unit.bash
 | `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session with a 1 GiB registry. The test authenticates to the session registry and writes and reads a blob. |
 | `verify-data` | `verify-data-enabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | File write/read, one credential update with workload restart, and read-only write rejection through the generated Secret. Render tests cover disabled Data and resource structure. |
 | `verify-s3` | `verify-s3` from [manifests/s3/datalab.yaml](manifests/s3/datalab.yaml) | Experimental S3 access with the generated Datalab client: TLS routing, list/HEAD/GET/range reads, write/delete rejection, shared browser hostname, and browser access after S3 is disabled. |
-| `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | The Datalab requests PostgreSQL `pg0` with database `verify`, 1 GiB primary storage, and 1 GiB backup storage. The test uses the generated connection Secret for an internal SQL write and read. |
-| `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | The Datalab requests the `verify` MongoDB document store. The test uses the generated connection Secret for an internal document write and read. |
-| `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | The Datalab requests the `verify` Redis cache store. The test uses the generated connection Secret for an internal key write and read. |
-| `verify-qdrant` | `verify-qdrant` from [manifests/qdrant/datalab.yaml](manifests/qdrant/datalab.yaml) | The Datalab requests the `verify` Qdrant vector store. The test uses the generated connection Secret to create a collection and write and read a point. |
+| `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
+| `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | Document write and read through the generated connection Secret. Runs the backup CronJob and restores its archive with oplog replay into an isolated local MongoDB process. Checks the restored probe document. |
+| `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | Key write and read through the generated connection Secret. Enables backups on the running store, runs the CronJob, and checks the restored value in an isolated Redis process. Disables backups and checks that the backup PVC remains and Redis still accepts writes. |
 
 All Datalabs use a matching profile-named prerequisite Secret. The Data
 fixture and the S3 fixture enable Data, and only the registry fixture starts a
@@ -51,13 +50,14 @@ tests/integration/run.bash verify-s3
 tests/integration/run.bash verify-postgres
 tests/integration/run.bash verify-mongo
 tests/integration/run.bash verify-redis
-tests/integration/run.bash verify-qdrant
 ```
 
 The network profile uses controlled HTTP targets to test generated policies.
 It does not start a real vCluster or test admission policy. Each connection
-check runs once after the policies have converged. Set
-`KEEP_NETWORK_RESOURCES=1` to retain successful resources.
+check runs once after the policies have converged. A denied connection must
+fail with a connection error or timeout; an HTTP, DNS, or command error fails
+the check. The external connectivity target is `https://www.iana.org/`.
+Set `KEEP_NETWORK_RESOURCES=1` to retain successful resources.
 
 The registry profile installs Kyverno because the Educates runtime applies
 Kyverno policies. It then installs the EOEPCA+ Educates dependency chart
@@ -93,23 +93,22 @@ It then repeats the S3 checks. This tests Secret propagation; it does not
 rotate credentials in Keycloak itself.
 Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
-The PostgreSQL profile installs Crunchy PGO `6.0.1`, which is the version
-pinned by EOEPCA+. Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
+The PostgreSQL profile installs Crunchy PGO `6.0.2`.
+Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
 resources. PGO remains installed after the profile finishes.
 
-The managed-store profiles use operator releases that accept the CR shape
-emitted by the composition:
+The managed-store profiles use these fixed operator releases to check the
+resources emitted by the composition:
 
-- MongoDB Kubernetes Operator chart `1.12.0` serves
+- MongoDB Kubernetes Operator `1.14.0` (Helm chart `1.14.0`) serves
   `mongodbcommunity.mongodb.com/v1`.
-- Redis Operator chart `0.26.1`, with operator `0.26.0`, serves
+- Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`) serves
   `redis.redis.opstreelabs.in/v1beta2`.
-- Qdrant Operator `0.0.3` serves `qdrant.io/v1alpha1`. Its newer development
-  line uses a different API group, so it is not compatible with the current
-  composition.
 
-Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB, Redis, or Qdrant
+Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB or Redis
 resources. Each operator remains installed after its profile finishes.
+Before an operator install or upgrade, the harness applies the CRDs from
+the selected chart. Helm does not update existing CRDs during an upgrade.
 
 Dependencies with matching pins are reused after readiness checks. Set
 `REUSE_DEPENDENCIES=0` to force Helm installation or upgrade, for example after
@@ -126,7 +125,7 @@ REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
 ## GitHub Actions
 
 Pull requests to `main`, pushes to `main`, and manual workflow runs execute the
-unit suite and all eight integration profiles. The profiles share one Kind
+unit suite and all seven integration profiles. The profiles share one Kind
 cluster in the job. Tag publication does not run the tests again. A release tag
 must point to a commit that passed the main-branch workflow.
 

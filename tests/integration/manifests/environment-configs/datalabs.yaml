@@ -10,7 +10,7 @@ data:
     realm: integration
   ingress:
     class: nginx
-    domain: lab.local
+    domain: lab.acme.com
     secret: wildcard-tls
   storage:
     endpoint: http://default-hl.minio:9000
@@ -61,7 +61,7 @@ data:
     realm: integration
   ingress:
     class: nginx
-    domain: lab.local
+    domain: lab.acme.com
     secret: wildcard-tls
   storage:
     endpoint: http://default-hl.minio:9000

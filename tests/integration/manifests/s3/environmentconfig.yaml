@@ -13,7 +13,7 @@ data:
     internalURL: http://keycloak.keycloak:8080/realms/integration
   ingress:
     class: nginx
-    domain: lab.local
+    domain: lab.acme.com
     secret: wildcard-tls
     enabled: false
   httpRoute:

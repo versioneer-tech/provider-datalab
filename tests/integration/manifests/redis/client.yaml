@@ -34,7 +34,7 @@ spec:
         - -c
         - |
           set -eu
-          expected="$(date +%s)"
+          expected=__PROBE_VALUE__
           REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
             -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
             SET provider-datalab:verify "${expected}" >/dev/null

@@ -1,8 +1,8 @@
 # Install Provider Datalab
 
-This guide prepares the platform, installs the configuration package, and
-creates a first Datalab. Run the commands with access to the target cluster.
-Use your platform's GitOps and Secret tools for a shared installation.
+Run these commands from a repository checkout with access to the target
+cluster. For a shared installation, manage manifests and Secrets through your
+platform's GitOps and Secret tools.
 
 ## Prerequisites
 
@@ -16,14 +16,17 @@ Follow the [Educates installation guide](https://docs.educates.dev/en/stable/ins
 The Educates ingress class, domain, and TLS Secret must match the settings
 below.
 
-Install the operators for the managed stores you plan to offer:
+Install the operators for the managed stores you plan to offer. Provider
+Datalab integration tests use these versions:
 
-| Datalab field | Operator | Required resource API |
-| --- | --- | --- |
-| `spec.databases` | Crunchy PostgreSQL Operator | `PostgresCluster` in `postgres-operator.crunchydata.com/v1` |
-| `spec.documentStores` | MongoDB Kubernetes Operator | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
-| `spec.cacheStores` | Redis Kubernetes Operator | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
-| `spec.vectorStores` | Qdrant Operator | `QdrantCluster` in `qdrant.io/v1alpha1` |
+| Datalab field | Operator | Test version | Required resource API |
+| --- | --- | --- | --- |
+| `spec.databases` | Crunchy PostgreSQL Operator (PGO) | `6.0.2` | `PostgresCluster` in `postgres-operator.crunchydata.com/v1` |
+| `spec.documentStores` | MongoDB Kubernetes Operator | `1.14.0` | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
+| `spec.cacheStores` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
+
+These are fixed test pins. Other versions need validation before use.
+The harness applies each chart's CRDs before it installs or upgrades the operator.
 
 See [managed service types](usage_concepts.md#managed-service-types) for the
 request fields and type defaults. Check the served APIs and fields before
@@ -31,6 +34,15 @@ upgrading an operator. The
 [integration tests](https://github.com/versioneer-tech/provider-datalab/tree/main/tests/integration)
 contain the dependency settings used by this repository. Configure storage,
 backup and restore, monitoring, and deletion for each store you offer.
+
+PostgreSQL without backups requires Crunchy PGO 5.7 or later. MongoDB
+Community backups use a composition-managed CronJob and the matching MongoDB
+image's database tools. Redis backups use a CronJob with the standard Redis
+tools image at the same Redis version as the server. Provider Kubernetes
+needs the `batch/cronjobs`
+permissions in `dependencies/rbac.yaml`. Backup volumes need a StorageClass
+that supports `ReadWriteOnce`. See [backup settings](usage_concepts.md#backups)
+for schedules, retention, and restore limits.
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
@@ -43,11 +55,12 @@ ProviderConfigs:
 
 ```bash
 kubectl create namespace workspace
+kubectl create namespace datalab
 ```
 
-The input storage Secret lives in `storage.secretNamespace`, set below.
-This guide also uses `workspace` for that namespace. Educates creates the
-runtime namespaces when the Datalab is reconciled.
+Input storage Secrets live in `datalab`, as set by `storage.secretNamespace`
+in the environment examples. Educates creates a runtime namespace for each
+Datalab.
 
 ## 2. Install provider dependencies
 
@@ -117,21 +130,21 @@ metadata:
   name: datalab
 data:
   iam:
-    realm: demo
-    issuerURL: https://identity.example.org/realms/demo
-    internalURL: http://keycloak.keycloak:8080/realms/demo
+    realm: acme
+    issuerURL: https://identity.acme.com/realms/acme
+    internalURL: http://keycloak.keycloak:8080/realms/acme
   ingress:
     enabled: true
     class: nginx
-    domain: lab.example.org
+    domain: lab.acme.com
     secret: wildcard-tls
     annotations: {}
   storage:
-    endpoint: https://s3.example.org
+    endpoint: https://s3.acme.com
     provider: Other
     region: us-east-1
     forcePathStyle: "true"
-    secretNamespace: workspace
+    secretNamespace: datalab
     type: s3
   storageClasses:
     allowed:
@@ -183,7 +196,7 @@ data:
   httpRoute:
     enabled: true
     parentName: default
-    parentNamespace: gateway-system
+    parentNamespace: contour
     sectionName: workspaces-https
     httpSectionName: workspaces-http
 ```
@@ -277,8 +290,9 @@ for a file bundle example.
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
 | `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
+| `documentStore.backupStorageClassName` | Cluster default | MongoDB backup StorageClass. |
 | `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |
-| `vectorStore.storageClassName` | Cluster default | Qdrant data StorageClass. |
+| `cacheStore.backupStorageClassName` | Cluster default | Redis backup StorageClass. |
 
 PostgreSQL TLSRoutes are created only when all three
 `database.tlsRoute` settings are present.
@@ -370,9 +384,9 @@ path-style S3 requests.
 For a manual setup, create the Secret with your credential values:
 
 ```bash
-kubectl -n workspace create secret generic demo \
-  --from-literal=AWS_ACCESS_KEY_ID=<KEY_ID> \
-  --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET>
+kubectl -n datalab create secret generic s-joe \
+  --from-literal=AWS_ACCESS_KEY_ID='<KEY_ID>' \
+  --from-literal=AWS_SECRET_ACCESS_KEY='<SECRET>'
 ```
 
 Use the platform's Secret tools for shared installations. Keep live
@@ -380,19 +394,19 @@ credentials out of Git.
 
 ## 6. Create a Datalab
 
-Save this resource as `datalab.yaml`. Alice must already exist in Keycloak.
+Save this resource as `datalab.yaml`. The user `joe` must already exist in
+Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml)
+with an explicit claim namespace.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
-  name: demo
+  name: s-joe
   namespace: workspace
 spec:
   users:
-  - alice
-  sessions:
-  - name: default
+  - joe
 ```
 
 Apply it and check its conditions:
@@ -400,7 +414,7 @@ Apply it and check its conditions:
 ```bash
 kubectl apply -f datalab.yaml
 kubectl get datalabs -n workspace
-kubectl describe datalab demo -n workspace
+kubectl describe datalab s-joe -n workspace
 ```
 
 See [Use a Datalab](usage_concepts.md) for session state, managed services,
@@ -432,5 +446,5 @@ kubectl api-resources --api-group=gateway.networking.k8s.io
 ```
 
 For a managed store, also check its API group from the prerequisite table.
-Then verify the session login, Data address, storage access, and each requested
-service before giving the Datalab to users.
+Verify the Data address, storage access, and each requested service. If you
+declared a session, also check its browser login before giving users access.

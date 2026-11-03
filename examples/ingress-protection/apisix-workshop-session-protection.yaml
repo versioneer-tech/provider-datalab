@@ -7,7 +7,7 @@
 #
 # Adapt namespaces, issuer names, storage settings, and the OIDC discovery URL
 # for your cluster.
-# These CEL policies require Kyverno v1.19.1 or later.
+# Requires the Kyverno policies.kyverno.io/v1 API.
 #
 # The generated <datalab>-oauth2-client Secret remains the Datalab-scoped
 # machine credential for client-credentials automation and services owned by
@@ -23,14 +23,14 @@ data:
     realm: acme
   ingress:
     class: apisix
-    domain: lab.acme.org
-    secret: workspace-tls
+    domain: lab.acme.com
+    secret: wildcard-tls
   storage:
-    endpoint: https://s3.acme.org
+    endpoint: https://s3.acme.com
     provider: Other
     region: acme
     forcePathStyle: "true"
-    secretNamespace: workspace
+    secretNamespace: datalab
     type: s3
 ---
 apiVersion: cert-manager.io/v1
@@ -40,11 +40,11 @@ metadata:
   namespace: workspace
 spec:
   dnsNames:
-    - "*.lab.acme.org"
+    - "*.lab.acme.com"
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-dns-prod
-  secretName: workspace-tls
+  secretName: wildcard-tls
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -101,7 +101,7 @@ spec:
     - name: uses-datalab-domain
       expression: >-
         has(object.spec.rules) &&
-        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.com'))
     - name: has-datalab-name
       expression: >-
         'training.educates.dev/environment.name' in object.metadata.labels &&
@@ -129,7 +129,7 @@ spec:
               - name: openid-connect
                 enable: true
                 config:
-                  discovery: "https://iam-auth.acme.org/realms/acme/.well-known/openid-configuration"
+                  discovery: "https://identity.acme.com/realms/acme/.well-known/openid-configuration"
                   use_jwks: true
                   bearer_only: false
                   scope: openid profile email roles
@@ -185,7 +185,7 @@ spec:
     - name: uses-datalab-domain
       expression: >-
         has(object.spec.rules) &&
-        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.com'))
     - name: has-datalab-name
       expression: >-
         'training.educates.dev/environment.name' in object.metadata.labels &&
@@ -242,7 +242,7 @@ spec:
     - name: uses-datalab-domain
       expression: >-
         has(object.spec.rules) &&
-        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.com'))
   mutations:
     - patchType: ApplyConfiguration
       applyConfiguration:

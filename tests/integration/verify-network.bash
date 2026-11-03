@@ -11,7 +11,7 @@ source "${INTEGRATION_DIR}/lib.bash"
 : "${NETWORK_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${NETWORK_SERVER_IMAGE:=nginx:1.27-alpine}"
 : "${NETWORK_VCLUSTER_IMAGE:=busybox:1.36.1}"
-: "${NETWORK_EXTERNAL_URL:=https://example.com}"
+: "${NETWORK_EXTERNAL_URL:=https://www.iana.org/}"
 : "${NETWORK_POLICY_SETTLE_SECONDS:=10}"
 : "${KEEP_NETWORK_RESOURCES:=0}"
 
@@ -160,8 +160,9 @@ verify_connection() {
     exit_code=$?
   fi
 
+  # HTTP and command errors do not prove that a network policy blocked traffic.
   if [[ ("${expectation}" == allow && "${exit_code}" == 0) || \
-    ("${expectation}" == block && "${exit_code}" != 0) ]]; then
+    ("${expectation}" == block && ("${exit_code}" == 7 || "${exit_code}" == 28)) ]]; then
     pass_count=$((pass_count + 1))
     printf 'PASS %s\n' "${name}"
   else
@@ -237,4 +238,6 @@ main() {
   cleanup_successful_verification
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

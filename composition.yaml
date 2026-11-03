@@ -283,7 +283,6 @@ spec:
             for field, backend in (
                 ("documentStores", "mongodb"),
                 ("cacheStores", "redis"),
-                ("vectorStores", "qdrant"),
             ):
                 stores = spec.get(field) or {}
                 if isinstance(stores, dict):
@@ -602,31 +601,6 @@ spec:
                         manifest["stringData"][_store_key("REDIS", store, "PASSWORD")] = pwd
                         manifest["stringData"][_store_key("REDIS", store, "URL")] = (
                             f"redis://default:{pwd}@{host}:6379/0"
-                        )
-
-            vector_stores = spec.get("vectorStores") or {}
-            if isinstance(vector_stores, dict):
-                for store_name in sorted(vector_stores.keys()):
-                    if not isinstance(store_name, str) or not store_name.strip():
-                        continue
-                    store = store_name.strip()
-                    host = f"qdrant-{store}.{workshop_namespace}.svc"
-                    manifest["stringData"][_store_key("QDRANT", store, "HOST")] = host
-                    manifest["stringData"][_store_key("QDRANT", store, "PORT")] = "6333"
-                    manifest["stringData"][_store_key("QDRANT", store, "GRPC_PORT")] = "6334"
-                    manifest["stringData"][_store_key("QDRANT", store, "URL")] = (
-                        f"http://{host}:6333"
-                    )
-                    auth_data = _extract_data(
-                        observed.get(f"observe-qdrant-auth-secret-{xr_name}-{store}")
-                    )
-                    api_key = _b64get_any(auth_data, ["apiKey"])
-                    read_key = _b64get_any(auth_data, ["readApiKey"])
-                    if api_key:
-                        manifest["stringData"][_store_key("QDRANT", store, "API_KEY")] = api_key
-                    if read_key:
-                        manifest["stringData"][_store_key("QDRANT", store, "READ_API_KEY")] = (
-                            read_key
                         )
 
             db_hosts = spec.get("databases") or {}
@@ -1585,8 +1559,7 @@ spec:
                         if _string_value(x)
                     ]
                     db_storage = _string_value(host_cfg.get("storage") or "")
-                    backup_storage = _string_value(host_cfg.get("backupStorage") or "")
-                    if dbnames and db_storage and backup_storage:
+                    if dbnames and db_storage:
                         db_service_names.append(f"{host_key.strip()}-primary")
 
             context = _to_dict(req.context)
@@ -3444,6 +3417,10 @@ spec:
 
             return fill(template)
 
+        import re
+
+        from decimal import Decimal
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -3456,6 +3433,16 @@ spec:
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
+
+        def _backup_enabled(value):
+            quantity = str(value or "0").strip()
+            match = re.fullmatch(
+                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
+                quantity,
+            )
+            if not match:
+                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
+            return Decimal(match[1]) > 0
 
         def _observed_manifests(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -3557,8 +3544,9 @@ spec:
 
                 db_storage = _string_value(host_cfg.get("storage") or "")
                 backup_storage = _string_value(host_cfg.get("backupStorage") or "")
-                if not db_storage or not backup_storage:
+                if not db_storage:
                     continue
+                backup_enabled = _backup_enabled(backup_storage)
 
                 db_storage_class = _string_value(
                     host_cfg.get("storageClassName") or data_sc_default
@@ -3586,13 +3574,6 @@ spec:
                 if db_storage_class:
                     data_vcs["storageClassName"] = db_storage_class
 
-                repo_vcs = {
-                    "accessModes": ["ReadWriteOnce"],
-                    "resources": {"requests": {"storage": backup_storage}},
-                }
-                if backup_storage_class:
-                    repo_vcs["storageClassName"] = backup_storage_class
-
                 pg_cluster = _render_template(
                     req,
                     "postgres/postgres-cluster",
@@ -3600,8 +3581,20 @@ spec:
                     workshop_ns=workshop_namespace,
                     cm_name=cm_name,
                     data_vcs=data_vcs,
-                    repo_vcs=repo_vcs,
                 )
+
+                readiness_query = "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1)"
+                if backup_enabled:
+                    repo_vcs = {
+                        "accessModes": ["ReadWriteOnce"],
+                        "resources": {"requests": {"storage": backup_storage}},
+                    }
+                    if backup_storage_class:
+                        repo_vcs["storageClassName"] = backup_storage_class
+                    pg_cluster["spec"]["backups"] = _render_template(
+                        req, "postgres/backups", repo_vcs=repo_vcs
+                    )
+                    readiness_query += " && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true"
 
                 if users_all:
                     pg_cluster["spec"]["users"] = [
@@ -3619,7 +3612,7 @@ spec:
                     pg_cluster,
                     readiness={
                         "policy": "DeriveFromCelQuery",
-                        "celQuery": "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true",
+                        "celQuery": readiness_query,
                     },
                     watch=True,
                 )
@@ -3650,6 +3643,19 @@ spec:
                     watch=True,
                 )
       templates:
+        postgres/backups:
+          pgbackrest:
+            global:
+              repo1-retention-full-type: count
+              repo1-retention-full: '4'
+              repo1-path: /pgbackrest/repo1
+            repos:
+            - name: repo1
+              schedules:
+                full: 0 1 * * 0
+                differential: 0 1 * * 1-6
+              volume:
+                volumeClaimSpec: ${repo_vcs}
         postgres/init-sql:
           apiVersion: v1
           kind: ConfigMap
@@ -3689,19 +3695,6 @@ spec:
             - name: primary
               replicas: 1
               dataVolumeClaimSpec: ${data_vcs}
-            backups:
-              pgbackrest:
-                global:
-                  repo1-retention-full-type: count
-                  repo1-retention-full: '4'
-                  repo1-path: /pgbackrest/repo1
-                repos:
-                - name: repo1
-                  schedules:
-                    full: 0 1 * * 0
-                    differential: 0 1 * * 1-6
-                  volume:
-                    volumeClaimSpec: ${repo_vcs}
         postgres/route:
           apiVersion: gateway.networking.k8s.io/v1
           kind: TLSRoute
@@ -3753,6 +3746,10 @@ spec:
 
         import hashlib
 
+        import re
+
+        from decimal import Decimal
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -3765,6 +3762,16 @@ spec:
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
+
+        def _backup_enabled(value):
+            quantity = str(value or "0").strip()
+            match = re.fullmatch(
+                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
+                quantity,
+            )
+            if not match:
+                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
+            return Decimal(match[1]) > 0
 
         def _observed_manifests(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -3809,6 +3816,7 @@ spec:
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             mongo_env = environment.get("documentStore") or {}
             mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
+            backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
@@ -3924,6 +3932,73 @@ spec:
                     pvc_spec=pvc_spec,
                 )
 
+                backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
+                if _backup_enabled(backup_storage):
+                    backup_name = f"{mongo_resource_name}-backup"
+                    backup_secret_name = f"{store_name}-mongodb-backup-auth"
+                    backup_username = f"{store_name}-backup"
+                    backup_password = _strong_token(f"{xr_name}:{store_name}:mongodb:backup")
+                    backup_secret = _render_template(
+                        req,
+                        "mongodb/backup-secret",
+                        backup_secret_name=backup_secret_name,
+                        workshop_ns=workshop_namespace,
+                        backup_password=backup_password,
+                        backup_config=f"password: {backup_password}\n",
+                    )
+                    backup_vcs = {
+                        "accessModes": ["ReadWriteOnce"],
+                        "resources": {"requests": {"storage": backup_storage}},
+                    }
+                    if backup_storage_class:
+                        backup_vcs["storageClassName"] = backup_storage_class
+                    backup_pvc = _render_template(
+                        req,
+                        "mongodb/backup-pvc",
+                        backup_name=backup_name,
+                        workshop_ns=workshop_namespace,
+                        backup_vcs=backup_vcs,
+                    )
+                    backup_job = _render_template(
+                        req,
+                        "mongodb/backup-cronjob",
+                        backup_name=backup_name,
+                        workshop_ns=workshop_namespace,
+                        backup_secret_name=backup_secret_name,
+                        backup_username=backup_username,
+                        backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
+                        mongo_image=f"mongo:{mongo['spec']['version']}",
+                    )
+                    mongo["spec"]["users"].append(
+                        {
+                            "name": backup_username,
+                            "db": "admin",
+                            "passwordSecretRef": {"name": backup_secret_name, "key": "password"},
+                            "roles": [{"name": "backup", "db": "admin"}],
+                            "scramCredentialsSecretName": f"{store_name}-backup-scram",
+                        }
+                    )
+                    for resource_type, manifest in (
+                        ("auth-secret", backup_secret),
+                        ("pvc", backup_pvc),
+                        ("cronjob", backup_job),
+                    ):
+                        backup_key = f"mongodb-backup-{resource_type}-{xr_name}-{store_name}"
+                        backup_body = _render_template(
+                            req,
+                            "common/object",
+                            key=backup_key,
+                            xr_namespace=xr_namespace,
+                            manifest=manifest,
+                            readiness={"policy": "SuccessfulCreate"},
+                        )
+                        if resource_type == "pvc":
+                            # Keep completed backups when the schedule is disabled.
+                            backup_body["spec"]["managementPolicies"] = [
+                                "Observe", "Create", "Update", "LateInitialize"
+                            ]
+                        rsp.desired.resources[backup_key].resource.update(backup_body)
+
                 key = f"mongodb-community-{xr_name}-{store_name}"
                 body = _render_template(
                     req,
@@ -3976,6 +4051,103 @@ spec:
           type: Opaque
           stringData:
             password: ${mongo_password}
+        mongodb/backup-cronjob:
+          apiVersion: batch/v1
+          kind: CronJob
+          metadata:
+            name: ${backup_name}
+            namespace: ${workshop_ns}
+          spec:
+            schedule: 0 1 * * *
+            timeZone: Etc/UTC
+            concurrencyPolicy: Forbid
+            startingDeadlineSeconds: 3600
+            successfulJobsHistoryLimit: 1
+            failedJobsHistoryLimit: 1
+            jobTemplate:
+              spec:
+                backoffLimit: 2
+                activeDeadlineSeconds: 3600
+                template:
+                  spec:
+                    restartPolicy: Never
+                    automountServiceAccountToken: false
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 999
+                      runAsGroup: 999
+                      fsGroup: 999
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                    - name: backup
+                      image: ${mongo_image}
+                      command:
+                      - /bin/sh
+                      - -ec
+                      args:
+                      - |
+                        umask 077
+                        archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).archive.gz"
+                        partial="/backup/dump.partial"
+                        trap 'rm -f "$partial"' EXIT
+                        mongodump --host="$BACKUP_HOST" --username="$BACKUP_USER" \
+                          --authenticationDatabase=admin --config=/auth/config.yaml \
+                          --oplog --gzip --archive="$partial"
+                        mv "$partial" "$archive"
+                        find /backup -maxdepth 1 -type f -name 'dump-*.archive.gz' -printf '%f\n' \
+                          | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
+                      env:
+                      - name: BACKUP_HOST
+                        value: ${backup_host}
+                      - name: BACKUP_USER
+                        value: ${backup_username}
+                      resources:
+                        requests:
+                          cpu: 100m
+                          memory: 128Mi
+                        limits:
+                          memory: 512Mi
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop:
+                          - ALL
+                      volumeMounts:
+                      - name: backup
+                        mountPath: /backup
+                      - name: auth
+                        mountPath: /auth
+                        readOnly: true
+                    volumes:
+                    - name: backup
+                      persistentVolumeClaim:
+                        claimName: ${backup_name}
+                    - name: auth
+                      secret:
+                        secretName: ${backup_secret_name}
+                        defaultMode: 288
+                        items:
+                        - key: config.yaml
+                          path: config.yaml
+        mongodb/backup-pvc:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: ${backup_name}
+            namespace: ${workshop_ns}
+          spec: ${backup_vcs}
+        mongodb/backup-secret:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${backup_secret_name}
+            namespace: ${workshop_ns}
+          type: Opaque
+          stringData:
+            password: ${backup_password}
+            config.yaml: ${backup_config}
         mongodb/role-mongodb-kubernetes-appdb:
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
@@ -4116,6 +4288,10 @@ spec:
 
         import hashlib
 
+        import re
+
+        from decimal import Decimal
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -4128,6 +4304,16 @@ spec:
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
+
+        def _backup_enabled(value):
+            quantity = str(value or "0").strip()
+            match = re.fullmatch(
+                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
+                quantity,
+            )
+            if not match:
+                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
+            return Decimal(match[1]) > 0
 
         def _observed_manifests(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -4143,6 +4329,16 @@ spec:
             manifest, raw_manifest = _observed_manifests(observed_resource)
             return manifest or raw_manifest
 
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
         def _strong_token(seed, *, suffix=":provider-datalab", length=32):
             # Keep each service's existing seed and length to prevent credential changes.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
@@ -4150,6 +4346,9 @@ spec:
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
+
+        import base64
+        import hashlib
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
@@ -4172,6 +4371,7 @@ spec:
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             redis_env = environment.get("cacheStore") or {}
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
+            backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
             observed = getattr(req.observed, "resources", None) or {}
             env_key = f"workshopenvironment-{xr_name}"
@@ -4194,6 +4394,8 @@ spec:
                 if not redis_storage:
                     continue
                 store_name = store_key.strip()
+                backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
+                backups_enabled = _backup_enabled(backup_storage)
                 redis_password = _strong_token(
                     f"{xr_name}:{store_name}:redis", suffix="", length=28
                 )
@@ -4216,12 +4418,17 @@ spec:
                 rsp.desired.resources[auth_key].resource.update(auth_body)
 
                 redis_acl_secret_name = f"{store_name}-redis-acl"
+                acl = f"user default on >{redis_password} ~* +@all\n"
+                if backups_enabled:
+                    backup_password = _strong_token(f"{xr_name}:{store_name}:redis:backup")
+                    acl += f"user backup on >{backup_password} -@all +ping +replconf +sync\n"
+                encoded_acl = base64.b64encode(acl.encode()).decode()
                 redis_acl_secret = _render_template(
                     req,
                     "redis/acl-secret",
                     redis_acl_secret_name=redis_acl_secret_name,
                     workshop_ns=workshop_namespace,
-                    stringData_user_acl=f"user default on >{redis_password} ~* +@all\n",
+                    data_user_acl=encoded_acl,
                 )
                 acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
                 acl_body = _render_template(
@@ -4232,6 +4439,9 @@ spec:
                     redis_acl_secret=redis_acl_secret,
                 )
                 rsp.desired.resources[acl_key].resource.update(acl_body)
+                # The operator mounts the ACL file with subPath, so changes need a restart.
+                observed_acl = _extract_data(observed.get(acl_key)).get("user.acl") or encoded_acl
+                acl_checksum = hashlib.sha256(observed_acl.encode()).hexdigest()
 
                 pvc_spec = {
                     "accessModes": ["ReadWriteOnce"],
@@ -4254,6 +4464,7 @@ spec:
                     workshop_ns=workshop_namespace,
                     redis_auth_secret_name=redis_auth_secret_name,
                     redis_acl_secret_name=redis_acl_secret_name,
+                    redis_acl_checksum=acl_checksum,
                     storage=storage,
                 )
 
@@ -4267,6 +4478,58 @@ spec:
                 )
                 rsp.desired.resources[key].resource.update(body)
 
+                if backups_enabled:
+                    backup_name = f"redis-{store_name}-backup"
+                    backup_secret_name = f"{store_name}-redis-backup-auth"
+                    backup_secret = _render_template(
+                        req,
+                        "redis/auth-secret",
+                        redis_auth_secret_name=backup_secret_name,
+                        workshop_ns=workshop_namespace,
+                        redis_password=backup_password,
+                    )
+                    backup_vcs = {
+                        "accessModes": ["ReadWriteOnce"],
+                        "resources": {"requests": {"storage": backup_storage}},
+                    }
+                    if backup_storage_class:
+                        backup_vcs["storageClassName"] = backup_storage_class
+                    backup_pvc = _render_template(
+                        req,
+                        "redis/backup-pvc",
+                        backup_name=backup_name,
+                        workshop_ns=workshop_namespace,
+                        backup_vcs=backup_vcs,
+                    )
+                    backup_job = _render_template(
+                        req,
+                        "redis/backup-cronjob",
+                        backup_name=backup_name,
+                        workshop_ns=workshop_namespace,
+                        backup_secret_name=backup_secret_name,
+                        backup_host=store_name,
+                    )
+                    for resource_type, manifest in (
+                        ("auth-secret", backup_secret),
+                        ("pvc", backup_pvc),
+                        ("cronjob", backup_job),
+                    ):
+                        backup_key = f"redis-backup-{resource_type}-{xr_name}-{store_name}"
+                        backup_body = _render_template(
+                            req,
+                            "common/object",
+                            key=backup_key,
+                            xr_namespace=xr_namespace,
+                            manifest=manifest,
+                            readiness={"policy": "SuccessfulCreate"},
+                        )
+                        if resource_type == "pvc":
+                            # Keep completed backups when the schedule is disabled.
+                            backup_body["spec"]["managementPolicies"] = [
+                                "Observe", "Create", "Update", "LateInitialize"
+                            ]
+                        rsp.desired.resources[backup_key].resource.update(backup_body)
+
                 pod_key = f"redis-pod-{xr_name}-{store_name}"
                 pod_body = _render_template(
                     req,
@@ -4278,6 +4541,22 @@ spec:
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
         common/pod-observer:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -4328,8 +4607,8 @@ spec:
             name: ${redis_acl_secret_name}
             namespace: ${workshop_ns}
           type: Opaque
-          stringData:
-            user.acl: ${stringData_user_acl}
+          data:
+            user.acl: ${data_user_acl}
         redis/auth-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -4356,12 +4635,93 @@ spec:
           type: Opaque
           stringData:
             password: ${redis_password}
+        redis/backup-cronjob:
+          apiVersion: batch/v1
+          kind: CronJob
+          metadata:
+            name: ${backup_name}
+            namespace: ${workshop_ns}
+          spec:
+            schedule: 0 1 * * *
+            timeZone: Etc/UTC
+            concurrencyPolicy: Forbid
+            startingDeadlineSeconds: 3600
+            successfulJobsHistoryLimit: 1
+            failedJobsHistoryLimit: 1
+            jobTemplate:
+              spec:
+                backoffLimit: 2
+                activeDeadlineSeconds: 3600
+                template:
+                  spec:
+                    restartPolicy: Never
+                    automountServiceAccountToken: false
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 999
+                      runAsGroup: 999
+                      fsGroup: 999
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                    - name: backup
+                      image: redis:7.0.15
+                      command:
+                      - /bin/sh
+                      - -ec
+                      args:
+                      - |
+                        umask 077
+                        archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).rdb"
+                        partial="/backup/dump.partial"
+                        trap 'rm -f "$partial"' EXIT
+                        redis-cli -h "$BACKUP_HOST" --user backup --rdb "$partial"
+                        redis-check-rdb "$partial"
+                        mv "$partial" "$archive"
+                        find /backup -maxdepth 1 -type f -name 'dump-*.rdb' -printf '%f\n' \
+                          | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
+                      env:
+                      - name: BACKUP_HOST
+                        value: ${backup_host}
+                      - name: REDISCLI_AUTH
+                        valueFrom:
+                          secretKeyRef:
+                            name: ${backup_secret_name}
+                            key: password
+                      resources:
+                        requests:
+                          cpu: 100m
+                          memory: 128Mi
+                        limits:
+                          memory: 512Mi
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop:
+                          - ALL
+                      volumeMounts:
+                      - name: backup
+                        mountPath: /backup
+                    volumes:
+                    - name: backup
+                      persistentVolumeClaim:
+                        claimName: ${backup_name}
+        redis/backup-pvc:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: ${backup_name}
+            namespace: ${workshop_ns}
+          spec: ${backup_vcs}
         redis/store:
           apiVersion: redis.redis.opstreelabs.in/v1beta2
           kind: Redis
           metadata:
             name: ${store_name}
             namespace: ${workshop_ns}
+            annotations:
+              datalabs.pkg.internal/redis-acl-checksum: ${redis_acl_checksum}
           spec:
             initContainer:
               enabled: true
@@ -4399,265 +4759,6 @@ spec:
               kind: ProviderConfig
             forProvider:
               manifest: ${redis_manifest}
-            readiness:
-              policy: DeriveFromCelQuery
-              celQuery: '!has(object.metadata.deletionTimestamp)'
-            watch: true
-  - step: update-qdrant-objects
-    functionRef:
-      name: crossplane-contrib-function-python
-    input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      script: |
-        import copy as _template_copy
-
-        import re as _template_re
-
-        from google.protobuf import json_format as _template_json
-
-        def _render_template(req, template_name, /, **values):
-            """Fill complete scalar placeholders and preserve each value's type."""
-            template = _template_json.MessageToDict(req.input["templates"][template_name])
-
-            def fill(value):
-                if isinstance(value, str):
-                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
-                    if match:
-                        return _template_copy.deepcopy(values[match[1]])
-                if isinstance(value, dict):
-                    return {key: fill(item) for key, item in value.items()}
-                if isinstance(value, list):
-                    return [fill(item) for item in value]
-                return value
-
-            return fill(template)
-
-        import base64
-
-        import hashlib
-
-        from google.protobuf import json_format
-
-        def _to_dict(value):
-            if value is None:
-                return {}
-            if isinstance(value, dict):
-                return value
-            return json_format.MessageToDict(value, preserving_proto_field_name=True)
-
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
-        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
-            # Keep each service's existing seed and length to prevent credential changes.
-            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
-            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
-
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-
-
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
-            xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
-
-            xr_name = metadata.get("name")
-            xr_namespace = metadata.get("namespace") or "default"
-
-            vector_stores = spec.get("vectorStores")
-            if not isinstance(vector_stores, dict) or not vector_stores:
-                return
-
-            context = _to_dict(req.context)
-            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-            qdrant_env = environment.get("vectorStore") or {}
-            qdrant_storage_class = _string_value(qdrant_env.get("storageClassName") or "")
-
-            observed = getattr(req.observed, "resources", None) or {}
-            env_key = f"workshopenvironment-{xr_name}"
-            environment_manifest = _extract_manifest(observed.get(env_key))
-
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-            if not workshop_namespace:
-                return
-
-            for store_key in sorted(list(vector_stores.keys())):
-                if not isinstance(store_key, str) or not store_key.strip():
-                    continue
-                store_cfg = vector_stores.get(store_key) or {}
-                if not isinstance(store_cfg, dict):
-                    continue
-
-                qdrant_storage = _string_value(store_cfg.get("storage") or "1Gi")
-                if not qdrant_storage:
-                    continue
-                store_name = store_key.strip()
-                qdrant_auth_secret_name = f"{store_name}-qdrant-auth"
-                qdrant_auth_secret = _render_template(
-                    req,
-                    "qdrant/auth-secret",
-                    qdrant_auth_secret_name=qdrant_auth_secret_name,
-                    workshop_ns=workshop_namespace,
-                    stringData_apiKey=_strong_token(f"{xr_name}:{store_name}:qdrant:write"),
-                    stringData_readApiKey=_strong_token(f"{xr_name}:{store_name}:qdrant:read"),
-                )
-                auth_key = f"qdrant-auth-secret-{xr_name}-{store_name}"
-                auth_body = _render_template(
-                    req,
-                    "qdrant/auth-object",
-                    auth_key=auth_key,
-                    xr_namespace=xr_namespace,
-                    qdrant_auth_secret=qdrant_auth_secret,
-                )
-                rsp.desired.resources[auth_key].resource.update(auth_body)
-
-                persistence = {"size": qdrant_storage}
-                if qdrant_storage_class:
-                    persistence["storageClassName"] = qdrant_storage_class
-
-                qdrant = _render_template(
-                    req,
-                    "qdrant/store",
-                    store_name=store_name,
-                    workshop_ns=workshop_namespace,
-                    qdrant_auth_secret_name=qdrant_auth_secret_name,
-                    persistence=persistence,
-                )
-
-                key = f"qdrant-vector-{xr_name}-{store_name}"
-                body = _render_template(
-                    req,
-                    "qdrant/store-object",
-                    key=key,
-                    xr_namespace=xr_namespace,
-                    qdrant=qdrant,
-                )
-                rsp.desired.resources[key].resource.update(body)
-
-                pod_key = f"qdrant-pod-{xr_name}-{store_name}"
-                pod_body = _render_template(
-                    req,
-                    "common/pod-observer",
-                    pod_key=pod_key,
-                    xr_namespace=xr_namespace,
-                    pod_name=f"qdrant-{store_name}-0",
-                    workshop_ns=workshop_namespace,
-                )
-                rsp.desired.resources[pod_key].resource.update(pod_body)
-      templates:
-        common/pod-observer:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${pod_key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${pod_key}
-          spec:
-            managementPolicies:
-            - Observe
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest:
-                apiVersion: v1
-                kind: Pod
-                metadata:
-                  name: ${pod_name}
-                  namespace: ${workshop_ns}
-            readiness:
-              policy: DeriveFromCelQuery
-              celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
-                c.type == 'Ready' && c.status == 'True')
-            watch: true
-        qdrant/auth-object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${auth_key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${auth_key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${qdrant_auth_secret}
-            readiness:
-              policy: SuccessfulCreate
-            watch: true
-        qdrant/auth-secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${qdrant_auth_secret_name}
-            namespace: ${workshop_ns}
-          type: Opaque
-          stringData:
-            apiKey: ${stringData_apiKey}
-            readApiKey: ${stringData_readApiKey}
-        qdrant/store:
-          apiVersion: qdrant.io/v1alpha1
-          kind: QdrantCluster
-          metadata:
-            name: ${store_name}
-            namespace: ${workshop_ns}
-          spec:
-            antiAffinity: true
-            apiKey:
-              enabled: true
-              secret:
-                name: ${qdrant_auth_secret_name}
-                key: apiKey
-            readApiKey:
-              enabled: true
-              secret:
-                name: ${qdrant_auth_secret_name}
-                key: readApiKey
-            image:
-              repository: qdrant/qdrant
-              tag: v1.13.4
-              pullPolicy: IfNotPresent
-            persistence: ${persistence}
-        qdrant/store-object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${qdrant}
             readiness:
               policy: DeriveFromCelQuery
               celQuery: '!has(object.metadata.deletionTimestamp)'

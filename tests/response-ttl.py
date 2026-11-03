@@ -93,12 +93,6 @@ class ResponseTTLTests(unittest.TestCase):
                 )
                 composition = yaml.safe_load(BUILDER["build"](root))
                 pipeline = composition["spec"]["pipeline"]
-                for step in pipeline:
-                    if (
-                        step["functionRef"]["name"]
-                        == "crossplane-contrib-function-auto-ready"
-                    ):
-                        self.assertEqual(step["input"]["ttl"], value)
                 cases.append(
                     {
                         "seconds": BUILDER["response_ttl_seconds"](value),

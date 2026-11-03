@@ -1,0 +1,44 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __STORE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: restore
+    image: __CLIENT_IMAGE__
+    command: [/bin/sh, -ec]
+    args:
+    - |
+      mkdir -p /tmp/db
+      mongod --dbpath=/tmp/db --bind_ip=127.0.0.1 --port=27017 --logpath=/tmp/mongod.log --fork
+      trap 'mongod --dbpath=/tmp/db --shutdown' EXIT
+      archive="$(find /backup -maxdepth 1 -name 'dump-*.archive.gz' -type f | sort | tail -n 1)"
+      test -n "$archive"
+      mongorestore --host=127.0.0.1 --gzip --archive="$archive" --oplogReplay
+      mongosh --quiet --eval 'const doc=db.getSiblingDB("verify").probe_checks.findOne({_id:"probe"}); if (!doc || !doc.value) quit(1);'
+      printf 'PASS MongoDB backup archive restored the probe document\n'
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    volumeMounts:
+    - name: backup
+      mountPath: /backup
+      readOnly: true
+  volumes:
+  - name: backup
+    persistentVolumeClaim:
+      claimName: mongodb-verify-backup

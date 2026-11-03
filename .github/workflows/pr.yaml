@@ -84,9 +84,6 @@ jobs:
       - name: Verify Datalab Redis
         run: tests/integration/verify-redis.bash
 
-      - name: Verify Datalab Qdrant
-        run: tests/integration/verify-qdrant.bash
-
       - name: Collect integration diagnostics
         if: failure()
         run: tests/integration/diagnostics.bash

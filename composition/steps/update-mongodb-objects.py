@@ -4,6 +4,7 @@
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _backup_enabled,
     _extract_manifest,
     _string_value,
     _strong_token,
@@ -28,6 +29,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     mongo_env = environment.get("documentStore") or {}
     mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
+    backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
     observed = getattr(req.observed, "resources", None) or {}
     env_key = f"workshopenvironment-{xr_name}"
@@ -142,6 +144,73 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             scram_secret_name=f"{store_name}-app-scram",
             pvc_spec=pvc_spec,
         )
+
+        backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
+        if _backup_enabled(backup_storage):
+            backup_name = f"{mongo_resource_name}-backup"
+            backup_secret_name = f"{store_name}-mongodb-backup-auth"
+            backup_username = f"{store_name}-backup"
+            backup_password = _strong_token(f"{xr_name}:{store_name}:mongodb:backup")
+            backup_secret = _render_template(
+                req,
+                "mongodb/backup-secret",
+                backup_secret_name=backup_secret_name,
+                workshop_ns=workshop_namespace,
+                backup_password=backup_password,
+                backup_config=f"password: {backup_password}\n",
+            )
+            backup_vcs = {
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": backup_storage}},
+            }
+            if backup_storage_class:
+                backup_vcs["storageClassName"] = backup_storage_class
+            backup_pvc = _render_template(
+                req,
+                "mongodb/backup-pvc",
+                backup_name=backup_name,
+                workshop_ns=workshop_namespace,
+                backup_vcs=backup_vcs,
+            )
+            backup_job = _render_template(
+                req,
+                "mongodb/backup-cronjob",
+                backup_name=backup_name,
+                workshop_ns=workshop_namespace,
+                backup_secret_name=backup_secret_name,
+                backup_username=backup_username,
+                backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
+                mongo_image=f"mongo:{mongo['spec']['version']}",
+            )
+            mongo["spec"]["users"].append(
+                {
+                    "name": backup_username,
+                    "db": "admin",
+                    "passwordSecretRef": {"name": backup_secret_name, "key": "password"},
+                    "roles": [{"name": "backup", "db": "admin"}],
+                    "scramCredentialsSecretName": f"{store_name}-backup-scram",
+                }
+            )
+            for resource_type, manifest in (
+                ("auth-secret", backup_secret),
+                ("pvc", backup_pvc),
+                ("cronjob", backup_job),
+            ):
+                backup_key = f"mongodb-backup-{resource_type}-{xr_name}-{store_name}"
+                backup_body = _render_template(
+                    req,
+                    "common/object",
+                    key=backup_key,
+                    xr_namespace=xr_namespace,
+                    manifest=manifest,
+                    readiness={"policy": "SuccessfulCreate"},
+                )
+                if resource_type == "pvc":
+                    # Keep completed backups when the schedule is disabled.
+                    backup_body["spec"]["managementPolicies"] = [
+                        "Observe", "Create", "Update", "LateInitialize"
+                    ]
+                rsp.desired.resources[backup_key].resource.update(backup_body)
 
         key = f"mongodb-community-{xr_name}-{store_name}"
         body = _render_template(

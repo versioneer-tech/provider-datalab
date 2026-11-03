@@ -9,6 +9,7 @@ metadata:
 spec:
   cacheStores:
     prod:
+      backupStorage: 3Gi
       storage: 1Gi
       type: redis
   crossplane:
@@ -67,6 +68,18 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
+      name: mongodb-backup-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-backup-cronjob-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: mongodb-backup-pvc-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
       name: mongodb-community-s-jeff-prod
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -103,10 +116,6 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: observe-qdrant-auth-secret-s-jeff-prod
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
       name: observe-redis-auth-secret-s-jeff-prod
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -115,23 +124,23 @@ spec:
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
-      name: qdrant-auth-secret-s-jeff-prod
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: qdrant-pod-s-jeff-prod
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
-      name: qdrant-vector-s-jeff-prod
-      namespace: default
-    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      kind: Object
       name: redis-acl-secret-s-jeff-prod
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
       name: redis-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-backup-auth-secret-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-backup-cronjob-s-jeff-prod
+      namespace: default
+    - apiVersion: kubernetes.m.crossplane.io/v1alpha1
+      kind: Object
+      name: redis-backup-pvc-s-jeff-prod
       namespace: default
     - apiVersion: kubernetes.m.crossplane.io/v1alpha1
       kind: Object
@@ -187,6 +196,7 @@ spec:
       type: postgres
   documentStores:
     prod:
+      backupStorage: 3Gi
       storage: 1Gi
       type: mongo
   secretName: s-jeff
@@ -198,10 +208,6 @@ spec:
   - jeff
   - jim
   - jane
-  vectorStores:
-    prod:
-      storage: 1Gi
-      type: qdrant
 status:
   conditions:
   - lastTransitionTime: "2024-01-01T00:00:00Z"
@@ -214,7 +220,7 @@ status:
     type: Synced
   - lastTransitionTime: "2024-01-01T00:00:00Z"
     message: 'Unready resources: db-configmap-s-jeff-pg0, db-postgrescluster-s-jeff-pg0,
-      db-tlsroute-s-jeff-pg0, and 38 more'
+      db-tlsroute-s-jeff-pg0, and 40 more'
     reason: Creating
     status: "False"
     type: Ready
@@ -872,6 +878,189 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: mongodb-backup-auth-secret-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: mongodb-backup-auth-secret-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-mongodb-backup-auth
+        namespace: s-jeff
+      stringData:
+        config.yaml: |
+          password: 16fGhq-c6D7u2aLYlvczKselzUCHgSmM
+        password: 16fGhq-c6D7u2aLYlvczKselzUCHgSmM
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: mongodb-backup-cronjob-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: mongodb-backup-cronjob-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: mongodb-prod-backup
+        namespace: s-jeff
+      spec:
+        concurrencyPolicy: Forbid
+        failedJobsHistoryLimit: 1
+        jobTemplate:
+          spec:
+            activeDeadlineSeconds: 3600
+            backoffLimit: 2
+            template:
+              spec:
+                automountServiceAccountToken: false
+                containers:
+                - args:
+                  - |
+                    umask 077
+                    archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).archive.gz"
+                    partial="/backup/dump.partial"
+                    trap 'rm -f "$partial"' EXIT
+                    mongodump --host="$BACKUP_HOST" --username="$BACKUP_USER" \
+                      --authenticationDatabase=admin --config=/auth/config.yaml \
+                      --oplog --gzip --archive="$partial"
+                    mv "$partial" "$archive"
+                    find /backup -maxdepth 1 -type f -name 'dump-*.archive.gz' -printf '%f\n' \
+                      | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
+                  command:
+                  - /bin/sh
+                  - -ec
+                  env:
+                  - name: BACKUP_HOST
+                    value: mongodb-prod/mongodb-prod-0.mongodb-prod-svc:27017
+                  - name: BACKUP_USER
+                    value: prod-backup
+                  image: mongo:8.0.12
+                  name: backup
+                  resources:
+                    limits:
+                      memory: 512Mi
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                      - ALL
+                    readOnlyRootFilesystem: true
+                  volumeMounts:
+                  - mountPath: /backup
+                    name: backup
+                  - mountPath: /auth
+                    name: auth
+                    readOnly: true
+                restartPolicy: Never
+                securityContext:
+                  fsGroup: 999
+                  runAsGroup: 999
+                  runAsNonRoot: true
+                  runAsUser: 999
+                  seccompProfile:
+                    type: RuntimeDefault
+                volumes:
+                - name: backup
+                  persistentVolumeClaim:
+                    claimName: mongodb-prod-backup
+                - name: auth
+                  secret:
+                    defaultMode: 288
+                    items:
+                    - key: config.yaml
+                      path: config.yaml
+                    secretName: prod-mongodb-backup-auth
+        schedule: 0 1 * * *
+        startingDeadlineSeconds: 3600
+        successfulJobsHistoryLimit: 1
+        timeZone: Etc/UTC
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: mongodb-backup-pvc-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: mongodb-backup-pvc-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: mongodb-prod-backup
+        namespace: s-jeff
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 3Gi
+  managementPolicies:
+  - Observe
+  - Create
+  - Update
+  - LateInitialize
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: mongodb-community-s-jeff-prod
   labels:
     crossplane.io/composite: s-jeff
@@ -923,6 +1112,15 @@ spec:
           - db: prod
             name: dbAdmin
           scramCredentialsSecretName: prod-app-scram
+        - db: admin
+          name: prod-backup
+          passwordSecretRef:
+            key: password
+            name: prod-mongodb-backup-auth
+          roles:
+          - db: admin
+            name: backup
+          scramCredentialsSecretName: prod-backup-scram
         version: 8.0.12
   providerConfigRef:
     kind: ProviderConfig
@@ -1209,37 +1407,6 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: observe-qdrant-auth-secret-s-jeff-prod
-  labels:
-    crossplane.io/composite: s-jeff
-  name: observe-qdrant-auth-secret-s-jeff-prod
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: prod-qdrant-auth
-        namespace: s-jeff
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-prod
   labels:
     crossplane.io/composite: s-jeff
@@ -1302,126 +1469,6 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: qdrant-auth-secret-s-jeff-prod
-  labels:
-    crossplane.io/composite: s-jeff
-  name: qdrant-auth-secret-s-jeff-prod
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: prod-qdrant-auth
-        namespace: s-jeff
-      stringData:
-        apiKey: ob9_OkWJsXK4tvUu3Ox66mq1IBVA1aPx
-        readApiKey: XmRnmPssht4GK99VPQDxa_F87RiooYko
-      type: Opaque
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: qdrant-pod-s-jeff-prod
-  labels:
-    crossplane.io/composite: s-jeff
-  name: qdrant-pod-s-jeff-prod
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: qdrant-prod-0
-        namespace: s-jeff
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
-      c.type == 'Ready' && c.status == 'True')
-    policy: DeriveFromCelQuery
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: qdrant-vector-s-jeff-prod
-  labels:
-    crossplane.io/composite: s-jeff
-  name: qdrant-vector-s-jeff-prod
-  namespace: default
-  ownerReferences:
-  - apiVersion: pkg.internal/v1beta2
-    blockOwnerDeletion: true
-    controller: true
-    kind: Datalab
-    name: s-jeff
-    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
-spec:
-  forProvider:
-    manifest:
-      apiVersion: qdrant.io/v1alpha1
-      kind: QdrantCluster
-      metadata:
-        name: prod
-        namespace: s-jeff
-      spec:
-        antiAffinity: true
-        apiKey:
-          enabled: true
-          secret:
-            key: apiKey
-            name: prod-qdrant-auth
-        image:
-          pullPolicy: IfNotPresent
-          repository: qdrant/qdrant
-          tag: v1.13.4
-        persistence:
-          size: 1Gi
-        readApiKey:
-          enabled: true
-          secret:
-            key: readApiKey
-            name: prod-qdrant-auth
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: '!has(object.metadata.deletionTimestamp)'
-    policy: DeriveFromCelQuery
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: redis-acl-secret-s-jeff-prod
   labels:
     crossplane.io/composite: s-jeff
@@ -1438,13 +1485,12 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        user.acl: dXNlciBkZWZhdWx0IG9uID5NcVpvTFhETFFyd1BPdXdnTTFkajZMek9UT01MIH4qICtAYWxsCnVzZXIgYmFja3VwIG9uID5iZmJlZGUzak9zZkplSE9EN05HempRaVRBQWozTEx3TSAtQGFsbCArcGluZyArcmVwbGNvbmYgK3N5bmMK
       kind: Secret
       metadata:
         name: prod-redis-acl
         namespace: s-jeff
-      stringData:
-        user.acl: |
-          user default on >MqZoLXDLQrwPOuwgM1dj6LzOTOML ~* +@all
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1491,6 +1537,179 @@ apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
   annotations:
+    crossplane.io/composition-resource-name: redis-backup-auth-secret-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: redis-backup-auth-secret-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prod-redis-backup-auth
+        namespace: s-jeff
+      stringData:
+        password: bfbede3jOsfJeHOD7NGzjQiTAAj3LLwM
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: redis-backup-cronjob-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: redis-backup-cronjob-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: redis-prod-backup
+        namespace: s-jeff
+      spec:
+        concurrencyPolicy: Forbid
+        failedJobsHistoryLimit: 1
+        jobTemplate:
+          spec:
+            activeDeadlineSeconds: 3600
+            backoffLimit: 2
+            template:
+              spec:
+                automountServiceAccountToken: false
+                containers:
+                - args:
+                  - |
+                    umask 077
+                    archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).rdb"
+                    partial="/backup/dump.partial"
+                    trap 'rm -f "$partial"' EXIT
+                    redis-cli -h "$BACKUP_HOST" --user backup --rdb "$partial"
+                    redis-check-rdb "$partial"
+                    mv "$partial" "$archive"
+                    find /backup -maxdepth 1 -type f -name 'dump-*.rdb' -printf '%f\n' \
+                      | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
+                  command:
+                  - /bin/sh
+                  - -ec
+                  env:
+                  - name: BACKUP_HOST
+                    value: prod
+                  - name: REDISCLI_AUTH
+                    valueFrom:
+                      secretKeyRef:
+                        key: password
+                        name: prod-redis-backup-auth
+                  image: redis:7.0.15
+                  name: backup
+                  resources:
+                    limits:
+                      memory: 512Mi
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                      - ALL
+                    readOnlyRootFilesystem: true
+                  volumeMounts:
+                  - mountPath: /backup
+                    name: backup
+                restartPolicy: Never
+                securityContext:
+                  fsGroup: 999
+                  runAsGroup: 999
+                  runAsNonRoot: true
+                  runAsUser: 999
+                  seccompProfile:
+                    type: RuntimeDefault
+                volumes:
+                - name: backup
+                  persistentVolumeClaim:
+                    claimName: redis-prod-backup
+        schedule: 0 1 * * *
+        startingDeadlineSeconds: 3600
+        successfulJobsHistoryLimit: 1
+        timeZone: Etc/UTC
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: redis-backup-pvc-s-jeff-prod
+  labels:
+    crossplane.io/composite: s-jeff
+  name: redis-backup-pvc-s-jeff-prod
+  namespace: default
+  ownerReferences:
+  - apiVersion: pkg.internal/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Datalab
+    name: s-jeff
+    uid: d27071c9-bf96-5688-a0a2-b0c13b2b6110
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: redis-prod-backup
+        namespace: s-jeff
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 3Gi
+  managementPolicies:
+  - Observe
+  - Create
+  - Update
+  - LateInitialize
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
     crossplane.io/composition-resource-name: redis-cache-s-jeff-prod
   labels:
     crossplane.io/composite: s-jeff
@@ -1509,6 +1728,8 @@ spec:
       apiVersion: redis.redis.opstreelabs.in/v1beta2
       kind: Redis
       metadata:
+        annotations:
+          datalabs.pkg.internal/redis-acl-checksum: 51b2df2ef6452aae4bafd5faa377b6115b82e3fa4b3b5f79431317adec2c917a
         name: prod
         namespace: s-jeff
       spec:

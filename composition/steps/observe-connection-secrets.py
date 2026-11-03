@@ -66,7 +66,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     for field, backend in (
         ("documentStores", "mongodb"),
         ("cacheStores", "redis"),
-        ("vectorStores", "qdrant"),
     ):
         stores = spec.get(field) or {}
         if isinstance(stores, dict):

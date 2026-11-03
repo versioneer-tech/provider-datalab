@@ -37,16 +37,14 @@ and recovery with the operator.
 
 ## Managed service types
 
-Each service entry requires a `type` field. The API sets the default below
-when you omit it. These values match `status.connections[].type`.
-The API name for MongoDB is `mongo`. Each service field currently supports only its listed type.
+Each service field accepts one type. The API sets that type when you omit it.
+The API name for MongoDB is `mongo`.
 
 | Field | Default type |
 | --- | --- |
 | `spec.databases` | `postgres` |
 | `spec.documentStores` | `mongo` |
 | `spec.cacheStores` | `redis` |
-| `spec.vectorStores` | `qdrant` |
 
 ## Database
 
@@ -73,31 +71,46 @@ Sessions receive connection settings such as `POSTGRES_PG0_HOST`,
 external TLSRoute, it also supplies `POSTGRES_PG0_DEV_URL_EXTERNAL`.
 External connections require a client that supports direct TLS with SNI.
 
-## Document, cache, and vector stores
+## Document and cache stores
 
-Use these fields to request MongoDB, Redis, and Qdrant stores:
+Use these fields to request MongoDB and Redis stores:
 
 ```yaml
 spec:
   documentStores:
     prod:
       storage: 1Gi
+      backupStorage: 3Gi
   cacheStores:
     prod:
       storage: 1Gi
-  vectorStores:
-    prod:
-      storage: 1Gi
+      backupStorage: 3Gi
 ```
 
 Each store needs its operator installed in the cluster. For the name `prod`,
-sessions receive `MONGO_PROD_URI`, `REDIS_PROD_URL`, and `QDRANT_PROD_URL`,
+sessions receive `MONGO_PROD_URI` and `REDIS_PROD_URL`,
 along with separate host and credential fields where available.
 
-The composition creates `<store>-mongodb-auth`, `<store>-redis-auth`, and
-`<store>-qdrant-auth` Secrets. It watches their values and copies connection
+The composition creates `<store>-mongodb-auth` and `<store>-redis-auth`
+Secrets. It watches their values and copies connection
 settings into `<datalab>-datalab`. Sessions import those settings as environment
 variables. Restart a session to load changed values.
+
+## Backups
+
+Set `backupStorage` to a positive Kubernetes storage quantity, such as `10Gi`,
+to create a separate backup PVC. Zero or an omitted value disables backups
+without stopping the store.
+
+| Store | Backup schedule | Retention |
+| --- | --- | --- |
+| PostgreSQL | pgBackRest: full on Sunday, differential on other days, at 01:00 in the operator's time zone. | Four full backups and their dependent backups; the volume also holds WAL. |
+| MongoDB | Full `mongodump --oplog --gzip` archive daily at 01:00 UTC. | Four completed archives. |
+| Redis | Full `redis-cli --rdb` snapshot daily at 01:00 UTC, checked with `redis-check-rdb`. | Four completed snapshots. |
+
+Size the volume for retained backups and the next full export. Monitor failed
+Jobs and free space. Failed MongoDB or Redis jobs preserve completed backups.
+Enabling or disabling Redis backups restarts its Pod.
 
 ## Data and sharing
 
@@ -169,7 +182,7 @@ before you apply these manifests in your claim namespace.
 | Manifest | Environment | Use |
 | --- | --- | --- |
 | [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data without a session. |
-| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, Redis, and Qdrant stores; Jim has the Datalab admin role. |
+| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
 | [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A started session and PostgreSQL. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Started and stopped sessions with workshop files. |
 

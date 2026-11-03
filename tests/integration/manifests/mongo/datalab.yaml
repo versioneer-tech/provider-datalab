@@ -15,3 +15,4 @@ spec:
   documentStores:
     verify:
       storage: 1Gi
+      backupStorage: 1Gi

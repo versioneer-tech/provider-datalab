@@ -13,7 +13,7 @@ data:
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
-    endpoint: https://s3.acme
+    endpoint: https://s3.acme.com
     forcePathStyle: "true"
     provider: Other
     region: acme
@@ -107,7 +107,7 @@ data:
     sectionName: workspaces-https
     httpSectionName: workspaces-http
   storage:
-    endpoint: https://s3.acme
+    endpoint: https://s3.acme.com
     forcePathStyle: 'true'
     provider: Other
     region: acme
@@ -201,6 +201,4 @@ data:
   documentStore:
     storageClassName: sbs-default-retain
   cacheStore:
-    storageClassName: sbs-default-retain
-  vectorStore:
     storageClassName: sbs-default-retain

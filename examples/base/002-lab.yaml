@@ -21,14 +21,12 @@ spec:
     prod:
       type: mongo
       storage: 1Gi
+      backupStorage: 3Gi
   cacheStores:
     prod:
       type: redis
       storage: 1Gi
-  vectorStores:
-    prod:
-      type: qdrant
-      storage: 1Gi
+      backupStorage: 3Gi
   databases:
     pg0:
       type: postgres

@@ -16,16 +16,3 @@ spec:
   - name: primary
     replicas: 1
     dataVolumeClaimSpec: ${data_vcs}
-  backups:
-    pgbackrest:
-      global:
-        repo1-retention-full-type: count
-        repo1-retention-full: '4'
-        repo1-path: /pgbackrest/repo1
-      repos:
-      - name: repo1
-        schedules:
-          full: 0 1 * * 0
-          differential: 0 1 * * 1-6
-        volume:
-          volumeClaimSpec: ${repo_vcs}

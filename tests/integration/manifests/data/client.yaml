@@ -50,7 +50,7 @@ spec:
             "${endpoint}/api/login")"
           test -n "${token}"
           bucket=verify-data-bucket
-          payload=verify-data-content
+          payload=__DATA_PAYLOAD__
           if [ "${DATA_READ_ONLY}" = false ]; then
             # Object-storage buckets are a prerequisite supplied outside Datalab.
             status="$(curl --silent --show-error --output /tmp/data-bucket-response \

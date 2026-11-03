@@ -1,0 +1,49 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __STORE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: restore
+    image: __CLIENT_IMAGE__
+    command: [/bin/sh, -ec]
+    args:
+    - |
+      archive="$(find /backup -maxdepth 1 -name 'dump-*.rdb' -type f | sort | tail -n 1)"
+      test -n "$archive"
+      mkdir -p /tmp/db
+      cp "$archive" /tmp/db/dump.rdb
+      redis-server --bind 127.0.0.1 --dir /tmp/db --appendonly no --save '' \
+        --daemonize yes --logfile /tmp/redis.log --pidfile /tmp/redis.pid
+      trap 'redis-cli shutdown nosave' EXIT
+      for attempt in $(seq 1 30); do
+        if redis-cli ping >/dev/null 2>&1; then break; fi
+        sleep 1
+      done
+      test "$(redis-cli --raw GET provider-datalab:verify)" = '__PROBE_VALUE__'
+      printf 'PASS Redis RDB snapshot restored the probe value\n'
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    volumeMounts:
+    - name: backup
+      mountPath: /backup
+      readOnly: true
+  volumes:
+  - name: backup
+    persistentVolumeClaim:
+      claimName: redis-verify-backup

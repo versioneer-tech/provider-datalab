@@ -1,9 +1,14 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
+import hashlib
+
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _backup_enabled,
+    _extract_data,
     _extract_manifest,
     _string_value,
     _strong_token,
@@ -28,6 +33,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     redis_env = environment.get("cacheStore") or {}
     redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
+    backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
     observed = getattr(req.observed, "resources", None) or {}
     env_key = f"workshopenvironment-{xr_name}"
@@ -50,6 +56,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not redis_storage:
             continue
         store_name = store_key.strip()
+        backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
+        backups_enabled = _backup_enabled(backup_storage)
         redis_password = _strong_token(
             f"{xr_name}:{store_name}:redis", suffix="", length=28
         )
@@ -72,12 +80,17 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         rsp.desired.resources[auth_key].resource.update(auth_body)
 
         redis_acl_secret_name = f"{store_name}-redis-acl"
+        acl = f"user default on >{redis_password} ~* +@all\n"
+        if backups_enabled:
+            backup_password = _strong_token(f"{xr_name}:{store_name}:redis:backup")
+            acl += f"user backup on >{backup_password} -@all +ping +replconf +sync\n"
+        encoded_acl = base64.b64encode(acl.encode()).decode()
         redis_acl_secret = _render_template(
             req,
             "redis/acl-secret",
             redis_acl_secret_name=redis_acl_secret_name,
             workshop_ns=workshop_namespace,
-            stringData_user_acl=f"user default on >{redis_password} ~* +@all\n",
+            data_user_acl=encoded_acl,
         )
         acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
         acl_body = _render_template(
@@ -88,6 +101,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             redis_acl_secret=redis_acl_secret,
         )
         rsp.desired.resources[acl_key].resource.update(acl_body)
+        # The operator mounts the ACL file with subPath, so changes need a restart.
+        observed_acl = _extract_data(observed.get(acl_key)).get("user.acl") or encoded_acl
+        acl_checksum = hashlib.sha256(observed_acl.encode()).hexdigest()
 
         pvc_spec = {
             "accessModes": ["ReadWriteOnce"],
@@ -110,6 +126,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             workshop_ns=workshop_namespace,
             redis_auth_secret_name=redis_auth_secret_name,
             redis_acl_secret_name=redis_acl_secret_name,
+            redis_acl_checksum=acl_checksum,
             storage=storage,
         )
 
@@ -122,6 +139,58 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             redis_manifest=redis_manifest,
         )
         rsp.desired.resources[key].resource.update(body)
+
+        if backups_enabled:
+            backup_name = f"redis-{store_name}-backup"
+            backup_secret_name = f"{store_name}-redis-backup-auth"
+            backup_secret = _render_template(
+                req,
+                "redis/auth-secret",
+                redis_auth_secret_name=backup_secret_name,
+                workshop_ns=workshop_namespace,
+                redis_password=backup_password,
+            )
+            backup_vcs = {
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": backup_storage}},
+            }
+            if backup_storage_class:
+                backup_vcs["storageClassName"] = backup_storage_class
+            backup_pvc = _render_template(
+                req,
+                "redis/backup-pvc",
+                backup_name=backup_name,
+                workshop_ns=workshop_namespace,
+                backup_vcs=backup_vcs,
+            )
+            backup_job = _render_template(
+                req,
+                "redis/backup-cronjob",
+                backup_name=backup_name,
+                workshop_ns=workshop_namespace,
+                backup_secret_name=backup_secret_name,
+                backup_host=store_name,
+            )
+            for resource_type, manifest in (
+                ("auth-secret", backup_secret),
+                ("pvc", backup_pvc),
+                ("cronjob", backup_job),
+            ):
+                backup_key = f"redis-backup-{resource_type}-{xr_name}-{store_name}"
+                backup_body = _render_template(
+                    req,
+                    "common/object",
+                    key=backup_key,
+                    xr_namespace=xr_namespace,
+                    manifest=manifest,
+                    readiness={"policy": "SuccessfulCreate"},
+                )
+                if resource_type == "pvc":
+                    # Keep completed backups when the schedule is disabled.
+                    backup_body["spec"]["managementPolicies"] = [
+                        "Observe", "Create", "Update", "LateInitialize"
+                    ]
+                rsp.desired.resources[backup_key].resource.update(backup_body)
 
         pod_key = f"redis-pod-{xr_name}-{store_name}"
         pod_body = _render_template(

@@ -76,6 +76,9 @@ for file in "${examples[@]}"; do
 done
 
 python3 tests/response-ttl.py "${render_dir##*/}-python"
+if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
+  python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+fi
 
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
   render examples/base/001-lab.yaml \

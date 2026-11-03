@@ -2,11 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v1
-kind: Secret
+kind: PersistentVolumeClaim
 metadata:
-  name: ${qdrant_auth_secret_name}
+  name: ${backup_name}
   namespace: ${workshop_ns}
-type: Opaque
-stringData:
-  apiKey: ${stringData_apiKey}
-  readApiKey: ${stringData_readApiKey}
+spec: ${backup_vcs}

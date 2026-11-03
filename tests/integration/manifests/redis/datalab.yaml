@@ -15,3 +15,4 @@ spec:
   cacheStores:
     verify:
       storage: 1Gi
+      backupStorage: 0Gi

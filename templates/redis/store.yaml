@@ -6,6 +6,8 @@ kind: Redis
 metadata:
   name: ${store_name}
   namespace: ${workshop_ns}
+  annotations:
+    datalabs.pkg.internal/redis-acl-checksum: ${redis_acl_checksum}
 spec:
   initContainer:
     enabled: true

@@ -39,7 +39,7 @@ spec:
           }
 
           repository=provider-datalab-verification
-          payload=datalab-registry-check
+          payload="datalab-registry-check-$(cat /proc/sys/kernel/random/uuid)"
           digest="sha256:$(printf '%s' "${payload}" | sha256sum | cut -d ' ' -f 1)"
 
           # A ready Pod can appear before the registry accepts connections.

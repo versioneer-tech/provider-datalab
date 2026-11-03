@@ -3,13 +3,14 @@
 Run services such as Dask or MLflow as Kubernetes workloads from your Datalab
 terminal. These examples need Kubernetes API access and permission to create
 Pods, Deployments, Services, and PVCs in the target namespace.
+If the Datalab has no session, [declare one](usage_concepts.md#sessions) first.
 
 Use a vCluster for tools that need their own CRDs, controllers, or cluster
 roles. For a short-lived process, you can run it in the terminal and use the
 editor's Ports tab to open its web interface.
 
 Use the [Datalab service fields](usage_concepts.md#database) for managed
-PostgreSQL, MongoDB, Redis, and Qdrant stores. The environment also supplies
+PostgreSQL, MongoDB, and Redis stores. The environment also supplies
 a session registry.
 
 ## Dask
@@ -119,7 +120,7 @@ For a shared service, use a managed database and arrange artifact backups
 with the operator.
 
 ```bash
-export BUCKET=example-data # Use a bucket you can write to.
+export BUCKET=s-jeff # Use a bucket your Datalab can write to.
 
 kubectl apply -f - <<EOF
 apiVersion: v1
@@ -130,6 +131,7 @@ type: Opaque
 stringData:
   accessKey: "${AWS_ACCESS_KEY_ID}"
   secretKey: "${AWS_SECRET_ACCESS_KEY}"
+  sessionToken: "${AWS_SESSION_TOKEN:-}"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -206,6 +208,9 @@ spec:
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef: { name: minio-creds, key: secretKey }
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: sessionToken }
             - name: AWS_S3_FORCE_PATH_STYLE
               value: "true"
             - name: AWS_EC2_METADATA_DISABLED
@@ -242,13 +247,12 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 
 ## PostgreSQL with psql
 
-If your Datalab provides database credentials through
-`POSTGRES_<HOST>_<DATABASE>_URL_EXTERNAL` environment variables, you can
-connect to the managed PostgreSQL instance by starting a Pod that opens a
-`psql` shell.
+The [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml)
+provides `POSTGRES_PG0_DEV_URL` for database `dev` on `pg0`. Run this command
+from a session with that variable to start a psql Pod in the current namespace:
 
 ```bash
-envsubst <<'EOF' | kubectl apply -f -
+envsubst '${POSTGRES_PG0_DEV_URL}' <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -264,10 +268,10 @@ spec:
       - sh
       - -lc
       - |
-        exec psql "$POSTGRES_URL_EXTERNAL"
+        exec psql "$POSTGRES_URL"
     env:
-      - name: POSTGRES_URL_EXTERNAL
-        value: ${POSTGRES_PG0_DEV_URL_EXTERNAL}
+      - name: POSTGRES_URL
+        value: ${POSTGRES_PG0_DEV_URL}
 EOF
 ```
 
@@ -277,27 +281,13 @@ Attach to the Pod after it starts:
 kubectl attach -it pgsql-debug
 ```
 
-Use psql to create and query a test table:
+Check the connection with a temporary table:
 
 ```sql
 \set ON_ERROR_STOP on
-\l
-
-DROP TABLE IF EXISTS demo;
-
-CREATE TABLE demo (
-    id serial PRIMARY KEY,
-    name text,
-    created_at timestamptz DEFAULT now(),
-    meta jsonb
-);
-
-INSERT INTO demo (name, meta) VALUES
-('alpha', '{"type":"test","value":1}'),
-('beta',  '{"type":"test","value":2}'),
-('gamma', '{"type":"prod","value":3}');
-
-SELECT * FROM demo;
+CREATE TEMP TABLE datalab_check (value text);
+INSERT INTO datalab_check VALUES ('ready');
+SELECT value FROM datalab_check;
 ```
 
 ## Keep or remove a service

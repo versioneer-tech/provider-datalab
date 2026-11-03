@@ -99,22 +99,3 @@ status:
         namespace: s-jeff
       data:
         password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: observe-qdrant-auth-secret-s-jeff-prod
-  namespace: default
-  annotations:
-    crossplane.io/composition-resource-name: observe-qdrant-auth-secret-s-jeff-prod
-status:
-  atProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: prod-qdrant-auth
-        namespace: s-jeff
-      data:
-        apiKey: b2I5X09rV0pzWEs0dHZVdTNPeDY2bXExSUJWQTFhUHg=
-        readApiKey: WG1Sbm1Qc3NodDRHSzk5VlBRRHhhX0Y4N1Jpb29Za28=

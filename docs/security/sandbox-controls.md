@@ -45,8 +45,8 @@ browser access and public links.
 
 The S3 service accepts Gateway traffic on port 8080. Data and S3 proxies can
 reach IAM on TCP port 8080 in the configured IAM namespace. Object-storage
-access follows the Datalab's egress rules. Before removing a manual IAM policy,
-verify the generated policy and repeat an S3 read without the manual rule.
+access follows the Datalab's egress rules. Set `iam.namespace` to the namespace
+that contains the Keycloak Pods.
 
 ## Replace or exclude policies
 
@@ -54,7 +54,5 @@ Use `EnvironmentConfig.data.network.excludePolicies` only when another policy
 system provides the required controls. Excluding `allow-dns-egress` also
 suppresses the Data DNS policy.
 
-Before changing these settings, verify the CNI, the allowed network ranges,
-and every required cross-namespace connection. Restrict who can change
-NetworkPolicies or request privileged and admin settings through the
-platform's RBAC and admission policy.
+Use RBAC and admission rules to limit who can change NetworkPolicies or
+select privileged and admin settings.

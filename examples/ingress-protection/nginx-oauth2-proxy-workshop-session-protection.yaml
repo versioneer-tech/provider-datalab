@@ -7,7 +7,7 @@
 #
 # Adapt namespaces, issuer names, storage settings, and oauth2-proxy endpoints
 # for your cluster.
-# This CEL policy requires Kyverno v1.19.1 or later.
+# Requires the Kyverno policies.kyverno.io/v1 API.
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
@@ -18,14 +18,14 @@ data:
     realm: acme
   ingress:
     class: nginx
-    domain: lab.acme.org
-    secret: workspace-tls
+    domain: lab.acme.com
+    secret: wildcard-tls
   storage:
-    endpoint: https://s3.acme.org
+    endpoint: https://s3.acme.com
     provider: Other
     region: acme
     forcePathStyle: "true"
-    secretNamespace: workspace
+    secretNamespace: datalab
     type: s3
 ---
 apiVersion: cert-manager.io/v1
@@ -35,11 +35,11 @@ metadata:
   namespace: workspace
 spec:
   dnsNames:
-    - "*.lab.acme.org"
+    - "*.lab.acme.com"
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-dns-prod
-  secretName: workspace-tls
+  secretName: wildcard-tls
 ---
 apiVersion: policies.kyverno.io/v1
 kind: MutatingPolicy
@@ -78,7 +78,7 @@ spec:
     - name: uses-datalab-domain
       expression: >-
         has(object.spec.rules) &&
-        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.org'))
+        object.spec.rules.exists(rule, has(rule.host) && rule.host.endsWith('.lab.acme.com'))
   mutations:
     - patchType: ApplyConfiguration
       applyConfiguration:
@@ -86,8 +86,8 @@ spec:
           Object{
             metadata: Object.metadata{
               annotations: {
-                "nginx.ingress.kubernetes.io/auth-url": "https://auth.lab.acme.org/oauth2/auth",
-                "nginx.ingress.kubernetes.io/auth-signin": "https://auth.lab.acme.org/oauth2/start?rd=https://$host$escaped_request_uri",
+                "nginx.ingress.kubernetes.io/auth-url": "https://auth.lab.acme.com/oauth2/auth",
+                "nginx.ingress.kubernetes.io/auth-signin": "https://auth.lab.acme.com/oauth2/start?rd=https://$host$escaped_request_uri",
                 "nginx.ingress.kubernetes.io/auth-response-headers": "Authorization,X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Preferred-Username"
               }
             }

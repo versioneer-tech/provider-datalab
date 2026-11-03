@@ -11,7 +11,7 @@ spec:
   automountServiceAccountToken: false
   hostAliases:
   - ip: __GATEWAY_IP__
-    hostnames: [verify-s3.lab.local]
+    hostnames: [verify-s3.lab.acme.com]
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000

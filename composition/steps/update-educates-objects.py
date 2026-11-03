@@ -58,8 +58,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 if _string_value(x)
             ]
             db_storage = _string_value(host_cfg.get("storage") or "")
-            backup_storage = _string_value(host_cfg.get("backupStorage") or "")
-            if dbnames and db_storage and backup_storage:
+            if dbnames and db_storage:
                 db_service_names.append(f"{host_key.strip()}-primary")
 
     context = _to_dict(req.context)

@@ -223,7 +223,6 @@ def main():
         stores = {
             'documentStore': 'mongodb-community-s-jeff-prod',
             'cacheStore': 'redis-cache-s-jeff-prod',
-            'vectorStore': 'qdrant-vector-s-jeff-prod',
         }
         for setting in stores:
             env['data'][setting] = {'storageClassName': f'test-{setting}'}
@@ -258,7 +257,7 @@ def main():
             'security': {'policy': 'restricted', 'externalEgress': False, 'kubernetesAccess': False, 'kubernetesRole': 'view'},
             'registry': {'enabled': True, 'storage': '3Gi'},
             'persistence': {'storageClassName': 'sbs-default-retain'},
-            'files': [{'git': {'url': 'https://example.org/workshop', 'ref': 'main'}}],
+            'files': [{'git': {'url': 'https://github.com/versioneer-tech/datalab-example', 'ref': 'origin/main'}}],
         }
         env['data']['storageClasses'] = {'allowed': ['sbs-default', 'sbs-default-retain']}
         env['data']['network'] = {'externalEgressCIDRs': ['0.0.0.0/0']}
@@ -292,24 +291,18 @@ def main():
         assert 'docker:' not in workshop and 'allow-external-egress' not in workshop
         assert re.search(r'token:\s+enabled: false', workshop)
         assert re.search(r'registry:\s+enabled: true\s+storage: 3Gi', workshop)
-        assert 'https://example.org/workshop' in workshop
+        assert 'https://github.com/versioneer-tech/datalab-example' in workshop
         assert re.search(r'vcluster:\s+enabled: true', workshop)
         assert 'allow-vcluster-egress' in workshop
+        assert 'name: KUBECONFIG' in resource(output, 'workshopsession-s-joe-default')
         pvc = resource(output, 'persistentvolumeclaim-s-joe-default-persistent')
         assert 'storage: 9Gi' in pvc and 'storageClassName: sbs-default-retain' in pvc
         quota = resource(output, 'resourcequota-s-joe-overall-storage')
         assert 'requests.storage: 50Gi' in quota
         print('PASS environment-only security, session, and aggregate quota settings', flush=True)
 
-        env['data']['defaults']['vcluster'] = {'enabled': True}
-        source['spec']['vcluster'] = {'enabled': False}
-        enabled = render(env, json.dumps(source))
-        workshop = resource(enabled, 'workshop-s-joe')
-        assert re.search(r'vcluster:\s+enabled: true', workshop)
-        assert 'allow-vcluster-egress' in workshop
-        assert 'name: KUBECONFIG' in resource(enabled, 'workshopsession-s-joe-default')
-        env['data']['defaults']['vcluster']['enabled'] = False
-        source['spec']['vcluster']['enabled'] = True
+        env['data']['defaults']['vcluster'] = {'enabled': False}
+        source['spec']['vcluster'] = {'enabled': True}
         disabled = render(env, json.dumps(source))
         workshop = resource(disabled, 'workshop-s-joe')
         assert re.search(r'vcluster:\s+enabled: false', workshop)

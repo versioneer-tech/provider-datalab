@@ -197,31 +197,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     f"redis://default:{pwd}@{host}:6379/0"
                 )
 
-    vector_stores = spec.get("vectorStores") or {}
-    if isinstance(vector_stores, dict):
-        for store_name in sorted(vector_stores.keys()):
-            if not isinstance(store_name, str) or not store_name.strip():
-                continue
-            store = store_name.strip()
-            host = f"qdrant-{store}.{workshop_namespace}.svc"
-            manifest["stringData"][_store_key("QDRANT", store, "HOST")] = host
-            manifest["stringData"][_store_key("QDRANT", store, "PORT")] = "6333"
-            manifest["stringData"][_store_key("QDRANT", store, "GRPC_PORT")] = "6334"
-            manifest["stringData"][_store_key("QDRANT", store, "URL")] = (
-                f"http://{host}:6333"
-            )
-            auth_data = _extract_data(
-                observed.get(f"observe-qdrant-auth-secret-{xr_name}-{store}")
-            )
-            api_key = _b64get_any(auth_data, ["apiKey"])
-            read_key = _b64get_any(auth_data, ["readApiKey"])
-            if api_key:
-                manifest["stringData"][_store_key("QDRANT", store, "API_KEY")] = api_key
-            if read_key:
-                manifest["stringData"][_store_key("QDRANT", store, "READ_API_KEY")] = (
-                    read_key
-                )
-
     db_hosts = spec.get("databases") or {}
     if isinstance(db_hosts, dict):
         db_env = environment.get("database") or {}

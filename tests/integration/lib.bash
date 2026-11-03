@@ -48,6 +48,12 @@ helm_it() {
     command helm "$@"
 }
 
+apply_operator_crds() {
+  # Helm owns the old CRD fields but does not update them during an upgrade.
+  helm_it show crds "$1" --version "$2" \
+    | kube apply --server-side --force-conflicts -f -
+}
+
 kind_cluster_exists() {
   KUBECONFIG="${PROVIDER_DATALAB_KUBECONFIG}" \
     kind get clusters 2>/dev/null | grep -Fx "${KIND_CLUSTER_NAME}" >/dev/null
@@ -143,11 +149,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-qdrant)
+    verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-qdrant>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-registry|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis>\n' "$2" >&2
       exit 1
       ;;
   esac

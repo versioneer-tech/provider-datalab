@@ -22,6 +22,7 @@ readonly MINIO_ACCESS_KEY=minioadmin
 readonly MINIO_ACCESS_KEY_B64=bWluaW9hZG1pbg==
 
 enabled_runtime_namespace=""
+data_payload=""
 
 # shellcheck source=educates.bash
 source "${INTEGRATION_DIR}/educates.bash"
@@ -51,6 +52,7 @@ verify_package_access() {
     PROBE_NAME "${PROBE_NAME}" \
     PROBE_NAMESPACE "${namespace}" \
     CLIENT_IMAGE "${DATA_CLIENT_IMAGE}" \
+    DATA_PAYLOAD "${data_payload}" \
     DATA_READ_ONLY "${read_only}" \
     DATALAB_SECRET "${ENABLED_DATALAB}-datalab" | kube apply -f -; then
     return 1
@@ -210,6 +212,7 @@ main() {
   require_cluster
   require_command jq
   install_educates
+  data_payload="verify-data-$(openssl rand -hex 12)"
   apply_data_datalabs
 
   if ! enabled_runtime_namespace="$(wait_for_runtime_namespace "${ENABLED_DATALAB}")" ||

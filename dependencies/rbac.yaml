@@ -135,10 +135,21 @@ metadata:
   name: provider-kubernetes-database
 rules:
 - apiGroups:
+  - "batch"
+  resources:
+  - "cronjobs"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+- apiGroups:
   - "postgres-operator.crunchydata.com"
   - "mongodbcommunity.mongodb.com"
   - "redis.redis.opstreelabs.in"
-  - "qdrant.io"
   - "gateway.networking.k8s.io"
   resources:
   - "*"

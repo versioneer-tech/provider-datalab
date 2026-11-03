@@ -7,16 +7,18 @@ create_ingress_certificate() {
   local result=0
 
   require_command openssl
+  certificate="$(mktemp /tmp/xyz-datalab-cert.XXXXXX)"
+  private_key="$(mktemp /tmp/xyz-datalab-key.XXXXXX)"
   if kube get secret wildcard-tls --namespace "${WORKSPACE_NAMESPACE}" \
-    -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 --decode | \
-    openssl x509 -checkend 300 -checkhost verify-data.lab.local -noout >/dev/null 2>&1; then
+    -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 --decode >"${certificate}" &&
+    openssl x509 -in "${certificate}" -checkend 300 -noout >/dev/null 2>&1 &&
+    openssl x509 -in "${certificate}" -checkhost verify-data.lab.acme.com -noout >/dev/null 2>&1; then
+    rm -f "${certificate}" "${private_key}"
     return 0
   fi
-  certificate="$(mktemp /tmp/datalab-data-cert.XXXXXX)"
-  private_key="$(mktemp /tmp/datalab-data-key.XXXXXX)"
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-    -subj '/CN=*.lab.local' \
-    -addext 'subjectAltName=DNS:*.lab.local' \
+    -subj '/CN=*.lab.acme.com' \
+    -addext 'subjectAltName=DNS:*.lab.acme.com' \
     -keyout "${private_key}" -out "${certificate}" >/dev/null 2>&1 || result=$?
   if ((result == 0)); then
     kube create secret tls wildcard-tls \
@@ -41,7 +43,7 @@ install_educates() {
       --kube-context "${KUBECTL_CONTEXT}" \
       --namespace "${EDUCATES_NAMESPACE}" --create-namespace \
       --version "${EDUCATES_DEPENDENCIES_VERSION}" \
-      --set clusterIngressDomain=lab.local --set clusterIngressClass=nginx \
+      --set clusterIngressDomain=lab.acme.com --set clusterIngressClass=nginx \
       --set tlsCertificateRef.name=wildcard-tls \
       --set tlsCertificateRef.namespace="${WORKSPACE_NAMESPACE}" --timeout 15m
   fi

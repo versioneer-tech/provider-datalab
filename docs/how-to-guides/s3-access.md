@@ -44,7 +44,7 @@ NGINX gateway :8080
   │                        (example internal URL: keycloak.keycloak:8080)
   │
   └─ If authorized → rclone 127.0.0.1:8081
-                         └─ HTTPS → upstream S3 storage (s3.acme :443)
+                         └─ HTTPS → upstream S3 storage (s3.acme.com :443)
 ```
 
 NGINX, oauth2-proxy, and rclone share the `data-s3` Pod and use localhost for
@@ -75,8 +75,9 @@ The following Bash commands use the
 [credential helper](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/s3/s3-credentials.py)
 from the repository root. It uses the client credentials grant with `s-jane`
 as the client ID. At the prompt, enter the `client_secret` from the generated
-`s-jane-oauth2-client` Secret in the runtime namespace. Replace `example-data`
-with a bucket that the Datalab can read. Both methods use path-style requests.
+`s-jane-oauth2-client` Secret in the runtime namespace. The commands read bucket
+`s-jane` with path-style requests. Change the bucket name if your storage uses
+another name.
 
 ### Manual token retrieval
 
@@ -99,7 +100,7 @@ AWS_SESSION_TOKEN="$(printf '%s' "$credentials" | \
 export AWS_SESSION_TOKEN
 unset credentials
 
-aws s3 ls s3://example-data/
+aws s3 ls s3://s-jane/
 ```
 
 Run the token retrieval command again after the token expires, or use automatic
@@ -129,7 +130,7 @@ aws configure set credential_process \
   "python3 \"$PWD/tests/s3/s3-credentials.py\" --tenant s-jane --issuer https://identity.acme.com/realms/acme" \
   --profile s-jane
 
-aws s3 ls s3://example-data/
+aws s3 ls s3://s-jane/
 ```
 
 Keep `CLIENT_SECRET` available in the environment of the AWS CLI or SDK

@@ -105,7 +105,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecdatabaseskey">databases</a></b></td>
         <td>map[string]object</td>
         <td>
-          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and a pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
+          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and an optional pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
           <br/>
             <i>Default</i>: map[]<br/>
         </td>
@@ -145,15 +145,6 @@ Desired configuration of the datalab.
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecvectorstoreskey">vectorStores</a></b></td>
-        <td>map[string]object</td>
-        <td>
-          Optional vector stores for this datalab, implemented via Qdrant and managed through the Qdrant Kubernetes operator.<br/>
-          <br/>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -175,6 +166,15 @@ Desired configuration of the datalab.
         </tr>
     </thead>
     <tbody><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the Redis backup PVC as a Kubernetes quantity. A positive value enables daily full RDB snapshots. Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>storage</b></td>
         <td>string</td>
         <td>
@@ -212,13 +212,6 @@ Desired configuration of the datalab.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a Kubernetes quantity (e.g., "10Gi", "100Gi").<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
         <td><b>names</b></td>
         <td>[]string</td>
         <td>
@@ -242,6 +235,15 @@ Desired configuration of the datalab.
             <i>Default</i>: postgres<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a Kubernetes quantity (e.g., "10Gi", "100Gi"). Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -279,6 +281,15 @@ Desired configuration of the datalab.
             <i>Default</i>: mongo<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>backupStorage</b></td>
+        <td>string</td>
+        <td>
+          Storage size for the MongoDB backup PVC as a Kubernetes quantity. A positive value enables daily full backups with mongodump and the oplog. Zero or an omitted value disables backups.<br/>
+          <br/>
+            <i>Default</i>: 0<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -360,43 +371,6 @@ Desired configuration of the datalab.
 </table>
 
 
-### Datalab.spec.vectorStores[key]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for Qdrant persistent data volume as a Kubernetes quantity (e.g., "1Gi", "10Gi"). Effective default: "1Gi".<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>type</b></td>
-        <td>enum</td>
-        <td>
-          Service type.<br/>
-          <br/>
-            <i>Enum</i>: qdrant<br/>
-            <i>Default</i>: qdrant<br/>
-        </td>
-        <td>true</td>
-      </tr></tbody>
-</table>
-
-
 ### Datalab.status
 <sup><sup>[↩ Parent](#datalab)</sup></sup>
 
@@ -474,7 +448,7 @@ Current observed state of the datalab.
         <td>
           <br/>
           <br/>
-            <i>Enum</i>: s3, postgres, mongo, redis, qdrant, vcluster<br/>
+            <i>Enum</i>: s3, postgres, mongo, redis, vcluster<br/>
         </td>
         <td>true</td>
       </tr><tr>

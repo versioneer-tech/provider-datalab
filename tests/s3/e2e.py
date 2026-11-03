@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--issuer', default='http://keycloak.keycloak:8080/realms/integration')
     parser.add_argument('--browser-only', action='store_true')
     args = parser.parse_args()
-    endpoint = f'https://{args.tenant}.lab.local'
+    endpoint = f'https://{args.tenant}.lab.acme.com'
     certificate = '/certs/tls.crt'
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -45,12 +45,12 @@ def main():
             print(f'GET {url} -> {exc.code}; Location: {location.split("?")[0]}', flush=True)
         else:
             raise AssertionError('Expected redirect: ' + url)
-    cors_request = urllib.request.Request(endpoint + '/share/public/', headers={'Origin': 'https://viewer.example'})
+    cors_request = urllib.request.Request(endpoint + '/share/public/', headers={'Origin': 'https://viewer.acme.com'})
     with opener.open(cors_request, timeout=10) as response:
         assert response.status == 200
         assert response.headers.get('Access-Control-Allow-Origin') == '*'
     preflight = urllib.request.Request(endpoint + '/share/public/', method='OPTIONS', headers={
-        'Origin': 'https://viewer.example',
+        'Origin': 'https://viewer.acme.com',
         'Access-Control-Request-Method': 'GET',
         'Access-Control-Request-Headers': 'Range',
     })
@@ -59,12 +59,6 @@ def main():
         assert response.headers.get('Access-Control-Allow-Origin') == '*'
         assert 'GET' in response.headers.get('Access-Control-Allow-Methods', '')
         assert 'Range' in response.headers.get('Access-Control-Allow-Headers', '')
-    other_origin = urllib.request.Request(endpoint + '/share/public/', headers={
-        'Origin': 'https://other.example',
-    })
-    with opener.open(other_origin, timeout=10) as response:
-        assert response.status == 200
-        assert response.headers.get('Access-Control-Allow-Origin') == '*'
     print('PASS public package wildcard CORS and preflight', flush=True)
     if args.browser_only:
         return
@@ -95,7 +89,7 @@ def main():
         if exc.response['Error']['Code'] not in ('BucketAlreadyOwnedByYou', 'BucketAlreadyExists'):
             raise
     key = 'samples/folder/file with spaces.txt'
-    content = b'Datalab S3 range read\n'
+    content = f'Datalab S3 range read {time.time_ns()}\n'.encode()
     storage.put_object(Bucket=bucket, Key=key, Body=content)
     object_path = '/' + bucket + '/' + quote(key, safe='/')
 

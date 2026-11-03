@@ -6,7 +6,7 @@ creates the resources from the platform's EnvironmentConfig.
 
 Educates provides session editors, terminals, and persistent workspaces.
 The shared Data service, packageR, provides object-storage browsing and file
-sharing. Datalabs can also request PostgreSQL, MongoDB, Redis, and Qdrant.
+sharing. Datalabs can also request PostgreSQL, MongoDB, and Redis.
 
 | Task | Guide |
 | --- | --- |
@@ -19,4 +19,7 @@ sharing. Datalabs can also request PostgreSQL, MongoDB, Redis, and Qdrant.
 | Look up Datalab fields | [API reference](reference-guides/api.md) |
 
 [ADR-001](architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md)
-records why Datalab is the public API and Educates is the internal runtime.
+records why Datalab is the public API and runtime resources stay internal.
+[ADR-002](architecture/0002-provide-managed-database-services.md) records why
+PostgreSQL, MongoDB, and Redis are managed services and how users and the
+platform operator share responsibility.

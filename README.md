@@ -12,30 +12,37 @@
 Provider Datalab is a Crossplane configuration package for shared data
 workspaces. A team requests storage access, compute sessions, and managed
 services through one `Datalab` resource.
+
 ```yaml
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
-  name: demo
+  name: s-jeff
   namespace: workspace
 spec:
   users:
-  - alice
-  - bob
+  - jeff
+  - jim
+  - jane
   databases:
     pg0:
       names:
-      - demo
+      - dev
+      - prod
       storage: 1Gi
       backupStorage: 3Gi
 ```
 
-The platform operator sets the
-identity, network, storage, and security rules.
+The platform operator sets identity, network, storage, and security rules.
 
 Educates provides a browser editor, terminal, and persistent session workspace.
 The shared Data service, packageR, lets users browse and share object storage.
-Datalabs can also request PostgreSQL, MongoDB, Redis, and Qdrant stores.
+Datalabs can also request PostgreSQL, MongoDB, and Redis stores.
+
+The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
+Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
+See the [operator prerequisites](docs/how-to-guides/installation.md#prerequisites)
+for the required resource APIs.
 
 <img src="docs/imgs/datalab-vs-code-server.png" height="200" alt="Datalab browser editor"/>
 

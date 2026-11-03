@@ -1,0 +1,71 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${backup_name}
+  namespace: ${workshop_ns}
+spec:
+  schedule: 0 1 * * *
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: backup
+            image: redis:7.0.15
+            command: [/bin/sh, -ec]
+            args:
+            - |
+              umask 077
+              archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).rdb"
+              partial="/backup/dump.partial"
+              trap 'rm -f "$partial"' EXIT
+              redis-cli -h "$BACKUP_HOST" --user backup --rdb "$partial"
+              redis-check-rdb "$partial"
+              mv "$partial" "$archive"
+              find /backup -maxdepth 1 -type f -name 'dump-*.rdb' -printf '%f\n' \
+                | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
+            env:
+            - name: BACKUP_HOST
+              value: ${backup_host}
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: ${backup_secret_name}
+                  key: password
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: [ALL]
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+          volumes:
+          - name: backup
+            persistentVolumeClaim:
+              claimName: ${backup_name}

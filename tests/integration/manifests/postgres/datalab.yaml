@@ -18,3 +18,8 @@ spec:
         - verify
       storage: 1Gi
       backupStorage: 1Gi
+    pg1:
+      names:
+      - verify
+      storage: 1Gi
+      backupStorage: 0Gi

@@ -4,6 +4,7 @@
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _backup_enabled,
     _extract_manifest,
     _string_value,
     _to_dict,
@@ -89,8 +90,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
         db_storage = _string_value(host_cfg.get("storage") or "")
         backup_storage = _string_value(host_cfg.get("backupStorage") or "")
-        if not db_storage or not backup_storage:
+        if not db_storage:
             continue
+        backup_enabled = _backup_enabled(backup_storage)
 
         db_storage_class = _string_value(
             host_cfg.get("storageClassName") or data_sc_default
@@ -118,13 +120,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if db_storage_class:
             data_vcs["storageClassName"] = db_storage_class
 
-        repo_vcs = {
-            "accessModes": ["ReadWriteOnce"],
-            "resources": {"requests": {"storage": backup_storage}},
-        }
-        if backup_storage_class:
-            repo_vcs["storageClassName"] = backup_storage_class
-
         pg_cluster = _render_template(
             req,
             "postgres/postgres-cluster",
@@ -132,8 +127,20 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             workshop_ns=workshop_namespace,
             cm_name=cm_name,
             data_vcs=data_vcs,
-            repo_vcs=repo_vcs,
         )
+
+        readiness_query = "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1)"
+        if backup_enabled:
+            repo_vcs = {
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": backup_storage}},
+            }
+            if backup_storage_class:
+                repo_vcs["storageClassName"] = backup_storage_class
+            pg_cluster["spec"]["backups"] = _render_template(
+                req, "postgres/backups", repo_vcs=repo_vcs
+            )
+            readiness_query += " && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true"
 
         if users_all:
             pg_cluster["spec"]["users"] = [
@@ -151,7 +158,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             pg_cluster,
             readiness={
                 "policy": "DeriveFromCelQuery",
-                "celQuery": "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true",
+                "celQuery": readiness_query,
             },
             watch=True,
         )

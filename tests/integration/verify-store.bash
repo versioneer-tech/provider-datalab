@@ -8,12 +8,10 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${MONGODB_OPERATOR_VERSION:=1.12.0}"
-: "${REDIS_OPERATOR_CHART_VERSION:=0.26.1}"
-: "${QDRANT_OPERATOR_VERSION:=0.0.3}"
+: "${MONGODB_OPERATOR_VERSION:=1.14.0}"
+: "${REDIS_OPERATOR_CHART_VERSION:=0.27.0}"
 : "${MONGO_CLIENT_IMAGE:=mongo:8.0.12}"
 : "${REDIS_CLIENT_IMAGE:=redis:7.0.15}"
-: "${QDRANT_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${KEEP_STORE_RESOURCES:=0}"
 
 readonly store_type="${1:-}"
@@ -49,23 +47,8 @@ case "${store_type}" in
       REDIS_VERIFY_PASSWORD REDIS_VERIFY_DATABASE REDIS_VERIFY_URL
     )
     ;;
-  qdrant)
-    DATALAB_NAME=verify-qdrant
-    OPERATOR_NAMESPACE=qdrant-operator
-    OPERATOR_RELEASE=qdrant-operator
-    OPERATOR_DEPLOYMENT=qdrant-operator
-    RESOURCE_TYPE=qdrantclusters.qdrant.io
-    RESOURCE_NAME=verify
-    POD_NAME=qdrant-verify-0
-    SERVICE_NAME=qdrant-verify
-    CLIENT_IMAGE="${QDRANT_CLIENT_IMAGE}"
-    SECRET_KEYS=(
-      QDRANT_VERIFY_HOST QDRANT_VERIFY_PORT QDRANT_VERIFY_GRPC_PORT
-      QDRANT_VERIFY_URL QDRANT_VERIFY_API_KEY QDRANT_VERIFY_READ_API_KEY
-    )
-    ;;
   *)
-    printf 'Usage: %s <mongo|redis|qdrant>\n' "$0" >&2
+    printf 'Usage: %s <mongo|redis>\n' "$0" >&2
     exit 1
     ;;
 esac
@@ -76,6 +59,7 @@ readonly STORAGE_SECRET="${DATALAB_NAME}"
 readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
 readonly PROBE_NAME="${DATALAB_NAME}"
 readonly STORE_NAMESPACE="${DATALAB_NAME}"
+probe_value=""
 
 install_mongo_operator() {
   if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" "mongodb-kubernetes-${MONGODB_OPERATOR_VERSION}"; then
@@ -84,6 +68,7 @@ install_mongo_operator() {
   log "Installing MongoDB Kubernetes Operator ${MONGODB_OPERATOR_VERSION}"
   helm_it repo add mongodb https://mongodb.github.io/helm-charts/ --force-update
   helm_it repo update mongodb
+  apply_operator_crds mongodb/mongodb-kubernetes "${MONGODB_OPERATOR_VERSION}"
   helm_it upgrade --install "${OPERATOR_RELEASE}" mongodb/mongodb-kubernetes \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
     --kube-context "${KUBECTL_CONTEXT}" \
@@ -104,6 +89,7 @@ install_redis_operator() {
   helm_it repo add opstree https://ot-container-kit.github.io/helm-charts/ \
     --force-update
   helm_it repo update opstree
+  apply_operator_crds opstree/redis-operator "${REDIS_OPERATOR_CHART_VERSION}"
   helm_it upgrade --install "${OPERATOR_RELEASE}" opstree/redis-operator \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
     --kube-context "${KUBECTL_CONTEXT}" \
@@ -115,58 +101,11 @@ install_redis_operator() {
     --timeout 10m
 }
 
-install_qdrant_operator() {
-  local archive chart_dir temp_dir
-  local result=0
-
-  if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" qdrant-operator-0.1.0 &&
-    kube get deployment "${OPERATOR_DEPLOYMENT}" --namespace "${OPERATOR_NAMESPACE}" -o json |
-      jq -e --arg image "ghcr.io/qdrant-operator/qdrant-operator:${QDRANT_OPERATOR_VERSION}" \
-        'any(.spec.template.spec.containers[]; .image == $image)' >/dev/null; then
-    return
-  fi
-  require_command curl
-  require_command tar
-  temp_dir="$(mktemp -d /tmp/provider-datalab-qdrant.XXXXXX)"
-  archive="${temp_dir}/qdrant-operator.tar.gz"
-  curl --fail --silent --show-error --location \
-    "https://github.com/qdrant-operator/qdrant-operator/archive/refs/tags/${QDRANT_OPERATOR_VERSION}.tar.gz" \
-    --output "${archive}" || result=$?
-  if ((result == 0)); then
-    tar -xzf "${archive}" --directory "${temp_dir}" || result=$?
-  fi
-  if ((result == 0)); then
-    chart_dir="$(find "${temp_dir}" -type d \
-      -path '*/charts/qdrant-operator' -print -quit)"
-    if [[ -z "${chart_dir}" ]]; then
-      printf 'The Qdrant Operator archive does not contain its Helm chart.\n' >&2
-      result=1
-    fi
-  fi
-  if ((result == 0)); then
-    log "Installing Qdrant Operator ${QDRANT_OPERATOR_VERSION}"
-    helm_it upgrade --install "${OPERATOR_RELEASE}" "${chart_dir}" \
-      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-      --kube-context "${KUBECTL_CONTEXT}" \
-      --namespace "${OPERATOR_NAMESPACE}" \
-      --create-namespace \
-      --set image.repository=ghcr.io/qdrant-operator/qdrant-operator \
-      --set-string "image.tag=${QDRANT_OPERATOR_VERSION}" \
-      --set image.pullPolicy=IfNotPresent \
-      --set metrics.enabled=false \
-      --wait \
-      --timeout 10m || result=$?
-  fi
-  rm -rf -- "${temp_dir}"
-  return "${result}"
-}
-
 install_operator() {
   require_command helm
   case "${store_type}" in
     mongo) install_mongo_operator ;;
     redis) install_redis_operator ;;
-    qdrant) install_qdrant_operator ;;
   esac
   kube wait "deployment/${OPERATOR_DEPLOYMENT}" \
     --namespace "${OPERATOR_NAMESPACE}" \
@@ -226,9 +165,80 @@ run_store_probe() {
     PROBE_NAME "${PROBE_NAME}" \
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${CLIENT_IMAGE}" \
+    PROBE_VALUE "${probe_value}" \
     DATALAB_SECRET "${DATALAB_SECRET}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
+}
+
+verify_mongo_backup() {
+  local backup_job=verify-mongo-backup restore_probe=verify-mongo-restore
+  log 'Running the MongoDB backup CronJob and restoring its archive'
+  kube wait cronjob/mongodb-verify-backup --namespace "${STORE_NAMESPACE}" \
+    --for=create --timeout=5m
+  kube delete "job/${backup_job}" "pod/${restore_probe}" --namespace "${STORE_NAMESPACE}" \
+    --ignore-not-found --wait=true
+  kube create job "${backup_job}" --from=cronjob/mongodb-verify-backup \
+    --namespace "${STORE_NAMESPACE}"
+  if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
+    --for=condition=Complete --timeout=10m; then
+    kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
+    return 1
+  fi
+  render_template "${MANIFEST_DIR}/mongo/restore.yaml" \
+    PROBE_NAME "${restore_probe}" STORE_NAMESPACE "${STORE_NAMESPACE}" \
+    CLIENT_IMAGE "${CLIENT_IMAGE}" | kube apply -f -
+  wait_for_probe "${STORE_NAMESPACE}" "${restore_probe}"
+}
+
+set_redis_backup_storage() {
+  local size="$1" previous_checksum checksum deadline=$((SECONDS + 600))
+  local annotation='{.metadata.annotations.datalabs\.pkg\.internal/redis-acl-checksum}'
+  previous_checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
+    --namespace "${STORE_NAMESPACE}" -o "jsonpath=${annotation}")" || return 1
+  kube patch "datalab.pkg.internal/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
+    --type=merge --patch "{\"spec\":{\"cacheStores\":{\"verify\":{\"backupStorage\":\"${size}\"}}}}" || return 1
+  while true; do
+    checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
+      --namespace "${STORE_NAMESPACE}" -o "jsonpath=${annotation}")" || return 1
+    if [[ -n "${checksum}" && "${checksum}" != "${previous_checksum}" ]]; then break; fi
+    if ((SECONDS >= deadline)); then
+      printf 'Redis did not update its ACL after backup storage changed.\n' >&2
+      return 1
+    fi
+    sleep 5
+  done
+  kube wait "statefulset/${RESOURCE_NAME}" --namespace "${STORE_NAMESPACE}" \
+    --for="jsonpath={.spec.template.metadata.annotations.datalabs\.pkg\.internal/redis-acl-checksum}=${checksum}" \
+    --timeout=5m || return 1
+  kube rollout status "statefulset/${RESOURCE_NAME}" --namespace "${STORE_NAMESPACE}" --timeout=5m
+}
+
+verify_redis_backup() {
+  local backup_job=verify-redis-backup restore_probe=verify-redis-restore
+  set_redis_backup_storage 1Gi || return 1
+  log 'Running the Redis backup CronJob and restoring its snapshot'
+  kube wait cronjob/redis-verify-backup --namespace "${STORE_NAMESPACE}" \
+    --for=create --timeout=5m
+  kube delete "job/${backup_job}" "pod/${restore_probe}" --namespace "${STORE_NAMESPACE}" \
+    --ignore-not-found --wait=true
+  kube create job "${backup_job}" --from=cronjob/redis-verify-backup \
+    --namespace "${STORE_NAMESPACE}"
+  if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
+    --for=condition=Complete --timeout=10m; then
+    kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
+    return 1
+  fi
+  render_template "${MANIFEST_DIR}/redis/restore.yaml" \
+    PROBE_NAME "${restore_probe}" STORE_NAMESPACE "${STORE_NAMESPACE}" \
+    PROBE_VALUE "${probe_value}" CLIENT_IMAGE "${CLIENT_IMAGE}" | kube apply -f -
+  wait_for_probe "${STORE_NAMESPACE}" "${restore_probe}" || return 1
+  log 'Disabling Redis backups while retaining the snapshot volume'
+  set_redis_backup_storage 0Gi || return 1
+  kube wait cronjob/redis-verify-backup --namespace "${STORE_NAMESPACE}" \
+    --for=delete --timeout=5m || return 1
+  kube get pvc/redis-verify-backup --namespace "${STORE_NAMESPACE}" || return 1
+  run_store_probe
 }
 
 show_store_diagnostics() {
@@ -265,6 +275,10 @@ cleanup_successful_verification() {
 
 main() {
   require_cluster
+  if [[ "${store_type}" == redis ]]; then
+    require_command openssl
+    probe_value="$(openssl rand -hex 12)"
+  fi
   install_operator
   apply_store_datalab
   if ! wait_for_store; then
@@ -275,6 +289,16 @@ main() {
     show_store_diagnostics
     printf '%s verification resources were kept for diagnosis.\n' \
       "${store_type}" >&2
+    exit 1
+  fi
+  if [[ "${store_type}" == mongo ]] && ! verify_mongo_backup; then
+    show_store_diagnostics
+    printf 'MongoDB backup verification resources were kept for diagnosis.\n' >&2
+    exit 1
+  fi
+  if [[ "${store_type}" == redis ]] && ! verify_redis_backup; then
+    show_store_diagnostics
+    printf 'Redis backup verification resources were kept for diagnosis.\n' >&2
     exit 1
   fi
   cleanup_successful_verification
