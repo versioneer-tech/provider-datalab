@@ -3698,7 +3698,6 @@ spec:
           metadata:
             name: ${control_policy}
             namespace: ${namespace}
-            annotations: {}
             labels:
               app: ${runtime}
               release: ${runtime}
@@ -3791,7 +3790,6 @@ spec:
           metadata:
             name: ${dns_policy}
             namespace: ${namespace}
-            annotations: {}
             labels:
               app: ${runtime}
               release: ${runtime}
@@ -4082,7 +4080,6 @@ spec:
           metadata:
             name: ${snapshot_policy}
             namespace: ${namespace}
-            annotations: {}
             labels:
               app: ${runtime}
               release: ${runtime}
@@ -4317,7 +4314,6 @@ spec:
           metadata:
             name: ${workload_policy}
             namespace: ${namespace}
-            annotations: {}
             labels:
               app: ${runtime}
               release: ${runtime}

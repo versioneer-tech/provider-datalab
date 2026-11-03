@@ -6,7 +6,6 @@ kind: NetworkPolicy
 metadata:
   name: ${snapshot_policy}
   namespace: ${namespace}
-  annotations: {}
   labels:
     app: ${runtime}
     release: ${runtime}

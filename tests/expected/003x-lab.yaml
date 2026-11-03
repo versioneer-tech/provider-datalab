@@ -2417,7 +2417,6 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        annotations: {}
         labels:
           app: vcluster-vc0
           release: vcluster-vc0
@@ -2542,7 +2541,6 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        annotations: {}
         labels:
           app: vcluster-vc0
           release: vcluster-vc0
@@ -3038,7 +3036,6 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        annotations: {}
         labels:
           app: vcluster-vc0
           release: vcluster-vc0
@@ -3353,7 +3350,6 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        annotations: {}
         labels:
           app: vcluster-vc0
           release: vcluster-vc0

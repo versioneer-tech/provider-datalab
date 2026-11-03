@@ -6,7 +6,6 @@ kind: NetworkPolicy
 metadata:
   name: ${workload_policy}
   namespace: ${namespace}
-  annotations: {}
   labels:
     app: ${runtime}
     release: ${runtime}
