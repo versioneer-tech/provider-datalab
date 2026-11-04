@@ -1952,7 +1952,7 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
-    name: vcluster:vc0:cluster-admin
+    name: vcluster_vc0_cluster-admin
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -1969,7 +1969,7 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
-    name: vcluster:vc0:namespace-demo
+    name: vcluster_vc0_namespace-demo
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -2287,7 +2287,7 @@ spec:
       subjects:
       - apiGroup: rbac.authorization.k8s.io
         kind: Group
-        name: datalab:s-jane:vcluster:vc0:namespace-demo
+        name: datalab:s-jane:vcluster_vc0_namespace-demo
   providerConfigRef:
     kind: ProviderConfig
     name: s-jane-vcluster-vc0-25fc5fbd42
@@ -2316,7 +2316,7 @@ spec:
       subjects:
       - apiGroup: rbac.authorization.k8s.io
         kind: Group
-        name: datalab:s-jane:vcluster:vc0:cluster-admin
+        name: datalab:s-jane:vcluster_vc0_cluster-admin
   providerConfigRef:
     kind: ProviderConfig
     name: s-jane-vcluster-vc0-25fc5fbd42
@@ -2363,10 +2363,10 @@ spec:
       data:
         authentication.json: '{"anonymous": {"enabled": false}, "apiVersion": "apiserver.config.k8s.io/v1", "jwt":
           [{"claimMappings": {"groups": {"expression": "claims.resource_access[\"s-jane\"].roles.filter(r, r in
-          [\"vcluster:vc0:cluster-admin\", \"vcluster:vc0:namespace-demo\"]).map(r, ''datalab:s-jane:'' + r)"},
+          [\"vcluster_vc0_cluster-admin\", \"vcluster_vc0_namespace-demo\"]).map(r, ''datalab:s-jane:'' + r)"},
           "username": {"claim": "sub", "prefix": "datalab:s-jane:"}}, "claimValidationRules": [{"expression": "has(claims.resource_access)
           && \"s-jane\" in claims.resource_access && has(claims.resource_access[\"s-jane\"].roles) && claims.resource_access[\"s-jane\"].roles.exists(r,
-          r in [\"vcluster:vc0:cluster-admin\", \"vcluster:vc0:namespace-demo\"])", "message": "A configured Datalab
+          r in [\"vcluster_vc0_cluster-admin\", \"vcluster_vc0_namespace-demo\"])", "message": "A configured Datalab
           vcluster role is required."}], "issuer": {"audienceMatchPolicy": "MatchAny", "audiences": ["s-jane"],
           "url": "https://identity.acme.com/realms/acme"}}], "kind": "AuthenticationConfiguration"}'
       kind: ConfigMap
@@ -3164,7 +3164,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/configuration-checksum: 3a9bff033855a332fe1b1feb271aa5942a4a31454030c561df5f1f521e1ba9d4
+              datalabs.pkg.internal/configuration-checksum: a38ae8ea0720d36e5d93527db5d05488e3ce07f3c5f1bd7436b2096f5acd14a1
             labels:
               app: vcluster-vc0
               release: vcluster-vc0

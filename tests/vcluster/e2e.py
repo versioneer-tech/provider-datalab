@@ -261,7 +261,7 @@ def admin_token():
 
 def verify_member_roles(removed, instances):
     expected = set() if removed else {
-        f"vcluster:{instance}:cluster-admin" for instance in instances
+        f"vcluster_{instance}_cluster-admin" for instance in instances
     }
 
     def assigned():
@@ -276,7 +276,7 @@ def verify_member_roles(removed, instances):
             token=admin,
         )
         roles = set(claims.get("resource_access", {}).get(LAB, {}).get("roles", []))
-        if {role for role in roles if role.startswith("vcluster:")} != expected:
+        if {role for role in roles if role.startswith("vcluster_")} != expected:
             return False
         assert ("ws_access" in roles) == (not removed)
         account = identity(client + "/service-account-user", token=admin)
@@ -502,8 +502,8 @@ def main():
     editor = profile_token("editor")
     marker.write_text(editor)
     for value, expected_role in (
-        (bearer, "vcluster:vc0:cluster-admin"),
-        (editor, "vcluster:vc0:namespace-demo"),
+        (bearer, "vcluster_vc0_cluster-admin"),
+        (editor, "vcluster_vc0_namespace-demo"),
     ):
         claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
         assert claims["resource_access"][LAB]["roles"] == [expected_role]
@@ -765,7 +765,7 @@ def main():
                 {
                     "kind": "Group",
                     "apiGroup": "rbac.authorization.k8s.io",
-                    "name": f"datalab:{LAB}:vcluster:vc0:namespace-demo",
+                    "name": f"datalab:{LAB}:vcluster_vc0_namespace-demo",
                 }
             ],
         },
@@ -923,7 +923,7 @@ def main():
         ("api", ["ws_api"], LAB),
         ("no-role", [], LAB),
         ("unknown-profile", ["vcluster-unconfigured"], LAB),
-        ("wrong-audience", ["vcluster:vc0:cluster-admin"], "another-datalab"),
+        ("wrong-audience", ["vcluster_vc0_cluster-admin"], "another-datalab"),
     ):
         denied = negative_token(label, roles, audience)
         claims = json.loads(base64.urlsafe_b64decode(denied.split(".")[1] + "=="))
@@ -942,7 +942,7 @@ def main():
     assert claims["iss"] != ISSUER
     api("/api/v1/namespaces", wrong_issuer, expected=(401, 403))
     print("PASS denied wrong issuer", flush=True)
-    expired = negative_token("expired", ["vcluster:vc0:cluster-admin"], lifetime=1)
+    expired = negative_token("expired", ["vcluster_vc0_cluster-admin"], lifetime=1)
     time.sleep(3)
     api("/api/v1/namespaces", expired, expected=(401, 403))
     parts = bearer.split(".")

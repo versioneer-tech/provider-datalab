@@ -122,7 +122,7 @@ def _vcluster_profile(name, instance, group):
 
 
 def _vcluster_role(instance, group):
-    return f"vcluster:{instance}:{group}"
+    return f"vcluster_{instance}_{group}"
 
 
 def _vcluster_groups(config):

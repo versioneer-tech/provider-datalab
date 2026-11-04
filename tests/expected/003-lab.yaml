@@ -722,7 +722,7 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
-    name: vcluster:vc0:cluster-admin
+    name: vcluster_vc0_cluster-admin
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig
@@ -739,7 +739,7 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
-    name: vcluster:vc0:namespace-demo
+    name: vcluster_vc0_namespace-demo
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig

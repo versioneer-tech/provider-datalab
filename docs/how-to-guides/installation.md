@@ -55,7 +55,7 @@ ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 
 Each declared instance gives all users in `spec.users` its built-in
-`vcluster:<instance>:cluster-admin` role through the Datalab users group.
+`vcluster_<instance>_cluster-admin` role through the Datalab users group.
 The role applies inside that virtual cluster. No `groups` entry is required.
 
 Datalab users can bind ready connections into a virtual cluster by `type`

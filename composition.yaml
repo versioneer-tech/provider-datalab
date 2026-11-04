@@ -840,7 +840,7 @@ spec:
             return _resource_name(name, "vcluster", instance, group, limit=55)
 
         def _vcluster_role(instance, group):
-            return f"vcluster:{instance}:{group}"
+            return f"vcluster_{instance}_{group}"
 
         def _vcluster_groups(config):
             groups = {group["name"]: group for group in config.get("groups") or []}
@@ -1214,28 +1214,31 @@ spec:
 
             admins = _distinct((users[0:1] or []) + role_admins)
 
-            put(
-                "keycloak-memberships-users",
-                _render_template(
-                    req,
-                    "keycloak/user-memberships",
-                    xr_name=xr_name,
-                    realm=realm,
-                    users=users,
-                ),
-            )
+            # The provider rejects an empty member list. Delete its membership resource to clear the group.
+            if users:
+                put(
+                    "keycloak-memberships-users",
+                    _render_template(
+                        req,
+                        "keycloak/user-memberships",
+                        xr_name=xr_name,
+                        realm=realm,
+                        users=users,
+                    ),
+                )
 
-            put(
-                "keycloak-memberships-admins",
-                _render_template(
-                    req,
-                    "keycloak/admin-memberships",
-                    group_name=f"{xr_name}-admin",
-                    realm=realm,
-                    admins=admins,
-                ),
-                f"{xr_name}-admin",
-            )
+            if admins:
+                put(
+                    "keycloak-memberships-admins",
+                    _render_template(
+                        req,
+                        "keycloak/admin-memberships",
+                        group_name=f"{xr_name}-admin",
+                        realm=realm,
+                        admins=admins,
+                    ),
+                    f"{xr_name}-admin",
+                )
       templates:
         keycloak/access-role:
           apiVersion: role.keycloak.m.crossplane.io/v1alpha1
@@ -2487,7 +2490,7 @@ spec:
             return _resource_name(name, "vcluster", instance, group, limit=55)
 
         def _vcluster_role(instance, group):
-            return f"vcluster:{instance}:{group}"
+            return f"vcluster_{instance}_{group}"
 
         def _vcluster_groups(config):
             groups = {group["name"]: group for group in config.get("groups") or []}

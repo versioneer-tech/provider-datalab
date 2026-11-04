@@ -24,7 +24,7 @@ Each entry creates one runtime in the Datalab namespace. Add
 Sessions and their environment-controlled vclusters remain separate.
 
 Each instance includes a built-in `cluster-admin` profile. All users in
-`spec.users` receive `vcluster:<instance>:cluster-admin` through the Datalab
+`spec.users` receive `vcluster_<instance>_cluster-admin` through the Datalab
 users group. The role belongs to that Datalab's Keycloak client. `groups` is optional and defines additional profiles.
 
 ## Platform settings

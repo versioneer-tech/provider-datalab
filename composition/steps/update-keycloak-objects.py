@@ -373,25 +373,28 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     admins = _distinct((users[0:1] or []) + role_admins)
 
-    put(
-        "keycloak-memberships-users",
-        _render_template(
-            req,
-            "keycloak/user-memberships",
-            xr_name=xr_name,
-            realm=realm,
-            users=users,
-        ),
-    )
+    # The provider rejects an empty member list. Delete its membership resource to clear the group.
+    if users:
+        put(
+            "keycloak-memberships-users",
+            _render_template(
+                req,
+                "keycloak/user-memberships",
+                xr_name=xr_name,
+                realm=realm,
+                users=users,
+            ),
+        )
 
-    put(
-        "keycloak-memberships-admins",
-        _render_template(
-            req,
-            "keycloak/admin-memberships",
-            group_name=f"{xr_name}-admin",
-            realm=realm,
-            admins=admins,
-        ),
-        f"{xr_name}-admin",
-    )
+    if admins:
+        put(
+            "keycloak-memberships-admins",
+            _render_template(
+                req,
+                "keycloak/admin-memberships",
+                group_name=f"{xr_name}-admin",
+                realm=realm,
+                admins=admins,
+            ),
+            f"{xr_name}-admin",
+        )

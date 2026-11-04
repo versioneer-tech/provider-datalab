@@ -89,12 +89,12 @@ def main():
             manifest(resources, key("authentication"))["data"]["authentication.json"]
         )
         assert (
-            f"vcluster:{instance}:demo"
+            f"vcluster_{instance}_demo"
             in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
         other = "vc1" if instance == "vc0" else "vc0"
         assert (
-            f"vcluster:{other}:demo"
+            f"vcluster_{other}_demo"
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
     assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 4
@@ -124,7 +124,7 @@ def main():
     )
     for instance in ("vc0", "vc1"):
         profile = profile_name("s-joe", instance, "cluster-admin")
-        assert automatic[f"keycloak-vcluster-role-{profile}"]["spec"]["forProvider"]["name"] == f"vcluster:{instance}:cluster-admin"
+        assert automatic[f"keycloak-vcluster-role-{profile}"]["spec"]["forProvider"]["name"] == f"vcluster_{instance}_cluster-admin"
         mapper_name = resource_name("vcluster", "s-joe", instance, "users-scope")
         mapper = automatic[f"keycloak-vcluster-user-role-mapper-{mapper_name}"]["spec"]["forProvider"]
         assert mapper["clientIdRef"]["name"] == "s-joe"
@@ -138,7 +138,7 @@ def main():
         ]
         assert len(bindings) == 1
         assert bindings[0]["roleRef"]["name"] == "cluster-admin"
-        assert bindings[0]["subjects"] == [{"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": f"datalab:s-joe:vcluster:{instance}:cluster-admin"}]
+        assert bindings[0]["subjects"] == [{"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": f"datalab:s-joe:vcluster_{instance}_cluster-admin"}]
         assert any(
             c["type"] == "vcluster" and c["instance"] == instance and c["group"] == "cluster-admin"
             for c in automatic["composite"]["status"]["connections"]
@@ -157,6 +157,13 @@ def main():
     assert disabled["keycloak-memberships-users-s-joe"]["spec"]["forProvider"]["members"] == ["joe"]
     assert not any(key.startswith("keycloak-vcluster-") for key in disabled)
     assert disabled["keycloak-service-account-role-api-s-joe-ws-api"]["spec"] == automatic["keycloak-service-account-role-api-s-joe-ws-api"]["spec"]
+    vacant_source = deepcopy(source)
+    vacant_source["spec"]["users"] = []
+    vacant = render(args, env, vacant_source, observed)
+    assert "keycloak-memberships-users-s-joe" not in vacant
+    assert "keycloak-memberships-admins-s-joe-admin" not in vacant
+    assert user_roles(vacant) == user_roles(automatic)
+    assert manifest(vacant, resource_name("vcluster", "s-joe", "vc0", "statefulset")) == manifest(resources, resource_name("vcluster", "s-joe", "vc0", "statefulset"))
     print("PASS Datalab members receive built-in administration without explicit profiles; removal clears grants")
 
     bound_source, bound_env = deepcopy(source), deepcopy(env)
