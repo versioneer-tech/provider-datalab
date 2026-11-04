@@ -19,6 +19,7 @@ report_failure() {
   local result=$?
   trap - ERR
   kube get datalab/verify-vcluster --namespace workspace || true
+  kube get datalab/s-john datalab/s-jane --namespace workspace || true
   kube get objects.kubernetes.m.crossplane.io --namespace workspace --selector crossplane.io/composite=verify-vcluster || true
   kube get statefulsets,pods,httproutes,backendtlspolicies --namespace "${VCLUSTER_NAMESPACE}" || true
   kube get events --namespace "${VCLUSTER_NAMESPACE}" --sort-by=.lastTimestamp | tail -25 || true
@@ -106,6 +107,61 @@ install_prerequisites() {
 }
 
 
+verify_custom_connections() {
+  local team namespace key deadline expected
+  kube patch environmentconfig/datalab-custom --type=merge --patch \
+    '{"data":{"customSecrets":[{"name":"apikey-1"},{"name":"apikey-2"}],"defaults":{"data":{"enabled":false},"registry":{"enabled":false},"vcluster":{"enabled":false}}}}'
+  for team in s-john s-jane; do
+    kube create secret generic "${team}" --namespace workspace \
+      --from-literal=AWS_ACCESS_KEY_ID=minioadmin --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin \
+      --dry-run=client -o yaml | kube apply -f -
+    kube apply -f - <<DATALAB
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: ${team}
+  namespace: workspace
+  annotations:
+    datalabs.pkg.internal/environment: datalab-custom
+spec:
+  users: [verify-s3]
+  sessions: []
+DATALAB
+  done
+  for team in s-john s-jane; do
+    namespace="$(wait_for_runtime_namespace "${team}")"
+    [[ "${namespace}" == "${team}" ]]
+    kube wait "datalab/${team}" --namespace workspace --for=condition=Ready --timeout=10m
+    kube get "datalab/${team}" --namespace workspace -o json \
+      | jq -e '[.status.connections[]? | select(.type == "custom")] | length == 0' >/dev/null
+    for key in apikey-1 apikey-2; do
+      [[ "${team}" != s-jane || "${key}" != apikey-2 ]] || continue
+      kube create secret generic "${key}" --namespace "${namespace}" \
+        --from-literal=token=integration-test --dry-run=client -o yaml | kube apply -f -
+    done
+  done
+  for team in s-john s-jane; do
+    expected='["apikey-1","apikey-2"]'
+    [[ "${team}" != s-jane ]] || expected='["apikey-1"]'
+    deadline=$((SECONDS + 600))
+    until kube get "datalab/${team}" --namespace workspace -o json | jq -e --argjson expected "${expected}" \
+      '([.status.connections[]? | select(.type == "custom") | .name] | sort) == $expected and all(.status.connections[]?; .ready)' >/dev/null; do
+      ((SECONDS < deadline)) || return 1
+      sleep 2
+    done
+    kube wait "datalab/${team}" --namespace workspace --for=condition=Ready --timeout=5m
+  done
+  printf 'PASS John has both custom keys; Jane has only apikey-1; missing keys do not block readiness\n'
+  if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
+    kube delete datalab/s-john datalab/s-jane --namespace workspace --wait=false
+    for team in s-john s-jane; do
+      kube wait "datalab/${team}" --namespace workspace --for=delete --timeout=10m
+      kube wait "namespace/${team}" --for=delete --timeout=10m
+    done
+    kube delete secret/s-john secret/s-jane --namespace workspace
+  fi
+}
+
 verify_vcluster() {
   local service gateway_ip deadline
   kube apply -f "${MANIFEST_DIR}/vcluster/datalab.yaml"
@@ -132,7 +188,7 @@ verify_vcluster() {
   kube wait datalab/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
   kube get datalab/verify-vcluster --namespace workspace -o json | python3 -c '
 import json, sys
-connections = json.load(sys.stdin)["status"]["connections"]
+connections = [c for c in json.load(sys.stdin)["status"]["connections"] if c["type"] == "vcluster"]
 assert len(connections) == 3 and all(c["ready"] for c in connections)
 assert {c["instance"] for c in connections} == {"vc0", "vc1"}
 assert all(set(c) <= {"name", "type", "instance", "group", "targetNamespace", "role", "endpoint", "ready", "secretRef"} for c in connections)
@@ -191,7 +247,7 @@ from copy import deepcopy
 from pathlib import Path
 import subprocess, sys, yaml
 source = yaml.safe_load(Path(sys.argv[1]).read_text())
-for version in ('v1beta1', 'v1beta2'):
+for version in ('v1beta2',):
     source['apiVersion'] = 'pkg.internal/' + version
     for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
         for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
@@ -209,6 +265,7 @@ main() {
   install_prerequisites
   build_catalog_image
   verify_name_admission
+  verify_custom_connections
   verify_vcluster
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete pod/verify-vcluster-client configmap/verify-vcluster-client --namespace workspace --ignore-not-found

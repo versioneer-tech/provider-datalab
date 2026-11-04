@@ -25,7 +25,6 @@ spec:
       backupStorage: 3Gi
       storage: 1Gi
       type: mongo
-  secretName: s-jeff
   userOverrides:
     jim:
       grantedAt: '2025-01-10T19:00:00Z'
@@ -34,6 +33,32 @@ spec:
   - jeff
   - jim
   - jane
+status:
+  connections:
+  - name: primary
+    ready: true
+    secretRef:
+      name: s-jeff
+      namespace: datalab
+    type: s3
+  - name: pg0
+    ready: false
+    secretRef:
+      name: pg0-pguser-postgres
+      namespace: s-jeff
+    type: postgres
+  - name: prod
+    ready: false
+    secretRef:
+      name: prod-mongodb-auth
+      namespace: s-jeff
+    type: mongo
+  - name: prod
+    ready: true
+    secretRef:
+      name: prod-redis-auth
+      namespace: s-jeff
+    type: redis
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

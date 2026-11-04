@@ -121,3 +121,10 @@ spec:
   - step: check-resource-readiness
     functionRef:
       name: crossplane-contrib-function-auto-ready
+  - step: check-connection-readiness
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/check-connection-readiness.py

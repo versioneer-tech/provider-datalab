@@ -141,9 +141,11 @@ def main():
         finally:
             patch(CLIENT, {"metadata": {"annotations": {PAUSED: previous_pause}}})
 
+    # Recovery can cross the watch circuit's backoff window.
     wait_for(
         lambda: propagated(original[secret_key]),
         "The OAuth credentials were not restored.",
+        timeout=300,
     )
     rollouts()
     wait_for(

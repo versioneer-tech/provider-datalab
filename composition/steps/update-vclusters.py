@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import base64
+from collections import Counter
 import hashlib
 import json
 import re
@@ -15,6 +16,35 @@ from composition.helpers import (
     _vcluster_role,
 )
 from composition.render import _render_template
+
+
+def _secret_mappings(connections, bindings):
+    candidates = []
+    for binding in bindings:
+        kind, name = binding["type"], binding["name"]
+        matches = [
+            item for item in connections
+            if item["type"] == kind and item["name"] == name
+        ]
+        if len(matches) != 1 or matches[0].get("ready") is not True:
+            continue
+        source = matches[0]["secretRef"]
+        if not (
+            re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", source["namespace"])
+            and re.fullmatch(r"[a-z0-9]([-a-z0-9.]*[a-z0-9])?", source["name"])
+        ):
+            continue
+        target = binding["target"]
+        source_name = f"{source['namespace']}/{source['name']}"
+        target_name = f"{target['namespace']}/{target['name']}"
+        candidates.append((source_name, target_name))
+    sources = Counter(source for source, _ in candidates)
+    targets = Counter(target for _, target in candidates)
+    return {
+        source: target
+        for source, target in candidates
+        if sources[source] == 1 and targets[target] == 1
+    }
 
 
 def compose(req, rsp):
@@ -62,6 +92,10 @@ def _compose_instance(
     }
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
     config = env.get("vcluster") or {}
+    secret_mappings = _secret_mappings(
+        (_to_dict(rsp.desired.composite.resource).get("status") or {}).get("connections") or [],
+        instance_config.get("secretBindings") or [],
+    )
     iam = env.get("iam") or {}
     route = env.get("httpRoute") or {}
     domain = (env.get("ingress") or {}).get("domain")
@@ -243,6 +277,10 @@ def _compose_instance(
     configuration["controlPlane"]["backingStore"]["database"]["embedded"].update(
         embedded
     )
+    configuration["sync"]["fromHost"]["secrets"] = {
+        "enabled": bool(secret_mappings),
+        "mappings": {"byName": secret_mappings},
+    }
     configuration_json = json.dumps(configuration, sort_keys=True)
     checksum = hashlib.sha256(
         (configuration_json + authentication).encode()
@@ -333,6 +371,23 @@ def _compose_instance(
         ),
     ):
         emit(suffix, manifest)
+    source_namespaces = {key.split("/")[0] for key in secret_mappings} - {namespace}
+    for source_namespace in sorted(source_namespaces):
+        reader_name = _resource_name(name, instance, "secret-import")
+        reader_values = {
+            **template_values,
+            "namespace": source_namespace,
+            "runtime_namespace": namespace,
+            "reader_name": reader_name,
+        }
+        for kind, manifest in (
+            ("role", _render_template(req, "vcluster/secret-import-role", **reader_values)),
+            ("rolebinding", _render_template(req, "vcluster/secret-import-rolebinding", **reader_values)),
+        ):
+            emit(
+                f"secret-import-{source_namespace}-{kind}",
+                manifest,
+            )
     workload_policy = _render_template(
         req, "vcluster/workload-networkpolicy", namespace=namespace, **template_values
     )

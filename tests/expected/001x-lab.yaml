@@ -9,6 +9,14 @@ metadata:
 spec:
   users:
   - joe
+status:
+  connections:
+  - name: primary
+    ready: false
+    secretRef:
+      name: s-joe
+      namespace: datalab
+    type: s3
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

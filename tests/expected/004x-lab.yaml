@@ -9,7 +9,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
   name: s-john
 spec:
-  secretName: s-john
   sessions:
   - name: default
   - name: analysis
@@ -17,6 +16,19 @@ spec:
   users:
   - john
 status:
+  connections:
+  - name: apikey-1
+    ready: true
+    secretRef:
+      name: apikey-1
+      namespace: s-john
+    type: custom
+  - name: apikey-2
+    ready: true
+    secretRef:
+      name: apikey-2
+      namespace: s-john
+    type: custom
   sessions:
     analysis:
       state: stopped
@@ -1327,6 +1339,46 @@ spec:
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-custom-secret-s-john-s-john-apikey-1-170a8a525a
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: apikey-1
+        namespace: s-john
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-custom-secret-s-john-s-john-apikey-2-81c3920bda
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: apikey-2
+        namespace: s-john
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1

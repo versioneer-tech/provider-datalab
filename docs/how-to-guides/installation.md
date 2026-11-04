@@ -54,6 +54,15 @@ issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 
+Datalab users can bind ready connections into a virtual cluster by `type`
+and `name`. List predefined Secret names under `data.customSecrets` to make
+available sources accessible as `type: custom` connections. Entries default
+to the team runtime namespace; an optional `namespace` selects a shared source.
+Missing custom Secrets are omitted from status and do not block the Datalab.
+If a storage or custom Secret is outside the runtime namespace, the provider
+grants the syncer read access to that source namespace. It must exist before vCluster starts. See
+[Secret bindings](vcluster.md#secret-bindings).
+
 ## 1. Choose the claim namespace
 
 This guide uses `workspace` for Datalab resources and their namespaced
@@ -390,8 +399,7 @@ Data access, and policy exclusions.
 
 Create the object-storage bucket and credentials through your platform's
 storage process or [Provider Storage](https://provider-storage.versioneer.at/).
-Provider Datalab reads an existing input Secret. Its name comes from
-`spec.secretName`, or the Datalab name when that field is omitted.
+Provider Datalab reads an existing input Secret with the same name as the Datalab.
 
 The Secret must exist in `storage.secretNamespace` and contain
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The storage identity must

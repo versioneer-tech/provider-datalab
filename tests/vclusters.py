@@ -97,11 +97,65 @@ def main():
             f"vcluster:{other}:demo"
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
-    assert len(resources["composite"]["status"]["connections"]) == 2
+    assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 2
     assert resources["composite"]["status"]["sessions"]["work"]["state"] == "started"
     print(
         "PASS two virtual clusters have separate routes, identities, selectors, and session status"
     )
+
+    bound_source, bound_env = deepcopy(source), deepcopy(env)
+    bound_source["spec"]["databases"] = {"pg0": {"names": ["analytics"]}}
+    bound_env["data"]["customSecrets"] = [
+        {"name": "github-development"}, {"name": "missing"}
+    ]
+    bound_source["spec"]["vclusters"]["vc0"]["secretBindings"] = [
+        {"type": kind, "name": name,
+         "target": {"namespace": "applications", "name": target}}
+        for kind, name, target in (
+            ("postgres", "pg0", "database-credentials"),
+            ("custom", "github-development", "github-credentials"),
+            ("custom", "missing", "missing-credentials"),
+            ("custom", "unknown", "unknown-credentials"),
+        )
+    ]
+    custom_key = resource_name(
+        "observe-custom-secret", "s-joe", "s-joe-runtime", "github-development"
+    )
+    custom_source = {
+        "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
+        "metadata": {"name": custom_key, "namespace": "workspace",
+                     "annotations": {"crossplane.io/composition-resource-name": custom_key}},
+        "status": {
+            "conditions": [{"type": "Ready", "status": "True"}],
+            "atProvider": {"manifest": {
+                "apiVersion": "v1", "kind": "Secret",
+                "metadata": {"namespace": "s-joe-runtime", "name": "github-development"},
+            }},
+        },
+    }
+    bound = render(args, bound_env, bound_source, [*observed, custom_source], include_composite=True)
+    connections = bound["composite"]["status"]["connections"]
+    custom = [c for c in connections if c["type"] == "custom"]
+    assert custom == [{"name": "github-development", "type": "custom", "ready": True,
+                       "secretRef": {"namespace": "s-joe-runtime", "name": "github-development"}}]
+    assert not next(c for c in connections if c["type"] == "postgres")["ready"]
+
+    def native_secrets(rendered, instance):
+        config = manifest(rendered, resource_name("vcluster", "s-joe", instance, "config"))
+        return json.loads(base64.b64decode(config["data"]["config.yaml"]))["sync"]["fromHost"]["secrets"]
+
+    source_ref = custom[0]["secretRef"]
+    assert native_secrets(bound, "vc0") == {
+        "enabled": True,
+        "mappings": {"byName": {
+            f"{source_ref['namespace']}/{source_ref['name']}": "applications/github-credentials"
+        }},
+    }
+    assert native_secrets(bound, "vc1") == {"enabled": False, "mappings": {"byName": {}}}
+    unavailable = render(args, bound_env, bound_source, observed, include_composite=True)
+    assert not any(c["type"] == "custom" for c in unavailable["composite"]["status"]["connections"])
+    assert native_secrets(unavailable, "vc0") == {"enabled": False, "mappings": {"byName": {}}}
+    print("PASS only ready connection references generate native Secret mappings")
 
     def settings(rendered, instance="vc0"):
         def key(suffix):
@@ -238,7 +292,7 @@ def main():
         )
     }
     distinct = render(args, env, hyphenated, observed, include_composite=True)
-    connections = distinct["composite"]["status"]["connections"]
+    connections = [c for c in distinct["composite"]["status"]["connections"] if c["type"] == "vcluster"]
     assert len({c["name"] for c in connections}) == 4
     assert len({c["secretRef"]["name"] for c in connections}) == 4
     host_objects = [

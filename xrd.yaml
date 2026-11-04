@@ -19,97 +19,6 @@ spec:
         openAPIV3Schema:
           type: object
           x-kubernetes-preserve-unknown-fields: true
-          properties:
-            spec:
-              type: object
-              x-kubernetes-preserve-unknown-fields: true
-              properties:
-                vclusters:
-                  type: object
-                  default: {}
-                  maxProperties: 20
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    description: Virtual Kubernetes clusters keyed by instance name.
-                    properties:
-                      groups:
-                        type: array
-                        description: Access profiles with separate kubeconfigs and Kubernetes RBAC.
-                        maxItems: 20
-                        x-kubernetes-list-type: map
-                        x-kubernetes-list-map-keys:
-                        - name
-                        items:
-                          type: object
-                          required:
-                          - name
-                          - namespace
-                          - role
-                          x-kubernetes-validations:
-                          - rule: (self.namespace == "*") == (self.role == "cluster-admin")
-                            message: cluster-admin requires namespace '*'; other roles require a namespace.
-                          properties:
-                            name:
-                              type: string
-                              description: Profile name used for its Keycloak role and connection set.
-                              maxLength: 40
-                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
-                            namespace:
-                              type: string
-                              description: Virtual namespace to create, or '*' for virtual cluster administration.
-                              maxLength: 63
-                              pattern: ^(\*|[a-z]([a-z0-9-]*[a-z0-9])?)$
-                              x-kubernetes-validations:
-                              - rule: self != "default" && !self.startsWith("kube-")
-                                message: Select a workload namespace, not a Kubernetes system namespace.
-                            role:
-                              type: string
-                              description: Kubernetes ClusterRole granted to this profile.
-                              enum:
-                              - view
-                              - edit
-                              - admin
-                              - cluster-admin
-                        minItems: 1
-                      storage:
-                        type: string
-                        description: Control-plane PVC size. The environment default is used when omitted.
-                    required:
-                    - groups
-                databases:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                documentStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                cacheStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  additionalProperties:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
     - name: v1beta2
       served: true
       referenceable: true
@@ -128,14 +37,6 @@ spec:
               required:
                 - users
               properties:
-                secretName:
-                  type: string
-                  description: >-
-                    Name of the Secret containing the credentials to access the
-                    storage associated with this Datalab. If omitted, the
-                    Datalab name is used. The Secret is read from the namespace
-                    configured in EnvironmentConfig.data.storage.secretNamespace,
-                    which is usually the same namespace as the Datalab.
                 users:
                   type: array
                   description: Users associated with this datalab.
@@ -234,6 +135,36 @@ spec:
                               - admin
                               - cluster-admin
                         minItems: 1
+                      secretBindings:
+                        type: array
+                        default: []
+                        maxItems: 100
+                        description: Datalab connection Secrets to sync into this virtual cluster.
+                        items:
+                          type: object
+                          required: [type, name, target]
+                          properties:
+                            type:
+                              type: string
+                              enum: [s3, postgres, mongo, redis, custom]
+                              description: Datalab connection type.
+                            name:
+                              type: string
+                              maxLength: 253
+                              pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                              description: Service instance, primary for storage, or a predefined custom Secret name.
+                            target:
+                              type: object
+                              required: [namespace, name]
+                              properties:
+                                namespace:
+                                  type: string
+                                  maxLength: 63
+                                  pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                                name:
+                                  type: string
+                                  maxLength: 253
+                                  pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
                       storage:
                         type: string
                         description: Control-plane PVC size. The environment default is used when omitted.
@@ -381,9 +312,9 @@ spec:
                         description: Public URL of the active session.
                 connections:
                   type: array
-                  description: Connection sets for the declared virtual clusters.
+                  description: Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery.
                   x-kubernetes-list-type: map
-                  x-kubernetes-list-map-keys: [name]
+                  x-kubernetes-list-map-keys: [type, name]
                   items:
                     type: object
                     required: [name, type, ready, secretRef]
@@ -392,7 +323,7 @@ spec:
                         type: string
                       type:
                         type: string
-                        enum: [s3, postgres, mongo, redis, vcluster]
+                        enum: [s3, postgres, mongo, redis, custom, vcluster]
                       instance:
                         type: string
                       group:

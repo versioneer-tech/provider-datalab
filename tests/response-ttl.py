@@ -45,7 +45,60 @@ for case in data['cases']:
 """
 
 
-class ResponseTTLTests(unittest.TestCase):
+READINESS_CHECK = """
+import json
+import sys
+
+from crossplane.function import response
+from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
+data = json.load(sys.stdin)
+namespace = {}
+exec(compile(data['check']['input']['script'], 'check-connection-readiness', 'exec'), namespace)
+for resource_ready, connections, expected in (
+    (fnv1.READY_TRUE, [{'ready': False}], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [{'ready': True}], fnv1.READY_TRUE),
+    (fnv1.READY_FALSE, [{'ready': True}], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [], fnv1.READY_TRUE),
+):
+    req = fnv1.RunFunctionRequest()
+    req.desired.composite.ready = resource_ready
+    req.desired.composite.resource.update({'status': {'connections': connections}})
+    rsp = response.to(req)
+    namespace['compose'](req, rsp)
+    assert rsp.desired.composite.ready == expected
+
+req = fnv1.RunFunctionRequest()
+req.observed.composite.resource.update({'metadata': {'name': 'readiness', 'namespace': 'workspace'}})
+req.context.update({'apiextensions.crossplane.io/environment': {
+    'customSecrets': [{'name': 'optional', 'namespace': 'shared-secrets'}],
+}})
+req.input.update(data['observe']['input'])
+namespace = {}
+exec(compile(data['observe']['input']['script'], 'observe-connection-secrets', 'exec'), namespace)
+rsp = response.to(req)
+namespace['compose'](req, rsp)
+optional = [resource for resource in rsp.desired.resources.values()
+            if resource.resource['spec']['forProvider']['manifest']['metadata']['name'] == 'optional']
+assert len(optional) == 1 and optional[0].ready == fnv1.READY_TRUE
+assert not any(item['type'] == 'custom'
+               for item in rsp.desired.composite.resource['status']['connections'])
+"""
+
+
+class FunctionResponseTests(unittest.TestCase):
+    def test_connection_readiness_preserves_optional_sources_and_resource_checks(self):
+        pipeline = yaml.safe_load((ROOT / "composition.yaml").read_text())["spec"]["pipeline"]
+        result = subprocess.run(
+            ["docker", "exec", "-i", RUNTIME, "/venv/fn/bin/python", "-c", READINESS_CHECK],
+            input=json.dumps({
+                "check": next(step for step in pipeline if step["step"] == "check-connection-readiness"),
+                "observe": next(step for step in pipeline if step["step"] == "observe-connection-secrets"),
+            }),
+            text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_all_generated_responses_use_setting(self):
         example = yaml.safe_load((ROOT / "examples/base/002-lab.yaml").read_text())
         empty = {

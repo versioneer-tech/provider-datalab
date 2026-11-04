@@ -11,7 +11,6 @@ metadata:
 spec:
   users:
   - verify-s3
-  secretName: verify-vcluster
   sessions: []
   databases:
     pg0:
@@ -22,6 +21,12 @@ spec:
   vclusters:
     vc0:
       storage: 1Gi
+      secretBindings:
+      - type: postgres
+        name: pg0
+        target:
+          namespace: demo
+          name: postgres-connection
       groups:
       - name: namespace-demo
         namespace: demo

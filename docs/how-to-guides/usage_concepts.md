@@ -161,9 +161,8 @@ place the files.
 
 ## Storage Secret
 
-Set `spec.secretName` to the input object-storage Secret name. If omitted,
-the Datalab name is used. The operator supplies the Secret and configures its
-namespace and endpoint during [installation](installation.md#5-supply-storage-credentials).
+The input object-storage Secret has the same name as the Datalab. The operator
+supplies the Secret and configures its namespace and endpoint during [installation](installation.md#5-supply-storage-credentials).
 
 ## Environment settings
 

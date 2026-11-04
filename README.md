@@ -41,6 +41,13 @@ Datalabs can also request PostgreSQL, MongoDB, Redis, and named virtual Kubernet
 clusters. Each virtual API uses `https://<datalab>.<domain>/.<instance>`, such as
 `https://s-joe.lab.acme.com/.vc0`.
 
+Use `secretBindings` to select a Datalab connection by `type` and `name`
+and sync its Secret into a virtual cluster.
+`status.connections` supplies source Secret references. Only ready connections
+generate mappings. Predefined custom Secrets appear there when available in
+the team namespace. The native vCluster sync keeps Secret data keys unchanged. See
+[Secret bindings](docs/how-to-guides/vcluster.md#secret-bindings).
+
 The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
 Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
 See the [operator prerequisites](docs/how-to-guides/installation.md#prerequisites)

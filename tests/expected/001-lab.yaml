@@ -9,6 +9,8 @@ metadata:
 spec:
   users:
   - joe
+status:
+  connections: []
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client

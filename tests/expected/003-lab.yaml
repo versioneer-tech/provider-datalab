@@ -15,7 +15,6 @@ spec:
       names:
       - analytics
       storage: 1Gi
-  secretName: s-jane
   sessions:
   - name: default
     state: started
@@ -30,6 +29,17 @@ spec:
       - name: cluster-admin
         namespace: '*'
         role: cluster-admin
+      secretBindings:
+      - name: pg0
+        target:
+          name: database-credentials
+          namespace: applications
+        type: postgres
+      - name: apikey-1
+        target:
+          name: apikey-1
+          namespace: applications
+        type: custom
       storage: 1Gi
 status:
   connections:

@@ -91,6 +91,84 @@ endpoints. Cross-namespace backends need an approved `network.internalEgress`
 rule. Virtual clusters share the host namespace and node kernel; their RBAC
 boundaries apply to their virtual APIs.
 
+## Secret bindings
+
+Select a Datalab connection by type and instance name:
+
+```yaml
+spec:
+  databases:
+    pg0:
+      names: [analytics]
+      storage: 5Gi
+  vclusters:
+    vc0:
+      # Add the required access groups beside this binding.
+      secretBindings:
+      - type: postgres
+        name: pg0
+        target:
+          namespace: applications
+          name: database-credentials
+```
+
+The provider
+publishes each service connection in `status.connections`, with its `type`,
+`name`, `secretRef`, and source readiness. A binding selects the same `type`
+and `name` pair. The mapping uses that connection's `secretRef`.
+
+The connection sources are:
+
+| Type | Name | Host Secret |
+| --- | --- | --- |
+| `s3` | `primary` | The Secret with the same name as the Datalab |
+| `postgres` | A key in `spec.databases` | `<name>-pguser-postgres` in the runtime namespace |
+| `mongo` | A key in `spec.documentStores` | `<name>-mongodb-auth` in the runtime namespace |
+| `redis` | A key in `spec.cacheStores` | `<name>-redis-auth` in the runtime namespace |
+| `custom` | A predefined Secret name | The named Secret in the team's runtime namespace, or its configured namespace |
+
+Only declared service instances can be selected. The storage source namespace
+comes from `EnvironmentConfig.data.storage.secretNamespace`, or the claim
+namespace when unset. Use a custom connection for credentials such as a GitHub token.
+
+The operator can list predefined custom Secrets in the EnvironmentConfig:
+
+```yaml
+data:
+  customSecrets:
+  - name: apikey-1
+  - name: apikey-2
+```
+
+The provider checks these names in each Datalab's runtime namespace. Set
+`namespace` on an entry to use a shared source namespace. Names must be unique.
+It observes the source and does not create or change it. A custom connection
+is listed in `status.connections` only after its source is confirmed ready.
+The examples give `s-john` both keys and `s-jane` only `apikey-1`.
+Status lists the keys present in each team namespace. Missing custom sources
+do not block Datalab readiness.
+
+Bind an available custom connection through the same list:
+
+```yaml
+spec:
+  vclusters:
+    vc0:
+      secretBindings:
+      - type: custom
+        name: apikey-1
+        target:
+          namespace: applications
+          name: application-credentials
+```
+
+vCluster creates the virtual namespace and syncs the whole Secret, including
+source updates and deletion. Only connections with `ready: true` generate native mappings. Unknown or
+unready references are skipped. A later reconciliation adds the mapping when
+the connection is ready. If readiness is lost, its mapping is removed from
+the generated configuration. Datalab readiness requires all published connections
+to be ready and the existing resource checks to pass.
+
 ## API access
 
 The generated kubeconfig for `vc0` uses:

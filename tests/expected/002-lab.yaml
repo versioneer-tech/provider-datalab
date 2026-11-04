@@ -25,7 +25,6 @@ spec:
       backupStorage: 3Gi
       storage: 1Gi
       type: mongo
-  secretName: s-jeff
   userOverrides:
     jim:
       grantedAt: '2025-01-10T19:00:00Z'
@@ -34,6 +33,8 @@ spec:
   - jeff
   - jim
   - jane
+status:
+  connections: []
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

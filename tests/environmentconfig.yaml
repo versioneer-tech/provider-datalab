@@ -88,6 +88,9 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-custom
 data:
+  customSecrets:
+  - name: apikey-1
+  - name: apikey-2
   vcluster:
     storage: 5Gi
     storageClasses:

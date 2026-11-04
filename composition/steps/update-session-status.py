@@ -54,6 +54,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             sessions_map[ws_id]["url"] = url
 
     cur_status = (xr.get("status") or {}).copy()
+    cur_status.update(_to_dict(rsp.desired.composite.resource).get("status") or {})
     if sessions_map:
         cur_status["sessions"] = sessions_map
     else:

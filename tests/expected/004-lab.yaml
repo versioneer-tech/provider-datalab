@@ -9,7 +9,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
   name: s-john
 spec:
-  secretName: s-john
   sessions:
   - name: default
   - name: analysis
@@ -17,6 +16,7 @@ spec:
   users:
   - john
 status:
+  connections: []
   sessions:
     analysis:
       state: stopped

@@ -41,3 +41,41 @@ status:
         AWS_SECRET_ACCESS_KEY: am9obi1zZWNyZXQta2V5
         AWS_ENDPOINT_URL: aHR0cHM6Ly9ydW50aW1lLXNlY3JldC1zMy5hY21l
         AWS_REGION: cnVudGltZS1zZWNyZXQtcmVnaW9u
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-custom-secret-s-john-s-john-apikey-1-170a8a525a
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-custom-secret-s-john-s-john-apikey-1-170a8a525a
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: apikey-1
+        namespace: s-john
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-custom-secret-s-john-s-john-apikey-2-81c3920bda
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: observe-custom-secret-s-john-s-john-apikey-2-81c3920bda
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+  atProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: apikey-2
+        namespace: s-john

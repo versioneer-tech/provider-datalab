@@ -152,6 +152,9 @@ CPU and memory so they receive a CPU share under local load. Their health
 probes allow five minutes for cold starts.
 
 The vcluster profile installs the session runtime, PGO, Keycloak, and Contour.
+It checks that John discovers both custom keys and Jane only `apikey-1`,
+with missing optional keys omitted from status and readiness checks.
+The virtual cluster starts with a native PostgreSQL Secret mapping.
 It builds the catalog image, loads it into Kind, and deploys the STAC workload
 through the public virtual Kubernetes API. The migration Job installs PgSTAC in a
 Datalab PostgreSQL database. The API uses a separate database login. The test

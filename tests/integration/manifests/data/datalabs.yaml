@@ -10,5 +10,4 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: []
-  secretName: __ENABLED_STORAGE_SECRET__
   sessions: []

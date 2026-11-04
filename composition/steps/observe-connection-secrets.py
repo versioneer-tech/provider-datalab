@@ -1,11 +1,14 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+from collections import Counter
+
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _boolish,
     _extract_manifest,
+    _resource_name,
     _safe_str,
     _to_dict,
 )
@@ -26,9 +29,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         observed.get(f"workshopenvironment-{xr_name}")
     )
     educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
+    runtime_namespace = _safe_str(educates_status.get("namespace"))
     workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
+    status = _to_dict(rsp.desired.composite.resource).get("status") or xr.get("status") or {}
+    connections = []
 
-    def observe(key, secret_name, secret_namespace):
+    def observe(key, secret_name, secret_namespace, kind=None, instance=None):
         rsp.desired.resources[key].resource.update(
             _render_template(
                 req,
@@ -39,18 +45,62 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 secret_namespace=secret_namespace,
             )
         )
+        if kind == "custom":
+            rsp.desired.resources[key].ready = fnv1.READY_TRUE
+        if kind and (kind in ("s3", "custom") or educates_status.get("namespace")):
+            source = observed.get(key)
+            body = _to_dict(source.resource) if source else {}
+            conditions = (body.get("status") or {}).get("conditions") or []
+            source_meta = _extract_manifest(source).get("metadata") or {}
+            present = (
+                source_meta.get("name") == secret_name
+                and source_meta.get("namespace") == secret_namespace
+                and not source_meta.get("deletionTimestamp")
+                and not body.get("metadata", {}).get("deletionTimestamp")
+            )
+            if kind == "s3" and not present:
+                return
+            connection = {
+                "name": instance,
+                "type": kind,
+                "secretRef": {"name": secret_name, "namespace": secret_namespace},
+                "ready": (
+                    present
+                    and any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
+                    and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
+                ),
+            }
+            if kind != "custom" or connection["ready"]:
+                connections.append(connection)
 
     storage_config = environment.get("storage") or {}
     observe(
         f"observe-storage-secret-{xr_name}",
-        spec.get("secretName") or xr_name,
+        xr_name,
         storage_config.get("secretNamespace") or xr_namespace,
+        kind="s3",
+        instance="primary",
     )
     observe(
         f"observe-oauth-client-secret-{xr_name}",
         f"{xr_name}-oauth-client",
         xr_namespace,
     )
+
+    custom_secrets = environment.get("customSecrets") or []
+    custom_names = Counter(custom["name"] for custom in custom_secrets)
+    for custom in custom_secrets:
+        secret_name = custom["name"]
+        secret_namespace = custom.get("namespace") or runtime_namespace
+        if not secret_namespace or custom_names[secret_name] != 1:
+            continue
+        observe(
+            _resource_name("observe-custom-secret", xr_name, secret_namespace, secret_name),
+            secret_name,
+            secret_namespace,
+            kind="custom",
+            instance=secret_name,
+        )
 
     postgres_clusters = spec.get("databases")
     if isinstance(postgres_clusters, dict):
@@ -61,6 +111,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     f"observe-database-secret-{xr_name}-{cluster_name}",
                     f"{cluster_name}-pguser-postgres",
                     workshop_namespace,
+                    kind="postgres",
+                    instance=cluster_name,
                 )
 
     for field, backend in (
@@ -76,16 +128,21 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                         f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                         f"{store_name}-{backend}-auth",
                         workshop_namespace,
+                        kind="mongo" if backend == "mongodb" else "redis",
+                        instance=store_name,
                     )
 
     data_config = (environment.get("defaults") or {}).get("data") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
         data_enabled = True
-    runtime_namespace = _safe_str(educates_status.get("namespace"))
     if _boolish(data_enabled) and runtime_namespace:
         observe(
             f"observe-runtime-storage-secret-{xr_name}",
             f"{xr_name}-datalab",
             runtime_namespace,
         )
+    status["connections"] = connections + [
+        item for item in status.get("connections", []) if item.get("type") == "vcluster"
+    ]
+    rsp.desired.composite.resource.update({"status": status})

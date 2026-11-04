@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The custom environment supplies privileged sessions, registry, file bundles,
-# quotas, vCluster, and Gateway access. Jane requests PostgreSQL.
+# quotas, vCluster, and Gateway access. Jane uses PostgreSQL and apikey-1.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
@@ -12,7 +12,6 @@ metadata:
 spec:
   users:
     - jane
-  secretName: s-jane
   sessions:
     - name: default
       state: started
@@ -25,6 +24,17 @@ spec:
   vclusters:
     vc0:
       storage: 1Gi
+      secretBindings:
+      - type: postgres
+        name: pg0
+        target:
+          namespace: applications
+          name: database-credentials
+      - type: custom
+        name: apikey-1
+        target:
+          namespace: applications
+          name: apikey-1
       groups:
       - name: namespace-demo
         namespace: demo

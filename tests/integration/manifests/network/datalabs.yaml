@@ -10,7 +10,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: []
-  secretName: __OPEN_STORAGE_SECRET__
   sessions: []
 ---
 apiVersion: pkg.internal/v1beta2
@@ -22,5 +21,4 @@ metadata:
     datalabs.pkg.internal/environment: datalab
 spec:
   users: []
-  secretName: __CLOSED_STORAGE_SECRET__
   sessions: []

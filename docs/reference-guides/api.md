@@ -123,13 +123,6 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>secretName</b></td>
-        <td>string</td>
-        <td>
-          Name of the Secret containing the credentials to access the storage associated with this Datalab. If omitted, the Datalab name is used. The Secret is read from the namespace configured in EnvironmentConfig.data.storage.secretNamespace, which is usually the same namespace as the Datalab.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
         <td>[]object</td>
         <td>
@@ -408,6 +401,17 @@ Virtual Kubernetes clusters keyed by instance name.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>secretBindings</b></td>
+        <td>[]object</td>
+        <td>
+          Datalab connection Secrets to sync into this virtual cluster. Each binding requires
+          <code>type</code>, <code>name</code>, and <code>target</code>, with a target <code>namespace</code>
+          and <code>name</code>. Types include <code>custom</code> for predefined Secrets.
+          Only ready connections generate mappings. Data keys do not change. See
+          <a href="../how-to-guides/vcluster.md#secret-bindings">Secret bindings</a>.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>storage</b></td>
         <td>string</td>
         <td>
@@ -483,7 +487,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
         <td>[]object</td>
         <td>
-          Connection sets for the declared virtual clusters.<br/>
+          Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -500,6 +504,11 @@ Current observed state of the datalab.
 ### Datalab.status.connections[index]
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
+Service connections use the same `type` and `name` pair as a Secret binding.
+`secretRef` identifies the host source. Custom connections are listed only
+when available. Source readiness does not report virtual Secret delivery.
+Datalab readiness requires every published connection and the existing
+resource checks to be ready.
 
 
 

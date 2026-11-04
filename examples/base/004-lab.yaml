@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The custom environment supplies the workspace StorageClass and file bundles.
-# John has started and stopped sessions; each declared session keeps its PVC.
+# John has both API keys. Each declared session keeps its PVC.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
@@ -12,7 +12,6 @@ metadata:
 spec:
   users:
   - john
-  secretName: s-john
   sessions:
   - name: default
   - name: analysis

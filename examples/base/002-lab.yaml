@@ -16,7 +16,6 @@ spec:
     jim:
       grantedAt: "2025-01-10T19:00:00Z"
       role: admin
-  secretName: s-jeff
   documentStores:
     prod:
       type: mongo

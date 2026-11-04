@@ -29,6 +29,9 @@ metadata:
   annotations:
     crossplane.io/composition-resource-name: observe-storage-secret-s-jeff
 status:
+  conditions:
+    - type: Ready
+      status: "True"
   atProvider:
     manifest:
       apiVersion: v1
@@ -90,6 +93,9 @@ metadata:
   annotations:
     crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-prod
 status:
+  conditions:
+    - type: Ready
+      status: "True"
   atProvider:
     manifest:
       apiVersion: v1

@@ -10,7 +10,6 @@ metadata:
     datalabs.pkg.internal/environment: datalab-custom
 spec:
   users: [verify-s3]
-  secretName: verify-s3
   sessions: []
 ---
 apiVersion: v1
