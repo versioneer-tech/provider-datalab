@@ -16,7 +16,7 @@ def main():
     parser.add_argument("--datalab", required=True)
     args = parser.parse_args()
 
-    def kube(*arguments, body=None):
+    def kube(*arguments, body=None, json_output=True):
         result = subprocess.run(
             ["kubectl", "--kubeconfig", args.kubeconfig, "--context", "kind-provider-datalab-it",
              "--namespace", "workspace", *arguments],
@@ -25,7 +25,7 @@ def main():
         )
         if result.returncode:
             raise RuntimeError("OAuth2 discovery test Kubernetes call failed: " + " ".join(arguments[:2]))
-        return json.loads(result.stdout) if result.stdout.strip() else None
+        return json.loads(result.stdout) if json_output and result.stdout.strip() else None
 
     def get(resource):
         return kube("get", resource, "-o", "json")
@@ -59,7 +59,7 @@ def main():
         patch(client, {"metadata": {"annotations": {paused: "true"}}})
         wait_for(lambda: any(c.get("reason") == "ReconcilePaused" for c in get(client)["status"]["conditions"]),
                  "The OAuth2 test client did not pause.")
-        kube("delete", source, "-o", "json")
+        kube("delete", source, json_output=False)
         deleted = True
         wait_for(lambda: get(datalab)["status"].get("oauth2") == [],
                  "OAuth2 discovery retained a removed credential Secret.")
