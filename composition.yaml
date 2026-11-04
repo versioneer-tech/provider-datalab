@@ -190,6 +190,8 @@ spec:
 
             return fill(template)
 
+        import base64
+
         import hashlib
 
         import json
@@ -224,6 +226,29 @@ spec:
         def _extract_manifest(observed_resource):
             manifest, raw_manifest = _observed_manifests(observed_resource)
             return manifest or raw_manifest
+
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
 
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
@@ -316,6 +341,54 @@ spec:
                 f"{xr_name}-oauth-client",
                 xr_namespace,
             )
+            status["oauth2"] = []
+            client = observed.get(f"keycloak-client-{xr_name}")
+            client_body = _to_dict(client.resource) if client else {}
+            oauth_source = observed.get(f"observe-oauth-client-secret-{xr_name}")
+            oauth_body = _to_dict(oauth_source.resource) if oauth_source else {}
+            oauth_meta = _extract_manifest(oauth_source).get("metadata") or {}
+            oauth_data = _extract_data(oauth_source)
+            credential_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
+            client_id = _safe_str(
+                (client_body.get("status", {}).get("atProvider") or {}).get("clientId")
+                or (client_body.get("spec", {}).get("forProvider") or {}).get("clientId")
+                or credential_id
+            )
+            issuer = _safe_str((environment.get("iam") or {}).get("issuerURL")).rstrip("/")
+            # A missing Secret can leave its last manifest in the observer status.
+            source_missing = any(
+                c.get("type") == "Synced" and c.get("status") == "False"
+                and "external resource does not exist" in c.get("message", "")
+                for c in (oauth_body.get("status") or {}).get("conditions") or []
+            )
+
+            def source_ready(body):
+                conditions = (body.get("status") or {}).get("conditions") or []
+                return (
+                    any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
+                    and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
+                )
+
+            if (
+                client_body and client_id and issuer
+                and not client_body.get("metadata", {}).get("deletionTimestamp")
+                and oauth_meta.get("name") == f"{xr_name}-oauth-client"
+                and oauth_meta.get("namespace") == xr_namespace
+                and not oauth_meta.get("deletionTimestamp")
+                and not oauth_body.get("metadata", {}).get("deletionTimestamp")
+                and not source_missing
+            ):
+                status["oauth2"].append({
+                    "name": client_id,
+                    "type": "client",
+                    "issuerUrl": issuer,
+                    "secretRef": {"name": f"{xr_name}-oauth-client", "namespace": xr_namespace},
+                    "ready": bool(
+                        source_ready(client_body) and source_ready(oauth_body)
+                        and _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+                        and (not credential_id or credential_id == client_id)
+                    ),
+                })
 
             custom_secrets = environment.get("customSecrets") or []
             custom_names = Counter(custom["name"] for custom in custom_secrets)
@@ -1133,75 +1206,13 @@ spec:
                         ),
                         profile,
                     )
-                    put(
-                        "keycloak-vcluster-client",
-                        _render_template(
-                            req,
-                            "vcluster/identity-client",
-                            realm=realm,
-                            profile=profile,
-                            spec_writeConnectionSecretToRef_name=f"{profile}-oauth",
-                        ),
-                        profile,
-                    )
-                    put(
-                        "keycloak-vcluster-scope",
-                        _render_template(
-                            req, "vcluster/identity-scope", realm=realm, profile=profile
-                        ),
-                        profile,
-                    )
                     if group["name"] == "cluster-admin":
                         put_keycloak_role_mapper(
                             "keycloak-vcluster-user-role-mapper", profile,
                             _resource_name("vcluster", xr_name, instance, "users-scope"),
                         )
-                    state = (getattr(req.observed, "resources", {}) or {}).get(
-                        f"keycloak-vcluster-client-{profile}"
-                    )
-                    client_state = _to_dict(state.resource) if state else {}
-                    client_identity = (client_state.get("status") or {}).get("atProvider") or {}
-                    resolved = {}
-                    owner_state = (getattr(req.observed, "resources", {}) or {}).get(
-                        f"keycloak-client-{xr_name}"
-                    )
-                    owner_identity = (
-                        _to_dict(owner_state.resource).get("status", {}).get("atProvider", {})
-                        if owner_state
-                        else {}
-                    )
-                    if owner_identity.get("id") and client_identity.get("serviceAccountUserId"):
-                        resolved = {
-                            "clientId": owner_identity["id"],
-                            "serviceAccountUserId": client_identity["serviceAccountUserId"],
-                            "role": role_name,
-                        }
-                    put(
-                        "keycloak-vcluster-assignment",
-                        _render_template(
-                            req,
-                            "vcluster/identity-assignment",
-                            spec_forProvider={
-                                "realmId": realm,
-                                "clientIdRef": {"name": xr_name},
-                                "roleRef": {"name": profile},
-                                "serviceAccountUserClientIdRef": {"name": profile},
-                                **resolved,
-                            },
-                        ),
-                        profile,
-                    )
-                    put(
-                        "keycloak-vcluster-audience",
-                        _render_template(
-                            req,
-                            "vcluster/identity-audience",
-                            realm=realm,
-                            profile=profile,
-                            xr_name=xr_name,
-                        ),
-                        profile,
-                    )
+                    else:
+                        put_keycloak_role_mapper("keycloak-vcluster-scope", profile)
 
             users = list(spec.get("users", []) or [])
             userOverrides = spec.get("userOverrides", {}) or {}
@@ -1453,51 +1464,6 @@ spec:
             forProvider:
               name: ${xr_name}
               realmId: ${realm}
-        vcluster/identity-assignment:
-          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-          kind: ClientServiceAccountRole
-          spec:
-            providerConfigRef:
-              name: provider-keycloak
-              kind: ProviderConfig
-            forProvider: ${spec_forProvider}
-        vcluster/identity-audience:
-          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-          kind: ProtocolMapper
-          spec:
-            providerConfigRef:
-              name: provider-keycloak
-              kind: ProviderConfig
-            forProvider:
-              realmId: ${realm}
-              clientIdRef:
-                name: ${profile}
-              name: datalab-audience
-              protocol: openid-connect
-              protocolMapper: oidc-audience-mapper
-              config:
-                included.client.audience: ${xr_name}
-                access.token.claim: 'true'
-                id.token.claim: 'false'
-        vcluster/identity-client:
-          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-          kind: Client
-          spec:
-            providerConfigRef:
-              name: provider-keycloak
-              kind: ProviderConfig
-            forProvider:
-              realmId: ${realm}
-              name: ${profile}
-              clientId: ${profile}
-              accessType: CONFIDENTIAL
-              fullScopeAllowed: false
-              standardFlowEnabled: false
-              implicitFlowEnabled: false
-              directAccessGrantsEnabled: false
-              serviceAccountsEnabled: true
-            writeConnectionSecretToRef:
-              name: ${spec_writeConnectionSecretToRef_name}
         vcluster/identity-role:
           apiVersion: role.keycloak.m.crossplane.io/v1alpha1
           kind: Role
@@ -1510,19 +1476,6 @@ spec:
               name: ${role_name}
               clientIdRef:
                 name: ${xr_name}
-        vcluster/identity-scope:
-          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-          kind: RoleMapper
-          spec:
-            providerConfigRef:
-              name: provider-keycloak
-              kind: ProviderConfig
-            forProvider:
-              realmId: ${realm}
-              clientIdRef:
-                name: ${profile}
-              roleIdRef:
-                name: ${profile}
   - step: update-oauth2-proxy-secret
     functionRef:
       name: crossplane-contrib-function-python
@@ -2486,9 +2439,6 @@ spec:
             digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
             return name[: limit - 11].rstrip("-") + "-" + digest
 
-        def _vcluster_profile(name, instance, group):
-            return _resource_name(name, "vcluster", instance, group, limit=55)
-
         def _vcluster_role(instance, group):
             return f"vcluster_{instance}_{group}"
 
@@ -3019,23 +2969,6 @@ spec:
                 if target != "*":
                     manifest["metadata"]["namespace"] = target
                 virtual(f"binding-{suffix}", manifest)
-            for group in groups:
-                profile = _vcluster_profile(name, instance, group["name"])
-                emit(
-                    f"observe-client-{group['name']}",
-                    _render_template(
-                        req,
-                        "vcluster/secret",
-                        metadata_name=f"{profile}-oauth",
-                        claim_namespace=claim_namespace,
-                        **template_values,
-                    ),
-                )
-                rsp.desired.resources[
-                    _resource_name(
-                        "vcluster", name, instance, f"observe-client-{group['name']}"
-                    )
-                ].resource["spec"]["managementPolicies"] = ["Observe"]
             response.require_resources(
                 rsp,
                 name=ca_name,
@@ -4186,12 +4119,6 @@ spec:
               timeouts:
                 request: 0s
                 backendRequest: 0s
-        vcluster/secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${metadata_name}
-            namespace: ${claim_namespace}
         vcluster/secret-import-role:
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
@@ -7287,8 +7214,6 @@ spec:
 
             return fill(template)
 
-        import base64
-
         import hashlib
 
         import json
@@ -7301,39 +7226,6 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
-
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
-            )
-
-        def _b64get_any(data, keys):
-            if not data:
-                return None
-            for key in keys:
-                value = data.get(key)
-                if value is None:
-                    continue
-                try:
-                    return base64.b64decode(value, validate=True).decode("utf-8")
-                except Exception:
-                    return str(value)
-            return None
 
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
@@ -7362,7 +7254,7 @@ spec:
         import hashlib
         import json
 
-        CREDENTIAL_HELPER = "#!/usr/bin/env python3\n# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)\n# SPDX-License-Identifier: Apache-2.0\n\n\"\"\"Get a short-lived Kubernetes credential with the Datalab OAuth client.\"\"\"\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--issuer', required=True)\n    parser.add_argument('--client-id', required=True)\n    source = parser.add_mutually_exclusive_group(required=True)\n    source.add_argument('--client-secret-file')\n    source.add_argument('--client-secret-env')\n    parser.add_argument('--issuer-ca')\n    parser.add_argument('--issuer-ca-data')\n    args = parser.parse_args()\n    if not args.issuer.startswith('https://'):\n        parser.error('--issuer must use HTTPS')\n    try:\n        secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                  else os.environ[args.client_secret_env])\n        ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n        context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n        request = Request(args.issuer.rstrip('/') + '/protocol/openid-connect/token',\n                          data=urlencode({'grant_type': 'client_credentials', 'client_id': args.client_id,\n                                          'client_secret': secret}).encode())\n        with urlopen(request, context=context, timeout=30) as result:\n            token = json.load(result)\n        expires = datetime.now(timezone.utc) + timedelta(seconds=int(token['expires_in']) - 10)\n        credential = {\n            'apiVersion': 'client.authentication.k8s.io/v1', 'kind': 'ExecCredential',\n            'status': {'token': token['access_token'], 'expirationTimestamp': expires.isoformat().replace('+00:00', 'Z')},\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print('Could not obtain a Datalab API token. Check the issuer and client credential.', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == '__main__':\n    sys.exit(main())\n"
+        CREDENTIAL_HELPER = '#!/usr/bin/env python3\n# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)\n# SPDX-License-Identifier: Apache-2.0\n\n"""Use a caller\'s access token or request one with the Datalab OAuth client."""\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\'--issuer\', required=True)\n    parser.add_argument(\'--client-id\', required=True)\n    source = parser.add_mutually_exclusive_group()\n    source.add_argument(\'--access-token-file\', default=os.environ.get(\'DATALAB_ACCESS_TOKEN_FILE\'))\n    source.add_argument(\'--client-secret-file\', default=os.environ.get(\'DATALAB_CLIENT_SECRET_FILE\'))\n    source.add_argument(\'--client-secret-env\')\n    parser.add_argument(\'--issuer-ca\')\n    parser.add_argument(\'--issuer-ca-data\')\n    args = parser.parse_args()\n    if sum(bool(value) for value in (args.access_token_file, args.client_secret_file, args.client_secret_env)) != 1:\n        parser.error(\'Supply one access token file or client secret source. Set DATALAB_ACCESS_TOKEN_FILE or DATALAB_CLIENT_SECRET_FILE.\')\n    if not args.issuer.startswith(\'https://\'):\n        parser.error(\'--issuer must use HTTPS\')\n    try:\n        if args.access_token_file:\n            status = {\'token\': Path(args.access_token_file).read_text().strip()}\n        else:\n            secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                      else os.environ[args.client_secret_env])\n            if not secret:\n                raise ValueError(\'Empty client secret\')\n            ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n            context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n            request = Request(args.issuer.rstrip(\'/\') + \'/protocol/openid-connect/token\',\n                              data=urlencode({\'grant_type\': \'client_credentials\', \'client_id\': args.client_id,\n                                              \'client_secret\': secret}).encode())\n            with urlopen(request, context=context, timeout=30) as result:\n                token = json.load(result)\n            expires = datetime.now(timezone.utc) + timedelta(seconds=int(token[\'expires_in\']) - 10)\n            status = {\'token\': token[\'access_token\'], \'expirationTimestamp\': expires.isoformat().replace(\'+00:00\', \'Z\')}\n        if not status[\'token\']:\n            raise ValueError(\'Empty access token\')\n        credential = {\n            \'apiVersion\': \'client.authentication.k8s.io/v1\', \'kind\': \'ExecCredential\',\n            \'status\': status,\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print(\'Could not obtain a Datalab API token. Check the token file or issuer and client credential.\', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == \'__main__\':\n    sys.exit(main())\n'
 
 
         def compose(req, rsp):
@@ -7405,28 +7297,15 @@ spec:
                 for group in _vcluster_groups(config):
                     profile = _vcluster_profile(name, instance, group["name"])
                     connection_name = _resource_name("vcluster", instance, group["name"])
-                    oauth = _extract_data(
-                        req.observed.resources.get(
-                            _resource_name(
-                                "vcluster", name, instance, f"observe-client-{group['name']}"
-                            )
-                        )
-                    )
-                    secret = (
-                        _b64get_any(
-                            oauth, ("clientSecret", "client_secret", "attribute.client_secret")
-                        )
-                        or ""
-                    )
+                    # New names let Crossplane delete old Secrets with stored credentials.
+                    secret_name = _resource_name(name, "vcluster", instance, group["name"], "connection")
                     args = [
                         "-c",
                         CREDENTIAL_HELPER,
                         "--issuer",
                         issuer,
                         "--client-id",
-                        profile,
-                        "--client-secret-env",
-                        "DATALAB_CLIENT_SECRET",
+                        name,
                     ]
                     issuer_ca = (env.get("vcluster") or {}).get("issuerCA")
                     if issuer_ca:
@@ -7437,7 +7316,7 @@ spec:
                     binding = hashlib.sha256(
                         f"{group['name']}:{group['namespace']}:{group['role']}".encode()
                     ).hexdigest()[:12]
-                    complete = bool(secret) and all(
+                    complete = all(
                         ready(key)
                         for key in [
                             *(
@@ -7447,43 +7326,44 @@ spec:
                             _resource_name(
                                 "vcluster", name, instance, "access", f"binding-{binding}"
                             ),
-                            *(
-                                f"keycloak-vcluster-{suffix}-{profile}"
-                                for suffix in ("assignment", "scope", "audience")
+                            f"keycloak-client-{name}",
+                            f"keycloak-vcluster-role-{profile}",
+                            (
+                                "keycloak-vcluster-user-role-mapper-"
+                                + _resource_name("vcluster", name, instance, "users-scope")
+                                if group["name"] == "cluster-admin"
+                                else f"keycloak-vcluster-scope-{profile}"
                             ),
                         ]
                     )
-                    if secret:
-                        kubeconfig = _render_template(
+                    kubeconfig = _render_template(
+                        req,
+                        "vcluster/client-config",
+                        name=_resource_name(name, instance),
+                        cluster=cluster,
+                        profile=profile,
+                        contexts_0_context_namespace=(
+                            "default" if group["namespace"] == "*" else group["namespace"]
+                        ),
+                        args=args,
+                    )
+                    key = _resource_name("connection", secret_name)
+                    rsp.desired.resources[key].resource.update(
+                        _render_template(
                             req,
-                            "vcluster/client-config",
-                            name=_resource_name(name, instance),
-                            cluster=cluster,
-                            profile=profile,
-                            contexts_0_context_namespace=(
-                                "default" if group["namespace"] == "*" else group["namespace"]
-                            ),
-                            args=args,
-                            secret=secret,
+                            "vcluster/connection-secret",
+                            key=key,
+                            name=name,
+                            namespace=namespace,
+                            secret_name=secret_name,
+                            connection_name=connection_name,
+                            values={key: base64.b64encode(value.encode()).decode() for key, value in {
+                                "kubeconfig": json.dumps(kubeconfig, indent=2, sort_keys=True),
+                                "client-id": name,
+                                "issuer-url": issuer,
+                            }.items()},
                         )
-                        key = _resource_name("connection", profile)
-                        rsp.desired.resources[key].resource.update(
-                            _render_template(
-                                req,
-                                "vcluster/connection-secret",
-                                key=key,
-                                name=name,
-                                namespace=namespace,
-                                secret_name=profile,
-                                connection_name=connection_name,
-                                values={
-                                    "kubeconfig": json.dumps(kubeconfig, indent=2),
-                                    "client-id": profile,
-                                    "client-secret": secret,
-                                    "issuer-url": issuer,
-                                },
-                            )
-                        )
+                    )
                     connections.append(
                         {
                             "name": connection_name,
@@ -7494,7 +7374,7 @@ spec:
                             "role": group["role"],
                             "endpoint": endpoint,
                             "ready": complete,
-                            "secretRef": {"name": profile, "namespace": namespace},
+                            "secretRef": {"name": secret_name, "namespace": namespace},
                         }
                     )
             status["connections"] = connections
@@ -7521,9 +7401,6 @@ spec:
                 interactiveMode: Never
                 command: python3
                 args: ${args}
-                env:
-                - name: DATALAB_CLIENT_SECRET
-                  value: ${secret}
         vcluster/connection-secret:
           apiVersion: v1
           kind: Secret
@@ -7536,7 +7413,7 @@ spec:
             annotations:
               crossplane.io/composition-resource-name: ${key}
           type: Opaque
-          stringData: ${values}
+          data: ${values}
   - step: protect-vcluster-resources
     functionRef:
       name: crossplane-contrib-function-python

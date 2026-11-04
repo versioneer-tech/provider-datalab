@@ -30,7 +30,7 @@ tests/unit.bash
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
 | `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | Document write and read through the generated connection Secret. Runs the backup CronJob and restores its archive with oplog replay into an isolated local MongoDB process. Checks the restored probe document. |
 | `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | Key write and read through the generated connection Secret. Enables backups on the running store, runs the CronJob, and checks the restored value in an isolated Redis process. Disables backups and checks that the backup PVC remains and Redis still accepts writes. |
-| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, implicit admin profiles, member token claims and membership removal, profile isolation, streaming, PVC persistence, role downgrade and revocation, independent removal, and a PostgreSQL-backed STAC catalog. |
+| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, implicit admin profiles, member token claims and membership removal, caller role isolation, credential-free profiles, streaming, PVC persistence, role downgrade and revocation, independent removal, and a PostgreSQL-backed STAC catalog. |
 
 All Datalabs use a matching profile-named prerequisite Secret. The Data
 fixture and the S3 fixture enable Data, and only the registry fixture starts a
@@ -152,6 +152,16 @@ CPU and memory so they receive a CPU share under local load. Their health
 probes allow five minutes for cold starts.
 
 The vcluster profile installs the session runtime, PGO, Keycloak, and Contour.
+It requires one workspace OAuth2 client and verifies that every downloaded
+profile rejects the service account with only `ws_api`. The test explicitly
+assigns one vcluster role at a time, obtains a token, then removes that grant.
+It checks that an admin profile cannot elevate a namespace caller and that
+role scopes and Kubernetes RBAC permit only the configured access. The probe
+mounts the workspace credential Secret separately from public profile Secrets.
+These test grants are not composition behavior.
+The profile also rejects duplicate OAuth2 discovery names and checks removal
+and recovery of discovery when the source credential Secret is deleted and
+restored. Its producer is paused for that check; credential values stay private.
 It checks that John discovers both custom keys and Jane only `apikey-1`,
 with missing optional keys omitted from status and readiness checks.
 The virtual cluster starts with a native PostgreSQL Secret mapping.

@@ -13,7 +13,6 @@ from composition.helpers import (
     _runtime_namespace,
     _to_dict,
     _vcluster_groups,
-    _vcluster_profile,
     _vcluster_role,
 )
 from composition.render import _render_template
@@ -519,23 +518,6 @@ def _compose_instance(
         if target != "*":
             manifest["metadata"]["namespace"] = target
         virtual(f"binding-{suffix}", manifest)
-    for group in groups:
-        profile = _vcluster_profile(name, instance, group["name"])
-        emit(
-            f"observe-client-{group['name']}",
-            _render_template(
-                req,
-                "vcluster/secret",
-                metadata_name=f"{profile}-oauth",
-                claim_namespace=claim_namespace,
-                **template_values,
-            ),
-        )
-        rsp.desired.resources[
-            _resource_name(
-                "vcluster", name, instance, f"observe-client-{group['name']}"
-            )
-        ].resource["spec"]["managementPolicies"] = ["Observe"]
     response.require_resources(
         rsp,
         name=ca_name,

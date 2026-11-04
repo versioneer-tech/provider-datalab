@@ -5,8 +5,6 @@ import base64
 import hashlib
 import json
 from composition.helpers import (
-    _b64get_any,
-    _extract_data,
     _resource_name,
     _to_dict,
     _vcluster_groups,
@@ -14,7 +12,7 @@ from composition.helpers import (
 )
 from composition.render import _render_template
 
-CREDENTIAL_HELPER = "#!/usr/bin/env python3\n# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)\n# SPDX-License-Identifier: Apache-2.0\n\n\"\"\"Get a short-lived Kubernetes credential with the Datalab OAuth client.\"\"\"\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--issuer', required=True)\n    parser.add_argument('--client-id', required=True)\n    source = parser.add_mutually_exclusive_group(required=True)\n    source.add_argument('--client-secret-file')\n    source.add_argument('--client-secret-env')\n    parser.add_argument('--issuer-ca')\n    parser.add_argument('--issuer-ca-data')\n    args = parser.parse_args()\n    if not args.issuer.startswith('https://'):\n        parser.error('--issuer must use HTTPS')\n    try:\n        secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                  else os.environ[args.client_secret_env])\n        ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n        context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n        request = Request(args.issuer.rstrip('/') + '/protocol/openid-connect/token',\n                          data=urlencode({'grant_type': 'client_credentials', 'client_id': args.client_id,\n                                          'client_secret': secret}).encode())\n        with urlopen(request, context=context, timeout=30) as result:\n            token = json.load(result)\n        expires = datetime.now(timezone.utc) + timedelta(seconds=int(token['expires_in']) - 10)\n        credential = {\n            'apiVersion': 'client.authentication.k8s.io/v1', 'kind': 'ExecCredential',\n            'status': {'token': token['access_token'], 'expirationTimestamp': expires.isoformat().replace('+00:00', 'Z')},\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print('Could not obtain a Datalab API token. Check the issuer and client credential.', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == '__main__':\n    sys.exit(main())\n"
+CREDENTIAL_HELPER = '#!/usr/bin/env python3\n# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)\n# SPDX-License-Identifier: Apache-2.0\n\n"""Use a caller\'s access token or request one with the Datalab OAuth client."""\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\'--issuer\', required=True)\n    parser.add_argument(\'--client-id\', required=True)\n    source = parser.add_mutually_exclusive_group()\n    source.add_argument(\'--access-token-file\', default=os.environ.get(\'DATALAB_ACCESS_TOKEN_FILE\'))\n    source.add_argument(\'--client-secret-file\', default=os.environ.get(\'DATALAB_CLIENT_SECRET_FILE\'))\n    source.add_argument(\'--client-secret-env\')\n    parser.add_argument(\'--issuer-ca\')\n    parser.add_argument(\'--issuer-ca-data\')\n    args = parser.parse_args()\n    if sum(bool(value) for value in (args.access_token_file, args.client_secret_file, args.client_secret_env)) != 1:\n        parser.error(\'Supply one access token file or client secret source. Set DATALAB_ACCESS_TOKEN_FILE or DATALAB_CLIENT_SECRET_FILE.\')\n    if not args.issuer.startswith(\'https://\'):\n        parser.error(\'--issuer must use HTTPS\')\n    try:\n        if args.access_token_file:\n            status = {\'token\': Path(args.access_token_file).read_text().strip()}\n        else:\n            secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                      else os.environ[args.client_secret_env])\n            if not secret:\n                raise ValueError(\'Empty client secret\')\n            ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n            context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n            request = Request(args.issuer.rstrip(\'/\') + \'/protocol/openid-connect/token\',\n                              data=urlencode({\'grant_type\': \'client_credentials\', \'client_id\': args.client_id,\n                                              \'client_secret\': secret}).encode())\n            with urlopen(request, context=context, timeout=30) as result:\n                token = json.load(result)\n            expires = datetime.now(timezone.utc) + timedelta(seconds=int(token[\'expires_in\']) - 10)\n            status = {\'token\': token[\'access_token\'], \'expirationTimestamp\': expires.isoformat().replace(\'+00:00\', \'Z\')}\n        if not status[\'token\']:\n            raise ValueError(\'Empty access token\')\n        credential = {\n            \'apiVersion\': \'client.authentication.k8s.io/v1\', \'kind\': \'ExecCredential\',\n            \'status\': status,\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print(\'Could not obtain a Datalab API token. Check the token file or issuer and client credential.\', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == \'__main__\':\n    sys.exit(main())\n'
 
 
 def compose(req, rsp):
@@ -56,28 +54,15 @@ def compose(req, rsp):
         for group in _vcluster_groups(config):
             profile = _vcluster_profile(name, instance, group["name"])
             connection_name = _resource_name("vcluster", instance, group["name"])
-            oauth = _extract_data(
-                req.observed.resources.get(
-                    _resource_name(
-                        "vcluster", name, instance, f"observe-client-{group['name']}"
-                    )
-                )
-            )
-            secret = (
-                _b64get_any(
-                    oauth, ("clientSecret", "client_secret", "attribute.client_secret")
-                )
-                or ""
-            )
+            # New names let Crossplane delete old Secrets with stored credentials.
+            secret_name = _resource_name(name, "vcluster", instance, group["name"], "connection")
             args = [
                 "-c",
                 CREDENTIAL_HELPER,
                 "--issuer",
                 issuer,
                 "--client-id",
-                profile,
-                "--client-secret-env",
-                "DATALAB_CLIENT_SECRET",
+                name,
             ]
             issuer_ca = (env.get("vcluster") or {}).get("issuerCA")
             if issuer_ca:
@@ -88,7 +73,7 @@ def compose(req, rsp):
             binding = hashlib.sha256(
                 f"{group['name']}:{group['namespace']}:{group['role']}".encode()
             ).hexdigest()[:12]
-            complete = bool(secret) and all(
+            complete = all(
                 ready(key)
                 for key in [
                     *(
@@ -98,43 +83,44 @@ def compose(req, rsp):
                     _resource_name(
                         "vcluster", name, instance, "access", f"binding-{binding}"
                     ),
-                    *(
-                        f"keycloak-vcluster-{suffix}-{profile}"
-                        for suffix in ("assignment", "scope", "audience")
+                    f"keycloak-client-{name}",
+                    f"keycloak-vcluster-role-{profile}",
+                    (
+                        "keycloak-vcluster-user-role-mapper-"
+                        + _resource_name("vcluster", name, instance, "users-scope")
+                        if group["name"] == "cluster-admin"
+                        else f"keycloak-vcluster-scope-{profile}"
                     ),
                 ]
             )
-            if secret:
-                kubeconfig = _render_template(
+            kubeconfig = _render_template(
+                req,
+                "vcluster/client-config",
+                name=_resource_name(name, instance),
+                cluster=cluster,
+                profile=profile,
+                contexts_0_context_namespace=(
+                    "default" if group["namespace"] == "*" else group["namespace"]
+                ),
+                args=args,
+            )
+            key = _resource_name("connection", secret_name)
+            rsp.desired.resources[key].resource.update(
+                _render_template(
                     req,
-                    "vcluster/client-config",
-                    name=_resource_name(name, instance),
-                    cluster=cluster,
-                    profile=profile,
-                    contexts_0_context_namespace=(
-                        "default" if group["namespace"] == "*" else group["namespace"]
-                    ),
-                    args=args,
-                    secret=secret,
+                    "vcluster/connection-secret",
+                    key=key,
+                    name=name,
+                    namespace=namespace,
+                    secret_name=secret_name,
+                    connection_name=connection_name,
+                    values={key: base64.b64encode(value.encode()).decode() for key, value in {
+                        "kubeconfig": json.dumps(kubeconfig, indent=2, sort_keys=True),
+                        "client-id": name,
+                        "issuer-url": issuer,
+                    }.items()},
                 )
-                key = _resource_name("connection", profile)
-                rsp.desired.resources[key].resource.update(
-                    _render_template(
-                        req,
-                        "vcluster/connection-secret",
-                        key=key,
-                        name=name,
-                        namespace=namespace,
-                        secret_name=profile,
-                        connection_name=connection_name,
-                        values={
-                            "kubeconfig": json.dumps(kubeconfig, indent=2),
-                            "client-id": profile,
-                            "client-secret": secret,
-                            "issuer-url": issuer,
-                        },
-                    )
-                )
+            )
             connections.append(
                 {
                     "name": connection_name,
@@ -145,7 +131,7 @@ def compose(req, rsp):
                     "role": group["role"],
                     "endpoint": endpoint,
                     "ready": complete,
-                    "secretRef": {"name": profile, "namespace": namespace},
+                    "secretRef": {"name": secret_name, "namespace": namespace},
                 }
             )
     status["connections"] = connections

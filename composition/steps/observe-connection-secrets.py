@@ -6,7 +6,9 @@ from collections import Counter
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
+    _b64get_any,
     _boolish,
+    _extract_data,
     _extract_manifest,
     _resource_name,
     _safe_str,
@@ -86,6 +88,54 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         f"{xr_name}-oauth-client",
         xr_namespace,
     )
+    status["oauth2"] = []
+    client = observed.get(f"keycloak-client-{xr_name}")
+    client_body = _to_dict(client.resource) if client else {}
+    oauth_source = observed.get(f"observe-oauth-client-secret-{xr_name}")
+    oauth_body = _to_dict(oauth_source.resource) if oauth_source else {}
+    oauth_meta = _extract_manifest(oauth_source).get("metadata") or {}
+    oauth_data = _extract_data(oauth_source)
+    credential_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
+    client_id = _safe_str(
+        (client_body.get("status", {}).get("atProvider") or {}).get("clientId")
+        or (client_body.get("spec", {}).get("forProvider") or {}).get("clientId")
+        or credential_id
+    )
+    issuer = _safe_str((environment.get("iam") or {}).get("issuerURL")).rstrip("/")
+    # A missing Secret can leave its last manifest in the observer status.
+    source_missing = any(
+        c.get("type") == "Synced" and c.get("status") == "False"
+        and "external resource does not exist" in c.get("message", "")
+        for c in (oauth_body.get("status") or {}).get("conditions") or []
+    )
+
+    def source_ready(body):
+        conditions = (body.get("status") or {}).get("conditions") or []
+        return (
+            any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
+            and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
+        )
+
+    if (
+        client_body and client_id and issuer
+        and not client_body.get("metadata", {}).get("deletionTimestamp")
+        and oauth_meta.get("name") == f"{xr_name}-oauth-client"
+        and oauth_meta.get("namespace") == xr_namespace
+        and not oauth_meta.get("deletionTimestamp")
+        and not oauth_body.get("metadata", {}).get("deletionTimestamp")
+        and not source_missing
+    ):
+        status["oauth2"].append({
+            "name": client_id,
+            "type": "client",
+            "issuerUrl": issuer,
+            "secretRef": {"name": f"{xr_name}-oauth-client", "namespace": xr_namespace},
+            "ready": bool(
+                source_ready(client_body) and source_ready(oauth_body)
+                and _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+                and (not credential_id or credential_id == client_id)
+            ),
+        })
 
     custom_secrets = environment.get("customSecrets") or []
     custom_names = Counter(custom["name"] for custom in custom_secrets)

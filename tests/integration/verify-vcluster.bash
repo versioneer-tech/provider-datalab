@@ -163,7 +163,7 @@ DATALAB
 }
 
 verify_vcluster() {
-  local service gateway_ip deadline
+  local service gateway_ip deadline administrator_secret editor_secret other_secret
   kube apply -f "${MANIFEST_DIR}/vcluster/datalab.yaml"
   runtime_namespace="$(wait_for_runtime_namespace verify-vcluster)"
   [[ "${runtime_namespace}" == "${VCLUSTER_NAMESPACE}" ]]
@@ -179,20 +179,39 @@ verify_vcluster() {
     sleep 5
   done
   wait_for_connection_secret verify-vcluster-datalab verify-vcluster 600 POSTGRES_PG0_PASSWORD POSTGRES_PG0_HOST
-  for profile in \
-    verify-vcluster-vcluster-vc0-cluster-admin-094bd1c6b0 \
-    verify-vcluster-vcluster-vc0-namespace-demo-6e6b6feb99 \
-    verify-vcluster-vcluster-vc1-cluster-admin-9da2539b9a; do
+  connection_secret() {
+    kube get datalab/verify-vcluster --namespace workspace -o json | jq -er --arg instance "$1" --arg group "$2" \
+      '.status.connections[] | select(.type == "vcluster" and .instance == $instance and .group == $group) | .secretRef.name'
+  }
+  administrator_secret="$(connection_secret vc0 cluster-admin)"
+  editor_secret="$(connection_secret vc0 namespace-demo)"
+  other_secret="$(connection_secret vc1 cluster-admin)"
+  for profile in "${administrator_secret}" "${editor_secret}" "${other_secret}"; do
     wait_for_connection_secret "${profile}" verify-vcluster 600 kubeconfig
+    kube get "secret/${profile}" --namespace workspace -o json \
+      | jq -e '(.data | keys | sort) == ["client-id", "issuer-url", "kubeconfig"]' >/dev/null
   done
   kube wait datalab/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
   kube get datalab/verify-vcluster --namespace workspace -o json | python3 -c '
 import json, sys
-connections = [c for c in json.load(sys.stdin)["status"]["connections"] if c["type"] == "vcluster"]
+status = json.load(sys.stdin)["status"]
+assert status["oauth2"] == [{"name": "verify-vcluster", "type": "client", "issuerUrl": "https://keycloak.keycloak:8443/realms/integration", "secretRef": {"name": "verify-vcluster-oauth-client", "namespace": "workspace"}, "ready": True}]
+assert not any(c["type"] == "oauth2" for c in status["connections"])
+connections = [c for c in status["connections"] if c["type"] == "vcluster"]
 assert len(connections) == 3 and all(c["ready"] for c in connections)
 assert {c["instance"] for c in connections} == {"vc0", "vc1"}
 assert all(set(c) <= {"name", "type", "instance", "group", "targetNamespace", "role", "endpoint", "ready", "secretRef"} for c in connections)
 print("PASS connection status contains ready profile references without credentials")'
+  if kube patch datalab/verify-vcluster --namespace workspace --subresource=status --dry-run=server --type=merge \
+    --patch '{"status":{"oauth2":[{"name":"duplicate","type":"client","issuerUrl":"https://identity.example","secretRef":{"name":"test","namespace":"workspace"},"ready":false},{"name":"duplicate","type":"client","issuerUrl":"https://identity.example","secretRef":{"name":"test","namespace":"workspace"},"ready":false}]}}' \
+    >"${work_directory}/oauth-admission.log" 2>&1; then
+    printf 'Kubernetes admitted duplicate OAuth2 discovery names.\n' >&2
+    return 1
+  fi
+  grep -F 'Duplicate value' "${work_directory}/oauth-admission.log" >/dev/null
+  printf 'PASS OAuth2 discovery is separate and Kubernetes rejects duplicate client names\n'
+  python3 "${INTEGRATION_DIR}/verify-oauth-discovery.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --datalab verify-vcluster
   for instance in vc0 vc1; do
     if kube create --dry-run=server --as "system:serviceaccount:${runtime_namespace}:vc-vcluster-${instance}" \
       -f - >"${work_directory}/storage-admission.log" 2>&1 <<PVC
@@ -219,7 +238,8 @@ PVC
     --from-file="${work_directory}/catalog.json" --from-file="${REPO_ROOT}/tests/vcluster/e2e.py" \
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod/verify-vcluster-client --namespace workspace --ignore-not-found --wait=true
-  kube apply -f "${MANIFEST_DIR}/vcluster/client.yaml"
+  apply_template "${MANIFEST_DIR}/vcluster/client.yaml" \
+    ADMINISTRATOR_SECRET "${administrator_secret}" EDITOR_SECRET "${editor_secret}" OTHER_SECRET "${other_secret}"
   kube wait pod/verify-vcluster-client --namespace workspace --for=condition=Ready --timeout=5m
   cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
   kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
@@ -238,7 +258,7 @@ PVC
   kube patch datalab/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --revoked
-  kube wait secret/verify-vcluster-vcluster-vc0-namespace-demo-6e6b6feb99 --namespace workspace --for=delete --timeout=5m
+  kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
   kube patch datalab/verify-vcluster --namespace workspace --type=json --patch '[{"op":"remove","path":"/spec/vclusters/vc0"}]'
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --other-only

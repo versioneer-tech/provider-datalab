@@ -29,6 +29,7 @@ status:
       name: apikey-2
       namespace: s-john
     type: custom
+  oauth2: []
   sessions:
     analysis:
       state: stopped

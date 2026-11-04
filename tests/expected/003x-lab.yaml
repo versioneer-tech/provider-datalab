@@ -59,7 +59,7 @@ status:
     ready: false
     role: cluster-admin
     secretRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      name: s-jane-vcluster-vc0-cluster-admin-connection-07f6306630
       namespace: default
     targetNamespace: '*'
     type: vcluster
@@ -70,13 +70,46 @@ status:
     ready: false
     role: edit
     secretRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      name: s-jane-vcluster-vc0-namespace-demo-connection-768a47880a
       namespace: default
     targetNamespace: demo
     type: vcluster
+  oauth2: []
   sessions:
     default:
       state: started
+---
+apiVersion: v1
+data:
+  client-id: cy1qYW5l
+  issuer-url: aHR0cHM6Ly9pZGVudGl0eS5hY21lLmNvbS9yZWFsbXMvYWNtZQ==
+  kubeconfig: ewogICJhcGlWZXJzaW9uIjogInYxIiwKICAiY2x1c3RlcnMiOiBbCiAgICB7CiAgICAgICJjbHVzdGVyIjogewogICAgICAgICJzZXJ2ZXIiOiAiaHR0cHM6Ly9zLWphbmUubGFiLmFjbWUuY29tLy52YzAiCiAgICAgIH0sCiAgICAgICJuYW1lIjogInMtamFuZS12YzAtNzRkODU4MzJkZiIKICAgIH0KICBdLAogICJjb250ZXh0cyI6IFsKICAgIHsKICAgICAgImNvbnRleHQiOiB7CiAgICAgICAgImNsdXN0ZXIiOiAicy1qYW5lLXZjMC03NGQ4NTgzMmRmIiwKICAgICAgICAibmFtZXNwYWNlIjogImRlZmF1bHQiLAogICAgICAgICJ1c2VyIjogInMtamFuZS12Y2x1c3Rlci12YzAtY2x1c3Rlci1hZG1pbi0wM2ExYmEzNjUxIgogICAgICB9LAogICAgICAibmFtZSI6ICJzLWphbmUtdmNsdXN0ZXItdmMwLWNsdXN0ZXItYWRtaW4tMDNhMWJhMzY1MSIKICAgIH0KICBdLAogICJjdXJyZW50LWNvbnRleHQiOiAicy1qYW5lLXZjbHVzdGVyLXZjMC1jbHVzdGVyLWFkbWluLTAzYTFiYTM2NTEiLAogICJraW5kIjogIkNvbmZpZyIsCiAgInVzZXJzIjogWwogICAgewogICAgICAibmFtZSI6ICJzLWphbmUtdmNsdXN0ZXItdmMwLWNsdXN0ZXItYWRtaW4tMDNhMWJhMzY1MSIsCiAgICAgICJ1c2VyIjogewogICAgICAgICJleGVjIjogewogICAgICAgICAgImFwaVZlcnNpb24iOiAiY2xpZW50LmF1dGhlbnRpY2F0aW9uLms4cy5pby92MSIsCiAgICAgICAgICAiYXJncyI6IFsKICAgICAgICAgICAgIi1jIiwKICAgICAgICAgICAgIiMhL3Vzci9iaW4vZW52IHB5dGhvbjNcbiMgQ29weXJpZ2h0IDIwMjYsIEVPWCAoaHR0cHM6Ly9lb3guYXQpIGFuZCBWZXJzaW9uZWVyIChodHRwczovL3ZlcnNpb25lZXIuYXQpXG4jIFNQRFgtTGljZW5zZS1JZGVudGlmaWVyOiBBcGFjaGUtMi4wXG5cblwiXCJcIlVzZSBhIGNhbGxlcidzIGFjY2VzcyB0b2tlbiBvciByZXF1ZXN0IG9uZSB3aXRoIHRoZSBEYXRhbGFiIE9BdXRoIGNsaWVudC5cIlwiXCJcblxuaW1wb3J0IGFyZ3BhcnNlXG5pbXBvcnQgYmFzZTY0XG5mcm9tIGRhdGV0aW1lIGltcG9ydCBkYXRldGltZSwgdGltZWRlbHRhLCB0aW1lem9uZVxuaW1wb3J0IGpzb25cbmltcG9ydCBvc1xuZnJvbSBwYXRobGliIGltcG9ydCBQYXRoXG5pbXBvcnQgc3NsXG5pbXBvcnQgc3lzXG5mcm9tIHVybGxpYi5lcnJvciBpbXBvcnQgSFRUUEVycm9yLCBVUkxFcnJvclxuZnJvbSB1cmxsaWIucGFyc2UgaW1wb3J0IHVybGVuY29kZVxuZnJvbSB1cmxsaWIucmVxdWVzdCBpbXBvcnQgUmVxdWVzdCwgdXJsb3BlblxuXG5cbmRlZiBtYWluKCk6XG4gICAgcGFyc2VyID0gYXJncGFyc2UuQXJndW1lbnRQYXJzZXIoZGVzY3JpcHRpb249X19kb2NfXylcbiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCctLWlzc3VlcicsIHJlcXVpcmVkPVRydWUpXG4gICAgcGFyc2VyLmFkZF9hcmd1bWVudCgnLS1jbGllbnQtaWQnLCByZXF1aXJlZD1UcnVlKVxuICAgIHNvdXJjZSA9IHBhcnNlci5hZGRfbXV0dWFsbHlfZXhjbHVzaXZlX2dyb3VwKClcbiAgICBzb3VyY2UuYWRkX2FyZ3VtZW50KCctLWFjY2Vzcy10b2tlbi1maWxlJywgZGVmYXVsdD1vcy5lbnZpcm9uLmdldCgnREFUQUxBQl9BQ0NFU1NfVE9LRU5fRklMRScpKVxuICAgIHNvdXJjZS5hZGRfYXJndW1lbnQoJy0tY2xpZW50LXNlY3JldC1maWxlJywgZGVmYXVsdD1vcy5lbnZpcm9uLmdldCgnREFUQUxBQl9DTElFTlRfU0VDUkVUX0ZJTEUnKSlcbiAgICBzb3VyY2UuYWRkX2FyZ3VtZW50KCctLWNsaWVudC1zZWNyZXQtZW52JylcbiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCctLWlzc3Vlci1jYScpXG4gICAgcGFyc2VyLmFkZF9hcmd1bWVudCgnLS1pc3N1ZXItY2EtZGF0YScpXG4gICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKClcbiAgICBpZiBzdW0oYm9vbCh2YWx1ZSkgZm9yIHZhbHVlIGluIChhcmdzLmFjY2Vzc190b2tlbl9maWxlLCBhcmdzLmNsaWVudF9zZWNyZXRfZmlsZSwgYXJncy5jbGllbnRfc2VjcmV0X2VudikpICE9IDE6XG4gICAgICAgIHBhcnNlci5lcnJvcignU3VwcGx5IG9uZSBhY2Nlc3MgdG9rZW4gZmlsZSBvciBjbGllbnQgc2VjcmV0IHNvdXJjZS4gU2V0IERBVEFMQUJfQUNDRVNTX1RPS0VOX0ZJTEUgb3IgREFUQUxBQl9DTElFTlRfU0VDUkVUX0ZJTEUuJylcbiAgICBpZiBub3QgYXJncy5pc3N1ZXIuc3RhcnRzd2l0aCgnaHR0cHM6Ly8nKTpcbiAgICAgICAgcGFyc2VyLmVycm9yKCctLWlzc3VlciBtdXN0IHVzZSBIVFRQUycpXG4gICAgdHJ5OlxuICAgICAgICBpZiBhcmdzLmFjY2Vzc190b2tlbl9maWxlOlxuICAgICAgICAgICAgc3RhdHVzID0geyd0b2tlbic6IFBhdGgoYXJncy5hY2Nlc3NfdG9rZW5fZmlsZSkucmVhZF90ZXh0KCkuc3RyaXAoKX1cbiAgICAgICAgZWxzZTpcbiAgICAgICAgICAgIHNlY3JldCA9IChQYXRoKGFyZ3MuY2xpZW50X3NlY3JldF9maWxlKS5yZWFkX3RleHQoKS5zdHJpcCgpIGlmIGFyZ3MuY2xpZW50X3NlY3JldF9maWxlXG4gICAgICAgICAgICAgICAgICAgICAgZWxzZSBvcy5lbnZpcm9uW2FyZ3MuY2xpZW50X3NlY3JldF9lbnZdKVxuICAgICAgICAgICAgaWYgbm90IHNlY3JldDpcbiAgICAgICAgICAgICAgICByYWlzZSBWYWx1ZUVycm9yKCdFbXB0eSBjbGllbnQgc2VjcmV0JylcbiAgICAgICAgICAgIGNhX2RhdGEgPSBiYXNlNjQuYjY0ZGVjb2RlKGFyZ3MuaXNzdWVyX2NhX2RhdGEpLmRlY29kZSgpIGlmIGFyZ3MuaXNzdWVyX2NhX2RhdGEgZWxzZSBOb25lXG4gICAgICAgICAgICBjb250ZXh0ID0gc3NsLmNyZWF0ZV9kZWZhdWx0X2NvbnRleHQoY2FmaWxlPWFyZ3MuaXNzdWVyX2NhLCBjYWRhdGE9Y2FfZGF0YSlcbiAgICAgICAgICAgIHJlcXVlc3QgPSBSZXF1ZXN0KGFyZ3MuaXNzdWVyLnJzdHJpcCgnLycpICsgJy9wcm90b2NvbC9vcGVuaWQtY29ubmVjdC90b2tlbicsXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICBkYXRhPXVybGVuY29kZSh7J2dyYW50X3R5cGUnOiAnY2xpZW50X2NyZWRlbnRpYWxzJywgJ2NsaWVudF9pZCc6IGFyZ3MuY2xpZW50X2lkLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICdjbGllbnRfc2VjcmV0Jzogc2VjcmV0fSkuZW5jb2RlKCkpXG4gICAgICAgICAgICB3aXRoIHVybG9wZW4ocmVxdWVzdCwgY29udGV4dD1jb250ZXh0LCB0aW1lb3V0PTMwKSBhcyByZXN1bHQ6XG4gICAgICAgICAgICAgICAgdG9rZW4gPSBqc29uLmxvYWQocmVzdWx0KVxuICAgICAgICAgICAgZXhwaXJlcyA9IGRhdGV0aW1lLm5vdyh0aW1lem9uZS51dGMpICsgdGltZWRlbHRhKHNlY29uZHM9aW50KHRva2VuWydleHBpcmVzX2luJ10pIC0gMTApXG4gICAgICAgICAgICBzdGF0dXMgPSB7J3Rva2VuJzogdG9rZW5bJ2FjY2Vzc190b2tlbiddLCAnZXhwaXJhdGlvblRpbWVzdGFtcCc6IGV4cGlyZXMuaXNvZm9ybWF0KCkucmVwbGFjZSgnKzAwOjAwJywgJ1onKX1cbiAgICAgICAgaWYgbm90IHN0YXR1c1sndG9rZW4nXTpcbiAgICAgICAgICAgIHJhaXNlIFZhbHVlRXJyb3IoJ0VtcHR5IGFjY2VzcyB0b2tlbicpXG4gICAgICAgIGNyZWRlbnRpYWwgPSB7XG4gICAgICAgICAgICAnYXBpVmVyc2lvbic6ICdjbGllbnQuYXV0aGVudGljYXRpb24uazhzLmlvL3YxJywgJ2tpbmQnOiAnRXhlY0NyZWRlbnRpYWwnLFxuICAgICAgICAgICAgJ3N0YXR1cyc6IHN0YXR1cyxcbiAgICAgICAgfVxuICAgIGV4Y2VwdCAoT1NFcnJvciwgSFRUUEVycm9yLCBVUkxFcnJvciwgVmFsdWVFcnJvciwgS2V5RXJyb3IpOlxuICAgICAgICBwcmludCgnQ291bGQgbm90IG9idGFpbiBhIERhdGFsYWIgQVBJIHRva2VuLiBDaGVjayB0aGUgdG9rZW4gZmlsZSBvciBpc3N1ZXIgYW5kIGNsaWVudCBjcmVkZW50aWFsLicsIGZpbGU9c3lzLnN0ZGVycilcbiAgICAgICAgcmV0dXJuIDFcbiAgICBwcmludChqc29uLmR1bXBzKGNyZWRlbnRpYWwpKVxuICAgIHJldHVybiAwXG5cblxuaWYgX19uYW1lX18gPT0gJ19fbWFpbl9fJzpcbiAgICBzeXMuZXhpdChtYWluKCkpXG4iLAogICAgICAgICAgICAiLS1pc3N1ZXIiLAogICAgICAgICAgICAiaHR0cHM6Ly9pZGVudGl0eS5hY21lLmNvbS9yZWFsbXMvYWNtZSIsCiAgICAgICAgICAgICItLWNsaWVudC1pZCIsCiAgICAgICAgICAgICJzLWphbmUiCiAgICAgICAgICBdLAogICAgICAgICAgImNvbW1hbmQiOiAicHl0aG9uMyIsCiAgICAgICAgICAiaW50ZXJhY3RpdmVNb2RlIjogIk5ldmVyIgogICAgICAgIH0KICAgICAgfQogICAgfQogIF0KfQ==
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jane-vcluster-vc0-cluster-admin-connect-31f20c0bf0
+  labels:
+    datalabs.pkg.internal/connection: vcluster-vc0-cluster-admin-7ad833319f
+    datalabs.pkg.internal/name: s-jane
+  name: s-jane-vcluster-vc0-cluster-admin-connection-07f6306630
+  namespace: default
+type: Opaque
+---
+apiVersion: v1
+data:
+  client-id: cy1qYW5l
+  issuer-url: aHR0cHM6Ly9pZGVudGl0eS5hY21lLmNvbS9yZWFsbXMvYWNtZQ==
+  kubeconfig: ewogICJhcGlWZXJzaW9uIjogInYxIiwKICAiY2x1c3RlcnMiOiBbCiAgICB7CiAgICAgICJjbHVzdGVyIjogewogICAgICAgICJzZXJ2ZXIiOiAiaHR0cHM6Ly9zLWphbmUubGFiLmFjbWUuY29tLy52YzAiCiAgICAgIH0sCiAgICAgICJuYW1lIjogInMtamFuZS12YzAtNzRkODU4MzJkZiIKICAgIH0KICBdLAogICJjb250ZXh0cyI6IFsKICAgIHsKICAgICAgImNvbnRleHQiOiB7CiAgICAgICAgImNsdXN0ZXIiOiAicy1qYW5lLXZjMC03NGQ4NTgzMmRmIiwKICAgICAgICAibmFtZXNwYWNlIjogImRlbW8iLAogICAgICAgICJ1c2VyIjogInMtamFuZS12Y2x1c3Rlci12YzAtbmFtZXNwYWNlLWRlbW8tNmVhYTA4ZDQxMiIKICAgICAgfSwKICAgICAgIm5hbWUiOiAicy1qYW5lLXZjbHVzdGVyLXZjMC1uYW1lc3BhY2UtZGVtby02ZWFhMDhkNDEyIgogICAgfQogIF0sCiAgImN1cnJlbnQtY29udGV4dCI6ICJzLWphbmUtdmNsdXN0ZXItdmMwLW5hbWVzcGFjZS1kZW1vLTZlYWEwOGQ0MTIiLAogICJraW5kIjogIkNvbmZpZyIsCiAgInVzZXJzIjogWwogICAgewogICAgICAibmFtZSI6ICJzLWphbmUtdmNsdXN0ZXItdmMwLW5hbWVzcGFjZS1kZW1vLTZlYWEwOGQ0MTIiLAogICAgICAidXNlciI6IHsKICAgICAgICAiZXhlYyI6IHsKICAgICAgICAgICJhcGlWZXJzaW9uIjogImNsaWVudC5hdXRoZW50aWNhdGlvbi5rOHMuaW8vdjEiLAogICAgICAgICAgImFyZ3MiOiBbCiAgICAgICAgICAgICItYyIsCiAgICAgICAgICAgICIjIS91c3IvYmluL2VudiBweXRob24zXG4jIENvcHlyaWdodCAyMDI2LCBFT1ggKGh0dHBzOi8vZW94LmF0KSBhbmQgVmVyc2lvbmVlciAoaHR0cHM6Ly92ZXJzaW9uZWVyLmF0KVxuIyBTUERYLUxpY2Vuc2UtSWRlbnRpZmllcjogQXBhY2hlLTIuMFxuXG5cIlwiXCJVc2UgYSBjYWxsZXIncyBhY2Nlc3MgdG9rZW4gb3IgcmVxdWVzdCBvbmUgd2l0aCB0aGUgRGF0YWxhYiBPQXV0aCBjbGllbnQuXCJcIlwiXG5cbmltcG9ydCBhcmdwYXJzZVxuaW1wb3J0IGJhc2U2NFxuZnJvbSBkYXRldGltZSBpbXBvcnQgZGF0ZXRpbWUsIHRpbWVkZWx0YSwgdGltZXpvbmVcbmltcG9ydCBqc29uXG5pbXBvcnQgb3NcbmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aFxuaW1wb3J0IHNzbFxuaW1wb3J0IHN5c1xuZnJvbSB1cmxsaWIuZXJyb3IgaW1wb3J0IEhUVFBFcnJvciwgVVJMRXJyb3JcbmZyb20gdXJsbGliLnBhcnNlIGltcG9ydCB1cmxlbmNvZGVcbmZyb20gdXJsbGliLnJlcXVlc3QgaW1wb3J0IFJlcXVlc3QsIHVybG9wZW5cblxuXG5kZWYgbWFpbigpOlxuICAgIHBhcnNlciA9IGFyZ3BhcnNlLkFyZ3VtZW50UGFyc2VyKGRlc2NyaXB0aW9uPV9fZG9jX18pXG4gICAgcGFyc2VyLmFkZF9hcmd1bWVudCgnLS1pc3N1ZXInLCByZXF1aXJlZD1UcnVlKVxuICAgIHBhcnNlci5hZGRfYXJndW1lbnQoJy0tY2xpZW50LWlkJywgcmVxdWlyZWQ9VHJ1ZSlcbiAgICBzb3VyY2UgPSBwYXJzZXIuYWRkX211dHVhbGx5X2V4Y2x1c2l2ZV9ncm91cCgpXG4gICAgc291cmNlLmFkZF9hcmd1bWVudCgnLS1hY2Nlc3MtdG9rZW4tZmlsZScsIGRlZmF1bHQ9b3MuZW52aXJvbi5nZXQoJ0RBVEFMQUJfQUNDRVNTX1RPS0VOX0ZJTEUnKSlcbiAgICBzb3VyY2UuYWRkX2FyZ3VtZW50KCctLWNsaWVudC1zZWNyZXQtZmlsZScsIGRlZmF1bHQ9b3MuZW52aXJvbi5nZXQoJ0RBVEFMQUJfQ0xJRU5UX1NFQ1JFVF9GSUxFJykpXG4gICAgc291cmNlLmFkZF9hcmd1bWVudCgnLS1jbGllbnQtc2VjcmV0LWVudicpXG4gICAgcGFyc2VyLmFkZF9hcmd1bWVudCgnLS1pc3N1ZXItY2EnKVxuICAgIHBhcnNlci5hZGRfYXJndW1lbnQoJy0taXNzdWVyLWNhLWRhdGEnKVxuICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncygpXG4gICAgaWYgc3VtKGJvb2wodmFsdWUpIGZvciB2YWx1ZSBpbiAoYXJncy5hY2Nlc3NfdG9rZW5fZmlsZSwgYXJncy5jbGllbnRfc2VjcmV0X2ZpbGUsIGFyZ3MuY2xpZW50X3NlY3JldF9lbnYpKSAhPSAxOlxuICAgICAgICBwYXJzZXIuZXJyb3IoJ1N1cHBseSBvbmUgYWNjZXNzIHRva2VuIGZpbGUgb3IgY2xpZW50IHNlY3JldCBzb3VyY2UuIFNldCBEQVRBTEFCX0FDQ0VTU19UT0tFTl9GSUxFIG9yIERBVEFMQUJfQ0xJRU5UX1NFQ1JFVF9GSUxFLicpXG4gICAgaWYgbm90IGFyZ3MuaXNzdWVyLnN0YXJ0c3dpdGgoJ2h0dHBzOi8vJyk6XG4gICAgICAgIHBhcnNlci5lcnJvcignLS1pc3N1ZXIgbXVzdCB1c2UgSFRUUFMnKVxuICAgIHRyeTpcbiAgICAgICAgaWYgYXJncy5hY2Nlc3NfdG9rZW5fZmlsZTpcbiAgICAgICAgICAgIHN0YXR1cyA9IHsndG9rZW4nOiBQYXRoKGFyZ3MuYWNjZXNzX3Rva2VuX2ZpbGUpLnJlYWRfdGV4dCgpLnN0cmlwKCl9XG4gICAgICAgIGVsc2U6XG4gICAgICAgICAgICBzZWNyZXQgPSAoUGF0aChhcmdzLmNsaWVudF9zZWNyZXRfZmlsZSkucmVhZF90ZXh0KCkuc3RyaXAoKSBpZiBhcmdzLmNsaWVudF9zZWNyZXRfZmlsZVxuICAgICAgICAgICAgICAgICAgICAgIGVsc2Ugb3MuZW52aXJvblthcmdzLmNsaWVudF9zZWNyZXRfZW52XSlcbiAgICAgICAgICAgIGlmIG5vdCBzZWNyZXQ6XG4gICAgICAgICAgICAgICAgcmFpc2UgVmFsdWVFcnJvcignRW1wdHkgY2xpZW50IHNlY3JldCcpXG4gICAgICAgICAgICBjYV9kYXRhID0gYmFzZTY0LmI2NGRlY29kZShhcmdzLmlzc3Vlcl9jYV9kYXRhKS5kZWNvZGUoKSBpZiBhcmdzLmlzc3Vlcl9jYV9kYXRhIGVsc2UgTm9uZVxuICAgICAgICAgICAgY29udGV4dCA9IHNzbC5jcmVhdGVfZGVmYXVsdF9jb250ZXh0KGNhZmlsZT1hcmdzLmlzc3Vlcl9jYSwgY2FkYXRhPWNhX2RhdGEpXG4gICAgICAgICAgICByZXF1ZXN0ID0gUmVxdWVzdChhcmdzLmlzc3Vlci5yc3RyaXAoJy8nKSArICcvcHJvdG9jb2wvb3BlbmlkLWNvbm5lY3QvdG9rZW4nLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZGF0YT11cmxlbmNvZGUoeydncmFudF90eXBlJzogJ2NsaWVudF9jcmVkZW50aWFscycsICdjbGllbnRfaWQnOiBhcmdzLmNsaWVudF9pZCxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAnY2xpZW50X3NlY3JldCc6IHNlY3JldH0pLmVuY29kZSgpKVxuICAgICAgICAgICAgd2l0aCB1cmxvcGVuKHJlcXVlc3QsIGNvbnRleHQ9Y29udGV4dCwgdGltZW91dD0zMCkgYXMgcmVzdWx0OlxuICAgICAgICAgICAgICAgIHRva2VuID0ganNvbi5sb2FkKHJlc3VsdClcbiAgICAgICAgICAgIGV4cGlyZXMgPSBkYXRldGltZS5ub3codGltZXpvbmUudXRjKSArIHRpbWVkZWx0YShzZWNvbmRzPWludCh0b2tlblsnZXhwaXJlc19pbiddKSAtIDEwKVxuICAgICAgICAgICAgc3RhdHVzID0geyd0b2tlbic6IHRva2VuWydhY2Nlc3NfdG9rZW4nXSwgJ2V4cGlyYXRpb25UaW1lc3RhbXAnOiBleHBpcmVzLmlzb2Zvcm1hdCgpLnJlcGxhY2UoJyswMDowMCcsICdaJyl9XG4gICAgICAgIGlmIG5vdCBzdGF0dXNbJ3Rva2VuJ106XG4gICAgICAgICAgICByYWlzZSBWYWx1ZUVycm9yKCdFbXB0eSBhY2Nlc3MgdG9rZW4nKVxuICAgICAgICBjcmVkZW50aWFsID0ge1xuICAgICAgICAgICAgJ2FwaVZlcnNpb24nOiAnY2xpZW50LmF1dGhlbnRpY2F0aW9uLms4cy5pby92MScsICdraW5kJzogJ0V4ZWNDcmVkZW50aWFsJyxcbiAgICAgICAgICAgICdzdGF0dXMnOiBzdGF0dXMsXG4gICAgICAgIH1cbiAgICBleGNlcHQgKE9TRXJyb3IsIEhUVFBFcnJvciwgVVJMRXJyb3IsIFZhbHVlRXJyb3IsIEtleUVycm9yKTpcbiAgICAgICAgcHJpbnQoJ0NvdWxkIG5vdCBvYnRhaW4gYSBEYXRhbGFiIEFQSSB0b2tlbi4gQ2hlY2sgdGhlIHRva2VuIGZpbGUgb3IgaXNzdWVyIGFuZCBjbGllbnQgY3JlZGVudGlhbC4nLCBmaWxlPXN5cy5zdGRlcnIpXG4gICAgICAgIHJldHVybiAxXG4gICAgcHJpbnQoanNvbi5kdW1wcyhjcmVkZW50aWFsKSlcbiAgICByZXR1cm4gMFxuXG5cbmlmIF9fbmFtZV9fID09ICdfX21haW5fXyc6XG4gICAgc3lzLmV4aXQobWFpbigpKVxuIiwKICAgICAgICAgICAgIi0taXNzdWVyIiwKICAgICAgICAgICAgImh0dHBzOi8vaWRlbnRpdHkuYWNtZS5jb20vcmVhbG1zL2FjbWUiLAogICAgICAgICAgICAiLS1jbGllbnQtaWQiLAogICAgICAgICAgICAicy1qYW5lIgogICAgICAgICAgXSwKICAgICAgICAgICJjb21tYW5kIjogInB5dGhvbjMiLAogICAgICAgICAgImludGVyYWN0aXZlTW9kZSI6ICJOZXZlciIKICAgICAgICB9CiAgICAgIH0KICAgIH0KICBdCn0=
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jane-vcluster-vc0-namespace-demo-connec-7c0fa2accc
+  labels:
+    datalabs.pkg.internal/connection: vcluster-vc0-namespace-demo-b2157b3b79
+    datalabs.pkg.internal/name: s-jane
+  name: s-jane-vcluster-vc0-namespace-demo-connection-768a47880a
+  namespace: default
+type: Opaque
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -1468,24 +1501,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: keycloak-usage-036582816298-s-jane-keycloak-vcluster-eed337aa4e
-  namespace: default
-spec:
-  by:
-    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-    kind: RoleMapper
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: keycloak-usage-0a70f7471fe5-s-jane-keycloak-vcluster-4b8c0c4052
   namespace: default
 spec:
@@ -1499,42 +1514,6 @@ spec:
     kind: Role
     resourceRef:
       name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-15d1c4085075-s-jane-keycloak-vcluster-e5ab8a5d25
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  of:
-    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-    kind: Role
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-264d7aa2d983-s-jane-keycloak-vcluster-b947944fb5
-  namespace: default
-spec:
-  by:
-    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-    kind: RoleMapper
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
   replayDeletion: true
 ---
 apiVersion: protection.crossplane.io/v1beta1
@@ -1558,60 +1537,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: keycloak-usage-3c6e02cc097a-s-jane-keycloak-client-s-b486723db1
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-459948876b3c-s-jane-keycloak-vcluster-50bcbc25c0
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-5acf551231e7-s-jane-keycloak-vcluster-3a5c390558
-  namespace: default
-spec:
-  by:
-    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-    kind: ProtocolMapper
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: keycloak-usage-5ba8d501fbd9-s-jane-keycloak-vcluster-6ca189b201
   namespace: default
 spec:
@@ -1620,96 +1545,6 @@ spec:
     kind: RoleMapper
     resourceRef:
       name: vcluster-s-jane-vc0-users-scope-a910511262
-  of:
-    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-    kind: Role
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-6f3132386097-s-jane-keycloak-vcluster-7e35177ba8
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  of:
-    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
-    kind: Role
-    resourceRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-8db7afd0ac66-s-jane-keycloak-vcluster-65af792f1b
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-a74cbed9f0d0-s-jane-keycloak-client-s-3d3bf3e693
-  namespace: default
-spec:
-  by:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: ClientServiceAccountRole
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-aa3ba4b97be0-s-jane-keycloak-vcluster-711d321e0d
-  namespace: default
-spec:
-  by:
-    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-    kind: ProtocolMapper
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-    kind: Client
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: keycloak-usage-aa57c6e58a82-s-jane-keycloak-vcluster-46185af777
-  namespace: default
-spec:
-  by:
-    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-    kind: RoleMapper
-    resourceRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
   of:
     apiVersion: role.keycloak.m.crossplane.io/v1alpha1
     kind: Role
@@ -1774,6 +1609,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: keycloak-usage-e6f85c950aa3-s-jane-keycloak-client-s-2cd0712ef3
+  namespace: default
+spec:
+  by:
+    apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+    kind: RoleMapper
+    resourceRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: Client
+    resourceRef:
+      name: s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: keycloak-usage-eaef9effb79d-s-jane-keycloak-client-s-d6243c46f6
   namespace: default
 spec:
@@ -1806,140 +1659,6 @@ spec:
     resourceRef:
       name: s-jane-ws-access
   replayDeletion: true
----
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-kind: ClientServiceAccountRole
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-    realmId: acme
-    roleRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-    serviceAccountUserClientIdRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-kind: ClientServiceAccountRole
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-assignment-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-    realmId: acme
-    roleRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-    serviceAccountUserClientIdRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: ProtocolMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-    config:
-      access.token.claim: 'true'
-      id.token.claim: 'false'
-      included.client.audience: s-jane
-    name: datalab-audience
-    protocol: openid-connect
-    protocolMapper: oidc-audience-mapper
-    realmId: acme
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: ProtocolMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-audience-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-    config:
-      access.token.claim: 'true'
-      id.token.claim: 'false'
-      included.client.audience: s-jane
-    name: datalab-audience
-    protocol: openid-connect
-    protocolMapper: oidc-audience-mapper
-    realmId: acme
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-kind: Client
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  namespace: default
-spec:
-  forProvider:
-    accessType: CONFIDENTIAL
-    clientId: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-    directAccessGrantsEnabled: false
-    fullScopeAllowed: false
-    implicitFlowEnabled: false
-    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-    realmId: acme
-    serviceAccountsEnabled: true
-    standardFlowEnabled: false
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
-  writeConnectionSecretToRef:
-    name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651-oauth
----
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
-kind: Client
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-client-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  namespace: default
-spec:
-  forProvider:
-    accessType: CONFIDENTIAL
-    clientId: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-    directAccessGrantsEnabled: false
-    fullScopeAllowed: false
-    implicitFlowEnabled: false
-    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-    realmId: acme
-    serviceAccountsEnabled: true
-    standardFlowEnabled: false
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
-  writeConnectionSecretToRef:
-    name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-oauth
 ---
 apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
@@ -1979,34 +1698,20 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-    realmId: acme
-    roleIdRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
   name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
   namespace: default
 spec:
   forProvider:
     clientIdRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      name: s-jane
+      policy:
+        resolution: Required
     realmId: acme
     roleIdRef:
       name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      policy:
+        resolution: Required
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -2712,54 +2417,6 @@ spec:
             ephemeral-storage: 3Gi
             memory: 128Mi
           type: Container
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  labels:
-    datalabs.pkg.internal/vcluster: vc0
-  name: vcluster-s-jane-vc0-observe-client-cluster-admin-5a8aa8c854
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651-oauth
-        namespace: default
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  labels:
-    datalabs.pkg.internal/vcluster: vc0
-  name: vcluster-s-jane-vc0-observe-client-namespace-demo-d6f93fb96e
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-oauth
-        namespace: default
-  managementPolicies:
-  - Observe
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

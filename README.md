@@ -50,6 +50,10 @@ generate mappings. Predefined custom Secrets appear there when available in
 the team namespace. The native vCluster sync keeps Secret data keys unchanged. See
 [Secret bindings](docs/how-to-guides/vcluster.md#secret-bindings).
 
+`status.oauth2` lists OAuth2 client names, issuer URLs, source Secret references,
+and readiness. OAuth2 discovery stays separate from `status.connections` and
+contains no credentials.
+
 The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
 Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
 See the [operator prerequisites](docs/how-to-guides/installation.md#prerequisites)

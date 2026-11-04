@@ -287,6 +287,33 @@ spec:
               type: object
               description: Current observed state of the datalab.
               properties:
+                oauth2:
+                  type: array
+                  description: OAuth2 discovery by client ID. Contains metadata and Secret references only.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name, type, issuerUrl, secretRef, ready]
+                    properties:
+                      name:
+                        type: string
+                        description: OAuth2 client ID.
+                      type:
+                        type: string
+                        enum: [client]
+                      issuerUrl:
+                        type: string
+                      secretRef:
+                        type: object
+                        required: [name, namespace]
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                      ready:
+                        type: boolean
                 sessions:
                   type: object
                   description: Map of session IDs and their lifecycle state and runtime details.
@@ -311,7 +338,7 @@ spec:
                         description: Public URL of the active session.
                 connections:
                   type: array
-                  description: Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery.
+                  description: Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery. Virtual API readiness does not imply caller authorization.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [type, name]
                   items:

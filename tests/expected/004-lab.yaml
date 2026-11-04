@@ -17,6 +17,7 @@ spec:
   - john
 status:
   connections: []
+  oauth2: []
   sessions:
     analysis:
       state: stopped

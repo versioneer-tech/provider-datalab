@@ -474,6 +474,15 @@ Virtual Kubernetes clusters keyed by instance name.
 
 Current observed state of the datalab.
 
+`oauth2` is a list of objects with `name`, `type`, `issuerUrl`, `secretRef`, and `ready`.
+`type` is required and its only allowed value is `client`.
+`name` is the actual OAuth2 client ID. The XRD uses a map list keyed by `name`
+to require unique names. `secretRef` requires a Secret `name` and `namespace`.
+Readiness uses the observed client and credential Secret. Entries are removed
+when either source is removed. The list contains no credentials or redundant `clientId` field and stays
+separate from `connections`. See
+[OAuth2 discovery](../how-to-guides/authentication.md#oauth2-discovery).
+
 <table>
     <thead>
         <tr>
@@ -487,7 +496,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
         <td>[]object</td>
         <td>
-          Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery.<br/>
+          Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery. Virtual API readiness does not imply caller authorization.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -509,6 +518,11 @@ Service connections use the same `type` and `name` pair as a Secret binding.
 when available. Source readiness does not report virtual Secret delivery.
 Datalab readiness requires every published connection and the existing
 resource checks to be ready.
+
+Virtual API profiles select an endpoint and default namespace. Their Secrets
+contain public connection settings only. Callers supply credentials separately;
+token roles and Kubernetes RBAC determine access. A ready profile does not grant
+access, including for the built-in `cluster-admin` profile.
 
 
 

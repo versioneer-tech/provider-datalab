@@ -59,6 +59,7 @@ status:
       name: prod-redis-auth
       namespace: s-jeff
     type: redis
+  oauth2: []
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

@@ -7,7 +7,11 @@ import subprocess
 import json
 import sys
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import yaml
 
@@ -59,6 +63,68 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(
             token("sample:redis", suffix="", length=28), "E6xDTnRLBJ1XV75rV3xJDiEsGpHp"
         )
+
+
+class VclusterCredentialTests(unittest.TestCase):
+    def run_helper(self, files, response=None):
+        module = runpy.run_path(str(ROOT / "examples/vcluster/credentials.py"))
+        output, error = StringIO(), StringIO()
+        argv = ["credentials.py", "--issuer", "https://identity.example/realms/test", "--client-id", "ws-alice"]
+        with patch.object(sys, "argv", argv), patch.object(module["os"], "environ", files), \
+                patch.dict(module["main"].__globals__, {"urlopen": response}), \
+                redirect_stdout(output), redirect_stderr(error):
+            try:
+                code = module["main"]()
+            except SystemExit as exc:
+                code = exc.code
+        return code, output.getvalue(), error.getvalue()
+
+    def test_profile_requires_a_separate_credential_source(self):
+        code, output, error = self.run_helper({})
+        self.assertNotEqual(code, 0)
+        self.assertEqual(output, "")
+        self.assertIn("DATALAB_ACCESS_TOKEN_FILE", error)
+
+    def test_human_token_is_used_without_an_identity_exchange(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            token = Path(directory) / "access-token"
+            token.write_text("caller-access-token\n")
+            code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"], {"token": "caller-access-token"})
+
+    def test_machine_exchange_uses_the_separately_supplied_workspace_secret(self):
+        requests = []
+
+        def exchange(request, **kwargs):
+            requests.append(request)
+            return StringIO(json.dumps({"access_token": "workspace-token", "expires_in": 300}))
+
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            secret = Path(directory) / "client-secret"
+            secret.write_text("separate-client-secret\n")
+            code, output, _ = self.run_helper({"DATALAB_CLIENT_SECRET_FILE": str(secret)}, exchange)
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"]["token"], "workspace-token")
+        self.assertEqual(len(requests), 1)
+        from urllib.parse import parse_qs
+        self.assertEqual(parse_qs(requests[0].data.decode()), {
+            "grant_type": ["client_credentials"], "client_id": ["ws-alice"],
+            "client_secret": ["separate-client-secret"],
+        })
+
+    def test_empty_or_ambiguous_sources_fail_without_a_credential(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            empty = Path(directory) / "empty"
+            empty.write_text("")
+            for sources in (
+                {"DATALAB_ACCESS_TOKEN_FILE": str(empty)},
+                {"DATALAB_CLIENT_SECRET_FILE": str(empty)},
+                {"DATALAB_ACCESS_TOKEN_FILE": str(empty), "DATALAB_CLIENT_SECRET_FILE": str(empty)},
+            ):
+                code, output, _ = self.run_helper(sources)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(output, "")
 
 
 class BuildAndHarnessTests(unittest.TestCase):

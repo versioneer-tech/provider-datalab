@@ -7,6 +7,7 @@ from copy import deepcopy
 import base64
 import hashlib
 import json
+from pathlib import Path
 
 from helpers import load_helpers
 
@@ -100,7 +101,7 @@ def main():
     assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 4
     assert resources["composite"]["status"]["sessions"]["work"]["state"] == "started"
     print(
-        "PASS two virtual clusters have separate routes, identities, selectors, and session status"
+        "PASS two virtual clusters have separate routes, roles, selectors, and session status"
     )
 
     def user_roles(rendered):
@@ -285,47 +286,81 @@ def main():
     assert settings(render(args, reordered_env, source, observed)) == settings(tuned)
     print("PASS each database and resource option triggers a stable configuration checksum")
 
+    clients = [body for body in resources.values() if body.get("kind") == "Client"]
+    assert len(clients) == 1 and clients[0]["spec"]["forProvider"]["clientId"] == "s-joe"
+    assignments = [body for body in resources.values() if body.get("kind") == "ClientServiceAccountRole"]
+    assert len(assignments) == 1
+    assert assignments[0]["spec"]["forProvider"]["roleRef"]["name"] == "s-joe-ws-api"
+    for instance in ("vc0", "vc1"):
+        profile = profile_name("s-joe", instance, "demo")
+        scope = resources[f"keycloak-vcluster-scope-{profile}"]["spec"]["forProvider"]
+        assert scope["clientIdRef"]["name"] == "s-joe"
+        assert scope["roleIdRef"]["name"] == profile
+    print("PASS one OAuth client, only ws_api assigned to its account, and all vcluster role scopes")
+
+    def connection_secrets(rendered):
+        connections = [c for c in rendered["composite"]["status"]["connections"] if c["type"] == "vcluster"]
+        for connection in connections:
+            secret = rendered[resource_name("connection", connection["secretRef"]["name"])]
+            assert "stringData" not in secret
+            assert set(secret["data"]) == {"kubeconfig", "client-id", "issuer-url"}
+            values = {key: base64.b64decode(value).decode() for key, value in secret["data"].items()}
+            assert values["client-id"] == "s-joe"
+            config = json.loads(values["kubeconfig"])
+            assert config["clusters"][0]["cluster"]["server"] == f"https://s-joe.lab.acme.com/.{connection['instance']}"
+            assert config["contexts"][0]["context"]["namespace"] == ("default" if connection["targetNamespace"] == "*" else connection["targetNamespace"])
+            user = config["users"][0]["user"]
+            assert set(user) == {"exec"}
+            assert set(user["exec"]) == {"apiVersion", "interactiveMode", "command", "args"}
+            assert user["exec"]["args"][1] == Path("examples/vcluster/credentials.py").read_text()
+            assert user["exec"]["args"][2:] == ["--issuer", values["issuer-url"], "--client-id", "s-joe"]
+            assert set(config["clusters"][0]["cluster"]) == {"server"}
+        return connections
+
+    connections = connection_secrets(resources)
+    assert all(not c["ready"] for c in connections)
     ready_observed = deepcopy(observed)
-    for instance in ("vc0", "vc1"):
-        ready_observed.append(
-            {
-                "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
-                "kind": "Object",
-                "metadata": {
-                    "name": resource_name(
-                        "vcluster", "s-joe", instance, "observe-client-demo"
-                    ),
-                    "namespace": "workspace",
-                    "annotations": {
-                        "crossplane.io/composition-resource-name": resource_name(
-                            "vcluster", "s-joe", instance, "observe-client-demo"
-                        )
-                    },
-                },
-                "status": {
-                    "atProvider": {
-                        "manifest": {
-                            "data": {
-                                "clientSecret": base64.b64encode(
-                                    f"{instance}-test-password".encode()
-                                ).decode()
-                            }
-                        }
-                    }
-                },
-            }
-        )
-    resources = render(args, env, source, ready_observed, include_composite=True)
-    for instance in ("vc0", "vc1"):
-        secret = resources[
-            resource_name("connection", profile_name("s-joe", instance, "demo"))
-        ]
-        config = json.loads(secret["stringData"]["kubeconfig"])
-        assert (
-            config["clusters"][0]["cluster"]["server"]
-            == f"https://s-joe.lab.acme.com/.{instance}"
-        )
-        assert secret["stringData"]["client-secret"] == f"{instance}-test-password"
+    for body in resources.values():
+        if body.get("kind") not in ("Secret", "Datalab"):
+            body = deepcopy(body)
+            body["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+            ready_observed.append(body)
+    ready_resources = render(args, env, source, ready_observed, include_composite=True)
+    assert all(c["ready"] for c in connection_secrets(ready_resources))
+    assert not any("observe-client" in key for key in ready_resources)
+    print("PASS profiles contain no credentials and become ready without credential observers or vcluster account grants")
+
+    legacy = []
+    profile = profile_name("s-joe", "vc0", "demo")
+    for suffix, api, kind, params in (
+        ("client", "openidclient", "Client", {"clientId": profile}),
+        ("assignment", "openidclient", "ClientServiceAccountRole", {"serviceAccountUserClientIdRef": {"name": profile}}),
+        ("audience", "client", "ProtocolMapper", {"clientIdRef": {"name": profile}}),
+    ):
+        key = f"keycloak-vcluster-{suffix}-{profile}"
+        legacy.append({
+            "apiVersion": f"{api}.keycloak.m.crossplane.io/v1alpha1", "kind": kind,
+            "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": key}},
+            "spec": {"forProvider": params},
+        })
+    old_connection_key = resource_name("connection", profile)
+    legacy.append({
+        "apiVersion": "v1", "kind": "Secret",
+        "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": old_connection_key}},
+        "data": {"client-secret": base64.b64encode(b"retired-profile-credential").decode()},
+    })
+    observer_key = resource_name("vcluster", "s-joe", "vc0", "observe-client-demo")
+    legacy.append({
+        "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
+        "metadata": {"name": observer_key, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": observer_key}},
+        "status": {"atProvider": {"manifest": {"data": {"clientSecret": base64.b64encode(b"retired-profile-credential").decode()}}}},
+    })
+    upgraded = render(args, env, source, [*ready_observed, *legacy], include_composite=True)
+    assert all(c["ready"] for c in connection_secrets(upgraded))
+    for body in legacy:
+        assert body["metadata"]["annotations"]["crossplane.io/composition-resource-name"] not in upgraded
+    assert all(c["secretRef"]["name"] != profile for c in connection_secrets(upgraded))
+    print("PASS upgrade omits old clients, assignments, mappers, observers, and credential-bearing profile Secrets")
 
     reduced = deepcopy(source)
     del reduced["spec"]["vclusters"]["vc0"]
@@ -383,7 +418,7 @@ def main():
     assert len([body for body in host_objects if body["kind"] == "StatefulSet"]) == 4
     assert len([body for body in host_objects if body["kind"] == "ServiceAccount"]) == 8
     print(
-        "PASS hyphenated instance and profile names keep separate host objects and credentials"
+        "PASS hyphenated instance and profile names keep separate host objects and connection references"
     )
 
 

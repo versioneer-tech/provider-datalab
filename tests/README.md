@@ -3,6 +3,13 @@
 The unit suite renders the composition with `crossplane render` and compares
 its output with snapshots through `dyff`. It also checks Data exposure,
 credential rotation, network rules, and environment-controlled settings.
+Virtual API checks require one workspace OAuth2 client, only the default
+`ws_api` account grant, scope mappings for all configured roles, and profile
+Secrets without credentials. They also check upgrade resource removal and
+connection readiness without profile clients or credentials. Helper checks
+cover human token files, separate machine credentials, and missing sources.
+OAuth2 discovery checks cover client names, source readiness, stale entry
+removal, the unique-name list schema, and separation from service connections.
 It does not use a Kubernetes cluster.
 
 Credential checks preserve the generated service passwords. Harness checks

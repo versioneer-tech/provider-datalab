@@ -11,6 +11,7 @@ spec:
   - joe
 status:
   connections: []
+  oauth2: []
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client

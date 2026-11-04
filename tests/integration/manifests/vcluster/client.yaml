@@ -25,6 +25,9 @@ spec:
     - name: other
       mountPath: /profiles/other
       readOnly: true
+    - name: oauth
+      mountPath: /oauth
+      readOnly: true
     - name: postgres
       mountPath: /postgres
       readOnly: true
@@ -34,17 +37,21 @@ spec:
       name: verify-vcluster-client
   - name: administrator
     secret:
-      secretName: verify-vcluster-vcluster-vc0-cluster-admin-094bd1c6b0
+      secretName: __ADMINISTRATOR_SECRET__
       defaultMode: 256
   - name: editor
     secret:
-      secretName: verify-vcluster-vcluster-vc0-namespace-demo-6e6b6feb99
+      secretName: __EDITOR_SECRET__
       defaultMode: 256
   - name: other
     secret:
-      secretName: verify-vcluster-vcluster-vc1-cluster-admin-9da2539b9a
+      secretName: __OTHER_SECRET__
       defaultMode: 256
   - name: postgres
     secret:
       secretName: verify-vcluster-datalab
+      defaultMode: 256
+  - name: oauth
+    secret:
+      secretName: verify-vcluster-oauth-client
       defaultMode: 256

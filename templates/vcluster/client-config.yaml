@@ -21,6 +21,3 @@ users:
       interactiveMode: Never
       command: python3
       args: ${args}
-      env:
-      - name: DATALAB_CLIENT_SECRET
-        value: ${secret}

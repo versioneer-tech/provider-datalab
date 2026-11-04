@@ -11,7 +11,8 @@ Users in `spec.users` must already exist in the realm selected by
 client named after the Datalab, groups for its users and administrators, and
 their memberships and role mappings. The client disables implicit, device,
 and direct access grants. Role scope mappings limit the Datalab client roles
-included in its tokens.
+included in its tokens. The same client serves virtual cluster access.
+There are no OAuth2 clients or service accounts for individual profiles.
 
 | Role | Assigned to | Used for |
 | --- | --- | --- |
@@ -21,7 +22,63 @@ included in its tokens.
 
 The runtime Secret `<datalab>-oauth2-client` contains `client_id` and
 `client_secret`. Anyone who can read it can request a machine token for that
-Datalab. Give access only to users and services that need it.
+Datalab. The source credential Secret is `<datalab>-oauth-client` in the claim
+namespace. Give access only to users and services that need it.
+
+Virtual API profile Secrets contain no authentication credentials. Humans
+supply their own access token; machines supply the existing workspace client
+secret separately. The workspace service account receives only `ws_api` by
+default. A vcluster role must be assigned explicitly before its token can pass
+virtual API authentication. Scope mappings allow all configured vcluster roles
+in tokens without granting them. The API checks issuer, audience, signature,
+expiry, and configured roles. Kubernetes RBAC sets the permitted operations.
+See [virtual API access](vcluster.md#api-access).
+
+Workspace API permissions for Secret downloads are unchanged. Permission to
+read a vcluster profile does not authorize the caller to read database,
+registry, workspace OAuth2, or other service credentials.
+
+## OAuth2 discovery
+
+The provider publishes the existing Datalab client in a separate status list:
+
+```yaml
+status:
+  oauth2:
+  - name: ws-alice
+    type: client
+    issuerUrl: https://identity.example.org/realms/eoepca
+    secretRef:
+      name: ws-alice-oauth-client
+      namespace: workspace
+    ready: true
+```
+
+`name` is the actual OAuth2 client ID, not the Keycloak internal UUID. Names
+are unique. `type` is always `client`; there is no redundant `clientId` field.
+Status contains only
+metadata and Secret references; client secrets and tokens stay in Secrets.
+
+Readiness requires both the observed client and its credential Secret to be
+ready, with matching client credentials. The provider clears stale entries
+when the client or Secret is removed. OAuth2 discovery does not grant access
+to that Secret and does not add OAuth2 entries to `status.connections`.
+
+The following contract is for a subsequent Workspace API change. It is not
+implemented by this provider:
+
+- `resolve_oauth2=<client-id>` is disabled by default. Resolution is allowed
+  only for `ws_access`, `ws_admin`, or global administrators. `ws_api` is denied.
+- `resolve_connections`, including wildcards, never resolves OAuth2 credentials.
+- Permission to resolve database, registry, or other service credentials is a
+  separate decision.
+
+Install the new XRD before the composition so Kubernetes retains this status
+field. A consumer must use the list entry's `name` and `secretRef`. If a prior
+deployment used an OAuth2 map, clear that field before installing the list schema.
+No client or credential rotation is required for discovery. See
+[profile-client cleanup](vcluster.md#upgrade-from-profile-clients) for the
+separate vcluster upgrade.
 
 A service can require extra token audiences. List them in
 `EnvironmentConfig.data.iam.extraAudiences` and use the same values in the

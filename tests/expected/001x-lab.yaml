@@ -17,6 +17,7 @@ status:
       name: s-joe
       namespace: datalab
     type: s3
+  oauth2: []
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

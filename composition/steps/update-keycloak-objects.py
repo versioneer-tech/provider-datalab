@@ -292,75 +292,13 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 ),
                 profile,
             )
-            put(
-                "keycloak-vcluster-client",
-                _render_template(
-                    req,
-                    "vcluster/identity-client",
-                    realm=realm,
-                    profile=profile,
-                    spec_writeConnectionSecretToRef_name=f"{profile}-oauth",
-                ),
-                profile,
-            )
-            put(
-                "keycloak-vcluster-scope",
-                _render_template(
-                    req, "vcluster/identity-scope", realm=realm, profile=profile
-                ),
-                profile,
-            )
             if group["name"] == "cluster-admin":
                 put_keycloak_role_mapper(
                     "keycloak-vcluster-user-role-mapper", profile,
                     _resource_name("vcluster", xr_name, instance, "users-scope"),
                 )
-            state = (getattr(req.observed, "resources", {}) or {}).get(
-                f"keycloak-vcluster-client-{profile}"
-            )
-            client_state = _to_dict(state.resource) if state else {}
-            client_identity = (client_state.get("status") or {}).get("atProvider") or {}
-            resolved = {}
-            owner_state = (getattr(req.observed, "resources", {}) or {}).get(
-                f"keycloak-client-{xr_name}"
-            )
-            owner_identity = (
-                _to_dict(owner_state.resource).get("status", {}).get("atProvider", {})
-                if owner_state
-                else {}
-            )
-            if owner_identity.get("id") and client_identity.get("serviceAccountUserId"):
-                resolved = {
-                    "clientId": owner_identity["id"],
-                    "serviceAccountUserId": client_identity["serviceAccountUserId"],
-                    "role": role_name,
-                }
-            put(
-                "keycloak-vcluster-assignment",
-                _render_template(
-                    req,
-                    "vcluster/identity-assignment",
-                    spec_forProvider={
-                        "realmId": realm,
-                        "clientIdRef": {"name": xr_name},
-                        "roleRef": {"name": profile},
-                        "serviceAccountUserClientIdRef": {"name": profile},
-                        **resolved,
-                    },
-                ),
-                profile,
-            )
-            put(
-                "keycloak-vcluster-audience",
-                _render_template(
-                    req,
-                    "vcluster/identity-audience",
-                    realm=realm,
-                    profile=profile,
-                    xr_name=xr_name,
-                ),
-                profile,
-            )
+            else:
+                put_keycloak_role_mapper("keycloak-vcluster-scope", profile)
 
     users = list(spec.get("users", []) or [])
     userOverrides = spec.get("userOverrides", {}) or {}

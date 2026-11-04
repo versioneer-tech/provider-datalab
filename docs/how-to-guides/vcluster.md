@@ -179,18 +179,40 @@ https://s-joe.lab.acme.com/.vc0
 
 The Gateway removes `/.vc0` and forwards to that instance. A separate backend
 TLS policy verifies its certificate. Each instance has its own selectors,
-credentials, provider configuration, and storage. Workload Ingress and Gateway
+provider configuration, and storage. Workload Ingress and Gateway
 synchronization is disabled. Use Kubernetes port forwarding to access a
 workload Service.
 
-Each group creates a profile Secret in the Datalab claim namespace. Its name
-starts with `<datalab>-vcluster-<instance>-<group>`. Generated names have a stable
-hash suffix when a component has a hyphen or the full name needs shortening. `status.connections` reports the instance, group, endpoint,
-readiness, and Secret reference. It contains no credentials.
+Each group creates a profile Secret in the Datalab claim namespace.
+`status.connections` reports the instance, group, endpoint, readiness, and
+Secret reference. Resolve the reference from status; do not construct its name.
+The Secret contains only `kubeconfig`, the public `client-id`, and `issuer-url`.
+The kubeconfig can include public CA certificates. It contains no client secret,
+access token, refresh token, private key, or client certificate.
 
-The Secret contains `kubeconfig`, `client-id`, `client-secret`, and `issuer-url`.
-The kubeconfig uses Python 3 to obtain short-lived tokens. Export the required
-profile and protect the file as a credential:
+A profile selects the endpoint and default namespace. It does not select an
+identity or grant permissions. Downloading `cluster-admin` does not give the
+caller that role. Every profile uses the existing Datalab client, such as
+`ws-alice`. The API checks the authenticated caller's token roles, issuer,
+Datalab audience, signature, and expiry. Kubernetes RBAC controls access.
+Roles are specific to an instance. A token needs a configured role for each
+instance it uses. A namespace default cannot restrict a token with wider grants.
+
+The Datalab users group receives each instance's admin role. Additional
+namespace profiles can bind `view`, `edit`, or `admin`. An identity administrator
+must assign these roles to the intended human or machine identity. Scope
+mappings allow assigned roles in workspace tokens; they do not grant roles.
+The workspace service account has only `ws_api` by default. Its token fails
+virtual API authentication until a vcluster role is explicitly assigned.
+The provider keeps the recovery kubeconfig private.
+
+`ready: true` reports runtime, routing, role, scope, and RBAC readiness. It does
+not imply caller authorization or require a caller credential to be present.
+Workspace API Secret-download permissions are unchanged. Access to database,
+registry, OAuth2, or other service Secrets requires a separate authorization
+decision.
+
+Download a profile:
 
 ```bash
 umask 077
@@ -198,14 +220,53 @@ profile_secret="$(kubectl -n workspace get datalab s-joe -o json | \
   jq -r '.status.connections[] | select(.instance == "vc0" and .group == "namespace-demo") | .secretRef.name')"
 kubectl -n workspace get secret "${profile_secret}" \
   -o jsonpath='{.data.kubeconfig}' | base64 --decode > s-joe-vc0.kubeconfig
+```
+
+### Human access
+
+Use the platform's browser OAuth2 authorization-code login to obtain an access
+token for your human identity. Request the Datalab audience and ensure that
+the token includes your assigned roles under
+`resource_access.<datalab>.roles`. Use an access token, not an ID token. Save it
+to a private file through the platform's login tool. Set its path for the
+kubeconfig helper:
+
+```bash
+export DATALAB_ACCESS_TOKEN_FILE="$HOME/.config/datalab/access-token"
+chmod 600 "$DATALAB_ACCESS_TOKEN_FILE"
 kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
 ```
 
-Roles are specific to an instance. A `vc0` profile does not authorize `vc1`.
-The Datalab users group receives each instance's admin role. Additional namespace
-profiles can use `view`, `edit`, or `admin`. Profile kubeconfigs use separate
-service identities; the built-in profile provides virtual administration.
-The provider keeps the recovery kubeconfig private.
+The helper reads this file and uses your token without an identity exchange.
+Renew the file through the same login flow when the token expires.
+
+### Machine access
+
+An identity administrator must first assign the required
+`vcluster_<instance>_<group>` role to the existing workspace service account.
+For example, `vcluster_vc0_namespace-demo` permits the configured operations
+in `demo`; it does not grant virtual cluster administration. This assignment
+is outside the composition. Do not add the account to the Datalab users group,
+which grants virtual cluster administration.
+
+Obtain the existing workspace client secret from `<datalab>-oauth-client`
+through an authorized Secret-delivery process. Store the decoded client secret
+alone in a private file, outside the profile and repository. Use one credential
+source at a time:
+
+```bash
+unset DATALAB_ACCESS_TOKEN_FILE
+export DATALAB_CLIENT_SECRET_FILE="$HOME/.config/datalab/client-secret"
+chmod 600 "$DATALAB_CLIENT_SECRET_FILE"
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
+```
+
+The Python 3 helper exchanges this secret for a short-lived token with
+`grant_type=client_credentials`. It uses the public workspace client ID and
+issuer from the profile. Every profile then has the same machine identity and
+its explicitly assigned roles. Removing a role affects new tokens; existing
+tokens keep their claims until expiry unless the API's configured role or
+binding is removed.
 
 For a private issuer CA, set `vcluster.issuerCA`. An optional HTTPS
 `vcluster.discoveryURL` can provide separate discovery routing with the same
@@ -257,14 +318,43 @@ transactions so a client can add collections and items. Its catalog records
 remain in PostgreSQL when the API Pod restarts.
 
 Run `tests/integration/run.bash verify-vcluster` to check both virtual clusters,
-profile boundaries, persistent volumes, and the catalog. The catalog test
+caller role boundaries, credential-free profiles, persistent volumes, and the catalog. The catalog test
 creates a collection and item, searches it, restarts the API, and repeats the
 search after a control-plane restart.
 
 ## Removal
 
-Removing a group revokes its identity and binding while retaining its virtual
+Removing a group removes its role and binding while retaining its virtual
 namespace data. Removing an instance removes its runtime and control-plane
 PVC. Other instances, databases, sessions, and the shared namespace remain.
 Deletion follows the host StorageClass retention policy. Back up control-plane
 and database volumes before removing an instance or Datalab.
+
+## Upgrade from profile clients
+
+The new composition removes profile clients, their service-account role
+assignments, profile audience mappers, obsolete scope mappings, and credential
+observers. It retains vcluster role definitions, human grants, audience checks,
+and Kubernetes RBAC. The workspace service account receives no new grant.
+
+Profile connection Secrets have new names. Crossplane deletes the old composed
+Secrets and creates public connection Secrets. Resolve the new names from
+`status.connections` and download the profiles again. New names prevent old
+credential data from remaining in an updated Secret. No workspace credential
+is copied into these Secrets.
+
+Check that the old managed clients and their Keycloak clients are deleted.
+Their service accounts are removed with them. Previously downloaded profile
+client secrets must no longer obtain tokens. Deleting only a Kubernetes Secret
+does not revoke a Keycloak credential. Check old `<profile>-oauth` Secrets too:
+provider-owned Secrets are garbage collected with their managed Client. If a
+Secret was copied or has no owner, remove it through the platform's Secret
+process after confirming that its client is gone. Do not remove the shared
+`<datalab>-oauth-client` Secret or workspace client.
+
+Already-issued JWTs can remain valid until expiry because the virtual API
+validates them locally. Allow that lifetime to pass before declaring old-token
+access revoked, or remove the affected role or binding to deny access sooner.
+The old downloaded client credentials cannot renew those tokens after client
+deletion. Restore required machine access only through an explicit workspace
+service-account role grant.

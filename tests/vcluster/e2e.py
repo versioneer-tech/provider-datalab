@@ -292,6 +292,30 @@ def verify_member_roles(removed, instances):
     print("PASS Datalab member token roles and separate ws_api automation permission", flush=True)
 
 
+def workspace_account():
+    admin = admin_token()
+    clients = identity("/admin/realms/integration/clients", token=admin)
+    owned = [client for client in clients if client["clientId"] == LAB or client["clientId"].startswith(LAB + "-vcluster-")]
+    assert len(owned) == 1 and owned[0]["clientId"] == LAB
+    client = "/admin/realms/integration/clients/" + owned[0]["id"]
+    account = identity(client + "/service-account-user", token=admin)
+    mapping = "/admin/realms/integration/users/" + account["id"] + "/role-mappings/clients/" + owned[0]["id"]
+    return admin, client, mapping
+
+
+def set_workspace_roles(roles):
+    admin, client, mapping = workspace_account()
+    assigned = identity(mapping, token=admin)
+    old = [role for role in assigned if role["name"].startswith("vcluster_")]
+    if old:
+        identity(mapping, old, token=admin, method="DELETE")
+    if roles:
+        available = identity(client + "/roles", token=admin)
+        selected = [role for role in available if role["name"] in roles]
+        assert {role["name"] for role in selected} == set(roles)
+        identity(mapping, selected, token=admin, method="POST")
+
+
 def negative_token(label, roles, audience=LAB, lifetime=None):
     admin = admin_token()
     client = "vcluster-test-" + label
@@ -410,8 +434,13 @@ def main():
             )
             == Path("/test/gateway.crt").read_bytes()
         )
+        values = {path.name: path.read_text().strip() for path in Path(f"/profiles/{profile}").iterdir() if path.is_file() and not path.name.startswith(".")}
+        assert set(values) == {"kubeconfig", "client-id", "issuer-url"}
+        assert values["client-id"] == LAB
         assert set(config["users"][0]["user"]) == {"exec"}
         command = config["users"][0]["user"]["exec"]
+        assert "env" not in command
+        secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file())
         credential = subprocess.run(
             [command["command"], *command["args"]],
             check=True,
@@ -419,13 +448,29 @@ def main():
             text=True,
             env={
                 **os.environ,
-                **{item["name"]: item["value"] for item in command["env"]},
+                "DATALAB_CLIENT_SECRET_FILE": str(secret_file),
             },
         )
         return json.loads(credential.stdout)["status"]["token"]
 
+    def granted_token(profile, role, instance="vc0"):
+        # Only this test assigns a vcluster role to the workspace account.
+        set_workspace_roles([role])
+        try:
+            value = profile_token(profile, instance)
+            claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
+            assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
+            return value
+        finally:
+            set_workspace_roles([])
+
+    admin, _, mapping = workspace_account()
+    assigned = identity(mapping + "/composite", token=admin)
+    assert {role["name"] for role in assigned} == {"ws_api"}
+    print("PASS one workspace OAuth client and no automatic vcluster account grant", flush=True)
+
     if args.other_only:
-        other = profile_token("other", "vc1")
+        other = granted_token("other", "vcluster_vc1_cluster-admin", "vc1")
         assert (
             api(
                 "/api/v1/namespaces/default/configmaps/instance-probe",
@@ -441,7 +486,7 @@ def main():
         deadline = time.monotonic() + 120
         while True:
             try:
-                api("/api/v1/namespaces", profile_token("administrator"))
+                api("/api/v1/namespaces", granted_token("administrator", "vcluster_vc0_cluster-admin"))
                 break
             except (AssertionError, OSError, subprocess.CalledProcessError):
                 if time.monotonic() > deadline:
@@ -450,7 +495,15 @@ def main():
         print("PASS HTTPS API and generated credentials after re-enable", flush=True)
         return
 
-    bearer = profile_token("administrator")
+    for profile, instance in (("administrator", "vc0"), ("editor", "vc0"), ("other", "vc1")):
+        if args.revoked and profile == "editor":
+            continue
+        denied = profile_token(profile, instance)
+        claims = json.loads(base64.urlsafe_b64decode(denied.split(".")[1] + "=="))
+        assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api"}
+        api("/api/v1/namespaces", denied, expected=401, instance=instance)
+    print("PASS every downloaded profile rejects the workspace account with only ws_api", flush=True)
+    bearer = granted_token("administrator", "vcluster_vc0_cluster-admin")
     marker = Path("/tmp/vcluster-editor-token")
     if args.read_only or args.revoked:
         editor = marker.read_text()
@@ -494,19 +547,23 @@ def main():
             flush=True,
         )
         return
-    other = profile_token("other", "vc1")
+    other = granted_token("other", "vcluster_vc1_cluster-admin", "vc1")
     api("/api/v1/namespaces", other, instance="vc1")
     api("/api/v1/namespaces", other, expected=(401, 403))
     api("/api/v1/namespaces", bearer, expected=(401, 403), instance="vc1")
     print("PASS each virtual cluster rejects the other profile", flush=True)
-    editor = profile_token("editor")
+    editor = granted_token("editor", "vcluster_vc0_namespace-demo")
+    admin_profile = granted_token("administrator", "vcluster_vc0_namespace-demo")
+    api("/api/v1/namespaces", admin_profile, expected=403)
+    api("/api/v1/namespaces/demo/configmaps", admin_profile)
+    print("PASS cluster-admin download keeps the caller's namespace role", flush=True)
     marker.write_text(editor)
     for value, expected_role in (
         (bearer, "vcluster_vc0_cluster-admin"),
         (editor, "vcluster_vc0_namespace-demo"),
     ):
         claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
-        assert claims["resource_access"][LAB]["roles"] == [expected_role]
+        assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", expected_role}
         assert LAB in (
             [claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"]
         )
@@ -837,6 +894,10 @@ def main():
     proxy.daemon_threads = True
     threading.Thread(target=proxy.serve_forever, daemon=True).start()
     config = json.loads(Path("/profiles/editor/kubeconfig").read_text())
+    config["users"][0]["user"]["exec"]["env"] = [
+        {"name": "DATALAB_ACCESS_TOKEN_FILE", "value": str(marker)},
+        {"name": "DATALAB_CLIENT_SECRET_FILE", "value": ""},
+    ]
     config["clusters"][0]["cluster"][
         "proxy-url"
     ] = f"http://127.0.0.1:{proxy.server_port}"
@@ -933,13 +994,18 @@ def main():
         )
         api("/api/v1/namespaces", denied, expected=(401, 403))
         print("PASS denied " + label, flush=True)
-    wrong_issuer = token(
-        Path("/profiles/administrator/client-id").read_text().strip(),
-        Path("/profiles/administrator/client-secret").read_text().strip(),
-        origin="http://keycloak.keycloak:8080",
-    )
+    set_workspace_roles(["vcluster_vc0_cluster-admin"])
+    try:
+        wrong_issuer = token(
+            Path("/profiles/administrator/client-id").read_text().strip(),
+            next((Path("/oauth") / key).read_text().strip() for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file()),
+            origin="http://keycloak.keycloak:8080",
+        )
+    finally:
+        set_workspace_roles([])
     claims = json.loads(base64.urlsafe_b64decode(wrong_issuer.split(".")[1] + "=="))
     assert claims["iss"] != ISSUER
+    assert "vcluster_vc0_cluster-admin" in claims["resource_access"][LAB]["roles"]
     api("/api/v1/namespaces", wrong_issuer, expected=(401, 403))
     print("PASS denied wrong issuer", flush=True)
     expired = negative_token("expired", ["vcluster_vc0_cluster-admin"], lifetime=1)
