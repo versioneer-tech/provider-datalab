@@ -26,6 +26,29 @@ Datalab's credentials and managed services.
 With no declared sessions, the Datalab still creates its shared services.
 It creates no session Pods or workspace PVCs.
 
+`status.sessions` is a list keyed by `name`:
+
+```yaml
+status:
+  sessions:
+  - name: default
+    state: started
+    phase: Running
+    pvcRef:
+      name: s-jane-default-persistent
+      namespace: s-jane
+    url: https://s-jane-default.lab.acme.com
+```
+
+`state` reports the desired lifecycle. `phase` and optional `message` report
+observed runtime details. The URL is present only when the runtime is
+`Running`. Stopped sessions keep `pvcRef` but have no runtime details or URL.
+The reference identifies the target PVC; it does not report PVC readiness.
+Read the PVC for its requested size and allocated capacity.
+
+This list replaces the previous map keyed by session name. Update consumers
+to select entries by `name`.
+
 ## Persistence
 
 Each declared session has a PVC mounted at `/home/eduk8s`. Its size and
@@ -202,7 +225,8 @@ kubectl describe datalab s-jeff -n workspace
 
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
-Session state, phase, messages, and URLs remain in `status.sessions`.
+Session names, state, phase, messages, PVC references, and URLs are in
+`status.sessions`.
 Service connections and public virtual API profiles are in `status.connections`.
 OAuth2 discovery is separate, in `status.oauth2`. Readiness does not confirm
 caller authorization. See [API access](vcluster.md#api-access) and

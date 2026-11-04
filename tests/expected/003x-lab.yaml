@@ -76,8 +76,11 @@ status:
     type: vcluster
   oauth2: []
   sessions:
-    default:
-      state: started
+  - name: default
+    pvcRef:
+      name: s-jane-default-persistent
+      namespace: s-jane
+    state: started
 ---
 apiVersion: v1
 data:

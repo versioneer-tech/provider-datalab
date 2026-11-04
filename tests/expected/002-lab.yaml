@@ -36,6 +36,7 @@ spec:
 status:
   connections: []
   oauth2: []
+  sessions: []
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

@@ -19,10 +19,16 @@ status:
   connections: []
   oauth2: []
   sessions:
-    analysis:
-      state: stopped
-    default:
-      state: started
+  - name: default
+    pvcRef:
+      name: s-john-default-persistent
+      namespace: s-john
+    state: started
+  - name: analysis
+    pvcRef:
+      name: s-john-analysis-persistent
+      namespace: s-john
+    state: stopped
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client

@@ -98,7 +98,7 @@ def main():
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
     assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 4
-    assert resources["composite"]["status"]["sessions"]["work"]["state"] == "started"
+    assert resources["composite"]["status"]["sessions"][0]["state"] == "started"
     print(
         "PASS two virtual clusters have separate routes, roles, selectors, and session status"
     )

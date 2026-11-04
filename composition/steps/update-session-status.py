@@ -6,6 +6,7 @@ from google.protobuf import json_format, struct_pb2
 
 from composition.helpers import (
     _extract_manifest,
+    _runtime_namespace,
     _session_name,
     _session_state,
     _to_dict,
@@ -20,7 +21,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     xr_name = metadata.get("name")
 
-    sessions_map = {}
+    sessions = {}
+    pvc_namespace = _runtime_namespace(req, xr_name) or xr_name
 
     for session in spec.get("sessions") or []:
         sid = _session_name(session)
@@ -28,7 +30,15 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not sid:
             continue
 
-        sessions_map[sid] = {"state": state}
+        entry = {
+            "name": sid,
+            "state": state,
+            "pvcRef": {
+                "name": f"{xr_name}-{sid}-persistent",
+                "namespace": pvc_namespace,
+            },
+        }
+        sessions[sid] = entry
 
         if state != "started":
             continue
@@ -38,27 +48,21 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not manifest:
             continue
 
-        ws_spec = (manifest.get("spec") or {}).get("session") or {}
-        ws_id = str(ws_spec.get("id") or sid)
-
         educates = (manifest.get("status") or {}).get("educates") or {}
         phase = educates.get("phase")
         url = educates.get("url")
         message = educates.get("message")
 
         if phase:
-            sessions_map[ws_id]["phase"] = phase
+            entry["phase"] = phase
         if message:
-            sessions_map[ws_id]["message"] = message
+            entry["message"] = message
         if phase == "Running" and url:
-            sessions_map[ws_id]["url"] = url
+            entry["url"] = url
 
     cur_status = (xr.get("status") or {}).copy()
     cur_status.update(_to_dict(rsp.desired.composite.resource).get("status") or {})
-    if sessions_map:
-        cur_status["sessions"] = sessions_map
-    else:
-        cur_status.pop("sessions", None)
+    cur_status["sessions"] = list(sessions.values())
 
     status_value = struct_pb2.Value()
     json_format.ParseDict(cur_status, status_value)

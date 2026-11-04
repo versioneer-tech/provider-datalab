@@ -260,6 +260,9 @@ fields, but extra fields in `spec` do not override these settings.
 | `defaults.files` | `[]` | Workshop file bundles. |
 | `packages` | `[]` | Session extension packages. |
 
+Session PVC names and namespaces are listed in `status.sessions[].pvcRef`.
+Read each PVC for its size and capacity.
+
 File bundles and extension packages are passed to the session runtime
 unchanged. Set Data enablement before creating Datalabs because the runtime
 saves each environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)

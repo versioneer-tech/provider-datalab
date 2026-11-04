@@ -315,12 +315,27 @@ spec:
                       ready:
                         type: boolean
                 sessions:
-                  type: object
-                  description: Map of session IDs and their lifecycle state and runtime details.
-                  additionalProperties:
+                  type: array
+                  description: Session lifecycle state, workspace PVC references, and runtime details.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
                     type: object
                     description: Observed state of a single datalab session.
+                    required: [name, state, pvcRef]
                     properties:
+                      name:
+                        type: string
+                        description: Session name from spec.sessions.
+                      pvcRef:
+                        type: object
+                        description: Workspace PVC reference. Does not report PVC readiness.
+                        required: [name, namespace]
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
                       state:
                         type: string
                         description: Desired lifecycle state for the declared session.

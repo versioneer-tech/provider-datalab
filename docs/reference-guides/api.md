@@ -498,10 +498,10 @@ Current observed state of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabstatussessionskey">sessions</a></b></td>
-        <td>map[string]object</td>
+        <td><b><a href="#datalabstatussessionsindex">sessions</a></b></td>
+        <td>[]object</td>
         <td>
-          Map of session IDs and their lifecycle state and runtime details.<br/>
+          Session lifecycle state, workspace PVC references, and runtime details.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -652,51 +652,18 @@ its entry when the client or credential source is removed. See
 | `secretRef` | object | Credential Secret reference, with required `name` and `namespace`. | true |
 | `ready` | boolean | The observed client and matching credential Secret are ready. Does not grant access to credentials or services. | true |
 
-### Datalab.status.sessions[key]
-<sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
+### Datalab.status.sessions[index]
 
+The list uses `x-kubernetes-list-type: map` with `name` as its key.
+It replaces the previous map keyed by session name.
 
+| Name | Type | Description | Required |
+| --- | --- | --- | --- |
+| `name` | string | Session name from `spec.sessions`. | true |
+| `state` | enum | Desired lifecycle: `started` or `stopped`. | true |
+| `pvcRef` | object | Workspace PVC reference with required `name` and `namespace`. Does not report PVC readiness. | true |
+| `phase` | string | Latest observed runtime phase. Absent for stopped sessions. | false |
+| `message` | string | Latest observed runtime message. Absent for stopped sessions. | false |
+| `url` | string | Public session URL. Present only when the runtime is `Running`. | false |
 
-Observed state of a single datalab session.
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>message</b></td>
-        <td>string</td>
-        <td>
-          Latest observed status message for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>phase</b></td>
-        <td>string</td>
-        <td>
-          Latest observed lifecycle phase for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired lifecycle state for the declared session.<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
-        <td>
-          Public URL of the active session.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
+Read the referenced PVC for its requested size and allocated capacity.
