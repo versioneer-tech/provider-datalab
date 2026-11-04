@@ -30,8 +30,7 @@ spec:
 Each team member can administer the virtual cluster. Its workloads can use the
 team's databases and object storage. API access uses the caller's token roles;
 downloading a profile grants no access. Optional browser sessions provide
-editors and terminals for the same team. `status.sessions` lists their names,
-lifecycle state, workspace PVC references, and active URLs.
+editors and terminals for the same team.
 
 ## Get started
 

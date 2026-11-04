@@ -268,6 +268,10 @@ unchanged. Set Data enablement before creating Datalabs because the runtime
 saves each environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
 for a file bundle example.
 
+The S3 entry in `status.connections` reports the configured `endpoint` and
+`region` when available. Source Secret settings take priority over the
+`storage` settings below.
+
 #### Identity and endpoints
 
 | Setting | Default | Use |

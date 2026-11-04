@@ -228,6 +228,12 @@ resources report ready. Read the conditions and events if either is false.
 Session names, state, phase, messages, PVC references, and URLs are in
 `status.sessions`.
 Service connections and public virtual API profiles are in `status.connections`.
+The backing S3 connection has the fixed name `primary`, also used in Secret
+bindings. It identifies the connection, not a bucket or failover priority.
+Its optional `endpoint` and `region` come from the source Secret's
+`AWS_ENDPOINT_URL` and `AWS_REGION`, with `storage.endpoint` and
+`storage.region` from the EnvironmentConfig as fallbacks. Missing values are
+omitted. The endpoint is the backing object store, not the read-only S3 gateway.
 OAuth2 discovery is separate, in `status.oauth2`. Readiness does not confirm
 caller authorization. See [API access](vcluster.md#api-access) and
 [OAuth2 discovery](authentication.md#oauth2-discovery) for Secret references.

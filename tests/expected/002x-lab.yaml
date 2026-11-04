@@ -35,8 +35,10 @@ spec:
   - jane
 status:
   connections:
-  - name: primary
+  - endpoint: https://s3.acme.com
+    name: primary
     ready: true
+    region: acme
     secretRef:
       name: s-jeff
       namespace: datalab

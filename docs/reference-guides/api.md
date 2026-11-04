@@ -568,7 +568,7 @@ access, including for the built-in `cluster-admin` profile.
         <td><b>endpoint</b></td>
         <td>string</td>
         <td>
-          <br/>
+          Service or virtual API endpoint. For S3, the source Secret takes priority over the environment setting.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -583,6 +583,13 @@ access, including for the built-in `cluster-admin` profile.
         <td>string</td>
         <td>
           <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>region</b></td>
+        <td>string</td>
+        <td>
+          S3 region, when configured. The source Secret takes priority over the environment setting.<br/>
         </td>
         <td>false</td>
       </tr><tr>

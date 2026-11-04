@@ -72,6 +72,15 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                 ),
             }
+            if kind == "s3":
+                data = _extract_data(source)
+                for field, secret_key in (
+                    ("endpoint", "AWS_ENDPOINT_URL"),
+                    ("region", "AWS_REGION"),
+                ):
+                    value = _b64get_any(data, [secret_key]) or storage_config.get(field)
+                    if value:
+                        connection[field] = value
             if kind != "custom" or connection["ready"]:
                 connections.append(connection)
 

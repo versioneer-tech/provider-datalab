@@ -375,6 +375,9 @@ spec:
                         type: string
                       endpoint:
                         type: string
+                      region:
+                        type: string
+                        description: S3 region, when configured.
                       ready:
                         type: boolean
                       secretRef:

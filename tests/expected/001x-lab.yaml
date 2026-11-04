@@ -11,8 +11,10 @@ spec:
   - joe
 status:
   connections:
-  - name: primary
+  - endpoint: https://s3.custom.acme.com
+    name: primary
     ready: false
+    region: custom-acme
     secretRef:
       name: s-joe
       namespace: datalab
@@ -48,7 +50,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.pkg.internal/storage-secret-checksum: e01ad97cf43e8017f25e556499ab29692d8acb1be986597f0423485c3a4fe82f
+              datalabs.pkg.internal/storage-secret-checksum: 38d643aac7f52fbc8b464fb2bded7d2fc772264ba87aeeee2b68f73dd7429f99
             labels:
               app.kubernetes.io/instance: s-joe
               app.kubernetes.io/name: package-r
@@ -739,8 +741,8 @@ metadata:
   namespace: default
 stringData:
   AWS_ACCESS_KEY_ID: joe-access-key
-  AWS_ENDPOINT_URL: https://secret-s3.custom
-  AWS_REGION: custom-secret-region
+  AWS_ENDPOINT_URL: https://s3.custom.acme.com
+  AWS_REGION: custom-acme
   AWS_S3_FORCE_PATH_STYLE: 'true'
   AWS_SECRET_ACCESS_KEY: joe-secret-key
   AWS_SESSION_TOKEN: fallback-session-token
@@ -753,8 +755,8 @@ stringData:
     [joe-access-key]
     type = s3
     provider = Other
-    endpoint = https://secret-s3.custom
-    region = custom-secret-region
+    endpoint = https://s3.custom.acme.com
+    region = custom-acme
     access_key_id = joe-access-key
     secret_access_key = joe-secret-key
     force_path_style = true
