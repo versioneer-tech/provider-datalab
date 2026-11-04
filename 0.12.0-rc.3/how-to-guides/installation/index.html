@@ -1,0 +1,2095 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.12.0-rc.3/how-to-guides/installation/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../usage_concepts/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../imgs/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Installation - provider-datalab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#install-provider-datalab" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="provider-datalab" class="md-header__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            provider-datalab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Installation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="provider-datalab" class="md-nav__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    provider-datalab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-choose-the-claim-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Choose the claim namespace
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-install-provider-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Install provider dependencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-install-the-configuration-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install the configuration package
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-set-the-shared-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Set the shared environment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Set the shared environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#data-address" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data address
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environmentconfig-values-and-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EnvironmentConfig values and defaults
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EnvironmentConfig values and defaults">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#runtime-and-service-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime and service defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity-and-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identity and endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-managed-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and managed stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-supply-storage-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Supply storage credentials
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-create-a-datalab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Create a Datalab
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-check-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Check the installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage_concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use a Datalab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../s3-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../additional_services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/workspace-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/sandbox-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference-guides/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0001-use-the-datalab-crd-as-the-workspace-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001 Datalab as the Public Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-choose-the-claim-namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Choose the claim namespace
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-install-provider-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Install provider dependencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-install-the-configuration-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install the configuration package
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-set-the-shared-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Set the shared environment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Set the shared environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#data-address" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data address
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environmentconfig-values-and-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EnvironmentConfig values and defaults
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EnvironmentConfig values and defaults">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#runtime-and-service-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime and service defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity-and-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identity and endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-managed-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and managed stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-supply-storage-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Supply storage credentials
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-create-a-datalab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Create a Datalab
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-check-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Check the installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="install-provider-datalab">Install Provider Datalab</h1>
+<p>Run these commands from a repository checkout with access to the target
+cluster. For a shared installation, manage manifests and Secrets through your
+platform's GitOps and Secret tools.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<p>The cluster needs Crossplane, the Educates session runtime, an ingress
+controller, Keycloak, and an S3-compatible object store. The CNI must enforce
+Kubernetes NetworkPolicy.
+Use Crossplane from the supported range in the package's
+<a href="https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml">metadata</a>.</p>
+<p>Install the session runtime with its CRDs and controller RBAC before creating
+Datalabs. Follow the <a href="https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html">runtime installation guide</a>.
+The runtime ingress class, domain, and TLS Secret must match the settings
+below.</p>
+<p>Install the operators for the managed stores you plan to offer. Provider
+Datalab integration tests use these versions:</p>
+<table>
+<thead>
+<tr>
+<th>Datalab field</th>
+<th>Operator</th>
+<th>Test version</th>
+<th>Required resource API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spec.databases</code></td>
+<td>Crunchy PostgreSQL Operator (PGO)</td>
+<td><code>6.0.2</code></td>
+<td><code>PostgresCluster</code> in <code>postgres-operator.crunchydata.com/v1</code></td>
+</tr>
+<tr>
+<td><code>spec.documentStores</code></td>
+<td>MongoDB Kubernetes Operator</td>
+<td><code>1.14.0</code></td>
+<td><code>MongoDBCommunity</code> in <code>mongodbcommunity.mongodb.com/v1</code></td>
+</tr>
+<tr>
+<td><code>spec.cacheStores</code></td>
+<td>Opstree Redis Operator</td>
+<td><code>0.27.0</code> (Helm chart <code>0.27.0</code>)</td>
+<td><code>Redis</code> in <code>redis.redis.opstreelabs.in/v1beta2</code></td>
+</tr>
+</tbody>
+</table>
+<p>These are fixed test pins. Other versions need validation before use.
+The harness applies each chart's CRDs before it installs or upgrades the operator.</p>
+<p>See <a href="../usage_concepts/#managed-service-types">managed service types</a> for the
+request fields and type defaults. Check the served APIs and fields before
+upgrading an operator. The
+<a href="https://github.com/versioneer-tech/provider-datalab/tree/main/tests/integration">integration tests</a>
+contain the dependency settings used by this repository. Configure storage,
+backup and restore, monitoring, and deletion for each store you offer.</p>
+<p>PostgreSQL without backups requires Crunchy PGO 5.7 or later. MongoDB
+Community backups use a composition-managed CronJob and the matching MongoDB
+image's database tools. Redis backups use a CronJob with the standard Redis
+tools image at the same Redis version as the server. Provider Kubernetes
+needs the <code>batch/cronjobs</code>
+permissions in <code>dependencies/rbac.yaml</code>. Backup volumes need a StorageClass
+that supports <code>ReadWriteOnce</code>. See <a href="../usage_concepts/#backups">backup settings</a>
+for schedules, retention, and restore limits.</p>
+<p>Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
+with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
+<code>TLSRoute</code> in <code>gateway.networking.k8s.io/v1</code> and direct TLS with SNI.</p>
+<p>For <code>spec.vclusters</code>, apply the supplied provider RBAC and configure an HTTPS
+issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
+ValidatingAdmissionPolicy and BackendTLSPolicy support. See
+<a href="../vcluster/#platform-settings">virtual cluster setup</a>.</p>
+<p>Datalab users can bind ready connections into a virtual cluster by <code>type</code>
+and <code>name</code>. List predefined Secret names under <code>data.customSecrets</code> to make
+available sources accessible as <code>type: custom</code> connections. Entries default
+to the team runtime namespace; an optional <code>namespace</code> selects a shared source.
+Missing custom Secrets are omitted from status and do not block the Datalab.
+If a storage or custom Secret is outside the runtime namespace, the provider
+grants the syncer read access to that source namespace. It must exist before vCluster starts. See
+<a href="../vcluster/#secret-bindings">Secret bindings</a>.</p>
+<h2 id="1-choose-the-claim-namespace">1. Choose the claim namespace</h2>
+<p>This guide uses <code>workspace</code> for Datalab resources and their namespaced
+ProviderConfigs:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>workspace
+kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>datalab
+</code></pre></div>
+<p>Input storage Secrets live in <code>datalab</code>, as set by <code>storage.secretNamespace</code>
+in the environment examples. Each Datalab also has a separate namespace for
+its runtime and shared services.</p>
+<h2 id="2-install-provider-dependencies">2. Install provider dependencies</h2>
+<p>Apply the files in
+<a href="https://github.com/versioneer-tech/provider-datalab/tree/main/dependencies"><code>dependencies/</code></a>
+in this order:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>00-mrap.yaml</code></td>
+<td>Activate the managed resource kinds used by the composition.</td>
+</tr>
+<tr>
+<td><code>01-deploymentRuntimeConfigs.yaml</code></td>
+<td>Set provider and function Pod security.</td>
+</tr>
+<tr>
+<td><code>02-providers.yaml</code></td>
+<td>Install the Kubernetes, Helm, and Keycloak providers.</td>
+</tr>
+<tr>
+<td><code>03-providerConfigs.yaml</code></td>
+<td>Configure those providers in the claim namespace.</td>
+</tr>
+<tr>
+<td><code>functions.yaml</code></td>
+<td>Install the composition functions.</td>
+</tr>
+<tr>
+<td><code>rbac.yaml</code></td>
+<td>Grant provider-kubernetes access to the resources it manages.</td>
+</tr>
+</tbody>
+</table>
+<p>Apply <code>03-providerConfigs.yaml</code> with <code>kubectl apply -n workspace -f ...</code>.
+Create its referenced Keycloak credential Secret in that namespace through
+your platform's Secret tools. The Keycloak account needs permission to manage
+clients, service-account roles, groups, memberships, and role mappings in the
+target realm.</p>
+<p>Use the package pins in the dependency manifests. Wait for the provider and
+function revisions to report healthy before installing the configuration
+package. The provider-kubernetes RBAC includes access to Pods for readiness
+checks and PVCs for session storage.</p>
+<h2 id="3-install-the-configuration-package">3. Install the configuration package</h2>
+<p>Save this resource as <code>configuration.yaml</code>. Replace <code>0.12.0-rc.3</code> with the
+release tag you want to install.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.crossplane.io/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Configuration</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/versioneer-tech/provider-datalab:0.12.0-rc.3</span>
+<span class="w">  </span><span class="nt">skipDependencyResolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>Apply it and check the package conditions:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>configuration.yaml
+kubectl<span class="w"> </span>get<span class="w"> </span>configurations.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>configurationrevisions.pkg.crossplane.io
+</code></pre></div>
+<p>The package installs the Datalab resource definition and composition. Its
+providers and functions are managed separately by the platform.</p>
+<p>The package build reads <code>responseTTL: 5m</code> from <code>composition/settings.yaml</code>.
+It applies the value to every Python response and the auto-ready input.
+To change it, rebuild the composition and release a new package.</p>
+<h2 id="4-set-the-shared-environment">4. Set the shared environment</h2>
+<p>Create an <code>EnvironmentConfig</code> named <code>datalab</code> with values for your cluster.
+This example uses a permanent Data Ingress:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apiextensions.crossplane.io/v1beta1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EnvironmentConfig</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
+<span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">iam</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">realm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">issuerURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.acme.com/realms/acme</span>
+<span class="w">    </span><span class="nt">internalURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://keycloak.keycloak:8080/realms/acme</span>
+<span class="w">  </span><span class="nt">ingress</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">class</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx</span>
+<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.acme.com</span>
+<span class="w">    </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wildcard-tls</span>
+<span class="w">    </span><span class="nt">annotations</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">storage</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://s3.acme.com</span>
+<span class="w">    </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Other</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">us-east-1</span>
+<span class="w">    </span><span class="nt">forcePathStyle</span><span class="p">:</span><span class="w"> </span><span class="s">"true"</span>
+<span class="w">    </span><span class="nt">secretNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datalab</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s3</span>
+<span class="w">  </span><span class="nt">storageClasses</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">allowed</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbs-default</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbs-default-retain</span>
+<span class="w">  </span><span class="nt">network</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">externalEgressCIDRs</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0/0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">::/0</span>
+<span class="w">    </span><span class="nt">serviceCIDR</span><span class="p">:</span><span class="w"> </span><span class="s">"10.43.0.0/16"</span>
+<span class="w">    </span><span class="nt">podCIDRs</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.42.0.0/16</span>
+<span class="w">    </span><span class="nt">blacklistIPs</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">169.254.169.254/32</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fd00:ec2::254/128</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">169.254.42.42/32</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fd00:42::42/128</span>
+<span class="w">    </span><span class="nt">excludePolicies</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vcluster</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">registry</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+<span class="w">    </span><span class="nt">data</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">readOnlyMount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">    </span><span class="nt">overallQuota</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span>
+<span class="w">    </span><span class="nt">security</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">externalEgress</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>Replace the example storage classes, network ranges, and DNS names before
+applying it. Configure <a href="../authentication/">authentication</a> before users start
+sessions.</p>
+<h3 id="data-address">Data address</h3>
+<p>Enable either <code>ingress.enabled</code> or <code>httpRoute.enabled</code> for a permanent Data
+address. Enabling both stops reconciliation. With neither enabled, Data is
+available through a session's authenticated ingress.</p>
+<p>For Gateway API exposure, replace the example's <code>ingress.enabled: true</code> with
+<code>false</code> and add:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">httpRoute</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">parentName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">    </span><span class="nt">parentNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contour</span>
+<span class="w">    </span><span class="nt">sectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-https</span>
+<span class="w">    </span><span class="nt">httpSectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-http</span>
+</code></pre></div>
+<p>The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
+routes from runtime namespaces. It manages the permanent Data certificate.
+Keep the ingress class and TLS Secret set for the session runtime. For the
+optional read-only S3 endpoint, see <a href="../s3-access/">S3 client access</a>.</p>
+<p>packageR permits all browser origins (<code>*</code>) for public catalog access.
+To restrict origins, configure the Gateway to replace or remove backend CORS
+headers and handle preflight requests. Adding a header does not restrict the
+wildcard. Cookie-based cross-origin access needs a separate policy.</p>
+<h3 id="environmentconfig-values-and-defaults">EnvironmentConfig values and defaults</h3>
+<p>All paths below are relative to <code>EnvironmentConfig.data</code>. Defaults apply
+when a setting is omitted; example values such as cluster CIDRs, endpoints,
+and StorageClass names are not built-in defaults.</p>
+<p>Select a specific EnvironmentConfig with the
+<code>datalabs.pkg.internal/environment</code> annotation or label to use its settings
+without per-Datalab overrides, as shown in the
+<a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml"><code>datalab-custom</code> example</a>.
+The annotation takes priority over the label; the default selection is <code>datalab</code>.</p>
+<p>Runtime settings come from the EnvironmentConfig. The XRD retains unknown
+fields, but extra fields in <code>spec</code> do not override these settings.</p>
+<h4 id="runtime-and-service-defaults">Runtime and service defaults</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>defaults.vcluster.enabled</code></td>
+<td><code>true</code></td>
+<td>Virtual Kubernetes API for each started session.</td>
+</tr>
+<tr>
+<td><code>defaults.registry.enabled</code></td>
+<td><code>true</code></td>
+<td>Session Docker registry.</td>
+</tr>
+<tr>
+<td><code>defaults.registry.storage</code></td>
+<td><code>5Gi</code></td>
+<td>Registry volume size.</td>
+</tr>
+<tr>
+<td><code>defaults.data.enabled</code></td>
+<td><code>true</code></td>
+<td>Shared packageR service and its configured endpoint.</td>
+</tr>
+<tr>
+<td><code>defaults.data.readOnlyMount</code></td>
+<td><code>false</code></td>
+<td>Read-only application permissions when enabled; storage IAM still applies.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.memory</code></td>
+<td><code>2Gi</code></td>
+<td>Session memory request.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.storage</code></td>
+<td><code>1Gi</code></td>
+<td>Workspace PVC size.</td>
+</tr>
+<tr>
+<td><code>defaults.quota.budget</code></td>
+<td><code>medium</code></td>
+<td>Session namespace budget.</td>
+</tr>
+<tr>
+<td><code>defaults.overallQuota.storage</code></td>
+<td><code>100Gi</code></td>
+<td>Aggregate PVC request limit in the environment namespace.</td>
+</tr>
+<tr>
+<td><code>defaults.security.policy</code></td>
+<td><code>baseline</code></td>
+<td>Pod security level: <code>restricted</code>, <code>baseline</code>, or <code>privileged</code>.</td>
+</tr>
+<tr>
+<td><code>defaults.security.kubernetesAccess</code></td>
+<td><code>true</code></td>
+<td>Session Kubernetes service account token.</td>
+</tr>
+<tr>
+<td><code>defaults.security.kubernetesRole</code></td>
+<td><code>edit</code></td>
+<td>Session role: <code>view</code>, <code>edit</code>, or <code>admin</code>.</td>
+</tr>
+<tr>
+<td><code>defaults.security.externalEgress</code></td>
+<td><code>true</code></td>
+<td>Broad egress to the configured external CIDRs.</td>
+</tr>
+<tr>
+<td><code>defaults.persistence.storageClassName</code></td>
+<td>First allowed class, or cluster default</td>
+<td>Workspace StorageClass; a value outside the allowlist falls back to its first entry.</td>
+</tr>
+<tr>
+<td><code>defaults.files</code></td>
+<td><code>[]</code></td>
+<td>Workshop file bundles.</td>
+</tr>
+<tr>
+<td><code>packages</code></td>
+<td><code>[]</code></td>
+<td>Session extension packages.</td>
+</tr>
+</tbody>
+</table>
+<p>File bundles and extension packages are passed to the session runtime
+unchanged. Set Data enablement before creating Datalabs because the runtime
+saves each environment's Workshop specification. See <a href="../usage_concepts/#files-and-the-workshop-tab">file sources</a>
+for a file bundle example.</p>
+<h4 id="identity-and-endpoints">Identity and endpoints</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>iam.realm</code></td>
+<td><code>default</code></td>
+<td>Keycloak realm; users must already exist here.</td>
+</tr>
+<tr>
+<td><code>iam.namespace</code></td>
+<td><code>keycloak</code></td>
+<td>Namespace selected by IAM egress rules.</td>
+</tr>
+<tr>
+<td><code>iam.issuerURL</code></td>
+<td>Not set</td>
+<td>Public login issuer; required for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>iam.internalURL</code></td>
+<td>Not set</td>
+<td>Token and signing-key URL; required for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>iam.extraAudiences</code></td>
+<td><code>[]</code></td>
+<td>Additional OAuth client audiences.</td>
+</tr>
+<tr>
+<td><code>ingress.enabled</code></td>
+<td><code>false</code></td>
+<td>Permanent Data Ingress; mutually exclusive with <code>httpRoute.enabled</code>.</td>
+</tr>
+<tr>
+<td><code>ingress.class</code></td>
+<td>Empty</td>
+<td>Session ingress class; required for Data Ingress.</td>
+</tr>
+<tr>
+<td><code>ingress.domain</code></td>
+<td><code>default</code> for sessions</td>
+<td>Host suffix; must be set for permanent Data exposure.</td>
+</tr>
+<tr>
+<td><code>ingress.secret</code></td>
+<td><code>wildcard-tls</code> for sessions</td>
+<td>TLS Secret; must be set for Data Ingress.</td>
+</tr>
+<tr>
+<td><code>ingress.annotations</code></td>
+<td><code>{}</code></td>
+<td>Annotations on the permanent Data Ingress.</td>
+</tr>
+<tr>
+<td><code>httpRoute.enabled</code></td>
+<td><code>false</code></td>
+<td>Permanent Data Gateway routes.</td>
+</tr>
+<tr>
+<td><code>httpRoute.enableS3</code></td>
+<td><code>false</code></td>
+<td>Read-only S3 endpoint; requires <code>httpRoute.enabled</code>.</td>
+</tr>
+<tr>
+<td><code>httpRoute.parentName</code></td>
+<td>Not set</td>
+<td>Gateway name; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.parentNamespace</code></td>
+<td>Not set</td>
+<td>Gateway namespace; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.sectionName</code></td>
+<td>Not set</td>
+<td>HTTPS listener; required when Gateway exposure is enabled.</td>
+</tr>
+<tr>
+<td><code>httpRoute.httpSectionName</code></td>
+<td>Not set</td>
+<td>HTTP redirect listener; required when Gateway exposure is enabled.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="storage-and-managed-stores">Storage and managed stores</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>storage.endpoint</code></td>
+<td>Empty</td>
+<td>Endpoint reachable by runtime Pods; the input Secret's <code>AWS_ENDPOINT_URL</code> takes priority.</td>
+</tr>
+<tr>
+<td><code>storage.region</code></td>
+<td>Empty</td>
+<td>Object-store region; the input Secret's <code>AWS_REGION</code> takes priority.</td>
+</tr>
+<tr>
+<td><code>storage.type</code></td>
+<td>Empty</td>
+<td>rclone backend type, usually <code>s3</code>.</td>
+</tr>
+<tr>
+<td><code>storage.provider</code></td>
+<td>Empty for rclone; <code>Other</code> for the S3 proxy</td>
+<td>Object-store provider.</td>
+</tr>
+<tr>
+<td><code>storage.forcePathStyle</code></td>
+<td><code>true</code></td>
+<td>Path-style S3 requests.</td>
+</tr>
+<tr>
+<td><code>storage.secretNamespace</code></td>
+<td>Datalab namespace, or <code>default</code></td>
+<td>Input storage Secret namespace.</td>
+</tr>
+<tr>
+<td><code>storageClasses.allowed</code></td>
+<td><code>[]</code></td>
+<td>Allowed workspace StorageClasses; an empty list permits any configured class.</td>
+</tr>
+<tr>
+<td><code>vcluster.resources.requests</code></td>
+<td>CPU <code>200m</code>, memory <code>1Gi</code>, ephemeral storage <code>1Gi</code></td>
+<td>Control-plane requests; supplied fields override these defaults.</td>
+</tr>
+<tr>
+<td><code>vcluster.resources.limits</code></td>
+<td>CPU <code>4</code>, memory <code>4Gi</code>, ephemeral storage <code>10Gi</code></td>
+<td>Control-plane limits; supplied fields override these defaults.</td>
+</tr>
+<tr>
+<td><code>vcluster.backingStore.database.embedded</code></td>
+<td><code>enabled: false</code>, <code>extraArgs: []</code></td>
+<td>Native embedded database options, including <code>enabled</code>, <code>dataSource</code>, and <code>extraArgs</code>.</td>
+</tr>
+<tr>
+<td><code>vcluster.storage</code></td>
+<td><code>5Gi</code></td>
+<td>Default control-plane PVC size for named virtual clusters.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClasses.allowed</code></td>
+<td>Required when virtual clusters are declared</td>
+<td>Host classes exposed to virtual workloads.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClasses.default</code></td>
+<td>First allowed class</td>
+<td>Virtual workload default class.</td>
+</tr>
+<tr>
+<td><code>vcluster.storageClassName</code></td>
+<td>Virtual default class</td>
+<td>Control-plane StorageClass; must be allowed.</td>
+</tr>
+<tr>
+<td><code>vcluster.issuerCA</code></td>
+<td>System trust</td>
+<td>PEM CA for the HTTPS issuer.</td>
+</tr>
+<tr>
+<td><code>vcluster.discoveryURL</code></td>
+<td>Issuer discovery</td>
+<td>Optional HTTPS discovery address.</td>
+</tr>
+<tr>
+<td><code>vcluster.backendTLS.apiVersion</code></td>
+<td><code>gateway.networking.k8s.io/v1</code></td>
+<td>BackendTLSPolicy API served by the Gateway.</td>
+</tr>
+<tr>
+<td><code>ingress.certificateAuthority</code></td>
+<td>System trust</td>
+<td>PEM Gateway CA embedded in profile kubeconfigs.</td>
+</tr>
+<tr>
+<td><code>database.storageClassName</code></td>
+<td>Cluster default</td>
+<td>PostgreSQL data StorageClass.</td>
+</tr>
+<tr>
+<td><code>database.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>PostgreSQL backup StorageClass.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.parentName</code></td>
+<td>Not set</td>
+<td>PostgreSQL Gateway name.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.parentNamespace</code></td>
+<td>Not set</td>
+<td>PostgreSQL Gateway namespace.</td>
+</tr>
+<tr>
+<td><code>database.tlsRoute.sectionName</code></td>
+<td>Not set</td>
+<td>PostgreSQL TLS listener.</td>
+</tr>
+<tr>
+<td><code>documentStore.storageClassName</code></td>
+<td>Cluster default</td>
+<td>MongoDB data StorageClass.</td>
+</tr>
+<tr>
+<td><code>documentStore.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>MongoDB backup StorageClass.</td>
+</tr>
+<tr>
+<td><code>cacheStore.storageClassName</code></td>
+<td>Cluster default</td>
+<td>Redis data StorageClass.</td>
+</tr>
+<tr>
+<td><code>cacheStore.backupStorageClassName</code></td>
+<td>Cluster default</td>
+<td>Redis backup StorageClass.</td>
+</tr>
+</tbody>
+</table>
+<p>PostgreSQL TLSRoutes are created only when all three
+<code>database.tlsRoute</code> settings are present.</p>
+<h4 id="network-rules">Network rules</h4>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network.externalEgressCIDRs</code></td>
+<td><code>[]</code></td>
+<td>External destination ranges; empty means no broad external allow rule.</td>
+</tr>
+<tr>
+<td><code>network.blacklistIPs</code></td>
+<td><code>[]</code></td>
+<td>CIDRs excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.podCIDRs</code></td>
+<td><code>[]</code></td>
+<td>Host Pod ranges excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.serviceCIDR</code></td>
+<td>Not set</td>
+<td>Host Service range excluded from external egress.</td>
+</tr>
+<tr>
+<td><code>network.excludePolicies</code></td>
+<td><code>[]</code></td>
+<td>Generated policies to omit.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress</code></td>
+<td><code>[]</code></td>
+<td>Explicit cross-namespace destinations.</td>
+</tr>
+<tr>
+<td><code>network.internalIngress</code></td>
+<td><code>[]</code></td>
+<td>Explicit cross-namespace sources.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].namespace</code>, <code>network.internalIngress[].namespace</code></td>
+<td>Required for each entry</td>
+<td>Peer namespace.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].podSelector</code>, <code>network.internalIngress[].podSelector</code></td>
+<td><code>{}</code></td>
+<td>Peer Pod selector; omitted means all Pods in the peer namespace.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports</code>, <code>network.internalIngress[].ports</code></td>
+<td><code>[]</code></td>
+<td>Ports; omitted means all ports.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].port</code>, <code>network.internalIngress[].ports[].port</code></td>
+<td>Required for each port entry</td>
+<td>Named or numbered port.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].protocol</code>, <code>network.internalIngress[].ports[].protocol</code></td>
+<td>Kubernetes default (<code>TCP</code>)</td>
+<td>Port protocol.</td>
+</tr>
+<tr>
+<td><code>network.internalEgress[].ports[].endPort</code>, <code>network.internalIngress[].ports[].endPort</code></td>
+<td>Not set</td>
+<td>End of a numeric port range.</td>
+</tr>
+<tr>
+<td><code>network.internalIngress[].targetPodSelector</code></td>
+<td><code>{}</code></td>
+<td>Runtime Pods selected by the ingress policy; omitted means all runtime Pods.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="network-access">Network access</h3>
+<p>Set <code>network.podCIDRs</code> and <code>network.serviceCIDR</code> to the host cluster's network
+ranges. They are excluded from broad external egress so that it does not also
+allow access to other Datalab namespaces. Use the cluster configuration for
+the Service CIDR. A DNS Service IP alone does not identify the full range.
+Pod CIDRs can be listed with:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>get<span class="w"> </span>nodes<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{range .items[*]}{.metadata.name}{"  "}{.spec.podCIDR}{"  "}{.spec.podCIDRs}{"\n"}{end}'</span>
+</code></pre></div>
+<p>Use <code>0.0.0.0/0</code> and <code>::/0</code> for all external IPv4 and IPv6 destinations,
+or list narrower ranges in <code>network.externalEgressCIDRs</code>.</p>
+<p>For a backend Pod in another namespace, add an <code>internalEgress</code> entry:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">network</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">internalEgress</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">minio</span>
+<span class="w">    </span><span class="nt">podSelector</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">matchLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">v1.min.io/tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TCP</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">443</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TCP</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9000</span>
+</code></pre></div>
+<p>Use <code>network.internalIngress</code> for inbound traffic. It uses the same fields as
+<code>internalEgress</code>, with <code>namespace</code> and <code>podSelector</code> selecting the source:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">network</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">internalIngress</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">operations</span>
+<span class="w">    </span><span class="nt">podSelector</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">matchLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">app.kubernetes.io/name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prometheus</span>
+<span class="w">    </span><span class="nt">targetPodSelector</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">matchLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">app.kubernetes.io/name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">package-r</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TCP</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8888</span>
+</code></pre></div>
+<p>These rules apply to existing runtime namespaces too. See
+<a href="../../security/sandbox-controls/">Network policies</a> for how policies combine,
+Data access, and policy exclusions.</p>
+<h2 id="5-supply-storage-credentials">5. Supply storage credentials</h2>
+<p>Create the object-storage bucket and credentials through your platform's
+storage process or <a href="https://provider-storage.versioneer.at/">Provider Storage</a>.
+Provider Datalab reads an existing input Secret with the same name as the Datalab.</p>
+<p>The Secret must exist in <code>storage.secretNamespace</code> and contain
+<code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>. The storage identity must
+permit bucket listing with <code>s3:ListAllMyBuckets</code>. The endpoint must support
+path-style S3 requests.</p>
+<p>For a manual setup, create the Secret with your credential values:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>-n<span class="w"> </span>datalab<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>s-joe<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_ACCESS_KEY_ID</span><span class="o">=</span><span class="s1">'&lt;KEY_ID&gt;'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span><span class="s1">'&lt;SECRET&gt;'</span>
+</code></pre></div>
+<p>Use the platform's Secret tools for shared installations. Keep live
+credentials out of Git.</p>
+<h2 id="6-create-a-datalab">6. Create a Datalab</h2>
+<p>Save this resource as <code>datalab.yaml</code>. The user <code>joe</code> must already exist in
+Keycloak. This uses the <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml">Joe example</a>
+with an explicit claim namespace.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.internal/v1beta2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Datalab</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-joe</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">users</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">joe</span>
+</code></pre></div>
+<p>Apply it and check its conditions:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>datalab.yaml
+kubectl<span class="w"> </span>get<span class="w"> </span>datalabs<span class="w"> </span>-n<span class="w"> </span>workspace
+kubectl<span class="w"> </span>describe<span class="w"> </span>datalab<span class="w"> </span>s-joe<span class="w"> </span>-n<span class="w"> </span>workspace
+</code></pre></div>
+<p>See <a href="../usage_concepts/">Use a Datalab</a> for session state, managed services,
+workshop files, and sharing.</p>
+<h2 id="7-check-the-installation">7. Check the installation</h2>
+<p>Check that provider and function revisions are healthy and that the
+Datalab reports <code>Synced=True</code> and <code>Ready=True</code>:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>get<span class="w"> </span>providers.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>providerrevisions.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>functions.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>functionrevisions.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>configurations.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>configurationrevisions.pkg.crossplane.io
+kubectl<span class="w"> </span>get<span class="w"> </span>datalabs<span class="w"> </span>-n<span class="w"> </span>workspace
+</code></pre></div>
+<p>If reconciliation fails, read the Datalab conditions and events. Check that
+the required APIs are served. The provider APIs used here are namespaced:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<span class="o">=</span>kubernetes.m.crossplane.io
+kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<span class="o">=</span>helm.m.crossplane.io
+kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<span class="o">=</span>keycloak.m.crossplane.io
+kubectl<span class="w"> </span>api-resources<span class="w"> </span>--api-group<span class="o">=</span>gateway.networking.k8s.io
+</code></pre></div>
+<p>For a managed store, also check its API group from the prerequisite table.
+Verify the Data address, storage access, and each requested service. If you
+declared a session, also check its browser login before giving users access.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026, Versioneer
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "search.suggest", "toc.follow", "toc.permalink"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
