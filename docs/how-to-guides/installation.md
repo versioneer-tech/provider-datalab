@@ -54,31 +54,9 @@ issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 
-Each declared instance gives all users in `spec.users` its built-in
-`vcluster_<instance>_cluster-admin` role through the Datalab users group.
-The role applies inside that virtual cluster. No `groups` entry is required.
-Each Datalab keeps one OAuth2 client. Profile Secrets contain public connection
-settings only. Callers supply credentials separately. The workspace service
-account keeps only `ws_api`; an identity administrator must explicitly assign
-a vcluster role before it can use a virtual API. Scope mappings permit those
-roles in tokens but do not assign them. A ready connection does not prove that
-a caller is authorized. See [API access](vcluster.md#api-access) and
-[upgrade cleanup](vcluster.md#upgrade-from-profile-clients).
-
-The XRD also defines `status.oauth2` as a list with unique OAuth2 client names.
-It refers to the existing `<datalab>-oauth-client` Secret and stays separate
-from service connections. Install the XRD before the composition. See
-[OAuth2 discovery](authentication.md#oauth2-discovery) for readiness and the
-future Workspace API resolution contract.
-
-Datalab users can bind ready connections into a virtual cluster by `type`
-and `name`. List predefined Secret names under `data.customSecrets` to make
-available sources accessible as `type: custom` connections. Entries default
-to the team runtime namespace; an optional `namespace` selects a shared source.
-Missing custom Secrets are omitted from status and do not block the Datalab.
-If a storage or custom Secret is outside the runtime namespace, the provider
-grants the syncer read access to that source namespace. It must exist before vCluster starts. See
-[Secret bindings](vcluster.md#secret-bindings).
+For virtual API access, role assignments, and Secret bindings, use the
+[virtual cluster guide](vcluster.md). Profile downloads contain public settings;
+callers supply credentials separately.
 
 ## 1. Choose the claim namespace
 
@@ -146,9 +124,12 @@ kubectl get configurationrevisions.pkg.crossplane.io
 The package installs the Datalab resource definition and composition. Its
 providers and functions are managed separately by the platform.
 
-The package build reads `responseTTL: 5m` from `composition/settings.yaml`.
-It applies the value to every Python response and the auto-ready input.
-To change it, rebuild the composition and release a new package.
+For a source installation, apply `xrd.yaml` before `composition.yaml` so
+Kubernetes retains the [OAuth2 discovery](authentication.md#oauth2-discovery)
+fields.
+
+The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md) explains how to change
+the pipeline response TTL before building a package.
 
 ## 4. Set the shared environment
 

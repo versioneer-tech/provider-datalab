@@ -1,18 +1,16 @@
 # Provider Datalab
 
-Provider Datalab creates shared data workspaces on Kubernetes. Teams declare
-users, sessions, and managed services in a `Datalab` resource. Crossplane
-creates the resources from the platform's EnvironmentConfig.
-
-Sessions provide editors, terminals, and persistent workspaces.
-The shared Data service, packageR, provides object-storage browsing and file
-sharing. Datalabs can also request PostgreSQL, MongoDB, and Redis.
+A `Datalab` gives a team virtual Kubernetes APIs, shared data, and managed
+databases through one resource. Crossplane provisions them from the platform's
+EnvironmentConfig. Optional browser sessions provide editors and terminals
+alongside those services.
 
 | Task | Guide |
 | --- | --- |
 | Prepare the platform | [Installation and EnvironmentConfig reference](how-to-guides/installation.md) |
-| Manage sessions, stores, and shared files | [Use a Datalab](how-to-guides/usage_concepts.md) |
+| Run Kubernetes workloads and bind service Secrets | [Virtual clusters](how-to-guides/vcluster.md) |
 | Protect browser and machine access | [Authentication](how-to-guides/authentication.md) |
+| Use stores, share files, and start browser sessions | [Use a Datalab](how-to-guides/usage_concepts.md) |
 | Read data with AWS tools | [S3 client access](how-to-guides/s3-access.md) |
 | Run Dask, MLflow, or psql | [Additional services](how-to-guides/additional_services.md) |
 | Review access controls | [Security](security/index.md) |

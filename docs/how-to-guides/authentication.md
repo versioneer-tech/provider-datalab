@@ -1,18 +1,16 @@
 # Authentication
 
-The platform ingress controller protects Datalab sessions. Configure sign-in
-and authorization before users start a session. The examples below use Kyverno
-policies to configure NGINX or APISIX session Ingress objects.
+Each Datalab has one Keycloak client for browser and machine access. Virtual
+APIs validate the caller's token. The platform ingress controller enforces
+browser sign-in and authorization for sessions.
 
 ## Keycloak clients and roles
 
-Users in `spec.users` must already exist in the realm selected by
-`EnvironmentConfig.data.iam.realm`. Provider Datalab creates a confidential
-client named after the Datalab, groups for its users and administrators, and
-their memberships and role mappings. The client disables implicit, device,
-and direct access grants. Role scope mappings limit the Datalab client roles
-included in its tokens. The same client serves virtual cluster access.
-There are no OAuth2 clients or service accounts for individual profiles.
+Users in `spec.users` must exist in the realm selected by
+`EnvironmentConfig.data.iam.realm`. The provider creates a confidential client
+named after the Datalab, user and administrator groups, and their memberships.
+The client disables implicit, device, and direct access grants. Scope mappings
+limit which assigned client roles can appear in tokens; they do not grant roles.
 
 | Role | Assigned to | Used for |
 | --- | --- | --- |
@@ -20,27 +18,42 @@ There are no OAuth2 clients or service accounts for individual profiles.
 | `ws_admin` | Datalab administrators | Browser access with the admin role |
 | `ws_api` | The client service account | Machine access through client credentials |
 
-The runtime Secret `<datalab>-oauth2-client` contains `client_id` and
-`client_secret`. Anyone who can read it can request a machine token for that
-Datalab. The source credential Secret is `<datalab>-oauth-client` in the claim
-namespace. Give access only to users and services that need it.
+Virtual APIs require a configured vcluster role as well as the Datalab audience.
+The workspace service account has only `ws_api` by default and cannot access
+those APIs until an identity administrator explicitly assigns a vcluster role.
+Datalab users receive each instance's built-in admin role through the users group.
+See [virtual API access](vcluster.md#api-access) for role boundaries and caller
+credential files.
 
-Virtual API profile Secrets contain no authentication credentials. Humans
-supply their own access token; machines supply the existing workspace client
-secret separately. The workspace service account receives only `ws_api` by
-default. A vcluster role must be assigned explicitly before its token can pass
-virtual API authentication. Scope mappings allow all configured vcluster roles
-in tokens without granting them. The API checks issuer, audience, signature,
-expiry, and configured roles. Kubernetes RBAC sets the permitted operations.
-See [virtual API access](vcluster.md#api-access).
+## Credential Secrets
 
-Workspace API permissions for Secret downloads are unchanged. Permission to
-read a vcluster profile does not authorize the caller to read database,
-registry, workspace OAuth2, or other service credentials.
+| Secret | Namespace | Use |
+| --- | --- | --- |
+| `<datalab>-oauth-client` | Claim namespace | Source credentials for the existing workspace client |
+| `<datalab>-oauth2-client` | Runtime namespace | Credential copy used by Datalab services, with `client_id` and `client_secret` |
+
+Anyone with the client secret can request a token as its service account.
+Grant read access only to callers authorized to use that identity. Virtual API
+profile Secrets contain public connection settings and no authentication
+credentials. Permission to download a profile is separate from permission to
+read OAuth2, database, registry, or other service credentials.
+
+## Tokens and audiences
+
+For machine access, exchange the workspace client ID and secret with
+`grant_type=client_credentials`, then send the access token to the service.
+Each service must check its required roles and audience. The virtual API
+helper accepts the secret in a separate file; see [machine access](vcluster.md#machine-access).
+
+List additional token audiences in `EnvironmentConfig.data.iam.extraAudiences`.
+The provider adds the Datalab client ID as an audience when its S3 endpoint or
+named virtual APIs are enabled. Other OAuth clients that call these services
+must emit the required Datalab audience and roles too.
 
 ## OAuth2 discovery
 
-The provider publishes the existing Datalab client in a separate status list:
+The provider publishes the existing client in `status.oauth2`, separately from
+service connections:
 
 ```yaml
 status:
@@ -54,39 +67,36 @@ status:
     ready: true
 ```
 
-`name` is the actual OAuth2 client ID, not the Keycloak internal UUID. Names
-are unique. `type` is always `client`; there is no redundant `clientId` field.
-Status contains only
-metadata and Secret references; client secrets and tokens stay in Secrets.
+`name` is the actual OAuth2 client ID, not Keycloak's internal UUID. Names are
+unique and `type` is always `client`. Entries contain only metadata and Secret
+references; credentials stay in the referenced Secret.
 
-Readiness requires both the observed client and its credential Secret to be
-ready, with matching client credentials. The provider clears stale entries
-when the client or Secret is removed. OAuth2 discovery does not grant access
-to that Secret and does not add OAuth2 entries to `status.connections`.
+Readiness requires the observed client and credential Secret to be ready, with
+matching client credentials. Removed sources clear stale entries. Discovery
+does not grant permission to read a Secret or authorize a service request.
 
-The following contract is for a subsequent Workspace API change. It is not
-implemented by this provider:
+## Session ingress
 
-- `resolve_oauth2=<client-id>` is disabled by default. Resolution is allowed
-  only for `ws_access`, `ws_admin`, or global administrators. `ws_api` is denied.
-- `resolve_connections`, including wildcards, never resolves OAuth2 credentials.
-- Permission to resolve database, registry, or other service credentials is a
-  separate decision.
+Configure sign-in before users start a session. The examples use Kyverno to
+configure NGINX or APISIX session Ingress objects.
 
-Install the new XRD before the composition so Kubernetes retains this status
-field. A consumer must use the list entry's `name` and `secretRef`. If a prior
-deployment used an OAuth2 map, clear that field before installing the list schema.
-No client or credential rotation is required for discovery. See
-[profile-client cleanup](vcluster.md#upgrade-from-profile-clients) for the
-separate vcluster upgrade.
+### Set the shared ingress settings
 
-A service can require extra token audiences. List them in
-`EnvironmentConfig.data.iam.extraAudiences` and use the same values in the
-service's token checks. The S3 endpoint adds the Datalab client ID as an
-audience when enabled. Other OAuth clients that call these services must emit
-the required audience and roles too.
+Set the ingress class, domain, and TLS Secret in the
+[EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
+values in the session runtime installation, for example:
 
-## Generated session resources
+```yaml
+clusterIngressDomain: lab.acme.com
+clusterIngressClass: apisix
+tlsCertificateRef:
+  name: wildcard-tls
+  namespace: workspace
+```
+
+Use a wildcard certificate for `*.lab.acme.com`.
+
+### Generated session resources
 
 For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
 `lab.acme.com`. The session ingress hosts include:
@@ -123,28 +133,7 @@ http://localhost:*
 A service that belongs to `s-jane` can use this client. Shared browser ingress
 can use a central platform client and check the generated Datalab roles.
 
-To call a Datalab-owned service with a machine token, read `client_id` and
-`client_secret` from `<datalab>-oauth2-client`, request a token with
-`grant_type=client_credentials`, then send that access token to the service. Its
-policy should require `ws_api` and any configured audience.
-
-## Set the shared ingress settings
-
-Set the ingress class, domain, and TLS Secret in the
-[EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
-values in the session runtime installation, for example:
-
-```yaml
-clusterIngressDomain: lab.acme.com
-clusterIngressClass: apisix
-tlsCertificateRef:
-  name: wildcard-tls
-  namespace: workspace
-```
-
-Use a wildcard certificate for `*.lab.acme.com`.
-
-## Apply ingress policy
+### Apply ingress policy
 
 Apply controller settings through platform policy so they cover every session
 Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
@@ -152,7 +141,7 @@ Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
 Kyverno is required for these policies, not for Provider Datalab itself.
 Adapt the domains, issuer, and controller settings in the linked manifests.
 
-### NGINX Ingress with OAuth2 Proxy
+#### NGINX Ingress with OAuth2 Proxy
 
 Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
 URI such as `https://auth.lab.acme.com/oauth2/callback`. Its authorization
@@ -163,7 +152,7 @@ to add external-auth annotations to matching session Ingress objects.
 Set the proxy cookie domain to cover the session hosts, for example
 `.lab.acme.com`, and allow redirects only to that domain.
 
-### APISIX Ingress configured by Kyverno
+#### APISIX Ingress configured by Kyverno
 
 The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
 gives Kyverno permission to create `ApisixPluginConfig` resources, generates

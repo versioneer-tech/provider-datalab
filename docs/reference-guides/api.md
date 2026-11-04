@@ -21,7 +21,7 @@ Resource Types:
 
 
 
-A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+A Datalab is a namespaced composite resource for a team. It defines membership, virtual clusters, data services, and optional sessions.
 
 <table>
     <thead>
@@ -474,15 +474,6 @@ Virtual Kubernetes clusters keyed by instance name.
 
 Current observed state of the datalab.
 
-`oauth2` is a list of objects with `name`, `type`, `issuerUrl`, `secretRef`, and `ready`.
-`type` is required and its only allowed value is `client`.
-`name` is the actual OAuth2 client ID. The XRD uses a map list keyed by `name`
-to require unique names. `secretRef` requires a Secret `name` and `namespace`.
-Readiness uses the observed client and credential Secret. Entries are removed
-when either source is removed. The list contains no credentials or redundant `clientId` field and stays
-separate from `connections`. See
-[OAuth2 discovery](../how-to-guides/authentication.md#oauth2-discovery).
-
 <table>
     <thead>
         <tr>
@@ -497,6 +488,13 @@ separate from `connections`. See
         <td>[]object</td>
         <td>
           Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery. Virtual API readiness does not imply caller authorization.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusoauth2index">oauth2</a></b></td>
+        <td>[]object</td>
+        <td>
+          OAuth2 client metadata and credential Secret references, keyed by unique client name. Contains no credentials.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -563,7 +561,7 @@ access, including for the built-in `cluster-admin` profile.
         <td>
           <br/>
           <br/>
-            <i>Enum</i>: s3, postgres, mongo, redis, vcluster<br/>
+            <i>Enum</i>: s3, postgres, mongo, redis, custom, vcluster<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -638,6 +636,21 @@ access, including for the built-in `cluster-admin` profile.
       </tr></tbody>
 </table>
 
+
+### Datalab.status.oauth2[index]
+
+The list uses `x-kubernetes-list-type: map` with `name` as its key. Names must
+be unique. The provider publishes the existing workspace client and removes
+its entry when the client or credential source is removed. See
+[OAuth2 discovery](../how-to-guides/authentication.md#oauth2-discovery).
+
+| Name | Type | Description | Required |
+| --- | --- | --- | --- |
+| `name` | string | Actual OAuth2 client ID. | true |
+| `type` | enum | Always `client`. | true |
+| `issuerUrl` | string | Token issuer URL. | true |
+| `secretRef` | object | Credential Secret reference, with required `name` and `namespace`. | true |
+| `ready` | boolean | The observed client and matching credential Secret are ready. Does not grant access to credentials or services. | true |
 
 ### Datalab.status.sessions[key]
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>

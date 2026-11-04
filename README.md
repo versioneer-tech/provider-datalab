@@ -4,14 +4,11 @@
 [![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab)
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
-> [!NOTE]
-> From Datalab 0.12.0, the package path changes from
-> `ghcr.io/versioneer-tech/provider-datalab/educates`
-> to `ghcr.io/versioneer-tech/provider-datalab`.
+Give your data team a virtual Kubernetes cluster with shared data and databases.
 
-Provider Datalab is a Crossplane configuration package for shared data
-workspaces. A team requests storage access, compute sessions, and managed
-services through one `Datalab` resource.
+Declare the team and its services in one `Datalab`.
+Crossplane provisions them under the platform's access, network, and storage
+rules. Team members can run Kubernetes workloads and work with the same data.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2
@@ -20,60 +17,38 @@ metadata:
   name: s-jeff
   namespace: workspace
 spec:
-  users:
-  - jeff
-  - jim
-  - jane
+  users: [jeff, jim, jane]
+  vclusters:
+    vc0:
+      storage: 5Gi
   databases:
     pg0:
-      names:
-      - dev
-      - prod
+      names: [results]
       storage: 1Gi
-      backupStorage: 3Gi
 ```
 
-The platform operator sets identity, network, storage, and security rules.
+Each team member can administer the virtual cluster. Its workloads can use the
+team's databases and object storage. API access uses the caller's token roles;
+downloading a profile grants no access. Optional browser sessions provide
+editors and terminals for the same team.
 
-Sessions provide a browser editor, terminal, and persistent workspace.
-The shared Data service, packageR, lets users browse and share object storage.
-Datalabs can also request PostgreSQL, MongoDB, Redis, and named virtual Kubernetes
-clusters. Each virtual API uses `https://<datalab>.<domain>/.<instance>`, such as
-`https://s-joe.lab.acme.com/.vc0`.
-Each declared virtual cluster gives all Datalab users its built-in
-`cluster-admin` role. Optional `groups` define additional access profiles.
+## Get started
 
-Use `secretBindings` to select a Datalab connection by `type` and `name`
-and sync its Secret into a virtual cluster.
-`status.connections` supplies source Secret references. Only ready connections
-generate mappings. Predefined custom Secrets appear there when available in
-the team namespace. The native vCluster sync keeps Secret data keys unchanged. See
-[Secret bindings](docs/how-to-guides/vcluster.md#secret-bindings).
+[Read the documentation online](https://provider-datalab.versioneer.at/), or use
+the guides in this checkout:
 
-`status.oauth2` lists OAuth2 client names, issuer URLs, source Secret references,
-and readiness. OAuth2 discovery stays separate from `status.connections` and
-contains no credentials.
+| Task | Guide |
+| --- | --- |
+| Install the package and set platform defaults | [Installation](docs/how-to-guides/installation.md) |
+| Run Kubernetes workloads and bind service Secrets | [Virtual clusters](docs/how-to-guides/vcluster.md) |
+| Configure sign-in, machine access, and OAuth2 discovery | [Authentication](docs/how-to-guides/authentication.md) |
+| Use stores, share files, and start browser sessions | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
+| Read object storage with AWS tools | [S3 access](docs/how-to-guides/s3-access.md) |
+| Review permissions or look up fields | [Security](docs/security/index.md), [API reference](docs/reference-guides/api.md) |
 
-The integration tests use Crunchy PGO `6.0.2`, MongoDB Kubernetes
-Operator `1.14.0`, and Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`).
-See the [operator prerequisites](docs/how-to-guides/installation.md#prerequisites)
-for the required resource APIs.
-
-<img src="docs/imgs/datalab-vs-code-server.png" height="200" alt="Datalab browser editor"/>
-
-## Documentation
-
-- [Installation](docs/how-to-guides/installation.md): prerequisites, setup, and all EnvironmentConfig values and defaults.
-- [Use a Datalab](docs/how-to-guides/usage_concepts.md): sessions, stores, and file sharing.
-- [Examples](examples/base): complete Datalab manifests.
-- [Authentication](docs/how-to-guides/authentication.md): Keycloak roles and session ingress protection.
-- [S3 client access](docs/how-to-guides/s3-access.md): read data with AWS tools.
-- [Virtual clusters](docs/how-to-guides/vcluster.md): database and resource settings, access profiles, and a PostgreSQL-backed STAC catalog.
-- [Additional services](docs/how-to-guides/additional_services.md): run Dask, MLflow, or psql from a workspace.
-- [Security](docs/security/index.md): access rules and operator responsibilities.
-- [API reference](docs/reference-guides/api.md): Datalab fields and service types.
-
-The documentation is also [published online](https://provider-datalab.versioneer.at/).
+See [examples/base](examples/base) for complete Datalab manifests and
+[Additional services](docs/how-to-guides/additional_services.md) for Dask,
+MLflow, and psql examples. Operator requirements are in the installation guide.
 
 ## Local checks
 
@@ -88,10 +63,6 @@ pre-commit run --all-files
 
 Edit the Python steps in `composition/` and the manifests in `templates/`.
 See [Manifest templates](templates/README.md) for the source layout and build.
-
-`composition/settings.yaml` sets one response TTL for all pipeline steps.
-The default is `5m`. See the [installation guide](docs/how-to-guides/installation.md)
-for package setup.
 
 See [Unit tests](tests/README.md) for fixtures and focused checks, and
 [Integration tests](tests/integration/README.md) for the dedicated Kind cluster.

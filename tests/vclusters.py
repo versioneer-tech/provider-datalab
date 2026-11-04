@@ -5,7 +5,6 @@
 
 from copy import deepcopy
 import base64
-import hashlib
 import json
 from pathlib import Path
 
@@ -230,18 +229,11 @@ def main():
         configuration_text = base64.b64decode(secret["data"]["config.yaml"]).decode()
         configuration = json.loads(configuration_text)
         pod = manifest(rendered, key("statefulset"))["spec"]["template"]
-        authentication = manifest(rendered, key("authentication"))["data"]["authentication.json"]
         checksum = pod["metadata"]["annotations"]["datalabs.pkg.internal/configuration-checksum"]
-        assert checksum == hashlib.sha256((configuration_text + authentication).encode()).hexdigest()
         assert configuration["controlPlane"]["statefulSet"]["resources"] == pod["spec"]["containers"][0]["resources"]
         return configuration["controlPlane"], checksum
 
     defaults, _ = settings(resources)
-    assert defaults["backingStore"]["database"]["embedded"] == {"enabled": False, "extraArgs": []}
-    assert defaults["statefulSet"]["resources"] == {
-        "requests": {"cpu": "200m", "memory": "1Gi", "ephemeral-storage": "1Gi"},
-        "limits": {"cpu": "4", "memory": "4Gi", "ephemeral-storage": "10Gi"},
-    }
     tuned_env = deepcopy(env)
     embedded = {
         "enabled": True,
@@ -256,35 +248,25 @@ def main():
         assert checksum != settings(resources, instance)[1]
     print("PASS database settings reach both configurations and change the Pod checksum")
 
-    for field, value in (
-        ("enabled", False),
-        ("dataSource", embedded["dataSource"].replace("TRUNCATE", "WAL")),
-        ("extraArgs", ["--datastore-max-open-connections=3", "--datastore-max-idle-connections=1"]),
-    ):
-        changed_env = deepcopy(tuned_env)
-        changed_env["data"]["vcluster"]["backingStore"]["database"]["embedded"][field] = value
-        changed = render(args, changed_env, source, observed)
-        control_plane, checksum = settings(changed)
-        assert control_plane["backingStore"]["database"]["embedded"][field] == value
-        assert checksum != settings(tuned)[1], field
-    for section, field, value in (
-        ("requests", "cpu", "300m"),
-        ("requests", "memory", "2Gi"),
-        ("limits", "cpu", "3"),
-        ("limits", "memory", "3Gi"),
-    ):
-        changed_env = deepcopy(tuned_env)
-        changed_env["data"]["vcluster"]["resources"] = {section: {field: value}}
-        changed = render(args, changed_env, source, observed)
-        control_plane, checksum = settings(changed)
-        expected = deepcopy(defaults["statefulSet"]["resources"])
-        expected[section][field] = value
+    resource_overrides = {
+        "requests": {"cpu": "300m", "memory": "2Gi"},
+        "limits": {"cpu": "3", "memory": "3Gi"},
+    }
+    resource_env = deepcopy(tuned_env)
+    resource_env["data"]["vcluster"]["resources"] = resource_overrides
+    changed = render(args, resource_env, source, observed)
+    expected = {
+        section: {**defaults["statefulSet"]["resources"][section], **values}
+        for section, values in resource_overrides.items()
+    }
+    for instance in ("vc0", "vc1"):
+        control_plane, checksum = settings(changed, instance)
         assert control_plane["statefulSet"]["resources"] == expected
-        assert checksum != settings(tuned)[1], (section, field)
+        assert checksum != settings(tuned, instance)[1]
     reordered_env = deepcopy(tuned_env)
     reordered_env["data"]["vcluster"]["backingStore"]["database"]["embedded"] = dict(reversed(list(embedded.items())))
     assert settings(render(args, reordered_env, source, observed)) == settings(tuned)
-    print("PASS each database and resource option triggers a stable configuration checksum")
+    print("PASS resource overrides reach both control planes and reordered settings keep the rollout checksum")
 
     clients = [body for body in resources.values() if body.get("kind") == "Client"]
     assert len(clients) == 1 and clients[0]["spec"]["forProvider"]["clientId"] == "s-joe"

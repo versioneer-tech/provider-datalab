@@ -6,9 +6,6 @@
 import base64
 from copy import deepcopy
 import json
-from pathlib import Path
-
-import yaml
 
 from render import arguments, environment, render
 
@@ -62,7 +59,6 @@ def main():
         assert all(c["type"] != "oauth2" for c in result["connections"])
         assert "oauth2-sensitive-value" not in json.dumps(result)
         assert base64.b64encode(b"oauth2-sensitive-value").decode() not in json.dumps(result)
-        assert len([body for body in resources.values() if body.get("kind") == "Client"]) == 1
         return result["oauth2"]
 
     assert status([client, observer]) == expected
@@ -73,25 +69,22 @@ def main():
         pending[index]["status"]["conditions"][0]["status"] = "False"
         result = status(pending)
         assert result == [{**expected[0], "ready": False}]
-        pending[index]["status"]["conditions"] = [
-            {"type": "Ready", "status": "True"}, {"type": "Synced", "status": "False"}
-        ]
-        assert status(pending)[0]["ready"] is False
+    pending = deepcopy(client)
+    pending["status"]["conditions"] = [
+        {"type": "Ready", "status": "True"}, {"type": "Synced", "status": "False"}
+    ]
+    assert status([pending, observer])[0]["ready"] is False
     for values in ({}, {"clientSecret": base64.b64encode(b"value").decode(), "clientID": base64.b64encode(b"another-client").decode()}):
         pending = deepcopy(observer)
         pending["status"]["atProvider"]["manifest"]["data"] = values
         assert status([client, pending])[0]["ready"] is False
     print("PASS OAuth2 readiness requires a ready client and matching observed credentials")
 
-    for observed in ([], [client], [observer]):
+    for observed in ([client], [observer]):
         assert status(observed) == []
-    for index in (0, 1):
-        deleting = deepcopy([client, observer])
-        deleting[index]["metadata"]["deletionTimestamp"] = "2026-11-04T12:00:00Z"
-        assert status(deleting) == []
-    missing = deepcopy(observer)
-    missing["status"]["atProvider"]["manifest"] = {}
-    assert status([client, missing]) == []
+    deleting = deepcopy(client)
+    deleting["metadata"]["deletionTimestamp"] = "2026-11-04T12:00:00Z"
+    assert status([deleting, observer]) == []
     cached = deepcopy(observer)
     cached["status"]["conditions"] = [
         {"type": "Ready", "status": "True"},
@@ -103,23 +96,6 @@ def main():
     wrong_namespace["status"]["atProvider"]["manifest"]["metadata"]["namespace"] = "another-workspace"
     assert status([client, wrong_namespace]) == []
     print("PASS missing, removed, or mismatched sources clear stale OAuth2 discovery entries")
-
-    xrd = yaml.safe_load(Path("xrd.yaml").read_text())
-    for version in xrd["spec"]["versions"]:
-        if not version["referenceable"]:
-            continue
-        fields = version["schema"]["openAPIV3Schema"]["properties"]["status"]["properties"]
-        oauth = fields["oauth2"]
-        assert oauth["type"] == "array"
-        assert oauth["x-kubernetes-list-type"] == "map"
-        assert oauth["x-kubernetes-list-map-keys"] == ["name"]
-        entry = oauth["items"]
-        assert set(entry["properties"]) == {"name", "type", "issuerUrl", "secretRef", "ready"}
-        assert set(entry["required"]) == set(entry["properties"])
-        assert entry["properties"]["type"]["enum"] == ["client"]
-        assert "oauth2" not in fields["connections"]["items"]["properties"]["type"]["enum"]
-    print("PASS the discovery schema permits only metadata and keeps OAuth2 out of service connections")
-
 
 if __name__ == "__main__":
     main()

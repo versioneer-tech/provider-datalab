@@ -182,7 +182,7 @@ before you apply these manifests in your claim namespace.
 | --- | --- | --- |
 | [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data without a session. |
 | [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
-| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A started session and PostgreSQL. |
+| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and a started session. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Started and stopped sessions with workshop files. |
 
 The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/environmentconfig.yaml)
@@ -203,8 +203,10 @@ kubectl describe datalab s-jeff -n workspace
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
 Session state, phase, messages, and URLs remain in `status.sessions`.
-Virtual cluster access profiles are reported in `status.connections`. See
-[API access](vcluster.md#api-access) for endpoints and Secret references.
+Service connections and public virtual API profiles are in `status.connections`.
+OAuth2 discovery is separate, in `status.oauth2`. Readiness does not confirm
+caller authorization. See [API access](vcluster.md#api-access) and
+[OAuth2 discovery](authentication.md#oauth2-discovery) for Secret references.
 
 ### Connect to databases
 
