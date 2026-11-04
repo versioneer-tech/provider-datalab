@@ -98,7 +98,7 @@ spec:
                     properties:
                       groups:
                         type: array
-                        description: Access profiles with separate kubeconfigs and Kubernetes RBAC.
+                        description: Additional access profiles. All Datalab users receive the built-in cluster-admin profile.
                         maxItems: 20
                         x-kubernetes-list-type: map
                         x-kubernetes-list-map-keys:
@@ -112,6 +112,8 @@ spec:
                           x-kubernetes-validations:
                           - rule: (self.namespace == "*") == (self.role == "cluster-admin")
                             message: cluster-admin requires namespace '*'; other roles require a namespace.
+                          - rule: self.name != "cluster-admin" || (self.namespace == "*" && self.role == "cluster-admin")
+                            message: The built-in cluster-admin profile cannot be changed.
                           properties:
                             name:
                               type: string
@@ -134,7 +136,6 @@ spec:
                               - edit
                               - admin
                               - cluster-admin
-                        minItems: 1
                       secretBindings:
                         type: array
                         default: []
@@ -168,8 +169,6 @@ spec:
                       storage:
                         type: string
                         description: Control-plane PVC size. The environment default is used when omitted.
-                    required:
-                    - groups
                 databases:
                   type: object
                   maxProperties: 100

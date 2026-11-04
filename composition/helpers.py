@@ -125,6 +125,14 @@ def _vcluster_role(instance, group):
     return f"vcluster:{instance}:{group}"
 
 
+def _vcluster_groups(config):
+    groups = {group["name"]: group for group in config.get("groups") or []}
+    groups["cluster-admin"] = {
+        "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
+    }
+    return [groups[name] for name in sorted(groups)]
+
+
 def _runtime_namespace(req, name):
     environment = _extract_manifest(
         req.observed.resources.get(f"workshopenvironment-{name}")

@@ -40,6 +40,8 @@ The shared Data service, packageR, lets users browse and share object storage.
 Datalabs can also request PostgreSQL, MongoDB, Redis, and named virtual Kubernetes
 clusters. Each virtual API uses `https://<datalab>.<domain>/.<instance>`, such as
 `https://s-joe.lab.acme.com/.vc0`.
+Each declared virtual cluster gives all Datalab users its built-in
+`cluster-admin` role. Optional `groups` define additional access profiles.
 
 Use `secretBindings` to select a Datalab connection by `type` and `name`
 and sync its Secret into a virtual cluster.

@@ -842,6 +842,13 @@ spec:
         def _vcluster_role(instance, group):
             return f"vcluster:{instance}:{group}"
 
+        def _vcluster_groups(config):
+            groups = {group["name"]: group for group in config.get("groups") or []}
+            groups["cluster-admin"] = {
+                "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
+            }
+            return [groups[name] for name in sorted(groups)]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -996,7 +1003,7 @@ spec:
                 f"{xr_name}-ws-api",
             )
 
-            def put_keycloak_role_mapper(key_base, role_name_override):
+            def put_keycloak_role_mapper(key_base, role_name_override, name_override=None):
                 put(
                     key_base,
                     _render_template(
@@ -1006,7 +1013,7 @@ spec:
                         xr_name=xr_name,
                         role_name_override=role_name_override,
                     ),
-                    role_name_override,
+                    name_override or role_name_override,
                 )
 
             put_keycloak_role_mapper("keycloak-role-mapper-user", f"{xr_name}-ws-access")
@@ -1047,7 +1054,16 @@ spec:
                     "keycloak/user-group-roles",
                     realm=realm,
                     xr_name=xr_name,
-                    role_name=f"{xr_name}-ws-access",
+                    role_refs=[
+                        {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
+                        for role in [
+                            f"{xr_name}-ws-access",
+                            *[
+                                _vcluster_profile(xr_name, instance, "cluster-admin")
+                                for instance in sorted(spec.get("vclusters") or {})
+                            ],
+                        ]
+                    ],
                 ),
             )
 
@@ -1103,7 +1119,7 @@ spec:
             )
 
             for instance, config in sorted((spec.get("vclusters") or {}).items()):
-                for group in sorted(config["groups"], key=lambda item: item["name"]):
+                for group in _vcluster_groups(config):
                     profile = _vcluster_profile(xr_name, instance, group["name"])
                     role_name = _vcluster_role(instance, group["name"])
                     put(
@@ -1135,6 +1151,11 @@ spec:
                         ),
                         profile,
                     )
+                    if group["name"] == "cluster-admin":
+                        put_keycloak_role_mapper(
+                            "keycloak-vcluster-user-role-mapper", profile,
+                            _resource_name("vcluster", xr_name, instance, "users-scope"),
+                        )
                     state = (getattr(req.observed, "resources", {}) or {}).get(
                         f"keycloak-vcluster-client-{profile}"
                     )
@@ -1404,10 +1425,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
-              roleIdsRefs:
-              - name: ${role_name}
-                policy:
-                  resolution: Required
+              roleIdsRefs: ${role_refs}
         keycloak/user-memberships:
           apiVersion: group.keycloak.m.crossplane.io/v1alpha1
           kind: Memberships
@@ -2471,6 +2489,13 @@ spec:
         def _vcluster_role(instance, group):
             return f"vcluster:{instance}:{group}"
 
+        def _vcluster_groups(config):
+            groups = {group["name"]: group for group in config.get("groups") or []}
+            groups["cluster-admin"] = {
+                "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
+            }
+            return [groups[name] for name in sorted(groups)]
+
         def _runtime_namespace(req, name):
             environment = _extract_manifest(
                 req.observed.resources.get(f"workshopenvironment-{name}")
@@ -2602,7 +2627,7 @@ spec:
             hostname = f"{name}.{domain}"
             backend_hostname = f"{runtime}.{namespace}.svc"
             audience = json.dumps(name)
-            groups = sorted(instance_config["groups"], key=lambda item: item["name"])
+            groups = _vcluster_groups(instance_config)
             roles = [_vcluster_role(instance, group["name"]) for group in groups]
             role_list = json.dumps(roles)
             jwt_issuer = {"url": issuer, "audiences": [name], "audienceMatchPolicy": "MatchAny"}
@@ -7320,6 +7345,13 @@ spec:
         def _vcluster_profile(name, instance, group):
             return _resource_name(name, "vcluster", instance, group, limit=55)
 
+        def _vcluster_groups(config):
+            groups = {group["name"]: group for group in config.get("groups") or []}
+            groups["cluster-admin"] = {
+                "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
+            }
+            return [groups[name] for name in sorted(groups)]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -7367,7 +7399,7 @@ spec:
                         gateway_ca.encode()
                     ).decode()
                 issuer = str((env.get("iam") or {})["issuerURL"]).rstrip("/")
-                for group in sorted(config["groups"], key=lambda item: item["name"]):
+                for group in _vcluster_groups(config):
                     profile = _vcluster_profile(name, instance, group["name"])
                     connection_name = _resource_name("vcluster", instance, group["name"])
                     oauth = _extract_data(
@@ -7705,8 +7737,9 @@ spec:
                 "groupId": ("group.keycloak.m.crossplane.io/v1alpha1", "Group"),
             }
             for key, body in objects.items():
-                if key.startswith(
-                    "keycloak-vcluster-"
+                if (
+                    key.startswith("keycloak-vcluster-")
+                    or key == f"keycloak-roles-user-{name}"
                 ) and ".keycloak.m.crossplane.io/" in body.get("apiVersion", ""):
                     params = body.get("spec", {}).get("forProvider", {})
                     for field, (api_version, kind) in identity_refs.items():

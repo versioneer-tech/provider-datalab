@@ -158,8 +158,9 @@ def compose(req, rsp):
         "groupId": ("group.keycloak.m.crossplane.io/v1alpha1", "Group"),
     }
     for key, body in objects.items():
-        if key.startswith(
-            "keycloak-vcluster-"
+        if (
+            key.startswith("keycloak-vcluster-")
+            or key == f"keycloak-roles-user-{name}"
         ) and ".keycloak.m.crossplane.io/" in body.get("apiVersion", ""):
             params = body.get("spec", {}).get("forProvider", {})
             for field, (api_version, kind) in identity_refs.items():

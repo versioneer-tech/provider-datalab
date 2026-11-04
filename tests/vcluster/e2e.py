@@ -259,6 +259,39 @@ def admin_token():
         return json.load(result)["access_token"]
 
 
+def verify_member_roles(removed, instances):
+    expected = set() if removed else {
+        f"vcluster:{instance}:cluster-admin" for instance in instances
+    }
+
+    def assigned():
+        admin = admin_token()
+        clients = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)
+        users = identity("/admin/realms/integration/users?username=verify-s3&exact=true", token=admin)
+        assert len(clients) == len(users) == 1
+        client = "/admin/realms/integration/clients/" + clients[0]["id"]
+        claims = identity(
+            client + "/evaluate-scopes/generate-example-access-token?"
+            + urlencode({"userId": users[0]["id"], "scope": "openid"}),
+            token=admin,
+        )
+        roles = set(claims.get("resource_access", {}).get(LAB, {}).get("roles", []))
+        if {role for role in roles if role.startswith("vcluster:")} != expected:
+            return False
+        assert ("ws_access" in roles) == (not removed)
+        account = identity(client + "/service-account-user", token=admin)
+        mappings = identity(
+            "/admin/realms/integration/users/" + account["id"]
+            + "/role-mappings/clients/" + clients[0]["id"] + "/composite",
+            token=admin,
+        )
+        assert {role["name"] for role in mappings} == {"ws_api"}
+        return True
+
+    wait_until(assigned, "Datalab member roles did not reach the expected state")
+    print("PASS Datalab member token roles and separate ws_api automation permission", flush=True)
+
+
 def negative_token(label, roles, audience=LAB, lifetime=None):
     admin = admin_token()
     client = "vcluster-test-" + label
@@ -319,7 +352,13 @@ def main():
     parser.add_argument("--api-only", action="store_true")
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--revoked", action="store_true")
+    parser.add_argument("--member-roles", action="store_true")
+    parser.add_argument("--member-removed", action="store_true")
+    parser.add_argument("--member-instance", action="append")
     args = parser.parse_args()
+    if args.member_roles or args.member_removed:
+        verify_member_roles(args.member_removed, args.member_instance or ["vc0", "vc1"])
+        return
     context = ssl.create_default_context(cafile="/test/gateway.crt")
 
     def api(

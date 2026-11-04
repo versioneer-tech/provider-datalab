@@ -17,14 +17,15 @@ spec:
       - name: namespace-demo
         namespace: demo
         role: edit
-      - name: cluster-admin
-        namespace: "*"
-        role: cluster-admin
 ```
 
 Each entry creates one runtime in the Datalab namespace. Add
 `vc1` alongside `vc0` to create another cluster. An empty map creates none.
 Sessions and their environment-controlled vclusters remain separate.
+
+Each instance includes a built-in `cluster-admin` profile. All users in
+`spec.users` receive `vcluster:<instance>:cluster-admin` through the Datalab
+users group. The role belongs to that Datalab's Keycloak client. `groups` is optional and defines additional profiles.
 
 ## Platform settings
 
@@ -103,7 +104,6 @@ spec:
       storage: 5Gi
   vclusters:
     vc0:
-      # Add the required access groups beside this binding.
       secretBindings:
       - type: postgres
         name: pg0
@@ -202,9 +202,10 @@ kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
 ```
 
 Roles are specific to an instance. A `vc0` profile does not authorize `vc1`.
-Workspace roles alone do not authorize either virtual API. Namespace profiles
-can use `view`, `edit`, or `admin`. Use `namespace: "*"` with `cluster-admin`
-for virtual administration. The provider keeps the recovery kubeconfig private.
+The Datalab users group receives each instance's admin role. Additional namespace
+profiles can use `view`, `edit`, or `admin`. Profile kubeconfigs use separate
+service identities; the built-in profile provides virtual administration.
+The provider keeps the recovery kubeconfig private.
 
 For a private issuer CA, set `vcluster.issuerCA`. An optional HTTPS
 `vcluster.discoveryURL` can provide separate discovery routing with the same

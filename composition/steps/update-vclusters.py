@@ -12,6 +12,7 @@ from composition.helpers import (
     _resource_name,
     _runtime_namespace,
     _to_dict,
+    _vcluster_groups,
     _vcluster_profile,
     _vcluster_role,
 )
@@ -129,7 +130,7 @@ def _compose_instance(
     hostname = f"{name}.{domain}"
     backend_hostname = f"{runtime}.{namespace}.svc"
     audience = json.dumps(name)
-    groups = sorted(instance_config["groups"], key=lambda item: item["name"])
+    groups = _vcluster_groups(instance_config)
     roles = [_vcluster_role(instance, group["name"]) for group in groups]
     role_list = json.dumps(roles)
     jwt_issuer = {"url": issuer, "audiences": [name], "audienceMatchPolicy": "MatchAny"}

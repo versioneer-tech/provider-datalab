@@ -39,6 +39,3 @@ spec:
       - name: namespace-demo
         namespace: demo
         role: edit
-      - name: cluster-admin
-        namespace: "*"
-        role: cluster-admin

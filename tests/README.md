@@ -70,6 +70,8 @@ For API or composition changes, use an existing scenario when it covers the
 required behavior. Add a scenario only for a missing observable outcome.
 
 Virtual cluster checks cover two independent instances, profile Secrets,
-instance removal and session coexistence. Kubernetes admission checks invalid
+instance removal and session coexistence. They also check built-in admin
+profiles, Datalab member grants, and compatibility with explicit admin entries.
+Kubernetes admission checks invalid
 store names in the integration profile. Live routing,
 streaming, persistence, and the STAC catalog are checked by `verify-vcluster`.

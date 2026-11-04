@@ -31,12 +31,5 @@ spec:
       - name: namespace-demo
         namespace: demo
         role: edit
-      - name: cluster-admin
-        namespace: '*'
-        role: cluster-admin
     vc1:
       storage: 1Gi
-      groups:
-      - name: cluster-admin
-        namespace: '*'
-        role: cluster-admin

@@ -611,6 +611,7 @@ spec:
     - name: s-joe-ws-access
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

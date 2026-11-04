@@ -397,9 +397,9 @@ Virtual Kubernetes clusters keyed by instance name.
         <td><b><a href="#datalabspecvclusterskeygroupsindex">groups</a></b></td>
         <td>[]object</td>
         <td>
-          Access profiles with separate kubeconfigs and Kubernetes RBAC.<br/>
+          Additional access profiles. All Datalab users receive the built-in cluster-admin profile.<br/>
         </td>
-        <td>true</td>
+        <td>false</td>
       </tr><tr>
         <td><b>secretBindings</b></td>
         <td>[]object</td>

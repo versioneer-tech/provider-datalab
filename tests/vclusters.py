@@ -97,11 +97,67 @@ def main():
             f"vcluster:{other}:demo"
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
-    assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 2
+    assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 4
     assert resources["composite"]["status"]["sessions"]["work"]["state"] == "started"
     print(
         "PASS two virtual clusters have separate routes, identities, selectors, and session status"
     )
+
+    def user_roles(rendered):
+        return {
+            ref["name"]
+            for ref in rendered["keycloak-roles-user-s-joe"]["spec"]["forProvider"]["roleIdsRefs"]
+        }
+
+    implicit = deepcopy(source)
+    implicit["spec"]["users"] = ["joe", "jane"]
+    implicit["spec"]["vclusters"] = {"vc0": {}, "vc1": {"groups": []}}
+    automatic = render(args, env, implicit, observed, include_composite=True)
+    assert automatic["keycloak-memberships-users-s-joe"]["spec"]["forProvider"]["members"] == ["joe", "jane"]
+    assert user_roles(automatic) == {
+        "s-joe-ws-access",
+        *(profile_name("s-joe", instance, "cluster-admin") for instance in ("vc0", "vc1")),
+    }
+    assert all(
+        ref["policy"]["resolve"] == "Always"
+        for ref in automatic["keycloak-roles-user-s-joe"]["spec"]["forProvider"]["roleIdsRefs"]
+    )
+    for instance in ("vc0", "vc1"):
+        profile = profile_name("s-joe", instance, "cluster-admin")
+        assert automatic[f"keycloak-vcluster-role-{profile}"]["spec"]["forProvider"]["name"] == f"vcluster:{instance}:cluster-admin"
+        mapper_name = resource_name("vcluster", "s-joe", instance, "users-scope")
+        mapper = automatic[f"keycloak-vcluster-user-role-mapper-{mapper_name}"]["spec"]["forProvider"]
+        assert mapper["clientIdRef"]["name"] == "s-joe"
+        assert mapper["roleIdRef"]["name"] == profile
+        bindings = [
+            body["spec"]["forProvider"]["manifest"]
+            for body in automatic.values()
+            if body.get("kind") == "Object"
+            and body["metadata"].get("labels", {}).get("datalabs.pkg.internal/vcluster") == instance
+            and body["spec"]["forProvider"].get("manifest", {}).get("kind") == "ClusterRoleBinding"
+        ]
+        assert len(bindings) == 1
+        assert bindings[0]["roleRef"]["name"] == "cluster-admin"
+        assert bindings[0]["subjects"] == [{"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": f"datalab:s-joe:vcluster:{instance}:cluster-admin"}]
+        assert any(
+            c["type"] == "vcluster" and c["instance"] == instance and c["group"] == "cluster-admin"
+            for c in automatic["composite"]["status"]["connections"]
+        )
+    explicit = deepcopy(implicit)
+    explicit["spec"]["vclusters"]["vc0"]["groups"] = [
+        {"name": "cluster-admin", "namespace": "*", "role": "cluster-admin"}
+    ]
+    compatible = render(args, env, explicit, observed, include_composite=True)
+    assert set(compatible) == set(automatic)
+    assert all(body.get("spec") == automatic[key].get("spec") for key, body in compatible.items() if key != "composite")
+    implicit["spec"]["users"].remove("jane")
+    implicit["spec"]["vclusters"] = {}
+    disabled = render(args, env, implicit, observed)
+    assert user_roles(disabled) == {"s-joe-ws-access"}
+    assert disabled["keycloak-memberships-users-s-joe"]["spec"]["forProvider"]["members"] == ["joe"]
+    assert not any(key.startswith("keycloak-vcluster-") for key in disabled)
+    assert disabled["keycloak-service-account-role-api-s-joe-ws-api"]["spec"] == automatic["keycloak-service-account-role-api-s-joe-ws-api"]["spec"]
+    print("PASS Datalab members receive built-in administration without explicit profiles; removal clears grants")
 
     bound_source, bound_env = deepcopy(source), deepcopy(env)
     bound_source["spec"]["databases"] = {"pg0": {"names": ["analytics"]}}
@@ -268,6 +324,9 @@ def main():
     del reduced["spec"]["vclusters"]["vc0"]
     reduced_resources = render(args, env, reduced, observed)
     assert "vcluster-s-joe-vc0-statefulset-1987a0016d" not in reduced_resources
+    assert user_roles(reduced_resources) == {
+        "s-joe-ws-access", profile_name("s-joe", "vc1", "cluster-admin")
+    }
     assert manifest(
         reduced_resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58"
     ) == manifest(resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58")
@@ -293,8 +352,8 @@ def main():
     }
     distinct = render(args, env, hyphenated, observed, include_composite=True)
     connections = [c for c in distinct["composite"]["status"]["connections"] if c["type"] == "vcluster"]
-    assert len({c["name"] for c in connections}) == 4
-    assert len({c["secretRef"]["name"] for c in connections}) == 4
+    assert len({c["name"] for c in connections}) == 8
+    assert len({c["secretRef"]["name"] for c in connections}) == 8
     host_objects = [
         resource["spec"]["forProvider"]["manifest"]
         for resource in distinct.values()

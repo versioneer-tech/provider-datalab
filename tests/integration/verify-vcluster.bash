@@ -223,6 +223,11 @@ PVC
   kube wait pod/verify-vcluster-client --namespace workspace --for=condition=Ready --timeout=5m
   cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
   kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
+  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-removed
+  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3"]}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}"
   kube rollout restart statefulset/vcluster-vc0 --namespace "${runtime_namespace}"
   kube rollout status statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --timeout=10m
@@ -237,6 +242,7 @@ PVC
   kube patch datalab/verify-vcluster --namespace workspace --type=json --patch '[{"op":"remove","path":"/spec/vclusters/vc0"}]'
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --other-only
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles --member-instance vc1
   kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
   printf 'PASS PostgreSQL remains ready after removing vc0\n'
 }
@@ -247,6 +253,16 @@ from copy import deepcopy
 from pathlib import Path
 import subprocess, sys, yaml
 source = yaml.safe_load(Path(sys.argv[1]).read_text())
+for config in ({}, {"groups": []}, {"groups": [{"name": "cluster-admin", "namespace": "*", "role": "cluster-admin"}]}):
+    value = deepcopy(source)
+    value["spec"]["vclusters"] = {"vc0": config}
+    result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+value = deepcopy(source)
+value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "namespace": "demo", "role": "view"}]}}
+result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
+assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
+print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
 for version in ('v1beta2',):
     source['apiVersion'] = 'pkg.internal/' + version
     for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):

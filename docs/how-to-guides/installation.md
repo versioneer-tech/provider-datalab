@@ -54,6 +54,10 @@ issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 
+Each declared instance gives all users in `spec.users` its built-in
+`vcluster:<instance>:cluster-admin` role through the Datalab users group.
+The role applies inside that virtual cluster. No `groups` entry is required.
+
 Datalab users can bind ready connections into a virtual cluster by `type`
 and `name`. List predefined Secret names under `data.customSecrets` to make
 available sources accessible as `type: custom` connections. Entries default

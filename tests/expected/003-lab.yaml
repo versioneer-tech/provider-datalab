@@ -26,9 +26,6 @@ spec:
       - name: namespace-demo
         namespace: demo
         role: edit
-      - name: cluster-admin
-        namespace: '*'
-        role: cluster-admin
       secretBindings:
       - name: pg0
         target:
@@ -545,6 +542,11 @@ spec:
     - name: s-jane-ws-access
       policy:
         resolution: Required
+        resolve: Always
+    - name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      policy:
+        resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -775,6 +777,28 @@ spec:
     realmId: acme
     roleIdRef:
       name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-vcluster-user-role-mapper-vcluster-s-jane-vc0-users-scope-a910511262
+  name: vcluster-s-jane-vc0-users-scope-a910511262
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      policy:
+        resolution: Required
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

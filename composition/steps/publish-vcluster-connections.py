@@ -9,6 +9,7 @@ from composition.helpers import (
     _extract_data,
     _resource_name,
     _to_dict,
+    _vcluster_groups,
     _vcluster_profile,
 )
 from composition.render import _render_template
@@ -52,7 +53,7 @@ def compose(req, rsp):
                 gateway_ca.encode()
             ).decode()
         issuer = str((env.get("iam") or {})["issuerURL"]).rstrip("/")
-        for group in sorted(config["groups"], key=lambda item: item["name"]):
+        for group in _vcluster_groups(config):
             profile = _vcluster_profile(name, instance, group["name"])
             connection_name = _resource_name("vcluster", instance, group["name"])
             oauth = _extract_data(

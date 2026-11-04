@@ -6,8 +6,10 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _boolish,
     _safe_str,
+    _resource_name,
     _session_name,
     _to_dict,
+    _vcluster_groups,
     _vcluster_profile,
     _vcluster_role,
 )
@@ -160,7 +162,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         f"{xr_name}-ws-api",
     )
 
-    def put_keycloak_role_mapper(key_base, role_name_override):
+    def put_keycloak_role_mapper(key_base, role_name_override, name_override=None):
         put(
             key_base,
             _render_template(
@@ -170,7 +172,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 xr_name=xr_name,
                 role_name_override=role_name_override,
             ),
-            role_name_override,
+            name_override or role_name_override,
         )
 
     put_keycloak_role_mapper("keycloak-role-mapper-user", f"{xr_name}-ws-access")
@@ -211,7 +213,16 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "keycloak/user-group-roles",
             realm=realm,
             xr_name=xr_name,
-            role_name=f"{xr_name}-ws-access",
+            role_refs=[
+                {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
+                for role in [
+                    f"{xr_name}-ws-access",
+                    *[
+                        _vcluster_profile(xr_name, instance, "cluster-admin")
+                        for instance in sorted(spec.get("vclusters") or {})
+                    ],
+                ]
+            ],
         ),
     )
 
@@ -267,7 +278,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     )
 
     for instance, config in sorted((spec.get("vclusters") or {}).items()):
-        for group in sorted(config["groups"], key=lambda item: item["name"]):
+        for group in _vcluster_groups(config):
             profile = _vcluster_profile(xr_name, instance, group["name"])
             role_name = _vcluster_role(instance, group["name"])
             put(
@@ -299,6 +310,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 ),
                 profile,
             )
+            if group["name"] == "cluster-admin":
+                put_keycloak_role_mapper(
+                    "keycloak-vcluster-user-role-mapper", profile,
+                    _resource_name("vcluster", xr_name, instance, "users-scope"),
+                )
             state = (getattr(req.observed, "resources", {}) or {}).get(
                 f"keycloak-vcluster-client-{profile}"
             )
