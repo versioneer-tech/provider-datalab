@@ -16,6 +16,11 @@ spec:
     - roles.role.keycloak.m.crossplane.io
     - rolemappers.client.keycloak.m.crossplane.io
     - protocolmappers.client.keycloak.m.crossplane.io
+    - clientscopes.openidclient.keycloak.m.crossplane.io
+    - clientdefaultscopes.openidclient.keycloak.m.crossplane.io
+    - clientoptionalscopes.openidclient.keycloak.m.crossplane.io
+    - clientpolicyprofiles.realm.keycloak.m.crossplane.io
+    - clientpolicyprofilepolicies.realm.keycloak.m.crossplane.io
 ---
 apiVersion: apiextensions.crossplane.io/v1alpha1
 kind: ManagedResourceActivationPolicy

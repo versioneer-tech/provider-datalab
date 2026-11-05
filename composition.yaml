@@ -891,11 +891,6 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
-        def _boolish(value):
-            if isinstance(value, bool):
-                return value
-            return str(value).lower() in ("true", "1", "yes", "on")
-
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
@@ -931,8 +926,17 @@ spec:
             }
             return [groups[name] for name in sorted(groups)]
 
+        def _vcluster_exchange_groups(config):
+            groups = {
+                group["name"]: group for group in config.get("groups") or []
+                if group["name"] != "cluster-admin"
+            }
+            return [groups[name] for name in sorted(groups)]
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
+
+        import json
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
@@ -959,6 +963,33 @@ spec:
             return _distinct(uris)
 
 
+        def _security_ready(req, resources):
+            def contains(actual, expected):
+                if isinstance(expected, dict):
+                    return isinstance(actual, dict) and all(
+                        key in actual and contains(actual[key], value)
+                        for key, value in expected.items()
+                    )
+                if isinstance(expected, list):
+                    return isinstance(actual, list) and len(actual) == len(expected) and all(
+                        any(contains(item, value) for item in actual) for value in expected
+                    )
+                return actual == expected
+
+            for key, desired in resources.items():
+                observed = req.observed.resources.get(key)
+                state = _to_dict(observed.resource) if observed else {}
+                conditions = {
+                    condition.get("type"): condition.get("status")
+                    for condition in (state.get("status") or {}).get("conditions") or []
+                }
+                if (state.get("metadata") or {}).get("deletionTimestamp") or any(
+                    conditions.get(name) != "True" for name in ("Ready", "Synced")
+                ) or not contains(state.get("spec") or {}, desired["spec"]):
+                    return False
+            return True
+
+
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             rsp.meta.ttl.FromSeconds(300)
             xr = _to_dict(req.observed.composite.resource)
@@ -978,17 +1009,10 @@ spec:
                 extra_audiences_raw = [extra_audiences_raw]
             elif not isinstance(extra_audiences_raw, list):
                 extra_audiences_raw = []
-            extra_audiences = _distinct(
-                [_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)]
-            )
-            data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get(
-                "enabled", True
-            )
-            s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
-            if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
-                extra_audiences = _distinct([*extra_audiences, xr_name])
-            if spec.get("vclusters"):
-                extra_audiences = _distinct([*extra_audiences, xr_name])
+            extra_audiences = _distinct([
+                xr_name,
+                *[_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)],
+            ])
             domain = ingress_env.get("domain", "default")
             url = f"https://{xr_name}.{domain}"
             session_names = [
@@ -997,6 +1021,8 @@ spec:
                 if _session_name(session)
             ]
             redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
+
+            security_resources = {}
 
             def put(key_base, body_base, name_override=xr_name):
                 key = f"{key_base}-{name_override}"
@@ -1007,6 +1033,11 @@ spec:
                 ann = md.setdefault("annotations", {})
                 ann["crossplane.io/composition-resource-name"] = key
                 rsp.desired.resources[key].resource.update(body)
+                if body["kind"] in {
+                    "ClientScope", "ClientDefaultScopes", "ClientOptionalScopes",
+                    "RoleMapper", "ProtocolMapper", "ClientPolicyProfile", "ClientPolicyProfilePolicy",
+                }:
+                    security_resources[key] = body
 
             put(
                 "keycloak-group",
@@ -1049,6 +1080,7 @@ spec:
                     redirect_uris=redirect_uris,
                     realm=realm,
                     connection_secret_name=f"{xr_name}-oauth-client",
+                    exchange_enabled=False,
                 ),
             )
 
@@ -1098,9 +1130,68 @@ spec:
                     name_override or role_name_override,
                 )
 
-            put_keycloak_role_mapper("keycloak-role-mapper-user", f"{xr_name}-ws-access")
-            put_keycloak_role_mapper("keycloak-role-mapper-admin", f"{xr_name}-ws-admin")
             put_keycloak_role_mapper("keycloak-role-mapper-api", f"{xr_name}-ws-api")
+
+            interactive_scope = f"{xr_name}:interactive"
+            interactive_resource = _resource_name(xr_name, "interactive")
+            policy_name = _resource_name(xr_name, "reject-interactive-exchange")
+            put("keycloak-exchange-policy-profile", _render_template(
+                req, "keycloak/exchange-policy-profile", realm=realm, policy_name=policy_name,
+            ), policy_name)
+            put("keycloak-exchange-policy", _render_template(
+                req, "keycloak/exchange-policy", realm=realm, policy_name=policy_name,
+                interactive_scopes_json=json.dumps([interactive_scope]),
+            ), policy_name)
+
+            def put_scope(name, resource, roles):
+                put("keycloak-optional-scope", _render_template(
+                    req, "keycloak/client-scope", realm=realm, scope_name=name,
+                ), resource)
+                for role in roles:
+                    put("keycloak-optional-role", _render_template(
+                        req, "keycloak/optional-role-scope-mapper", realm=realm,
+                        scope_resource=resource, role_resource=role,
+                    ), _resource_name(resource, role))
+
+            instances = spec.get("vclusters") or {}
+            additional_profiles = [
+                (instance, group["name"])
+                for instance, config in sorted(instances.items())
+                for group in _vcluster_exchange_groups(config)
+            ]
+            additional_roles = [
+                _vcluster_profile(xr_name, instance, group)
+                for instance, group in additional_profiles
+            ]
+            admin_roles = [
+                _vcluster_profile(xr_name, instance, "cluster-admin")
+                for instance in sorted(instances)
+            ]
+            put_scope(interactive_scope, interactive_resource, [
+                f"{xr_name}-ws-access", f"{xr_name}-ws-admin", *admin_roles,
+            ])
+            optional_scopes = [interactive_scope]
+            for (instance, group), role in zip(additional_profiles, additional_roles):
+                scope = f"{xr_name}:vclusters_{instance}_{group}"
+                put_scope(scope, _resource_name(role, "scope"), [role])
+                optional_scopes.append(scope)
+
+            for kind, field, names in (
+                ("ClientDefaultScopes", "defaultScopes", ["basic", "profile", "email"]),
+                ("ClientOptionalScopes", "optionalScopes", optional_scopes),
+            ):
+                put(f"keycloak-{field}", _render_template(
+                    req, "keycloak/client-scopes", scope_kind=kind,
+                    scope_binding={
+                        "realmId": realm,
+                        "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                        field: names,
+                    },
+                ))
+            put("keycloak-client-roles", _render_template(
+                req, "keycloak/client-roles-mapper", realm=realm, xr_name=xr_name,
+                claim_name=f"resource_access.{xr_name}.roles",
+            ))
 
             for audience in extra_audiences:
                 audience_name = (
@@ -1140,10 +1231,8 @@ spec:
                         {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
                         for role in [
                             f"{xr_name}-ws-access",
-                            *[
-                                _vcluster_profile(xr_name, instance, "cluster-admin")
-                                for instance in sorted(spec.get("vclusters") or {})
-                            ],
+                            f"{xr_name}-ws-api",
+                            *additional_roles,
                         ]
                     ],
                 ),
@@ -1156,7 +1245,10 @@ spec:
                     "keycloak/admin-group-roles",
                     realm=realm,
                     group_name=f"{xr_name}-admin",
-                    role_name=f"{xr_name}-ws-admin",
+                    role_refs=[
+                        {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
+                        for role in [f"{xr_name}-ws-admin", f"{xr_name}-ws-api", *admin_roles, *additional_roles]
+                    ],
                 ),
                 f"{xr_name}-admin",
             )
@@ -1215,13 +1307,6 @@ spec:
                         ),
                         profile,
                     )
-                    if group["name"] == "cluster-admin":
-                        put_keycloak_role_mapper(
-                            "keycloak-vcluster-user-role-mapper", profile,
-                            _resource_name("vcluster", xr_name, instance, "users-scope"),
-                        )
-                    else:
-                        put_keycloak_role_mapper("keycloak-vcluster-scope", profile)
 
             users = list(spec.get("users", []) or [])
             userOverrides = spec.get("userOverrides", {}) or {}
@@ -1259,6 +1344,16 @@ spec:
                     ),
                     f"{xr_name}-admin",
                 )
+
+            # Wait for scope restrictions and deletion of old broad mappings before exchange.
+            stale_security = any(
+                key not in security_resources
+                and _to_dict(observed.resource).get("kind") in {"RoleMapper", "ProtocolMapper", "ClientScope"}
+                for key, observed in req.observed.resources.items()
+            )
+            rsp.desired.resources[f"keycloak-client-{xr_name}"].resource["spec"]["forProvider"][
+                "standardTokenExchangeEnabled"
+            ] = not stale_security and _security_ready(req, security_resources)
       templates:
         keycloak/access-role:
           apiVersion: role.keycloak.m.crossplane.io/v1alpha1
@@ -1287,10 +1382,8 @@ spec:
                 name: ${group_name}
                 policy:
                   resolution: Required
-              roleIdsRefs:
-              - name: ${role_name}
-                policy:
-                  resolution: Required
+              exhaustive: true
+              roleIdsRefs: ${role_refs}
         keycloak/admin-memberships:
           apiVersion: group.keycloak.m.crossplane.io/v1alpha1
           kind: Memberships
@@ -1386,12 +1479,93 @@ spec:
               implicitFlowEnabled: false
               directAccessGrantsEnabled: false
               serviceAccountsEnabled: true
+              standardTokenExchangeEnabled: ${exchange_enabled}
               oauth2DeviceAuthorizationGrantEnabled: false
               webOrigins: ${redirect_uris}
               validRedirectUris: ${redirect_uris}
               realmId: ${realm}
             writeConnectionSecretToRef:
               name: ${connection_secret_name}
+        keycloak/client-roles-mapper:
+          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+          kind: ProtocolMapper
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              clientIdRef:
+                name: ${xr_name}
+                policy:
+                  resolution: Required
+              protocol: openid-connect
+              protocolMapper: oidc-usermodel-client-role-mapper
+              name: workspace-client-roles
+              config:
+                usermodel.clientRoleMapping.clientId: ${xr_name}
+                claim.name: ${claim_name}
+                jsonType.label: String
+                multivalued: 'true'
+                access.token.claim: 'true'
+                id.token.claim: 'false'
+                introspection.token.claim: 'true'
+                userinfo.token.claim: 'false'
+        keycloak/client-scope:
+          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+          kind: ClientScope
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              name: ${scope_name}
+              includeInTokenScope: true
+        keycloak/client-scopes:
+          apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+          kind: ${scope_kind}
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider: ${scope_binding}
+        keycloak/exchange-policy:
+          apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+          kind: ClientPolicyProfilePolicy
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              name: ${policy_name}
+              enabled: true
+              profilesRefs:
+              - name: ${policy_name}
+                policy:
+                  resolution: Required
+                  resolve: Always
+              condition:
+              - name: grant-type
+                configuration:
+                  grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'
+              - name: client-scopes
+                configuration:
+                  type: Any
+                  scopes: ${interactive_scopes_json}
+        keycloak/exchange-policy-profile:
+          apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+          kind: ClientPolicyProfile
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              name: ${policy_name}
+              executor:
+              - name: reject-request
         keycloak/group-membership-mapper:
           apiVersion: openidgroup.keycloak.m.crossplane.io/v1alpha1
           kind: GroupMembershipProtocolMapper
@@ -1410,6 +1584,25 @@ spec:
               fullPath: false
               name: ${xr_name}
               realmId: ${realm}
+        keycloak/optional-role-scope-mapper:
+          apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+          kind: RoleMapper
+          spec:
+            providerConfigRef:
+              name: provider-keycloak
+              kind: ProviderConfig
+            forProvider:
+              realmId: ${realm}
+              clientScopeIdRef:
+                name: ${scope_resource}
+                policy:
+                  resolution: Required
+                  resolve: Always
+              roleIdRef:
+                name: ${role_resource}
+                policy:
+                  resolution: Required
+                  resolve: Always
         keycloak/role-scope-mapper:
           apiVersion: client.keycloak.m.crossplane.io/v1alpha1
           kind: RoleMapper
@@ -1444,6 +1637,7 @@ spec:
               kind: ProviderConfig
             forProvider:
               realmId: ${realm}
+              exhaustive: true
               groupIdRef:
                 name: ${xr_name}
                 policy:
@@ -1526,8 +1720,10 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
-        def _safe_str(value):
-            return str(value).strip() if value is not None else ""
+        def _boolish(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes", "on")
 
         def _observed_manifests(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -1566,6 +1762,14 @@ spec:
                     return str(value)
             return None
 
+        def _runtime_namespace(req, name):
+            environment = _extract_manifest(
+                req.observed.resources.get(f"workshopenvironment-{name}")
+            )
+            return ((environment.get("status") or {}).get("educates") or {}).get(
+                "namespace"
+            ) or ""
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -1584,6 +1788,19 @@ spec:
             xr_name = metadata.get("name")
             xr_namespace = metadata.get("namespace") or "default"
 
+            environment = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get("enabled")
+            if data_enabled is not None and not _boolish(data_enabled):
+                return
+            if not (
+                _boolish((environment.get("ingress") or {}).get("enabled"))
+                or _boolish((environment.get("httpRoute") or {}).get("enabled"))
+            ):
+                return
+            workshop_namespace = _runtime_namespace(req, xr_name)
+            if not workshop_namespace:
+                return
+
             observed = getattr(req.observed, "resources", {}) or {}
             oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
             client_secret = _b64get_any(
@@ -1596,12 +1813,6 @@ spec:
                 or xr_name
             )
             cookie_secret = _hashlib.sha256(client_secret.encode("utf-8")).hexdigest()[:32]
-
-            environment_manifest = _extract_manifest(
-                observed.get(f"workshopenvironment-{xr_name}")
-            )
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
 
             secret_name = f"{xr_name}-oauth2-client"
             key = f"oauth2-client-secret-{xr_name}"
@@ -7336,6 +7547,10 @@ spec:
                     binding = hashlib.sha256(
                         f"{group['name']}:{group['namespace']}:{group['role']}".encode()
                     ).hexdigest()[:12]
+                    scope_resource = (
+                        _resource_name(name, "interactive") if group["name"] == "cluster-admin"
+                        else _resource_name(profile, "scope")
+                    )
                     complete = all(
                         ready(key)
                         for key in [
@@ -7348,12 +7563,11 @@ spec:
                             ),
                             f"keycloak-client-{name}",
                             f"keycloak-vcluster-role-{profile}",
-                            (
-                                "keycloak-vcluster-user-role-mapper-"
-                                + _resource_name("vcluster", name, instance, "users-scope")
-                                if group["name"] == "cluster-admin"
-                                else f"keycloak-vcluster-scope-{profile}"
-                            ),
+                            f"keycloak-optional-scope-{scope_resource}",
+                            "keycloak-optional-role-" + _resource_name(scope_resource, profile),
+                            f"keycloak-defaultScopes-{name}",
+                            f"keycloak-optionalScopes-{name}",
+                            f"keycloak-client-roles-{name}",
                         ]
                     )
                     kubeconfig = _render_template(

@@ -397,7 +397,7 @@ Virtual Kubernetes clusters keyed by instance name.
         <td><b><a href="#datalabspecvclusterskeygroupsindex">groups</a></b></td>
         <td>[]object</td>
         <td>
-          Additional access profiles. All Datalab users receive the built-in cluster-admin profile.<br/>
+          Additional profiles granted to workspace users and admins. Only workspace admins receive the built-in cluster-admin profile.<br/>
         </td>
         <td>false</td>
       </tr><tr>

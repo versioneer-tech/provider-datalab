@@ -43,19 +43,21 @@ operations those roles permit.
 
 | Caller | Virtual API access |
 | --- | --- |
-| A user in `spec.users` | Each instance's built-in `vcluster_<instance>_cluster-admin` role, through the Datalab users group |
+| A user in `spec.users` | Explicit additional profiles, through the Datalab users group |
+| A workspace administrator | Additional profiles and each instance's built-in `vcluster_<instance>_cluster-admin` role |
 | The workspace service account | None by default; its only default role is `ws_api` |
 | An identity with an assigned `vcluster_<instance>_<group>` role | The group's configured namespace and Kubernetes role |
 
 `groups` defines additional profiles with `view`, `edit`, or `admin` access.
-An identity administrator must assign their client roles to the intended
-identities. Workspace scope mappings permit assigned roles in tokens; they
-do not grant roles. Roles are specific to an instance.
+The provider grants their client roles to both workspace groups. Optional
+OAuth scopes select which assigned roles appear in workspace client tokens.
+Roles are specific to an instance. See [token exchange](authentication.md#user-token-exchange)
+for a token limited to one selected profile.
 
 A downloaded profile selects the endpoint and default namespace. It neither
 grants access nor reduces permissions already present in the caller's token.
 The `cluster-admin` profile cannot elevate a namespace caller, and a namespace
-profile cannot restrict a Datalab member who already has the admin role.
+profile cannot restrict a caller who already has the admin role.
 
 ### Download a profile
 
@@ -99,8 +101,9 @@ login flow when the token expires. An ID token cannot replace an access token.
 An identity administrator must explicitly assign the required vcluster role
 to the existing workspace service account. For example,
 `vcluster_vc0_namespace-demo` permits the configured operations in `demo`.
-Do not add this account to the Datalab users group, which grants virtual
-cluster administration.
+Do not add this account to a human group. Request the profile's optional scope
+when using a separately assigned role; the default machine token has only
+`ws_api`. The bundled helper requests no optional scopes.
 
 Obtain the workspace client secret from the source in `status.oauth2` through
 an authorized Secret-delivery process. This is the existing

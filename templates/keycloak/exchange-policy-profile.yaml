@@ -1,0 +1,14 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfile
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    realmId: ${realm}
+    name: ${policy_name}
+    executor:
+    - name: reject-request

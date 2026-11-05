@@ -11,6 +11,7 @@ metadata:
 spec:
   users:
   - verify-s3
+  - verify-vcluster-member
   sessions: []
   databases:
     pg0:
@@ -33,3 +34,7 @@ spec:
         role: edit
     vc1:
       storage: 1Gi
+      groups:
+      - name: namespace-other
+        namespace: other
+        role: view

@@ -152,11 +152,23 @@ CPU and memory so they receive a CPU share under local load. Their health
 probes allow five minutes for cold starts.
 
 The vcluster profile installs the session runtime, PGO, Keycloak, and Contour.
+Its identity fixture creates `test-login` to check exchange of tokens from
+another client. The test EnvironmentConfig explicitly adds it through
+`iam.extraAudiences`. The fixture permits a password grant to obtain real human
+subject tokens. User passwords are generated at test time. Exchange probes
+check member and admin subjects, exact roles and
+audiences, omission of an unauthorized profile, rejection of interactive scopes,
+and namespace access with signed exchanged tokens. The test also checks that
+the separate login client's tokens contain the expected group roles and workspace audience.
+These probes run only in the dedicated Kind cluster. Passing render checks
+does not establish a live result.
+
 It requires one workspace OAuth2 client and verifies that every downloaded
 profile rejects the service account with only `ws_api`. The test explicitly
 assigns one vcluster role at a time, obtains a token, then removes that grant.
-It checks that an admin profile cannot elevate a namespace caller and that
-role scopes and Kubernetes RBAC permit only the configured access. The probe
+Test requests explicitly include the required optional OAuth scope. The profile
+checks that an admin profile cannot elevate a namespace caller and that role
+scopes and Kubernetes RBAC permit only the configured access. The probe
 mounts the workspace credential Secret separately from public profile Secrets.
 These test grants are not composition behavior.
 The profile also rejects duplicate OAuth2 discovery names and checks removal

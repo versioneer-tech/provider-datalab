@@ -8,9 +8,9 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _b64get_any,
+    _boolish,
     _extract_data,
-    _extract_manifest,
-    _safe_str,
+    _runtime_namespace,
     _to_dict,
 )
 from composition.render import _render_template
@@ -22,6 +22,19 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     xr_name = metadata.get("name")
     xr_namespace = metadata.get("namespace") or "default"
+
+    environment = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+    data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get("enabled")
+    if data_enabled is not None and not _boolish(data_enabled):
+        return
+    if not (
+        _boolish((environment.get("ingress") or {}).get("enabled"))
+        or _boolish((environment.get("httpRoute") or {}).get("enabled"))
+    ):
+        return
+    workshop_namespace = _runtime_namespace(req, xr_name)
+    if not workshop_namespace:
+        return
 
     observed = getattr(req.observed, "resources", {}) or {}
     oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
@@ -35,12 +48,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         or xr_name
     )
     cookie_secret = _hashlib.sha256(client_secret.encode("utf-8")).hexdigest()[:32]
-
-    environment_manifest = _extract_manifest(
-        observed.get(f"workshopenvironment-{xr_name}")
-    )
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
 
     secret_name = f"{xr_name}-oauth2-client"
     key = f"oauth2-client-secret-{xr_name}"

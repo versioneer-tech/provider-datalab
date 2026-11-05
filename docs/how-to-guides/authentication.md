@@ -1,54 +1,183 @@
 # Authentication
 
-Each Datalab has one Keycloak client for browser and machine access. Virtual
-APIs validate the caller's token. The platform ingress controller enforces
-browser sign-in and authorization for sessions.
+Each Datalab has one confidential Keycloak client, such as `s-joe`.
+Use that client for browser login, machine access, and restricted user-token
+exchange. The same client credentials and Secret references serve these flows.
 
-## Keycloak clients and roles
+## Groups and roles
 
-Users in `spec.users` must exist in the realm selected by
-`EnvironmentConfig.data.iam.realm`. The provider creates a confidential client
-named after the Datalab, user and administrator groups, and their memberships.
-The client disables implicit, device, and direct access grants. Scope mappings
-limit which assigned client roles can appear in tokens; they do not grant roles.
+Users in `spec.users` must exist in the configured realm. The first user and
+users with `userOverrides.<user>.role: admin` belong to the administrator group.
+All listed users belong to the workspace users group.
 
-| Role | Assigned to | Used for |
-| --- | --- | --- |
-| `ws_access` | Datalab users | Browser access |
-| `ws_admin` | Datalab administrators | Browser access with the admin role |
-| `ws_api` | The client service account | Machine access through client credentials |
+| Managed group or account | Assigned workspace client roles |
+| --- | --- |
+| `<workspace>` | `ws_access`, `ws_api`, all explicitly configured additional vcluster profiles |
+| `<workspace>-admin` | `ws_admin`, `ws_api`, all additional profiles, each instance's built-in cluster-admin role |
+| Workspace service account | `ws_api` only |
 
-Virtual APIs require a configured vcluster role as well as the Datalab audience.
-The workspace service account has only `ws_api` by default and cannot access
-those APIs until an identity administrator explicitly assigns a vcluster role.
-Datalab users receive each instance's built-in admin role through the users group.
-See [virtual API access](vcluster.md#api-access) for role boundaries and caller
-credential files.
+Administrators also inherit the users group's grants. The provider replaces
+managed group grants on each reconciliation. Profile removal or rename removes
+its grants. This includes removal of the old automatic cluster-admin grants
+from the users group. Direct user assignments are unchanged.
 
-## Credential Secrets
+Only `spec.vclusters.<instance>.groups` defines selectable exchange profiles.
+The reserved `cluster-admin` entry never adds an exchange scope, even when
+explicitly declared. Empty groups give regular members no vcluster roles;
+administrators retain each declared instance's built-in admin role and profile.
+Role names remain `vcluster_<instance>_<group>`.
+
+## OAuth scopes and direct login
+
+The workspace client's dedicated role mapping permits only `ws_api`. It
+appears in a token only if its subject holds that role. Default scopes are
+`basic`, `profile`, and `email`; inherited authorization scopes are removed
+from this client. A dedicated Client Roles mapper writes effective roles under
+`resource_access.<workspace>.roles`. It does not hardcode role grants.
+
+| Optional OAuth scope | Permitted roles |
+| --- | --- |
+| `<workspace>:vclusters_<instance>_<group>` | Exactly `vcluster_<instance>_<group>` for an additional configured profile |
+| `<workspace>:interactive` | `ws_access`, `ws_admin`, and each instance's built-in cluster-admin role |
+
+Scopes permit only roles that the subject holds. They are never realm-default
+scopes. Scope names differ from role names: bare `ws_admin` or
+`vcluster_vc0_namespace-demo` are not generated OAuth scopes.
+
+A direct authorization-code request to `s-joe` can use these parameters:
+
+```text
+client_id=s-joe
+response_type=code
+redirect_uri=http://localhost:8080/callback
+scope=openid profile email s-joe:interactive s-joe:vclusters_vc0_namespace-demo
+```
+
+Use the normal state and PKCE checks, then authenticate the confidential client
+when redeeming the code. Request only the scopes needed by the application.
+For a namespace-only direct login, omit `s-joe:interactive`.
+
+Device authorization is disabled on workspace clients. Enabling that capability
+is a separate platform change. If enabled, the device authorization request
+must explicitly include the same optional scope names, for example
+`scope=openid s-joe:vclusters_vc0_namespace-demo`. Token exchange does not
+require device authorization.
+
+You can also use a separate login client in the same realm. Its scope mappings
+control the roles in its tokens. Before exchanging one of those tokens through
+the workspace client, check that it contains the workspace audience and the
+requested roles. Configure those claims on the separate login client.
+
+## User-token exchange
+
+Standard Token Exchange V2 uses the existing workspace credentials. The caller's
+access token remains the subject; exchange does not use the service account's
+permissions. A managed client policy combines the `grant-type` and
+`client-scopes` conditions with `reject-request`. It rejects
+`<workspace>:interactive` during token exchange, including requests that combine
+it with allowed profile scopes. Direct interactive login can still use it.
+
+Send this form to the configured realm's token endpoint. Authenticate with the
+existing confidential `s-joe` client through the approved credential path.
+The placeholder below represents the original caller access token.
+
+```text
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=<caller access token>
+subject_token_type=urn:ietf:params:oauth:token-type:access_token
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+scope=s-joe:vclusters_vc0_namespace-demo
+audience=s-joe
+```
+
+The caller token must contain `s-joe` in `aud`, unless it was issued to
+`s-joe` itself. Keycloak uses this check to confirm that the token was intended
+for the workspace client. The workspace audience is always available in tokens
+issued by that client. The `audience` parameter filters available audiences;
+it does not add missing mappings.
+
+For an eligible caller, the required authorization claims are:
+
+```yaml
+iss: https://identity.acme.com/realms/acme
+sub: <same user subject as the caller token>
+aud: [s-joe]
+resource_access:
+  s-joe:
+    roles: [ws_api, vcluster_vc0_namespace-demo]
+```
+
+This applies to both members and administrators selecting the profile. The
+result must omit `ws_access`, `ws_admin`, built-in cluster-admin, unrequested
+profiles, and roles for other workspaces. Identity claims can remain.
+
+To use workspace-issued tokens with another service, add its client ID to
+`EnvironmentConfig.data.iam.extraAudiences`. For example, for
+[EOEPCA Workspace API](https://github.com/EOEPCA/rm-workspace-api/):
+
+```yaml
+iam:
+  extraAudiences:
+  - workspace-api
+```
+
+An exchange request can then include both `audience=s-joe` and
+`audience=workspace-api` to retain those two recipients. Removing the setting
+removes its managed audience mapper. For tokens issued by a separate login
+client, configure the workspace audience on that client.
+
+Keycloak checks the user's role grants before applying an optional profile
+scope. A user without the role can receive a successful response with that
+scope and role omitted. Consumers must reject a result missing a requested
+role. This is the documented server behavior; actual issuance must be checked
+against the deployed server. Render checks do not prove token contents. See
+[Keycloak scope permissions](https://www.keycloak.org/docs/latest/server_admin/index.html#_client_scopes_permissions).
+
+Reconciliation removes a deleted or renamed profile's optional association,
+role scope mapping, Client Scope, and managed group grants. Instance deletion
+removes its profiles too. Already-issued JWTs can retain their claims until
+expiry. Downloading a kubeconfig profile neither grants permissions nor
+reduces a supplied token's permissions. The virtual API still checks the realm
+issuer, workspace audience, signature, validity, and configured workspace roles.
+Its username is `sub`; groups are `datalab:<workspace>:<role>`. Existing virtual
+RoleBinding and ClusterRoleBinding rules apply without an authentication change.
+
+## Credential Secrets and machine access
 
 | Secret | Namespace | Use |
 | --- | --- | --- |
 | `<datalab>-oauth-client` | Claim namespace | Source credentials for the existing workspace client |
-| `<datalab>-oauth2-client` | Runtime namespace | Credential copy used by Datalab services, with `client_id` and `client_secret` |
+| `<datalab>-oauth2-client` | Runtime namespace | Created only for public Data/S3 OAuth2 proxies; contains `client_id`, `client_secret`, and `cookie_secret` |
 
-Anyone with the client secret can request a token as its service account.
-Grant read access only to callers authorized to use that identity. Virtual API
-profile Secrets contain public connection settings and no authentication
-credentials. Permission to download a profile is separate from permission to
-read OAuth2, database, registry, or other service credentials.
+The runtime copy is needed only when Data is enabled and exposed through an
+Ingress or HTTPRoute. It is created after the runtime namespace is known and
+removed when that proxy is disabled. Token exchange and virtual-cluster access
+do not need this copy. The legacy aggregate Secret still includes OAuth fields
+delivered to sessions.
 
-## Tokens and audiences
+Anyone with the client secret can request a service-account token. Grant read
+access only to authorized callers. With `grant_type=client_credentials` and no
+optional scopes, the unchanged workspace service account receives only
+`ws_api`.
 
-For machine access, exchange the workspace client ID and secret with
-`grant_type=client_credentials`, then send the access token to the service.
-Each service must check its required roles and audience. The virtual API
-helper accepts the secret in a separate file; see [machine access](vcluster.md#machine-access).
+Virtual API profile Secrets contain public settings and no credentials. See
+[virtual API access](vcluster.md#api-access) for credential files. Permission to
+download a profile is separate from permission to read service credentials.
 
-List additional token audiences in `EnvironmentConfig.data.iam.extraAudiences`.
-The provider adds the Datalab client ID as an audience when its S3 endpoint or
-named virtual APIs are enabled. Other OAuth clients that call these services
-must emit the required Datalab audience and roles too.
+## Exchange caller checks
+
+A service that exchanges tokens for users must:
+
+- Accept full profile scope names, or translate short names with the workspace.
+- Allow only currently configured additional profiles and check each requested
+  role against the caller's validated token.
+- Retain the original caller access token for `subject_token` and authenticate
+  exchange with the existing workspace client credentials.
+- Validate the returned signature, validity, issuer, exact audiences, user
+  subject, requested roles, and absence of unexpected authorization permissions.
+- Reject missing requested roles even when the token endpoint returns success.
+- Check that the caller is allowed to request token issuance through that
+  service, in addition to the token and role checks above.
 
 ## OAuth2 discovery
 
@@ -58,11 +187,11 @@ service connections:
 ```yaml
 status:
   oauth2:
-  - name: ws-alice
+  - name: s-joe
     type: client
-    issuerUrl: https://identity.example.org/realms/eoepca
+    issuerUrl: https://identity.acme.com/realms/acme
     secretRef:
-      name: ws-alice-oauth-client
+      name: s-joe-oauth-client
       namespace: workspace
     ready: true
 ```

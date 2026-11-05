@@ -14,6 +14,17 @@ from render import arguments, environment, manifest, render
 
 def main():
     args = arguments()
+    observed = list(yaml.safe_load_all(Path("tests/observed/001-lab.yaml").read_text()))
+
+    def oauth_observer(secret):
+        return {
+            "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
+            "metadata": {"name": "observe-oauth-client-secret-s-joe", "annotations": {
+                "crossplane.io/composition-resource-name": "observe-oauth-client-secret-s-joe"}},
+            "status": {"atProvider": {"manifest": {"data": {
+                "clientSecret": base64.b64encode(secret.encode()).decode()}}}},
+        }
+
     for exposure in ("ingress", "gateway", "gateway-s3", "disabled-data", "internal"):
         env = environment()
         if exposure in ("ingress", "internal"):
@@ -23,7 +34,10 @@ def main():
             env["data"]["httpRoute"].pop("enableS3")
         if exposure == "disabled-data":
             env["data"]["defaults"] = {"data": {"enabled": False}}
-        resources = render(args, env)
+        resources = render(args, env, observed=observed + [oauth_observer("initial-client-secret")])
+        assert ("oauth2-client-secret-s-joe" in resources) == (
+            exposure in ("ingress", "gateway", "gateway-s3")
+        )
         gateway = exposure in ("gateway", "gateway-s3")
         s3 = exposure == "gateway-s3"
         assert ("data-ingress-s-joe" in resources) == (exposure == "ingress")
@@ -40,7 +54,7 @@ def main():
             assert redirect["spec"]["rules"][0]["filters"][0]["requestRedirect"]["scheme"] == "https"
         for kind in ("config", "deployment", "service", "networkpolicy"):
             assert (f"data-s3-{kind}-s-joe" in resources) == s3
-        assert any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values()) == s3
+        assert any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values())
         assert ("data-deployment-s-joe" in resources) == (exposure != "disabled-data")
         if s3:
             for name in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):
@@ -75,17 +89,9 @@ def main():
                for container in containers for entry in container.get("env", []))
     print("PASS custom IAM namespace and storage path style", flush=True)
 
-    observed = list(yaml.safe_load_all(Path("tests/observed/001-lab.yaml").read_text()))
     outputs = []
     for secret in ("initial-client-secret", "rotated-client-secret"):
-        observer = {
-            "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-            "metadata": {"name": "observe-oauth-client-secret-s-joe", "annotations": {
-                "crossplane.io/composition-resource-name": "observe-oauth-client-secret-s-joe"}},
-            "status": {"atProvider": {"manifest": {"data": {
-                "clientSecret": base64.b64encode(secret.encode()).decode()}}}},
-        }
-        resources = render(args, environment(), observed=observed + [observer])
+        resources = render(args, environment(), observed=observed + [oauth_observer(secret)])
         projected = manifest(resources, "oauth2-client-secret-s-joe")
         assert "stringData" not in projected
         assert {key: base64.b64decode(value).decode() for key, value in projected["data"].items()} == {
@@ -102,6 +108,18 @@ def main():
             "datalabs.pkg.internal/oauth2-cookie-checksum"] for output in outputs]
         assert checksums[0] != checksums[1]
     print("PASS OAuth credential projection and rotation", flush=True)
+
+    pending = render(args, environment(), observed=[oauth_observer("initial-client-secret")])
+    assert "oauth2-client-secret-s-joe" not in pending
+    disabled_env = environment()
+    disabled_env["data"]["defaults"] = {"data": {"enabled": False}}
+    disabled = render(args, disabled_env, observed=observed + [
+        oauth_observer("initial-client-secret"), outputs[0]["oauth2-client-secret-s-joe"],
+    ])
+    assert "oauth2-client-secret-s-joe" not in disabled
+    assert "observe-oauth-client-secret-s-joe" in disabled
+    assert disabled["keycloak-client-s-joe"]["spec"]["writeConnectionSecretToRef"]["name"] == "s-joe-oauth-client"
+    print("PASS runtime OAuth credentials wait for the namespace and are removed with the proxy", flush=True)
 
     for path, value, error in (
         (("ingress", "enabled"), True, "Enable only one"),

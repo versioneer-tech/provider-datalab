@@ -1,15 +1,17 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
-    _boolish,
     _safe_str,
     _resource_name,
     _session_name,
     _to_dict,
     _vcluster_groups,
+    _vcluster_exchange_groups,
     _vcluster_profile,
     _vcluster_role,
 )
@@ -37,6 +39,33 @@ def _workspace_redirect_uris(xr_name, domain, session_names):
     return _distinct(uris)
 
 
+def _security_ready(req, resources):
+    def contains(actual, expected):
+        if isinstance(expected, dict):
+            return isinstance(actual, dict) and all(
+                key in actual and contains(actual[key], value)
+                for key, value in expected.items()
+            )
+        if isinstance(expected, list):
+            return isinstance(actual, list) and len(actual) == len(expected) and all(
+                any(contains(item, value) for item in actual) for value in expected
+            )
+        return actual == expected
+
+    for key, desired in resources.items():
+        observed = req.observed.resources.get(key)
+        state = _to_dict(observed.resource) if observed else {}
+        conditions = {
+            condition.get("type"): condition.get("status")
+            for condition in (state.get("status") or {}).get("conditions") or []
+        }
+        if (state.get("metadata") or {}).get("deletionTimestamp") or any(
+            conditions.get(name) != "True" for name in ("Ready", "Synced")
+        ) or not contains(state.get("spec") or {}, desired["spec"]):
+            return False
+    return True
+
+
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr = _to_dict(req.observed.composite.resource)
     metadata = xr.get("metadata", {}) or {}
@@ -55,17 +84,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         extra_audiences_raw = [extra_audiences_raw]
     elif not isinstance(extra_audiences_raw, list):
         extra_audiences_raw = []
-    extra_audiences = _distinct(
-        [_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)]
-    )
-    data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get(
-        "enabled", True
-    )
-    s3_enabled = (environment.get("httpRoute") or {}).get("enableS3", False)
-    if (data_enabled is None or _boolish(data_enabled)) and _boolish(s3_enabled):
-        extra_audiences = _distinct([*extra_audiences, xr_name])
-    if spec.get("vclusters"):
-        extra_audiences = _distinct([*extra_audiences, xr_name])
+    extra_audiences = _distinct([
+        xr_name,
+        *[_safe_str(audience) for audience in extra_audiences_raw if _safe_str(audience)],
+    ])
     domain = ingress_env.get("domain", "default")
     url = f"https://{xr_name}.{domain}"
     session_names = [
@@ -74,6 +96,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if _session_name(session)
     ]
     redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
+
+    security_resources = {}
 
     def put(key_base, body_base, name_override=xr_name):
         key = f"{key_base}-{name_override}"
@@ -84,6 +108,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         ann = md.setdefault("annotations", {})
         ann["crossplane.io/composition-resource-name"] = key
         rsp.desired.resources[key].resource.update(body)
+        if body["kind"] in {
+            "ClientScope", "ClientDefaultScopes", "ClientOptionalScopes",
+            "RoleMapper", "ProtocolMapper", "ClientPolicyProfile", "ClientPolicyProfilePolicy",
+        }:
+            security_resources[key] = body
 
     put(
         "keycloak-group",
@@ -126,6 +155,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             redirect_uris=redirect_uris,
             realm=realm,
             connection_secret_name=f"{xr_name}-oauth-client",
+            exchange_enabled=False,
         ),
     )
 
@@ -175,9 +205,68 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             name_override or role_name_override,
         )
 
-    put_keycloak_role_mapper("keycloak-role-mapper-user", f"{xr_name}-ws-access")
-    put_keycloak_role_mapper("keycloak-role-mapper-admin", f"{xr_name}-ws-admin")
     put_keycloak_role_mapper("keycloak-role-mapper-api", f"{xr_name}-ws-api")
+
+    interactive_scope = f"{xr_name}:interactive"
+    interactive_resource = _resource_name(xr_name, "interactive")
+    policy_name = _resource_name(xr_name, "reject-interactive-exchange")
+    put("keycloak-exchange-policy-profile", _render_template(
+        req, "keycloak/exchange-policy-profile", realm=realm, policy_name=policy_name,
+    ), policy_name)
+    put("keycloak-exchange-policy", _render_template(
+        req, "keycloak/exchange-policy", realm=realm, policy_name=policy_name,
+        interactive_scopes_json=json.dumps([interactive_scope]),
+    ), policy_name)
+
+    def put_scope(name, resource, roles):
+        put("keycloak-optional-scope", _render_template(
+            req, "keycloak/client-scope", realm=realm, scope_name=name,
+        ), resource)
+        for role in roles:
+            put("keycloak-optional-role", _render_template(
+                req, "keycloak/optional-role-scope-mapper", realm=realm,
+                scope_resource=resource, role_resource=role,
+            ), _resource_name(resource, role))
+
+    instances = spec.get("vclusters") or {}
+    additional_profiles = [
+        (instance, group["name"])
+        for instance, config in sorted(instances.items())
+        for group in _vcluster_exchange_groups(config)
+    ]
+    additional_roles = [
+        _vcluster_profile(xr_name, instance, group)
+        for instance, group in additional_profiles
+    ]
+    admin_roles = [
+        _vcluster_profile(xr_name, instance, "cluster-admin")
+        for instance in sorted(instances)
+    ]
+    put_scope(interactive_scope, interactive_resource, [
+        f"{xr_name}-ws-access", f"{xr_name}-ws-admin", *admin_roles,
+    ])
+    optional_scopes = [interactive_scope]
+    for (instance, group), role in zip(additional_profiles, additional_roles):
+        scope = f"{xr_name}:vclusters_{instance}_{group}"
+        put_scope(scope, _resource_name(role, "scope"), [role])
+        optional_scopes.append(scope)
+
+    for kind, field, names in (
+        ("ClientDefaultScopes", "defaultScopes", ["basic", "profile", "email"]),
+        ("ClientOptionalScopes", "optionalScopes", optional_scopes),
+    ):
+        put(f"keycloak-{field}", _render_template(
+            req, "keycloak/client-scopes", scope_kind=kind,
+            scope_binding={
+                "realmId": realm,
+                "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                field: names,
+            },
+        ))
+    put("keycloak-client-roles", _render_template(
+        req, "keycloak/client-roles-mapper", realm=realm, xr_name=xr_name,
+        claim_name=f"resource_access.{xr_name}.roles",
+    ))
 
     for audience in extra_audiences:
         audience_name = (
@@ -217,10 +306,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
                 for role in [
                     f"{xr_name}-ws-access",
-                    *[
-                        _vcluster_profile(xr_name, instance, "cluster-admin")
-                        for instance in sorted(spec.get("vclusters") or {})
-                    ],
+                    f"{xr_name}-ws-api",
+                    *additional_roles,
                 ]
             ],
         ),
@@ -233,7 +320,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "keycloak/admin-group-roles",
             realm=realm,
             group_name=f"{xr_name}-admin",
-            role_name=f"{xr_name}-ws-admin",
+            role_refs=[
+                {"name": role, "policy": {"resolution": "Required", "resolve": "Always"}}
+                for role in [f"{xr_name}-ws-admin", f"{xr_name}-ws-api", *admin_roles, *additional_roles]
+            ],
         ),
         f"{xr_name}-admin",
     )
@@ -292,13 +382,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 ),
                 profile,
             )
-            if group["name"] == "cluster-admin":
-                put_keycloak_role_mapper(
-                    "keycloak-vcluster-user-role-mapper", profile,
-                    _resource_name("vcluster", xr_name, instance, "users-scope"),
-                )
-            else:
-                put_keycloak_role_mapper("keycloak-vcluster-scope", profile)
 
     users = list(spec.get("users", []) or [])
     userOverrides = spec.get("userOverrides", {}) or {}
@@ -336,3 +419,13 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             ),
             f"{xr_name}-admin",
         )
+
+    # Wait for scope restrictions and deletion of old broad mappings before exchange.
+    stale_security = any(
+        key not in security_resources
+        and _to_dict(observed.resource).get("kind") in {"RoleMapper", "ProtocolMapper", "ClientScope"}
+        for key, observed in req.observed.resources.items()
+    )
+    rsp.desired.resources[f"keycloak-client-{xr_name}"].resource["spec"]["forProvider"][
+        "standardTokenExchangeEnabled"
+    ] = not stale_security and _security_ready(req, security_resources)

@@ -19,6 +19,7 @@ import ssl
 import subprocess
 import time
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 ISSUER = "https://keycloak.keycloak:8443/realms/integration"
@@ -221,12 +222,13 @@ def identity(path, values=None, token=None, method=None):
         return json.loads(body) if body else None
 
 
-def token(client, secret, realm="integration", origin="https://keycloak.keycloak:8443"):
+def token(client, secret, realm="integration", origin="https://keycloak.keycloak:8443", scope=""):
     data = urlencode(
         {
             "grant_type": "client_credentials",
             "client_id": client,
             "client_secret": secret,
+            "scope": scope,
         }
     ).encode()
     context = ssl.create_default_context(cafile="/test/issuer.crt")
@@ -263,6 +265,10 @@ def verify_member_roles(removed, instances):
     expected = set() if removed else {
         f"vcluster_{instance}_cluster-admin" for instance in instances
     }
+    if not removed and "vc0" in instances:
+        expected.add("vcluster_vc0_namespace-demo")
+    if not removed and "vc1" in instances:
+        expected.add("vcluster_vc1_namespace-other")
 
     def assigned():
         admin = admin_token()
@@ -272,7 +278,9 @@ def verify_member_roles(removed, instances):
         client = "/admin/realms/integration/clients/" + clients[0]["id"]
         claims = identity(
             client + "/evaluate-scopes/generate-example-access-token?"
-            + urlencode({"userId": users[0]["id"], "scope": "openid"}),
+            + urlencode({"userId": users[0]["id"], "scope": "openid " + LAB + ":interactive"
+                         + (" " + LAB + ":vclusters_vc0_namespace-demo" if "vc0" in instances else "")
+                         + (" " + LAB + ":vclusters_vc1_namespace-other" if "vc1" in instances else "")}),
             token=admin,
         )
         roles = set(claims.get("resource_access", {}).get(LAB, {}).get("roles", []))
@@ -290,6 +298,82 @@ def verify_member_roles(removed, instances):
 
     wait_until(assigned, "Datalab member roles did not reach the expected state")
     print("PASS Datalab member token roles and separate ws_api automation permission", flush=True)
+
+
+def verify_user_exchange(api):
+    admin = admin_token()
+    context = ssl.create_default_context(cafile="/test/issuer.crt")
+    secret = next((Path("/oauth") / key).read_text().strip()
+                  for key in ("clientSecret", "client_secret", "attribute.client_secret")
+                  if (Path("/oauth") / key).is_file())
+    endpoint = ISSUER + "/protocol/openid-connect/token"
+    profile = LAB + ":vclusters_vc0_namespace-demo"
+
+    def claims(value):
+        return json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
+
+    def issue(values):
+        with urlopen(Request(endpoint, data=urlencode(values).encode()), context=context, timeout=30) as result:
+            return json.load(result)
+
+    client = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)[0]
+    wait_until(lambda: identity("/admin/realms/integration/clients/" + client["id"], token=admin)
+               .get("attributes", {}).get("standard.token.exchange.enabled") == "true",
+               "Standard token exchange did not become enabled")
+    for username, eligible, is_admin in (
+        ("verify-s3", True, True),
+        ("verify-vcluster-member", True, False),
+        ("verify-vcluster-unassigned", False, False),
+    ):
+        user = identity("/admin/realms/integration/users?" + urlencode({"username": username, "exact": "true"}), token=admin)[0]
+        password = secrets.token_urlsafe(32)
+        identity("/admin/realms/integration/users/" + user["id"],
+                 {"firstName": "Integration", "lastName": "User", "email": username + "@example.invalid",
+                  "emailVerified": True, "requiredActions": []}, method="PUT", token=admin)
+        identity("/admin/realms/integration/users/" + user["id"] + "/reset-password",
+                 {"type": "password", "value": password, "temporary": False}, method="PUT", token=admin)
+        subject = issue({"grant_type": "password", "client_id": "test-login",
+                         "username": username, "password": password, "scope": "openid"})["access_token"]
+        original = claims(subject)
+        assert LAB in ([original["aud"]] if isinstance(original["aud"], str) else original["aud"])
+        original_roles = set(original.get("resource_access", {}).get(LAB, {}).get("roles", []))
+        expected_original = {"ws_api", "ws_access", "vcluster_vc0_namespace-demo", "vcluster_vc1_namespace-other"} if eligible else set()
+        if is_admin:
+            expected_original |= {"ws_admin", "vcluster_vc0_cluster-admin", "vcluster_vc1_cluster-admin"}
+        assert original_roles == expected_original
+        request = [
+            ("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"),
+            ("client_id", LAB), ("client_secret", secret), ("subject_token", subject),
+            ("subject_token_type", "urn:ietf:params:oauth:token-type:access_token"),
+            ("requested_token_type", "urn:ietf:params:oauth:token-type:access_token"),
+            ("audience", "test-login"), ("audience", LAB),
+        ]
+        response = issue([*request, ("scope", profile)])
+        exchanged = response["access_token"]
+        output = claims(exchanged)
+        assert output["sub"] == original["sub"] and output["iss"] == ISSUER
+        assert set(output["aud"]) == {LAB, "test-login"}
+        assert not output.get("realm_access", {}).get("roles")
+        authorization = output.get("resource_access", {})
+        if eligible:
+            assert set(authorization) == {LAB}
+            assert set(authorization[LAB]["roles"]) == {"ws_api", "vcluster_vc0_namespace-demo"}
+            assert profile in response["scope"].split()
+            api("/api/v1/namespaces/demo/configmaps", exchanged)
+            api("/api/v1/namespaces", exchanged, expected=403)
+        else:
+            assert not authorization
+            assert profile not in response["scope"].split()
+            api("/api/v1/namespaces/demo/configmaps", exchanged, expected=(401, 403))
+        for requested in (LAB + ":interactive", profile + " " + LAB + ":interactive"):
+            try:
+                issue([*request, ("scope", requested)])
+            except HTTPError as error:
+                assert error.code == 400 and json.load(error).get("error")
+            else:
+                raise AssertionError("Exchange accepted the privileged interactive scope")
+    print("PASS user identity, exact exchanged roles and audiences, unauthorized profile omission, and privileged scope rejection", flush=True)
+    print("PASS signed exchanged tokens permit namespace reads and reject cluster access", flush=True)
 
 
 def workspace_account():
@@ -457,7 +541,12 @@ def main():
         # Only this test assigns a vcluster role to the workspace account.
         set_workspace_roles([role])
         try:
-            value = profile_token(profile, instance)
+            profile_token(profile, instance)
+            scope = (LAB + ":interactive" if role.endswith("_cluster-admin")
+                     else LAB + ":vclusters_" + role.removeprefix("vcluster_"))
+            value = token(LAB, next((Path("/oauth") / key).read_text().strip()
+                                   for key in ("clientSecret", "client_secret", "attribute.client_secret")
+                                   if (Path("/oauth") / key).is_file()), scope=scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
             return value
@@ -553,6 +642,7 @@ def main():
     api("/api/v1/namespaces", bearer, expected=(401, 403), instance="vc1")
     print("PASS each virtual cluster rejects the other profile", flush=True)
     editor = granted_token("editor", "vcluster_vc0_namespace-demo")
+    verify_user_exchange(api)
     admin_profile = granted_token("administrator", "vcluster_vc0_namespace-demo")
     api("/api/v1/namespaces", admin_profile, expected=403)
     api("/api/v1/namespaces/demo/configmaps", admin_profile)
@@ -1000,6 +1090,7 @@ def main():
             Path("/profiles/administrator/client-id").read_text().strip(),
             next((Path("/oauth") / key).read_text().strip() for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file()),
             origin="http://keycloak.keycloak:8080",
+            scope=LAB + ":interactive",
         )
     finally:
         set_workspace_roles([])

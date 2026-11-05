@@ -90,8 +90,19 @@ in this order:
 Apply `03-providerConfigs.yaml` with `kubectl apply -n workspace -f ...`.
 Create its referenced Keycloak credential Secret in that namespace through
 your platform's Secret tools. The Keycloak account needs permission to manage
-clients, service-account roles, groups, memberships, and role mappings in the
-target realm.
+clients, client scopes, service-account roles, groups, memberships, role
+mappings, and client policies in the target realm.
+
+Public Data/S3 access needs a runtime credential copy for its OAuth2 proxy.
+The provider creates that copy only when the proxy is enabled.
+
+The server must support Standard Token Exchange V2 and the `grant-type`,
+`client-scopes`, and `reject-request` client-policy providers.
+
+Provider Datalab configures one Keycloak client per workspace. If you use a
+separate login client, its tokens must include the workspace client in `aud`
+before that workspace client can exchange them. Set additional audiences for
+workspace-issued tokens with `iam.extraAudiences`. See [authentication](authentication.md).
 
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
@@ -280,7 +291,7 @@ The S3 entry in `status.connections` reports the configured `endpoint` and
 | `iam.namespace` | `keycloak` | Namespace selected by IAM egress rules. |
 | `iam.issuerURL` | Not set | Public login issuer; required for permanent Data exposure. |
 | `iam.internalURL` | Not set | Token and signing-key URL; required for permanent Data exposure. |
-| `iam.extraAudiences` | `[]` | Additional OAuth client audiences. |
+| `iam.extraAudiences` | `[]` | Additional audiences for workspace-issued tokens. The workspace audience is always included. |
 | `ingress.enabled` | `false` | Permanent Data Ingress; mutually exclusive with `httpRoute.enabled`. |
 | `ingress.class` | Empty | Session ingress class; required for Data Ingress. |
 | `ingress.domain` | `default` for sessions | Host suffix; must be set for permanent Data exposure. |

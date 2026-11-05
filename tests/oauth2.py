@@ -25,7 +25,7 @@ def main():
             "secretRef": {"name": "retired", "namespace": "workspace"},
         }]},
     }
-    client_id = "ws-alice"
+    client_id = "s-john"
     expected = [{"name": client_id, "type": "client",
         "issuerUrl": env["data"]["iam"]["issuerURL"],
         "secretRef": {"name": "s-joe-oauth-client", "namespace": "workspace"},
@@ -55,6 +55,7 @@ def main():
 
     def status(observed):
         resources = render(args, env, source, observed, include_composite=True)
+        assert "oauth2-client-secret-s-joe" not in resources
         result = resources["composite"]["status"]
         assert all(c["type"] != "oauth2" for c in result["connections"])
         assert "oauth2-sensitive-value" not in json.dumps(result)

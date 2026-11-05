@@ -198,7 +198,7 @@ status = json.load(sys.stdin)["status"]
 assert status["oauth2"] == [{"name": "verify-vcluster", "type": "client", "issuerUrl": "https://keycloak.keycloak:8443/realms/integration", "secretRef": {"name": "verify-vcluster-oauth-client", "namespace": "workspace"}, "ready": True}]
 assert not any(c["type"] == "oauth2" for c in status["connections"])
 connections = [c for c in status["connections"] if c["type"] == "vcluster"]
-assert len(connections) == 3 and all(c["ready"] for c in connections)
+assert len(connections) == 4 and all(c["ready"] for c in connections)
 assert {c["instance"] for c in connections} == {"vc0", "vc1"}
 assert all(set(c) <= {"name", "type", "instance", "group", "targetNamespace", "role", "endpoint", "ready", "secretRef"} for c in connections)
 print("PASS connection status contains ready profile references without credentials")'
@@ -246,7 +246,7 @@ PVC
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
   kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-removed
-  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3"]}}'
+  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3","verify-vcluster-member"]}}'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}"
   kube rollout restart statefulset/vcluster-vc0 --namespace "${runtime_namespace}"

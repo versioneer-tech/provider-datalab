@@ -86,6 +86,7 @@ python3 tests/vclusters.py --functions "${render_dir}/functions.yaml" --network 
 python3 tests/s3-connections.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 python3 tests/sessions.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 python3 tests/oauth2.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+python3 tests/token-exchange.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then

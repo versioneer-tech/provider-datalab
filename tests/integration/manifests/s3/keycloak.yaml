@@ -13,7 +13,7 @@ metadata:
   namespace: keycloak
 data:
   integration-realm.json: |
-    {"realm":"integration","enabled":true,"accessTokenLifespan":3600,"users":[{"username":"verify-s3","enabled":true}]}
+    {"realm":"integration","enabled":true,"accessTokenLifespan":3600,"users":[{"username":"verify-s3","enabled":true},{"username":"verify-vcluster-member","enabled":true},{"username":"verify-vcluster-unassigned","enabled":true}],"clients":[{"clientId":"test-login","protocol":"openid-connect","publicClient":true,"standardFlowEnabled":true,"directAccessGrantsEnabled":true,"fullScopeAllowed":true,"defaultClientScopes":["basic","roles","profile","email"],"protocolMappers":[{"name":"test-workspace-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","config":{"included.custom.audience":"verify-vcluster","access.token.claim":"true","id.token.claim":"false"}}]}]}
 ---
 apiVersion: apps/v1
 kind: Deployment

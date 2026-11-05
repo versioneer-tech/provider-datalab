@@ -1,0 +1,26 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfilePolicy
+spec:
+  providerConfigRef:
+    name: provider-keycloak
+    kind: ProviderConfig
+  forProvider:
+    realmId: ${realm}
+    name: ${policy_name}
+    enabled: true
+    profilesRefs:
+    - name: ${policy_name}
+      policy:
+        resolution: Required
+        resolve: Always
+    condition:
+    - name: grant-type
+      configuration:
+        grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'
+    - name: client-scopes
+      configuration:
+        type: Any
+        scopes: ${interactive_scopes_json}

@@ -37,8 +37,9 @@ that repeat the resource list. Behavior checks cover outcomes that need more
 than a snapshot comparison:
 
 - Virtual clusters: instance isolation and removal, member grants, one
-  workspace OAuth2 client with only the default `ws_api` account grant, scope
-  mappings, public profile Secrets, and removal of old profile resources.
+  workspace OAuth2 client with only the default `ws_api` account grant, exact
+  human group grants, optional profile scopes, the exchange policy, public
+  profile Secrets, and removal of old profile resources.
 - Caller credentials and discovery: human token files, separate machine
   credentials, missing sources, readiness, stale entry removal, and no
   credential disclosure in status.
@@ -50,6 +51,8 @@ than a snapshot comparison:
   separate integration build, and rejection of invalid build settings.
 
 Render tests cannot prove live authorization, routing, persistence, or timing.
+`token-exchange.py` checks rendered authorization boundaries and exchange
+enablement after scope reconciliation. It does not simulate token issuance.
 The [Kind integration suite](integration/README.md) checks those outcomes.
 Its `verify-vcluster` profile also checks OAuth2 name uniqueness through
 Kubernetes admission and rejects API access without a vcluster role.

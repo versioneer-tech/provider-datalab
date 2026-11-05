@@ -27,4 +27,4 @@ and who can restore it.
 
 Stopping a Pod or tightening a network rule does not revoke a leaked
 credential. Rotate or revoke it at its source. Protect the generated OAuth
-Secret as described in [Authentication](../how-to-guides/authentication.md#keycloak-clients-and-roles).
+Secret as described in [Authentication](../how-to-guides/authentication.md#groups-and-roles).

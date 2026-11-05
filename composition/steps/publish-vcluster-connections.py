@@ -73,6 +73,10 @@ def compose(req, rsp):
             binding = hashlib.sha256(
                 f"{group['name']}:{group['namespace']}:{group['role']}".encode()
             ).hexdigest()[:12]
+            scope_resource = (
+                _resource_name(name, "interactive") if group["name"] == "cluster-admin"
+                else _resource_name(profile, "scope")
+            )
             complete = all(
                 ready(key)
                 for key in [
@@ -85,12 +89,11 @@ def compose(req, rsp):
                     ),
                     f"keycloak-client-{name}",
                     f"keycloak-vcluster-role-{profile}",
-                    (
-                        "keycloak-vcluster-user-role-mapper-"
-                        + _resource_name("vcluster", name, instance, "users-scope")
-                        if group["name"] == "cluster-admin"
-                        else f"keycloak-vcluster-scope-{profile}"
-                    ),
+                    f"keycloak-optional-scope-{scope_resource}",
+                    "keycloak-optional-role-" + _resource_name(scope_resource, profile),
+                    f"keycloak-defaultScopes-{name}",
+                    f"keycloak-optionalScopes-{name}",
+                    f"keycloak-client-roles-{name}",
                 ]
             )
             kubeconfig = _render_template(

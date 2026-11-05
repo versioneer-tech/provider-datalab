@@ -69,7 +69,7 @@ class VclusterCredentialTests(unittest.TestCase):
     def run_helper(self, files, response=None):
         module = runpy.run_path(str(ROOT / "examples/vcluster/credentials.py"))
         output, error = StringIO(), StringIO()
-        argv = ["credentials.py", "--issuer", "https://identity.example/realms/test", "--client-id", "ws-alice"]
+        argv = ["credentials.py", "--issuer", "https://identity.example/realms/test", "--client-id", "s-joe"]
         with patch.object(sys, "argv", argv), patch.object(module["os"], "environ", files), \
                 patch.dict(module["main"].__globals__, {"urlopen": response}), \
                 redirect_stdout(output), redirect_stderr(error):
@@ -86,7 +86,7 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertIn("DATALAB_ACCESS_TOKEN_FILE", error)
 
     def test_human_token_is_used_without_an_identity_exchange(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-access-token-") as directory:
             token = Path(directory) / "access-token"
             token.write_text("caller-access-token\n")
             code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
@@ -100,7 +100,7 @@ class VclusterCredentialTests(unittest.TestCase):
             requests.append(request)
             return StringIO(json.dumps({"access_token": "workspace-token", "expires_in": 300}))
 
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-client-secret-") as directory:
             secret = Path(directory) / "client-secret"
             secret.write_text("separate-client-secret\n")
             code, output, _ = self.run_helper({"DATALAB_CLIENT_SECRET_FILE": str(secret)}, exchange)
@@ -109,12 +109,12 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertEqual(len(requests), 1)
         from urllib.parse import parse_qs
         self.assertEqual(parse_qs(requests[0].data.decode()), {
-            "grant_type": ["client_credentials"], "client_id": ["ws-alice"],
+            "grant_type": ["client_credentials"], "client_id": ["s-joe"],
             "client_secret": ["separate-client-secret"],
         })
 
     def test_empty_or_ambiguous_sources_fail_without_a_credential(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credential-sources-") as directory:
             empty = Path(directory) / "empty"
             empty.write_text("")
             for sources in (

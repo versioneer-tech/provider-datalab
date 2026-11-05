@@ -916,6 +916,36 @@ spec:
     policy: SuccessfulCreate
   watch: true
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-client-roles-s-john
+  name: s-john
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-john
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: 'true'
+      claim.name: resource_access.s-john.roles
+      id.token.claim: 'false'
+      introspection.token.claim: 'true'
+      jsonType.label: String
+      multivalued: 'true'
+      userinfo.token.claim: 'false'
+      usermodel.clientRoleMapping.clientId: s-john
+    name: workspace-client-roles
+    protocol: openid-connect
+    protocolMapper: oidc-usermodel-client-role-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
@@ -939,6 +969,7 @@ spec:
     rootUrl: https://s-john.lab.acme.com
     serviceAccountsEnabled: true
     standardFlowEnabled: true
+    standardTokenExchangeEnabled: false
     validRedirectUris:
     - https://s-john.lab.acme.com/*
     - https://s-john-default.lab.acme.com/*
@@ -970,6 +1001,74 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-john-oauth-client
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientDefaultScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-defaultScopes-s-john
+  name: s-john
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-john
+      policy:
+        resolution: Required
+    defaultScopes:
+    - basic
+    - profile
+    - email
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfile
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-profile-s-john-reject-interactive-exchange-f97c4fc1ac
+  name: s-john-reject-interactive-exchange-f97c4fc1ac
+  namespace: default
+spec:
+  forProvider:
+    executor:
+    - name: reject-request
+    name: s-john-reject-interactive-exchange-f97c4fc1ac
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfilePolicy
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-s-john-reject-interactive-exchange-f97c4fc1ac
+  name: s-john-reject-interactive-exchange-f97c4fc1ac
+  namespace: default
+spec:
+  forProvider:
+    condition:
+    - configuration:
+        grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'
+      name: grant-type
+    - configuration:
+        scopes: '["s-john:interactive"]'
+        type: Any
+      name: client-scopes
+    enabled: true
+    name: s-john-reject-interactive-exchange-f97c4fc1ac
+    profilesRefs:
+    - name: s-john-reject-interactive-exchange-f97c4fc1ac
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: ProtocolMapper
@@ -1118,6 +1217,90 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-john-interactive-b006c04221-s-john-ws-access-69369ba4d1
+  name: s-john-interactive-b006c04221-s-john-ws-access-69369ba4d1
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-john-interactive-b006c04221
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-john-ws-access
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-john-interactive-b006c04221-s-john-ws-admin-ada8078621
+  name: s-john-interactive-b006c04221-s-john-ws-admin-ada8078621
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-john-interactive-b006c04221
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-john-ws-admin
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientScope
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-scope-s-john-interactive-b006c04221
+  name: s-john-interactive-b006c04221
+  namespace: default
+spec:
+  forProvider:
+    includeInTokenScope: true
+    name: s-john:interactive
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientOptionalScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optionalScopes-s-john
+  name: s-john
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-john
+      policy:
+        resolution: Required
+    optionalScopes:
+    - s-john:interactive
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
@@ -1160,28 +1343,6 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-john-ws-admin
-  name: s-john-ws-admin
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-john
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-john-ws-admin
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-john-ws-api
   name: s-john-ws-api
   namespace: default
@@ -1194,28 +1355,6 @@ spec:
     realmId: acme
     roleIdRef:
       name: s-john-ws-api
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-john-ws-access
-  name: s-john-ws-access
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-john
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-john-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -1250,6 +1389,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-john-admin
       policy:
@@ -1259,6 +1399,11 @@ spec:
     - name: s-john-ws-admin
       policy:
         resolution: Required
+        resolve: Always
+    - name: s-john-ws-api
+      policy:
+        resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -1272,6 +1417,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-john
       policy:
@@ -1279,6 +1425,10 @@ spec:
     realmId: acme
     roleIdsRefs:
     - name: s-john-ws-access
+      policy:
+        resolution: Required
+        resolve: Always
+    - name: s-john-ws-api
       policy:
         resolution: Required
         resolve: Always

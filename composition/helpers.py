@@ -133,6 +133,14 @@ def _vcluster_groups(config):
     return [groups[name] for name in sorted(groups)]
 
 
+def _vcluster_exchange_groups(config):
+    groups = {
+        group["name"]: group for group in config.get("groups") or []
+        if group["name"] != "cluster-admin"
+    }
+    return [groups[name] for name in sorted(groups)]
+
+
 def _runtime_namespace(req, name):
     environment = _extract_manifest(
         req.observed.resources.get(f"workshopenvironment-{name}")

@@ -11,6 +11,8 @@ data:
     namespace: keycloak
     internalURL: http://keycloak.keycloak:8080/realms/integration
     issuerURL: https://keycloak.keycloak:8443/realms/integration
+    extraAudiences:
+    - test-login
   ingress:
     class: nginx
     domain: lab.acme.com

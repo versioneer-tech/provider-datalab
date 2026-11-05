@@ -223,6 +223,36 @@ spec:
     policy: DeriveFromCelQuery
   watch: true
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-client-roles-s-jane
+  name: s-jane
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: 'true'
+      claim.name: resource_access.s-jane.roles
+      id.token.claim: 'false'
+      introspection.token.claim: 'true'
+      jsonType.label: String
+      multivalued: 'true'
+      userinfo.token.claim: 'false'
+      usermodel.clientRoleMapping.clientId: s-jane
+    name: workspace-client-roles
+    protocol: openid-connect
+    protocolMapper: oidc-usermodel-client-role-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
@@ -246,6 +276,7 @@ spec:
     rootUrl: https://s-jane.lab.acme.com
     serviceAccountsEnabled: true
     standardFlowEnabled: true
+    standardTokenExchangeEnabled: false
     validRedirectUris:
     - https://s-jane.lab.acme.com/*
     - https://s-jane-default.lab.acme.com/*
@@ -267,6 +298,74 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-jane-oauth-client
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientDefaultScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-defaultScopes-s-jane
+  name: s-jane
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    defaultScopes:
+    - basic
+    - profile
+    - email
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfile
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-profile-s-jane-reject-interactive-exchange-aaa817b81a
+  name: s-jane-reject-interactive-exchange-aaa817b81a
+  namespace: default
+spec:
+  forProvider:
+    executor:
+    - name: reject-request
+    name: s-jane-reject-interactive-exchange-aaa817b81a
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfilePolicy
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-s-jane-reject-interactive-exchange-aaa817b81a
+  name: s-jane-reject-interactive-exchange-aaa817b81a
+  namespace: default
+spec:
+  forProvider:
+    condition:
+    - configuration:
+        grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'
+      name: grant-type
+    - configuration:
+        scopes: '["s-jane:interactive"]'
+        type: Any
+      name: client-scopes
+    enabled: true
+    name: s-jane-reject-interactive-exchange-aaa817b81a
+    profilesRefs:
+    - name: s-jane-reject-interactive-exchange-aaa817b81a
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: ProtocolMapper
@@ -415,6 +514,155 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-jane-interactive-6889d26b6f-s-jane-vcluster-vc0-cl-b762b26044
+  name: s-jane-interactive-6889d26b6f-s-jane-vcluster-vc0-cl-b762b26044
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jane-interactive-6889d26b6f
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-jane-interactive-6889d26b6f-s-jane-ws-access-e9bc7a311a
+  name: s-jane-interactive-6889d26b6f-s-jane-ws-access-e9bc7a311a
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jane-interactive-6889d26b6f
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-jane-ws-access
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-jane-interactive-6889d26b6f-s-jane-ws-admin-8a0b022eeb
+  name: s-jane-interactive-6889d26b6f-s-jane-ws-admin-8a0b022eeb
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jane-interactive-6889d26b6f
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-jane-ws-admin
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-jane-vcluster-vc0-namespace-demo-6eaa08d412-scope-5883ec5aed
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-scope-5883ec5aed
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-scope-5b124be121
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientScope
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-scope-s-jane-interactive-6889d26b6f
+  name: s-jane-interactive-6889d26b6f
+  namespace: default
+spec:
+  forProvider:
+    includeInTokenScope: true
+    name: s-jane:interactive
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientScope
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-scope-s-jane-vcluster-vc0-namespace-demo-6eaa08d412-scope-5b124be121
+  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412-scope-5b124be121
+  namespace: default
+spec:
+  forProvider:
+    includeInTokenScope: true
+    name: s-jane:vclusters_vc0_namespace-demo
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientOptionalScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optionalScopes-s-jane
+  name: s-jane
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jane
+      policy:
+        resolution: Required
+    optionalScopes:
+    - s-jane:interactive
+    - s-jane:vclusters_vc0_namespace-demo
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
@@ -457,28 +705,6 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-jane-ws-admin
-  name: s-jane-ws-admin
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-jane-ws-admin
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-jane-ws-api
   name: s-jane-ws-api
   namespace: default
@@ -491,28 +717,6 @@ spec:
     realmId: acme
     roleIdRef:
       name: s-jane-ws-api
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-jane-ws-access
-  name: s-jane-ws-access
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-jane-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -547,6 +751,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-jane-admin
       policy:
@@ -556,6 +761,19 @@ spec:
     - name: s-jane-ws-admin
       policy:
         resolution: Required
+        resolve: Always
+    - name: s-jane-ws-api
+      policy:
+        resolution: Required
+        resolve: Always
+    - name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+      policy:
+        resolution: Required
+        resolve: Always
+    - name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
+      policy:
+        resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -569,6 +787,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-jane
       policy:
@@ -579,7 +798,11 @@ spec:
       policy:
         resolution: Required
         resolve: Always
-    - name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
+    - name: s-jane-ws-api
+      policy:
+        resolution: Required
+        resolve: Always
+    - name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
       policy:
         resolution: Required
         resolve: Always
@@ -643,50 +866,6 @@ spec:
       name: s-jane
     name: vcluster_vc0_namespace-demo
     realmId: acme
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-scope-s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-vcluster-user-role-mapper-vcluster-s-jane-vc0-users-scope-a910511262
-  name: vcluster-s-jane-vc0-users-scope-a910511262
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jane
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
-      policy:
-        resolution: Required
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

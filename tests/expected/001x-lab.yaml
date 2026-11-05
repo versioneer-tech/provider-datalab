@@ -324,6 +324,36 @@ spec:
     policy: SuccessfulCreate
   watch: true
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-client-roles-s-joe
+  name: s-joe
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: 'true'
+      claim.name: resource_access.s-joe.roles
+      id.token.claim: 'false'
+      introspection.token.claim: 'true'
+      jsonType.label: String
+      multivalued: 'true'
+      userinfo.token.claim: 'false'
+      usermodel.clientRoleMapping.clientId: s-joe
+    name: workspace-client-roles
+    protocol: openid-connect
+    protocolMapper: oidc-usermodel-client-role-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
@@ -347,6 +377,7 @@ spec:
     rootUrl: https://s-joe.lab.acme.com
     serviceAccountsEnabled: true
     standardFlowEnabled: true
+    standardTokenExchangeEnabled: false
     validRedirectUris:
     - https://s-joe.lab.acme.com/*
     - http://localhost:*
@@ -358,6 +389,101 @@ spec:
     name: provider-keycloak
   writeConnectionSecretToRef:
     name: s-joe-oauth-client
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientDefaultScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-defaultScopes-s-joe
+  name: s-joe
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    defaultScopes:
+    - basic
+    - profile
+    - email
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfile
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-profile-s-joe-reject-interactive-exchange-807773c462
+  name: s-joe-reject-interactive-exchange-807773c462
+  namespace: default
+spec:
+  forProvider:
+    executor:
+    - name: reject-request
+    name: s-joe-reject-interactive-exchange-807773c462
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+kind: ClientPolicyProfilePolicy
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-exchange-policy-s-joe-reject-interactive-exchange-807773c462
+  name: s-joe-reject-interactive-exchange-807773c462
+  namespace: default
+spec:
+  forProvider:
+    condition:
+    - configuration:
+        grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'
+      name: grant-type
+    - configuration:
+        scopes: '["s-joe:interactive"]'
+        type: Any
+      name: client-scopes
+    enabled: true
+    name: s-joe-reject-interactive-exchange-807773c462
+    profilesRefs:
+    - name: s-joe-reject-interactive-exchange-807773c462
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-extra-audience-s-joe-s-joe-s-joe-audience
+  name: s-joe-s-joe-audience
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: 'true'
+      id.token.claim: 'false'
+      included.client.audience: s-joe
+      introspection.token.claim: 'true'
+      userinfo.token.claim: 'false'
+    name: s-joe-audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
 ---
 apiVersion: group.keycloak.m.crossplane.io/v1alpha1
 kind: Group
@@ -452,6 +578,90 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-joe-interactive-4df9c2363b-s-joe-ws-access-c9d31c80c3
+  name: s-joe-interactive-4df9c2363b-s-joe-ws-access-c9d31c80c3
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-joe-interactive-4df9c2363b
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-joe-ws-access
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: RoleMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-role-s-joe-interactive-4df9c2363b-s-joe-ws-admin-4e256764ec
+  name: s-joe-interactive-4df9c2363b-s-joe-ws-admin-4e256764ec
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-joe-interactive-4df9c2363b
+      policy:
+        resolution: Required
+        resolve: Always
+    realmId: acme
+    roleIdRef:
+      name: s-joe-ws-admin
+      policy:
+        resolution: Required
+        resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientScope
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optional-scope-s-joe-interactive-4df9c2363b
+  name: s-joe-interactive-4df9c2363b
+  namespace: default
+spec:
+  forProvider:
+    includeInTokenScope: true
+    name: s-joe:interactive
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+kind: ClientOptionalScopes
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-optionalScopes-s-joe
+  name: s-joe
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-joe
+      policy:
+        resolution: Required
+    optionalScopes:
+    - s-joe:interactive
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
 apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
@@ -494,28 +704,6 @@ apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: RoleMapper
 metadata:
   annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-admin-s-joe-ws-admin
-  name: s-joe-ws-admin
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-joe
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-joe-ws-admin
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
     crossplane.io/composition-resource-name: keycloak-role-mapper-api-s-joe-ws-api
   name: s-joe-ws-api
   namespace: default
@@ -528,28 +716,6 @@ spec:
     realmId: acme
     roleIdRef:
       name: s-joe-ws-api
-      policy:
-        resolution: Required
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: RoleMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-role-mapper-user-s-joe-ws-access
-  name: s-joe-ws-access
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-joe
-      policy:
-        resolution: Required
-    realmId: acme
-    roleIdRef:
-      name: s-joe-ws-access
       policy:
         resolution: Required
   providerConfigRef:
@@ -584,6 +750,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-joe-admin
       policy:
@@ -593,6 +760,11 @@ spec:
     - name: s-joe-ws-admin
       policy:
         resolution: Required
+        resolve: Always
+    - name: s-joe-ws-api
+      policy:
+        resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -606,6 +778,7 @@ metadata:
   namespace: default
 spec:
   forProvider:
+    exhaustive: true
     groupIdRef:
       name: s-joe
       policy:
@@ -613,6 +786,10 @@ spec:
     realmId: acme
     roleIdsRefs:
     - name: s-joe-ws-access
+      policy:
+        resolution: Required
+        resolve: Always
+    - name: s-joe-ws-api
       policy:
         resolution: Required
         resolve: Always

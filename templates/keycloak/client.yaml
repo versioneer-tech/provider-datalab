@@ -21,6 +21,7 @@ spec:
     implicitFlowEnabled: false
     directAccessGrantsEnabled: false
     serviceAccountsEnabled: true
+    standardTokenExchangeEnabled: ${exchange_enabled}
     oauth2DeviceAuthorizationGrantEnabled: false
     webOrigins: ${redirect_uris}
     validRedirectUris: ${redirect_uris}

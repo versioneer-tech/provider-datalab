@@ -83,7 +83,6 @@ def main():
     resources = render(args, env, source)
     for name in ("data-deployment-s-joe", "observe-runtime-storage-secret-s-joe"):
         assert name not in resources
-    assert not any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values())
     workshop = manifest(resources, "workshop-s-joe")["spec"]
     assert "registry" not in workshop["session"]["applications"]
     assert not any(dashboard["name"] == "Data" for dashboard in workshop["session"]["dashboards"])
