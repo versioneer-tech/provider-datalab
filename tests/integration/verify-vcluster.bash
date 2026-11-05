@@ -150,12 +150,16 @@ DATALAB
       sleep 2
     done
     kube wait "datalab/${team}" --namespace workspace --for=condition=Ready --timeout=5m
+    python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
+      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace workspace --datalab "${team}"
   done
   printf 'PASS John has both custom keys; Jane has only apikey-1; missing keys do not block readiness\n'
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete datalab/s-john datalab/s-jane --namespace workspace --wait=false
     for team in s-john s-jane; do
       kube wait "datalab/${team}" --namespace workspace --for=delete --timeout=10m
+      python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
+        --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace workspace --datalab "${team}" --deleted
       kube wait "namespace/${team}" --for=delete --timeout=10m
     done
     kube delete secret/s-john secret/s-jane --namespace workspace

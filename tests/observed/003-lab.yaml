@@ -102,3 +102,5 @@ status:
       metadata:
         name: apikey-1
         namespace: s-jane
+      data:
+        token: dGVzdC1hcGkta2V5

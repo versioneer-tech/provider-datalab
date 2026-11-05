@@ -1,6 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 from collections import Counter
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -72,6 +73,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                 ),
             }
+            if kind in ("postgres", "mongo", "redis", "custom"):
+                connection = publish_connection(connection, source, present)
+                if kind == "custom" and connection is None:
+                    return
             if kind == "s3":
                 data = _extract_data(source)
                 for field, secret_key in (
@@ -81,8 +86,55 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     value = _b64get_any(data, [secret_key]) or storage_config.get(field)
                     if value:
                         connection[field] = value
-            if kind != "custom" or connection["ready"]:
-                connections.append(connection)
+            connections.append(connection)
+
+    def publish_connection(connection, source, present):
+        kind, instance = connection["type"], connection["name"]
+        secret_name = _resource_name(xr_name, kind, instance, "connection")
+        key = _resource_name("connection", secret_name)
+        source_manifest = _extract_manifest(source)
+        data = dict(source_manifest.get("data") or {})
+        data.update({name: base64.b64encode(value.encode()).decode()
+                     for name, value in (source_manifest.get("stringData") or {}).items()})
+        required = {
+            "postgres": ("host", "port", "user", "password", "dbname", "uri"),
+            "mongo": ("user", "password"),
+            "redis": ("user", "password"),
+        }.get(kind, ())
+        if kind != "custom":
+            data = {name: value for name, value in data.items() if name in required}
+        available = (present and connection["ready"] and bool(data)
+                     and all(data.get(name) for name in required))
+        if kind == "custom" and not available:
+            return None
+        connection["secretRef"] = {"name": secret_name, "namespace": xr_namespace}
+        connection["ready"] = False
+        if available:
+            secret_type = (source_manifest.get("type") or "Opaque") if kind == "custom" else "Opaque"
+            # Token copies must not attach to another namespace's account controller.
+            if secret_type in ("kubernetes.io/service-account-token", "bootstrap.kubernetes.io/token"):
+                secret_type = "Opaque"
+            secret = _render_template(
+                req, "secrets/connection", key=key, name=xr_name,
+                namespace=xr_namespace, secret_name=secret_name,
+                connection_name=_resource_name(kind, instance), values=data,
+            )
+            secret["type"] = secret_type
+            rsp.desired.resources[key].resource.update(secret)
+            published = observed.get(key)
+            body = _to_dict(published.resource) if published else {}
+            # Native Secrets have no Ready condition. Compare their actual data.
+            connection["ready"] = (
+                body.get("apiVersion") == "v1" and body.get("kind") == "Secret"
+                and body.get("metadata", {}).get("name") == secret_name
+                and body.get("metadata", {}).get("namespace") == xr_namespace
+                and not body.get("metadata", {}).get("deletionTimestamp")
+                and body.get("type") == secret_type and body.get("data") == data
+            )
+            rsp.desired.resources[key].ready = (
+                fnv1.READY_TRUE if connection["ready"] else fnv1.READY_FALSE
+            )
+        return connection
 
     storage_config = environment.get("storage") or {}
     observe(

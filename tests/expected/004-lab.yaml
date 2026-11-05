@@ -23,11 +23,13 @@ status:
     pvcRef:
       name: s-john-default-persistent
       namespace: s-john
+    pvcSize: 40Gi
     state: started
   - name: analysis
     pvcRef:
       name: s-john-analysis-persistent
       namespace: s-john
+    pvcSize: 40Gi
     state: stopped
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1

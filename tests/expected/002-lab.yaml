@@ -791,6 +791,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: 4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW
+        user: prod-app
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1274,6 +1275,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: MqZoLXDLQrwPOuwgM1dj6LzOTOML
+        user: default
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1297,6 +1299,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: bfbede3jOsfJeHOD7NGzjQiTAAj3LLwM
+        user: backup
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig

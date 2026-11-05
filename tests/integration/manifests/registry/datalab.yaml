@@ -13,3 +13,5 @@ spec:
   sessions:
     - name: default
       state: started
+    - name: saved
+      state: stopped

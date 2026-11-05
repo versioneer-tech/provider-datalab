@@ -487,7 +487,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusconnectionsindex">connections</a></b></td>
         <td>[]object</td>
         <td>
-          Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery. Virtual API readiness does not imply caller authorization.<br/>
+          Service and virtual API connection metadata. Managed service and custom connections are ready when their published Secret in the Datalab namespace matches the available source. Readiness does not confirm delivery into a virtual cluster or caller authorization.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -501,7 +501,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatussessionsindex">sessions</a></b></td>
         <td>[]object</td>
         <td>
-          Session lifecycle state, workspace PVC references, and runtime details.<br/>
+          Session lifecycle state, persistent storage requests, workspace PVC references, and runtime details.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -512,8 +512,9 @@ Current observed state of the datalab.
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
 Service connections use the same `type` and `name` pair as a Secret binding.
-`secretRef` identifies the host source. Custom connections are listed only
-when available. Source readiness does not report virtual Secret delivery.
+`secretRef` identifies the published Secret. Managed service and custom
+connection Secrets are in the Datalab namespace. Readiness does not report
+virtual Secret delivery or caller authorization.
 Datalab readiness requires every published connection and the existing
 resource checks to be ready.
 
@@ -669,8 +670,7 @@ It replaces the previous map keyed by session name.
 | `name` | string | Session name from `spec.sessions`. | true |
 | `state` | enum | Desired lifecycle: `started` or `stopped`. | true |
 | `pvcRef` | object | Workspace PVC reference with required `name` and `namespace`. Does not report PVC readiness. | true |
+| `pvcSize` | string | Persistent session PVC request as a Kubernetes quantity. Retained while stopped; zero when none, omitted when unknown. Shared PVCs are counted once. | false |
 | `phase` | string | Latest observed runtime phase. Absent for stopped sessions. | false |
 | `message` | string | Latest observed runtime message. Absent for stopped sessions. | false |
 | `url` | string | Public session URL. Present only when the runtime is `Running`. | false |
-
-Read the referenced PVC for its requested size and allocated capacity.

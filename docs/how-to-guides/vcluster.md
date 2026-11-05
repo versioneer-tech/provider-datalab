@@ -141,18 +141,18 @@ spec:
 ```
 
 The provider publishes each service connection in `status.connections`, with its `type`,
-`name`, `secretRef`, and source readiness. A binding selects the same `type`
+`name`, `secretRef`, and readiness. A binding selects the same `type`
 and `name` pair. The mapping uses that connection's `secretRef`.
 
 The connection sources are:
 
-| Type | Name | Host Secret |
+| Type | Name | Published host Secret |
 | --- | --- | --- |
 | `s3` | `primary` | The Secret with the same name as the Datalab |
-| `postgres` | A key in `spec.databases` | `<name>-pguser-postgres` in the runtime namespace |
-| `mongo` | A key in `spec.documentStores` | `<name>-mongodb-auth` in the runtime namespace |
-| `redis` | A key in `spec.cacheStores` | `<name>-redis-auth` in the runtime namespace |
-| `custom` | A predefined Secret name | The named Secret in the team's runtime namespace, or its configured namespace |
+| `postgres` | A key in `spec.databases` | A connection copy in the Datalab namespace |
+| `mongo` | A key in `spec.documentStores` | A connection copy in the Datalab namespace |
+| `redis` | A key in `spec.cacheStores` | A connection copy in the Datalab namespace |
+| `custom` | A predefined Secret name | A connection copy in the Datalab namespace |
 
 Only declared service instances can be selected. The storage source namespace
 comes from `EnvironmentConfig.data.storage.secretNamespace`, or the claim
@@ -171,7 +171,8 @@ data:
 The provider checks these names in each Datalab's runtime namespace. Set
 `namespace` on an entry to use a shared source namespace. Names must be unique.
 It observes the source and does not create or change it. A custom connection
-is listed in `status.connections` only after its source is confirmed ready.
+is listed in `status.connections` after its source is confirmed ready. Its
+`ready` value stays false until the published copy is available and current.
 Missing custom sources do not block Datalab readiness.
 
 Bind an available custom connection through the same list:

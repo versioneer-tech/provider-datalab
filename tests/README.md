@@ -45,6 +45,12 @@ than a snapshot comparison:
   credential disclosure in status.
 - Service operation: stable generated passwords, credential rotation, Data
   exposure, network rules, and environment overrides.
+- Service publication: copies in the Datalab namespace, connection fields,
+  local ownership, rotation readiness, source loss and recovery, removal,
+  and distinct names for Datalabs with the same service instances.
+- Session storage: effective defaults and overrides, retained stopped-session
+  storage, exclusion of service volumes, shared-volume counting, known zero,
+  and omission of unknown or invalid sizes.
 - Backups: enabled and disabled storage settings, usable PostgreSQL without
   backups, retained backups after export failure, and invalid Redis snapshots.
 - Function TTL: configured responses on normal and early-return paths, a

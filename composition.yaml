@@ -263,6 +263,7 @@ spec:
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
+        import base64
         from collections import Counter
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -325,6 +326,10 @@ spec:
                             and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                         ),
                     }
+                    if kind in ("postgres", "mongo", "redis", "custom"):
+                        connection = publish_connection(connection, source, present)
+                        if kind == "custom" and connection is None:
+                            return
                     if kind == "s3":
                         data = _extract_data(source)
                         for field, secret_key in (
@@ -334,8 +339,55 @@ spec:
                             value = _b64get_any(data, [secret_key]) or storage_config.get(field)
                             if value:
                                 connection[field] = value
-                    if kind != "custom" or connection["ready"]:
-                        connections.append(connection)
+                    connections.append(connection)
+
+            def publish_connection(connection, source, present):
+                kind, instance = connection["type"], connection["name"]
+                secret_name = _resource_name(xr_name, kind, instance, "connection")
+                key = _resource_name("connection", secret_name)
+                source_manifest = _extract_manifest(source)
+                data = dict(source_manifest.get("data") or {})
+                data.update({name: base64.b64encode(value.encode()).decode()
+                             for name, value in (source_manifest.get("stringData") or {}).items()})
+                required = {
+                    "postgres": ("host", "port", "user", "password", "dbname", "uri"),
+                    "mongo": ("user", "password"),
+                    "redis": ("user", "password"),
+                }.get(kind, ())
+                if kind != "custom":
+                    data = {name: value for name, value in data.items() if name in required}
+                available = (present and connection["ready"] and bool(data)
+                             and all(data.get(name) for name in required))
+                if kind == "custom" and not available:
+                    return None
+                connection["secretRef"] = {"name": secret_name, "namespace": xr_namespace}
+                connection["ready"] = False
+                if available:
+                    secret_type = (source_manifest.get("type") or "Opaque") if kind == "custom" else "Opaque"
+                    # Token copies must not attach to another namespace's account controller.
+                    if secret_type in ("kubernetes.io/service-account-token", "bootstrap.kubernetes.io/token"):
+                        secret_type = "Opaque"
+                    secret = _render_template(
+                        req, "secrets/connection", key=key, name=xr_name,
+                        namespace=xr_namespace, secret_name=secret_name,
+                        connection_name=_resource_name(kind, instance), values=data,
+                    )
+                    secret["type"] = secret_type
+                    rsp.desired.resources[key].resource.update(secret)
+                    published = observed.get(key)
+                    body = _to_dict(published.resource) if published else {}
+                    # Native Secrets have no Ready condition. Compare their actual data.
+                    connection["ready"] = (
+                        body.get("apiVersion") == "v1" and body.get("kind") == "Secret"
+                        and body.get("metadata", {}).get("name") == secret_name
+                        and body.get("metadata", {}).get("namespace") == xr_namespace
+                        and not body.get("metadata", {}).get("deletionTimestamp")
+                        and body.get("type") == secret_type and body.get("data") == data
+                    )
+                    rsp.desired.resources[key].ready = (
+                        fnv1.READY_TRUE if connection["ready"] else fnv1.READY_FALSE
+                    )
+                return connection
 
             storage_config = environment.get("storage") or {}
             observe(
@@ -459,6 +511,19 @@ spec:
             ]
             rsp.desired.composite.resource.update({"status": status})
       templates:
+        secrets/connection:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${secret_name}
+            namespace: ${namespace}
+            labels:
+              datalabs.pkg.internal/name: ${name}
+              datalabs.pkg.internal/connection: ${connection_name}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          type: Opaque
+          data: ${values}
         secrets/observer:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -6503,12 +6568,14 @@ spec:
                 store_name = store_key.strip()
                 mongo_resource_name = f"mongodb-{store_name}"
                 password_secret_name = f"{store_name}-mongodb-auth"
+                app_username = f"{store_name}-app"
                 mongo_password = _strong_token(f"{xr_name}:{store_name}:mongodb")
                 password_secret = _render_template(
                     req,
                     "mongodb/auth-secret",
                     password_secret_name=password_secret_name,
                     workshop_ns=workshop_namespace,
+                    app_username=app_username,
                     mongo_password=mongo_password,
                 )
                 pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
@@ -6526,7 +6593,7 @@ spec:
                     "mongodb/store",
                     mongo_resource_name=mongo_resource_name,
                     workshop_ns=workshop_namespace,
-                    app_username=f"{store_name}-app",
+                    app_username=app_username,
                     password_secret_name=password_secret_name,
                     store_name=store_name,
                     scram_secret_name=f"{store_name}-app-scram",
@@ -6651,6 +6718,7 @@ spec:
             namespace: ${workshop_ns}
           type: Opaque
           stringData:
+            user: ${app_username}
             password: ${mongo_password}
         mongodb/backup-cronjob:
           apiVersion: batch/v1
@@ -7006,6 +7074,7 @@ spec:
                     "redis/auth-secret",
                     redis_auth_secret_name=redis_auth_secret_name,
                     workshop_ns=workshop_namespace,
+                    redis_user="default",
                     redis_password=redis_password,
                 )
                 auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
@@ -7087,6 +7156,7 @@ spec:
                         "redis/auth-secret",
                         redis_auth_secret_name=backup_secret_name,
                         workshop_ns=workshop_namespace,
+                        redis_user="backup",
                         redis_password=backup_password,
                     )
                     backup_vcs = {
@@ -7235,6 +7305,7 @@ spec:
             namespace: ${workshop_ns}
           type: Opaque
           stringData:
+            user: ${redis_user}
             password: ${redis_password}
         redis/backup-cronjob:
           apiVersion: batch/v1
@@ -7425,9 +7496,23 @@ spec:
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
+        from decimal import Decimal
+        import re
+
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
         from google.protobuf import json_format, struct_pb2
 
+
+
+        def _storage_size(value):
+            text = str(value).strip() if value is not None else ""
+            match = re.fullmatch(
+                r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[KMGTPE]i|[numkMGTPE]?)",
+                text,
+            )
+            if not match or Decimal(match[1]) < 0:
+                return None
+            return text if Decimal(match[1]) else "0"
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -7441,6 +7526,11 @@ spec:
 
             sessions = {}
             pvc_namespace = _runtime_namespace(req, xr_name) or xr_name
+            counted_volumes = {}
+            workshop = rsp.desired.resources.get(f"workshop-{xr_name}")
+            workshop = _to_dict(workshop.resource) if workshop else {}
+            workshop = workshop.get("spec", {}).get("forProvider", {}).get("manifest") or {}
+            workspace = workshop.get("spec", {}).get("session", {}).get("resources")
 
             for session in spec.get("sessions") or []:
                 sid = _session_name(session)
@@ -7457,6 +7547,24 @@ spec:
                     },
                 }
                 sessions[sid] = entry
+
+                pvc = rsp.desired.resources.get(f"persistentvolumeclaim-{xr_name}-{sid}-persistent")
+                pvc = _to_dict(pvc.resource) if pvc else {}
+                pvc = pvc.get("spec", {}).get("forProvider", {}).get("manifest") or {}
+                if pvc.get("kind") == "PersistentVolumeClaim":
+                    size = _storage_size(pvc.get("spec", {}).get("resources", {}).get("requests", {}).get("storage"))
+                    volume = pvc.get("metadata") or {}
+                    identity = (volume.get("namespace"), volume.get("name"))
+                    if all(identity):
+                        entry["pvcRef"] = {"namespace": identity[0], "name": identity[1]}
+                        if size is not None:
+                            # Assign a shared volume's request to the first listed session.
+                            first_session = counted_volumes.setdefault(identity, sid)
+                            entry["pvcSize"] = size if first_session == sid else "0"
+                elif isinstance(workspace, dict) and not workspace.get("volume"):
+                    size = _storage_size(workspace["storage"]) if "storage" in workspace else "0"
+                    if size is not None:
+                        entry["pvcSize"] = size
 
                 if state != "started":
                     continue
@@ -7657,7 +7765,7 @@ spec:
                     rsp.desired.resources[key].resource.update(
                         _render_template(
                             req,
-                            "vcluster/connection-secret",
+                            "secrets/connection",
                             key=key,
                             name=name,
                             namespace=namespace,
@@ -7686,6 +7794,19 @@ spec:
             status["connections"] = connections
             rsp.desired.composite.resource.update({"status": status})
       templates:
+        secrets/connection:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ${secret_name}
+            namespace: ${namespace}
+            labels:
+              datalabs.pkg.internal/name: ${name}
+              datalabs.pkg.internal/connection: ${connection_name}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          type: Opaque
+          data: ${values}
         vcluster/client-config:
           apiVersion: v1
           kind: Config
@@ -7707,19 +7828,6 @@ spec:
                 interactiveMode: Never
                 command: python3
                 args: ${args}
-        vcluster/connection-secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${secret_name}
-            namespace: ${namespace}
-            labels:
-              datalabs.pkg.internal/name: ${name}
-              datalabs.pkg.internal/connection: ${connection_name}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          type: Opaque
-          data: ${values}
   - step: protect-vcluster-resources
     functionRef:
       name: crossplane-contrib-function-python

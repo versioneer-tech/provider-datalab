@@ -178,6 +178,8 @@ main() {
     printf 'Registry verification resources were kept for diagnosis.\n' >&2
     exit 1
   fi
+  python3 "${INTEGRATION_DIR}/verify-session-storage.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}"
   cleanup_successful_verification "${registry_runtime_namespace}"
 }
 

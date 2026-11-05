@@ -194,14 +194,19 @@ def main():
             "atProvider": {"manifest": {
                 "apiVersion": "v1", "kind": "Secret",
                 "metadata": {"namespace": "s-joe-runtime", "name": "github-development"},
+                "data": {"token": base64.b64encode(b"test-token").decode()},
             }},
         },
     }
-    bound = render(args, bound_env, bound_source, [*observed, custom_source], include_composite=True)
+    pending = render(args, bound_env, bound_source, [*observed, custom_source], include_composite=True)
+    custom_ref = next(c["secretRef"] for c in pending["composite"]["status"]["connections"] if c["type"] == "custom")
+    copy = next(body for body in pending.values() if body.get("kind") == "Secret"
+                and body["metadata"]["name"] == custom_ref["name"])
+    bound = render(args, bound_env, bound_source, [*observed, custom_source, copy], include_composite=True)
     connections = bound["composite"]["status"]["connections"]
     custom = [c for c in connections if c["type"] == "custom"]
     assert custom == [{"name": "github-development", "type": "custom", "ready": True,
-                       "secretRef": {"namespace": "s-joe-runtime", "name": "github-development"}}]
+                       "secretRef": {"namespace": "workspace", "name": copy["metadata"]["name"]}}]
     assert not next(c for c in connections if c["type"] == "postgres")["ready"]
 
     def native_secrets(rendered, instance):

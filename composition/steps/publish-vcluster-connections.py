@@ -113,7 +113,7 @@ def compose(req, rsp):
             rsp.desired.resources[key].resource.update(
                 _render_template(
                     req,
-                    "vcluster/connection-secret",
+                    "secrets/connection",
                     key=key,
                     name=name,
                     namespace=namespace,

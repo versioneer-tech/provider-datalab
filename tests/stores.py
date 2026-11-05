@@ -32,6 +32,12 @@ def main():
         assert f"test-{setting}" in yaml.safe_dump(store["spec"])
     for name in ("observe-database-secret-s-jeff-pg0", "db-postgrescluster-s-jeff-pg0"):
         assert manifest(resources, name)["metadata"]["namespace"] == "test-runtime"
+    mongo = manifest(resources, "mongodb-auth-secret-s-jeff-prod")
+    mongo_store = manifest(resources, stores["documentStore"])
+    assert mongo["stringData"]["user"] == mongo_store["spec"]["users"][0]["name"] == "prod-app"
+    redis = manifest(resources, "redis-auth-secret-s-jeff-prod")
+    assert redis["stringData"]["user"] == "default"
+    print("PASS MongoDB and Redis credentials match their configured users", flush=True)
     print("PASS store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
 
 

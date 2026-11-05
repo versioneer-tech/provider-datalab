@@ -68,6 +68,7 @@ status:
     pvcRef:
       name: s-jane-default-persistent
       namespace: s-jane
+    pvcSize: 40Gi
     state: started
 ---
 apiVersion: v1

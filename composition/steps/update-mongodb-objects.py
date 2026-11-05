@@ -115,12 +115,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         store_name = store_key.strip()
         mongo_resource_name = f"mongodb-{store_name}"
         password_secret_name = f"{store_name}-mongodb-auth"
+        app_username = f"{store_name}-app"
         mongo_password = _strong_token(f"{xr_name}:{store_name}:mongodb")
         password_secret = _render_template(
             req,
             "mongodb/auth-secret",
             password_secret_name=password_secret_name,
             workshop_ns=workshop_namespace,
+            app_username=app_username,
             mongo_password=mongo_password,
         )
         pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
@@ -138,7 +140,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "mongodb/store",
             mongo_resource_name=mongo_resource_name,
             workshop_ns=workshop_namespace,
-            app_username=f"{store_name}-app",
+            app_username=app_username,
             password_secret_name=password_secret_name,
             store_name=store_name,
             scram_secret_name=f"{store_name}-app-scram",

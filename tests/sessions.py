@@ -20,7 +20,7 @@ def main():
     env = environment()
     initial = render(args, env, source, [], include_composite=True)
     expected = [
-        {"name": name, "state": state,
+        {"name": name, "state": state, "pvcSize": "1Gi",
          "pvcRef": {"name": f"test-sessions-{name}-persistent", "namespace": "test-sessions"}}
         for name, state in (("work", "started"), ("saved", "stopped"))
     ]
@@ -54,13 +54,21 @@ def main():
     stopped["spec"]["sessions"] = [{"name": "work", "state": "stopped"}]
     result = render(args, env, stopped, observed, include_composite=True)
     assert result["composite"]["status"]["sessions"] == [{
-        "name": "work", "state": "stopped", "pvcRef": expected[0]["pvcRef"]
+        "name": "work", "state": "stopped", "pvcRef": expected[0]["pvcRef"], "pvcSize": "1Gi"
     }]
     assert "workshopsession-test-sessions-work" not in result
     stopped["spec"]["sessions"] = []
     result = render(args, env, stopped, observed, include_composite=True)
     assert not result["composite"].get("status", {}).get("sessions")
     print("PASS session names and PVC references survive stopping; stale runtime details and removed sessions do not")
+
+    env["data"]["defaults"] = {"quota": {"storage": "9Gi"}}
+    overridden = render(args, env, source, observed, include_composite=True)
+    for entry in overridden["composite"]["status"]["sessions"]:
+        pvc = manifest(overridden, f"persistentvolumeclaim-test-sessions-{entry['name']}-persistent")
+        assert entry["pvcSize"] == pvc["spec"]["resources"]["requests"]["storage"] == "9Gi"
+    assert [entry["state"] for entry in overridden["composite"]["status"]["sessions"]] == ["started", "stopped"]
+    print("PASS started and stopped session sizes follow effective PVC defaults and environment overrides")
 
 
 if __name__ == "__main__":

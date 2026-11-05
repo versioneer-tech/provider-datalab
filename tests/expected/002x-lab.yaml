@@ -46,23 +46,38 @@ status:
   - name: pg0
     ready: false
     secretRef:
-      name: pg0-pguser-postgres
-      namespace: s-jeff
+      name: s-jeff-postgres-pg0-connection-7625037fbd
+      namespace: default
     type: postgres
   - name: prod
     ready: false
     secretRef:
-      name: prod-mongodb-auth
-      namespace: s-jeff
+      name: s-jeff-mongo-prod-connection-3120006002
+      namespace: default
     type: mongo
   - name: prod
-    ready: true
+    ready: false
     secretRef:
-      name: prod-redis-auth
-      namespace: s-jeff
+      name: s-jeff-redis-prod-connection-d754ffa05f
+      namespace: default
     type: redis
   oauth2: []
   sessions: []
+---
+apiVersion: v1
+data:
+  password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
+  user: ZGVmYXVsdA==
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jeff-redis-prod-connection-d754ffa05f-7006a59e31
+  labels:
+    datalabs.pkg.internal/connection: redis-prod
+    datalabs.pkg.internal/name: s-jeff
+  name: s-jeff-redis-prod-connection-d754ffa05f
+  namespace: default
+type: Opaque
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -817,6 +832,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: 4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW
+        user: prod-app
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1320,6 +1336,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: MqZoLXDLQrwPOuwgM1dj6LzOTOML
+        user: default
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1343,6 +1360,7 @@ spec:
         namespace: s-jeff
       stringData:
         password: bfbede3jOsfJeHOD7NGzjQiTAAj3LLwM
+        user: backup
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig

@@ -67,6 +67,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "redis/auth-secret",
             redis_auth_secret_name=redis_auth_secret_name,
             workshop_ns=workshop_namespace,
+            redis_user="default",
             redis_password=redis_password,
         )
         auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
@@ -148,6 +149,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 "redis/auth-secret",
                 redis_auth_secret_name=backup_secret_name,
                 workshop_ns=workshop_namespace,
+                redis_user="backup",
                 redis_password=backup_password,
             )
             backup_vcs = {

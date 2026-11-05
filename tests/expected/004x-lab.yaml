@@ -18,16 +18,16 @@ spec:
 status:
   connections:
   - name: apikey-1
-    ready: true
+    ready: false
     secretRef:
-      name: apikey-1
-      namespace: s-john
+      name: s-john-custom-apikey-1-connection-f5bccc16b1
+      namespace: default
     type: custom
   - name: apikey-2
-    ready: true
+    ready: false
     secretRef:
-      name: apikey-2
-      namespace: s-john
+      name: s-john-custom-apikey-2-connection-6219fd6270
+      namespace: default
     type: custom
   oauth2: []
   sessions:
@@ -35,12 +35,42 @@ status:
     pvcRef:
       name: s-john-default-persistent
       namespace: s-john
+    pvcSize: 40Gi
     state: started
   - name: analysis
     pvcRef:
       name: s-john-analysis-persistent
       namespace: s-john
+    pvcSize: 40Gi
     state: stopped
+---
+apiVersion: v1
+data:
+  token: dGVzdC1hcGkta2V5
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-john-custom-apikey-1-connection-f5bccc1-9b916ef82a
+  labels:
+    datalabs.pkg.internal/connection: custom-apikey-1-e7e5ef9614
+    datalabs.pkg.internal/name: s-john
+  name: s-john-custom-apikey-1-connection-f5bccc16b1
+  namespace: default
+type: Opaque
+---
+apiVersion: v1
+data:
+  token: dGVzdC1hcGkta2V5
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-john-custom-apikey-2-connection-6219fd6-5a889019f9
+  labels:
+    datalabs.pkg.internal/connection: custom-apikey-2-d8e8888a51
+    datalabs.pkg.internal/name: s-john
+  name: s-john-custom-apikey-2-connection-6219fd6270
+  namespace: default
+type: Opaque
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object

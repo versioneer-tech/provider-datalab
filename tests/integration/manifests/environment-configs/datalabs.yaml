@@ -103,6 +103,8 @@ data:
     registry:
       enabled: true
       storage: 1Gi
+    quota:
+      storage: 2Gi
     security:
       kubernetesAccess: false
       externalEgress: false

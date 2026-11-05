@@ -60,6 +60,9 @@ status:
       metadata:
         name: apikey-1
         namespace: s-john
+      data:
+        token: dGVzdC1hcGkta2V5
+
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -79,3 +82,5 @@ status:
       metadata:
         name: apikey-2
         namespace: s-john
+      data:
+        token: dGVzdC1hcGkta2V5

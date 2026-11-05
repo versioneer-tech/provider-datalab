@@ -124,6 +124,8 @@ cleanup_successful_verification() {
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=5m; then
+    python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
+      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}" --deleted
     kube delete namespace "${POSTGRES_NAMESPACE}" \
       --ignore-not-found --wait=true --timeout=5m
     stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
@@ -162,6 +164,8 @@ main() {
     printf 'PostgreSQL verification resources were kept for diagnosis.\n' >&2
     exit 1
   fi
+  python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}"
   cleanup_successful_verification
 }
 

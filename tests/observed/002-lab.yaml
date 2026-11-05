@@ -83,6 +83,7 @@ status:
         name: prod-mongodb-auth
         namespace: s-jeff
       data:
+        user: cHJvZC1hcHA=
         password: NGhxNVdxN3pWeXdBRUkwaEM3SVAtaXlMWGlMWkVsUVc=
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -104,4 +105,5 @@ status:
         name: prod-redis-auth
         namespace: s-jeff
       data:
+        user: ZGVmYXVsdA==
         password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==

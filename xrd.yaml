@@ -316,7 +316,7 @@ spec:
                         type: boolean
                 sessions:
                   type: array
-                  description: Session lifecycle state, workspace PVC references, and runtime details.
+                  description: Session lifecycle state, persistent storage requests, workspace PVC references, and runtime details.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [name]
                   items:
@@ -342,6 +342,9 @@ spec:
                         enum:
                           - started
                           - stopped
+                      pvcSize:
+                        type: string
+                        description: Persistent session PVC request as a Kubernetes quantity. Retained while stopped, zero when none, and omitted when unknown. Shared PVCs are counted once.
                       phase:
                         type: string
                         description: Latest observed lifecycle phase for the session runtime.
@@ -353,7 +356,7 @@ spec:
                         description: Public URL of the active session.
                 connections:
                   type: array
-                  description: Service and virtual API connection metadata. Service readiness reports source observation, not Secret delivery. Virtual API readiness does not imply caller authorization.
+                  description: Service and virtual API connection metadata. Managed service and custom connections are ready when their published Secret in the Datalab namespace matches the available source. Readiness does not confirm delivery into a virtual cluster or caller authorization.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [type, name]
                   items:

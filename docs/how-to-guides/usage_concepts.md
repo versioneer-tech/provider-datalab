@@ -34,6 +34,7 @@ status:
   - name: default
     state: started
     phase: Running
+    pvcSize: "1Gi"
     pvcRef:
       name: s-jane-default-persistent
       namespace: s-jane
@@ -44,7 +45,8 @@ status:
 observed runtime details. The URL is present only when the runtime is
 `Running`. Stopped sessions keep `pvcRef` but have no runtime details or URL.
 The reference identifies the target PVC; it does not report PVC readiness.
-Read the PVC for its requested size and allocated capacity.
+`pvcSize` reports the requested capacity of the session PVC, including while
+stopped.
 
 This list replaces the previous map keyed by session name. Update consumers
 to select entries by `name`.
@@ -228,6 +230,8 @@ resources report ready. Read the conditions and events if either is false.
 Session names, state, phase, messages, PVC references, and URLs are in
 `status.sessions`.
 Service connections and public virtual API profiles are in `status.connections`.
+Read each connection through its `secretRef`.
+
 The backing S3 connection has the fixed name `primary`, also used in Secret
 bindings. It identifies the connection, not a bucket or failover priority.
 Its optional `endpoint` and `region` come from the source Secret's
