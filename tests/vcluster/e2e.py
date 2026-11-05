@@ -18,6 +18,7 @@ import threading
 import ssl
 import subprocess
 import time
+from tempfile import TemporaryDirectory
 from urllib.parse import urlencode
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -539,16 +540,21 @@ def main():
         command = config["users"][0]["user"]["exec"]
         assert "env" not in command
         secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file())
-        credential = subprocess.run(
-            [command["command"], *command["args"]],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={
-                **os.environ,
-                "DATALAB_CLIENT_SECRET_FILE": str(secret_file),
-            },
-        )
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            sources = {"DATALAB_CLIENT_SECRET_FILE": str(secret_file)}
+            if len(command["args"]) == 2:
+                value = token(LAB, secret_file.read_text().strip())
+                token_file = Path(directory) / "access-token"
+                token_file.write_text(value)
+                token_file.chmod(0o600)
+                sources = {"DATALAB_ACCESS_TOKEN_FILE": str(token_file)}
+            credential = subprocess.run(
+                [command["command"], *command["args"]],
+                check=True,
+                capture_output=True,
+                text=True,
+                env={**os.environ, **sources},
+            )
         return json.loads(credential.stdout)["status"]["token"]
 
     def granted_token(profile, role, instance="vc0"):

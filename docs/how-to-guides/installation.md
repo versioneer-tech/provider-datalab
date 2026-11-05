@@ -56,7 +56,10 @@ ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 
 For virtual API access, role assignments, and Secret bindings, use the
 [virtual cluster guide](vcluster.md). Profile downloads contain public settings;
-callers supply credentials separately.
+callers supply credentials separately. Additional profiles use a JWT access
+token file and need no client ID or secret. Exchange the token before you
+delegate access. The built-in `cluster-admin` profile keeps client ID and
+separate client-secret support.
 
 ## 1. Choose the claim namespace
 

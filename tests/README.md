@@ -41,7 +41,7 @@ than a snapshot comparison:
   human group grants, optional profile scopes, the exchange policy, public
   profile Secrets, and removal of old profile resources.
 - Caller credentials and discovery: human token files, separate machine
-  credentials, missing sources, readiness, stale entry removal, and no
+  credentials, delegated token expiry without client credentials, missing sources, readiness, stale entry removal, and no
   credential disclosure in status.
 - Service operation: stable generated passwords, credential rotation, Data
   exposure, network rules, and environment overrides.

@@ -139,8 +139,11 @@ Reconciliation removes a deleted or renamed profile's optional association,
 role scope mapping, Client Scope, and managed group grants. Instance deletion
 removes its profiles too. Already-issued JWTs can retain their claims until
 expiry. Downloading a kubeconfig profile neither grants permissions nor
-reduces a supplied token's permissions. The virtual API still checks the realm
-issuer, Datalab audience, signature, validity, and configured Datalab roles.
+reduces a supplied token's permissions. For delegated access, exchange the
+token first, then give the recipient the profile and returned access token.
+The additional profile helper reads that token from a file and needs no client
+secret. The virtual API still checks the realm issuer, Datalab audience,
+signature, validity, and configured Datalab roles.
 Its username is `sub`; groups are `datalab:<datalab>:<role>`. Existing virtual
 RoleBinding and ClusterRoleBinding rules apply without an authentication change.
 

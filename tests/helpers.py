@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import runpy
+import base64
 import re
 import subprocess
 import json
@@ -125,6 +126,76 @@ class VclusterCredentialTests(unittest.TestCase):
                 code, output, _ = self.run_helper(sources)
                 self.assertNotEqual(code, 0)
                 self.assertEqual(output, "")
+
+
+class VclusterDelegatedTokenTests(unittest.TestCase):
+    @staticmethod
+    def access_token(exp=1893456000):
+        payload = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).decode().rstrip("=")
+        return "header." + payload + ".signature"
+
+    def run_helper(self, files, args=()):
+        module = runpy.run_path(str(ROOT / "examples/vcluster/access-token.py"))
+        output, error = StringIO(), StringIO()
+        argv = ["credentials.py", *args]
+        with patch.object(sys, "argv", argv), patch.object(module["os"], "environ", files), \
+                redirect_stdout(output), redirect_stderr(error):
+            try:
+                code = module["main"]()
+            except SystemExit as exc:
+                code = exc.code
+        return code, output.getvalue(), error.getvalue()
+
+    def test_profile_requires_a_separate_credential_source(self):
+        code, output, error = self.run_helper({})
+        self.assertNotEqual(code, 0)
+        self.assertEqual(output, "")
+        self.assertIn("DATALAB_ACCESS_TOKEN_FILE", error)
+
+    def test_human_token_is_used_without_an_identity_exchange(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            token = Path(directory) / "access-token"
+            value = self.access_token()
+            token.write_text(value + "\n")
+            code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"], {
+            "token": value, "expirationTimestamp": "2030-01-01T00:00:00Z",
+        })
+
+    def test_delegated_token_needs_no_client_credentials(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            token = Path(directory) / "access-token"
+            value = self.access_token()
+            token.write_text(value + "\n")
+            code, output, _ = self.run_helper({}, ["--access-token-file", str(token)])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"]["token"], value)
+
+    def test_client_secret_cannot_replace_a_caller_token(self):
+        code, output, _ = self.run_helper({"DATALAB_CLIENT_SECRET_FILE": "/unused/client-secret"})
+        self.assertNotEqual(code, 0)
+        self.assertEqual(output, "")
+
+    def test_empty_or_missing_token_files_fail_without_a_credential(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            empty = Path(directory) / "empty"
+            empty.write_text("")
+            for token in (empty, Path(directory) / "missing"):
+                with self.subTest(token=token.name):
+                    code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
+                    self.assertNotEqual(code, 0)
+                    self.assertEqual(output, "")
+
+    def test_invalid_token_expiry_fails_without_a_credential(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            token = Path(directory) / "access-token"
+            for value in ("invalid", "header.e30.signature", self.access_token("invalid")):
+                with self.subTest(value=value):
+                    token.write_text(value)
+                    code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
+                    self.assertNotEqual(code, 0)
+                    self.assertEqual(output, "")
 
 
 class BuildAndHarnessTests(unittest.TestCase):

@@ -69,7 +69,11 @@ provider keeps the recovery kubeconfig private.
 
 `ready: true` reports runtime, routing, role, scope, and RBAC readiness. It does
 not imply caller authorization or require caller credentials to be present.
-The kubeconfig uses Python 3 with a credential file supplied by the caller.
+The kubeconfig uses Python 3. Additional profiles read an access token file
+supplied by the caller. They require no OAuth client ID or client secret and
+make no token requests. The built-in `cluster-admin` profile retains the
+Datalab client ID and issuer. It accepts a caller token or a separate client
+secret for the client-credentials flow.
 
 ```bash
 umask 077
@@ -96,6 +100,22 @@ kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
 The helper uses your access token directly. Renew the file through the same
 login flow when the token expires. An ID token cannot replace an access token.
 
+### Delegated access
+
+Before you give access to an agent or another caller, use
+[token exchange](authentication.md#user-token-exchange) to request the profile's
+scope. For example, `s-joe:vclusters_vc0_namespace-demo` selects the configured
+`namespace-demo` profile of `vc0`. Check that the returned token contains
+`vcluster_vc0_namespace-demo` and omits administrator and unrelated roles.
+
+Give the caller that token through a private file and the downloaded profile.
+The caller sets `DATALAB_ACCESS_TOKEN_FILE` and uses the kubeconfig as shown
+above. Keep the client secret with the user or service that performs exchange.
+The helper uses the supplied JWT access token directly and sets
+`ExecCredential.expirationTimestamp` from its `exp` claim. The API validates
+the token. When it expires, supply a new token through the same exchange
+process.
+
 ### Machine access
 
 An identity administrator must explicitly assign the required vcluster role
@@ -103,7 +123,7 @@ to the existing Datalab service account. For example,
 `vcluster_vc0_namespace-demo` permits the configured operations in `demo`.
 Do not add this account to a human group. Request the profile's optional scope
 when using a separately assigned role; the default machine token has only
-`ws_api`. The bundled helper requests no optional scopes.
+`ws_api`. Obtain the token before using the downloaded profile.
 
 Obtain the Datalab client secret from the source in `status.oauth2` through
 an authorized Secret-delivery process. This is the `<datalab>-oauth-client`
@@ -116,9 +136,11 @@ scope=s-joe:vclusters_vc0_namespace-demo
 ```
 
 Save the returned access token in a private file and use
-`DATALAB_ACCESS_TOKEN_FILE` as shown above. The helper's client-secret mode
-requests no optional scopes, so it gets only `ws_api` and cannot access the
-virtual API. A profile download supplies no credentials or role grants.
+`DATALAB_ACCESS_TOKEN_FILE` as shown above. The downloaded helper accepts only
+an access token file for additional profiles. The built-in `cluster-admin`
+helper still accepts a client secret, but requests no optional scopes. Its
+default machine token has only `ws_api` and cannot access the virtual API.
+A profile download supplies no credentials or role grants.
 
 ## Secret bindings
 

@@ -33,6 +33,8 @@ databases and object storage. API access uses the caller's token roles;
 downloading a profile grants no access. Token exchange can select a configured
 profile without the caller's administrator roles through
 [restricted exchange](docs/how-to-guides/authentication.md#user-token-exchange).
+Downloaded delegated profiles read a caller-supplied access token file. Exchange the
+token before delegating access; the recipient needs no client secret.
 Keycloak 26.2 or later is required. Optional browser sessions provide editors
 and terminals for the same team.
 
