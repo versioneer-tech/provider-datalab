@@ -397,7 +397,7 @@ Virtual Kubernetes clusters keyed by instance name.
         <td><b><a href="#datalabspecvclusterskeygroupsindex">groups</a></b></td>
         <td>[]object</td>
         <td>
-          Additional profiles granted to workspace users and admins. Only workspace admins receive the built-in cluster-admin profile.<br/>
+          Additional profiles granted to Datalab users and administrators. Only Datalab administrators receive the built-in cluster-admin profile.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -647,7 +647,7 @@ access, including for the built-in `cluster-admin` profile.
 ### Datalab.status.oauth2[index]
 
 The list uses `x-kubernetes-list-type: map` with `name` as its key. Names must
-be unique. The provider publishes the existing workspace client and removes
+be unique. The provider publishes the existing Datalab client and removes
 its entry when the client or credential source is removed. See
 [OAuth2 discovery](../how-to-guides/authentication.md#oauth2-discovery).
 

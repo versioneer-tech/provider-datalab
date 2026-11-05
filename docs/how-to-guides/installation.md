@@ -96,13 +96,18 @@ mappings, and client policies in the target realm.
 Public Data/S3 access needs a runtime credential copy for its OAuth2 proxy.
 The provider creates that copy only when the proxy is enabled.
 
-The server must support Standard Token Exchange V2 and the `grant-type`,
-`client-scopes`, and `reject-request` client-policy providers.
+Use Keycloak 26.2 or later for
+[Standard Token Exchange V2](https://www.keycloak.org/2025/05/standard-token-exchange-kc-26-2).
+The server must have the `grant-type`, `client-scopes`, and `reject-request`
+client-policy providers enabled.
+It also needs the built-in Role Name and Realm Roles protocol mappers.
+Keep `basic`, `profile`, and `email` as identity-only scopes, without role
+grants or role mappers.
 
-Provider Datalab configures one Keycloak client per workspace. If you use a
-separate login client, its tokens must include the workspace client in `aud`
-before that workspace client can exchange them. Set additional audiences for
-workspace-issued tokens with `iam.extraAudiences`. See [authentication](authentication.md).
+Provider Datalab configures one Keycloak client per Datalab. If you use a
+separate login client, its tokens must include the Datalab client in `aud`
+before that Datalab client can exchange them. Set additional audiences for
+tokens issued by the Datalab client with `iam.extraAudiences`. See [authentication](authentication.md).
 
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
@@ -291,7 +296,7 @@ The S3 entry in `status.connections` reports the configured `endpoint` and
 | `iam.namespace` | `keycloak` | Namespace selected by IAM egress rules. |
 | `iam.issuerURL` | Not set | Public login issuer; required for permanent Data exposure. |
 | `iam.internalURL` | Not set | Token and signing-key URL; required for permanent Data exposure. |
-| `iam.extraAudiences` | `[]` | Additional audiences for workspace-issued tokens. The workspace audience is always included. |
+| `iam.extraAudiences` | `[]` | Additional audiences for tokens issued by the Datalab client. The Datalab audience is always included. |
 | `ingress.enabled` | `false` | Permanent Data Ingress; mutually exclusive with `httpRoute.enabled`. |
 | `ingress.class` | Empty | Session ingress class; required for Data Ingress. |
 | `ingress.domain` | `default` for sessions | Host suffix; must be set for permanent Data exposure. |

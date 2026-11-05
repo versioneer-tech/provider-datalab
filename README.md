@@ -27,11 +27,14 @@ spec:
       storage: 1Gi
 ```
 
-Team members receive the configured access profiles. Workspace administrators
+Team members receive the configured access profiles. Datalab administrators
 also receive virtual cluster administration. Workloads can use the team's
 databases and object storage. API access uses the caller's token roles;
-downloading a profile grants no access. Optional browser sessions provide
-editors and terminals for the same team.
+downloading a profile grants no access. Token exchange can select a configured
+profile without the caller's administrator roles through
+[restricted exchange](docs/how-to-guides/authentication.md#user-token-exchange).
+Keycloak 26.2 or later is required. Optional browser sessions provide editors
+and terminals for the same team.
 
 ## Get started
 

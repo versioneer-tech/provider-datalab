@@ -53,6 +53,8 @@ than a snapshot comparison:
 Render tests cannot prove live authorization, routing, persistence, or timing.
 `token-exchange.py` checks rendered authorization boundaries and exchange
 enablement after scope reconciliation. It does not simulate token issuance.
+It rejects broad client-role mappers and checks role selection per scope.
+It also checks policy deletion dependencies.
 The [Kind integration suite](integration/README.md) checks those outcomes.
 Its `verify-vcluster` profile also checks OAuth2 name uniqueness through
 Kubernetes admission and rejects API access without a vcluster role.

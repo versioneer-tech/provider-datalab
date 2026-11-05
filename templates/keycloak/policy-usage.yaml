@@ -1,0 +1,17 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: ${used_api_version}
+    kind: ${used_kind}
+    resourceRef:
+      name: ${used_name}
+  by:
+    apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientPolicyProfilePolicy
+    resourceRef:
+      name: ${policy_name}

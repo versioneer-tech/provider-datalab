@@ -65,14 +65,32 @@ def main():
     assert conditions["client-scopes"]["type"] == "Any"
     assert json.loads(conditions["client-scopes"]["scopes"]) == ["s-joe:interactive"]
     assert params(initial, "ClientPolicyProfile")[0]["executor"] == [{"name": "reject-request"}]
+    usages = [body["spec"] for body in initial.values() if body.get("kind") == "Usage"]
+    assert {item["of"]["kind"] for item in usages} == {"ClientScope", "ClientPolicyProfile"}
+    assert all(item["replayDeletion"] and item["by"]["kind"] == "ClientPolicyProfilePolicy"
+               and item["by"]["resourceRef"]["name"] == policy["name"] for item in usages)
     mappers = params(initial, "ProtocolMapper")
     assert {item["config"]["included.client.audience"] for item in mappers
             if item["protocolMapper"] == "oidc-audience-mapper"} == {"s-joe"}
-    role_mapper, = [item for item in mappers if item["protocolMapper"] == "oidc-usermodel-client-role-mapper"]
-    assert role_mapper["config"]["usermodel.clientRoleMapping.clientId"] == "s-joe"
+    role_mapper, = [item for item in mappers if item["protocolMapper"] == "oidc-usermodel-realm-role-mapper"]
     assert role_mapper["config"]["claim.name"] == "resource_access.s-joe.roles"
+    collector, = [body for body in initial.values() if body.get("kind") == "ProtocolMapper"
+                  and body["spec"]["forProvider"]["protocolMapper"] == "oidc-usermodel-realm-role-mapper"]
+    assert collector["metadata"]["name"] != "s-joe"
+    assert not any(item["protocolMapper"] in {"oidc-usermodel-client-role-mapper", "oidc-hardcoded-role-mapper", "oidc-hardcoded-claim-mapper"}
+                   for item in mappers)
+    selected = [item for item in mappers if item["protocolMapper"] == "oidc-role-name-mapper"]
+    baseline, = [item for item in selected if "clientIdRef" in item]
+    assert baseline["config"] == {"role": "s-joe.ws_api", "new.role.name": "ws_api"}
+    selected_scopes = {}
+    for item in selected:
+        role = item["config"]["new.role.name"]
+        assert item["config"]["role"] == "s-joe." + role
+        if "clientScopeIdRef" in item:
+            selected_scopes.setdefault(scopes[item["clientScopeIdRef"]["name"]], set()).add(role)
+    assert selected_scopes == optional
     assert not any(item.get("kind") in {"Realm", "DefaultClientScopes", "OptionalClientScopes"} for item in initial.values())
-    assert all(item.get("clientIdRef", {}).get("name") == "s-joe" for item in mappers)
+    assert all(item["clientIdRef"]["name"] == "s-joe" for item in mappers if "clientIdRef" in item)
     account, = params(initial, "ClientServiceAccountRole")
     assert roles[account["roleRef"]["name"]] == "ws_api"
     print("PASS exact group grants, scope boundaries, policy, audiences, and unchanged workspace account")
@@ -95,18 +113,34 @@ def main():
         body["status"] = {"conditions": [{"type": name, "status": "True"} for name in ("Ready", "Synced")]}
     reconciled = render(args, env, source, observed)
     assert params(reconciled, "Client")[0]["standardTokenExchangeEnabled"]
+    other_usage = deepcopy(next(body for body in observed if body["kind"] == "Usage"))
+    other_usage["metadata"]["name"] = "s-joe-vcluster-control-plane-usage"
+    other_usage["metadata"]["annotations"]["crossplane.io/composition-resource-name"] = "vcluster-usage-vc0-control-plane"
+    assert params(render(args, env, source, [*observed, other_usage]), "Client")[0]["standardTokenExchangeEnabled"]
+    native_usage = deepcopy(observed)
+    for body in native_usage:
+        if body.get("kind") == "Usage":
+            body["status"]["conditions"] = [{"type": "Ready", "status": "True"}]
+    assert params(render(args, env, source, native_usage), "Client")[0]["standardTokenExchangeEnabled"]
     stale = deepcopy(next(body for body in observed if body["kind"] == "RoleMapper" and "clientIdRef" in body["spec"]["forProvider"]))
     stale["metadata"]["annotations"]["crossplane.io/composition-resource-name"] = "keycloak-role-mapper-user-s-joe-ws-access"
     assert not params(render(args, env, source, [*observed, stale]), "Client")[0]["standardTokenExchangeEnabled"]
+    old_mapper = deepcopy(next(body for body in observed if body.get("kind") == "ProtocolMapper"))
+    old_mapper["metadata"]["annotations"]["crossplane.io/composition-resource-name"] = "keycloak-client-roles-s-joe"
+    old_mapper["spec"]["forProvider"]["protocolMapper"] = "oidc-usermodel-client-role-mapper"
+    assert not params(render(args, env, source, [*observed, old_mapper]), "Client")[0]["standardTokenExchangeEnabled"]
     pending = deepcopy(observed)
     next(body for body in pending if body["kind"] == "ClientPolicyProfilePolicy")["status"]["conditions"][0]["status"] = "False"
     assert not params(render(args, env, source, pending), "Client")[0]["standardTokenExchangeEnabled"]
+    pending_usage = deepcopy(observed)
+    next(body for body in pending_usage if body["kind"] == "Usage")["status"]["conditions"][0]["status"] = "False"
+    assert not params(render(args, env, source, pending_usage), "Client")[0]["standardTokenExchangeEnabled"]
     print("PASS exchange waits for reconciled restrictions and removal of old broad mappings")
 
     renamed = deepcopy(source)
     renamed["spec"]["vclusters"]["vc0"]["groups"][0]["name"] = "renamed"
     changed = render(args, env, renamed, observed)
-    old_keys = {key for key, body in initial.items() if body["kind"] in {"ClientScope", "RoleMapper"}
+    old_keys = {key for key, body in initial.items() if body["kind"] in {"ClientScope", "RoleMapper", "ProtocolMapper"}
                 and "namespace-demo" in json.dumps(body)}
     assert old_keys and old_keys.isdisjoint(changed)
     assert set(params(changed, "ClientOptionalScopes")[0]["optionalScopes"]) == {"s-joe:interactive", "s-joe:vclusters_vc0_renamed"}

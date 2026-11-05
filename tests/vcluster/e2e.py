@@ -317,6 +317,17 @@ def verify_user_exchange(api):
             return json.load(result)
 
     client = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)[0]
+    for scope in identity("/admin/realms/integration/clients/" + client["id"] + "/default-client-scopes", token=admin):
+        path = "/admin/realms/integration/client-scopes/" + scope["id"]
+        mappings = identity(path + "/scope-mappings", token=admin)
+        assert not mappings.get("realmMappings") and not mappings.get("clientMappings"), (
+            "Identity scope contains role grants: " + scope["name"]
+        )
+        mappers = identity(path + "/protocol-mappers/models", token=admin)
+        assert not any("role" in mapper["protocolMapper"] for mapper in mappers), (
+            "Identity scope contains a role mapper: " + scope["name"]
+        )
+    print("PASS default identity scopes contain no role grants or role mappers", flush=True)
     wait_until(lambda: identity("/admin/realms/integration/clients/" + client["id"], token=admin)
                .get("attributes", {}).get("standard.token.exchange.enabled") == "true",
                "Standard token exchange did not become enabled")
@@ -357,7 +368,10 @@ def verify_user_exchange(api):
         authorization = output.get("resource_access", {})
         if eligible:
             assert set(authorization) == {LAB}
-            assert set(authorization[LAB]["roles"]) == {"ws_api", "vcluster_vc0_namespace-demo"}
+            actual_roles = set(authorization[LAB]["roles"])
+            assert actual_roles == {"ws_api", "vcluster_vc0_namespace-demo"}, (
+                f"{username}: unexpected exchanged roles {sorted(actual_roles)}"
+            )
             assert profile in response["scope"].split()
             api("/api/v1/namespaces/demo/configmaps", exchanged)
             api("/api/v1/namespaces", exchanged, expected=403)

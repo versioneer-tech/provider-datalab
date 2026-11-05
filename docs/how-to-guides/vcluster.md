@@ -44,13 +44,13 @@ operations those roles permit.
 | Caller | Virtual API access |
 | --- | --- |
 | A user in `spec.users` | Explicit additional profiles, through the Datalab users group |
-| A workspace administrator | Additional profiles and each instance's built-in `vcluster_<instance>_cluster-admin` role |
-| The workspace service account | None by default; its only default role is `ws_api` |
+| A Datalab administrator | Additional profiles and each instance's built-in `vcluster_<instance>_cluster-admin` role |
+| The Datalab service account | None by default; its only default role is `ws_api` |
 | An identity with an assigned `vcluster_<instance>_<group>` role | The group's configured namespace and Kubernetes role |
 
 `groups` defines additional profiles with `view`, `edit`, or `admin` access.
-The provider grants their client roles to both workspace groups. Optional
-OAuth scopes select which assigned roles appear in workspace client tokens.
+The provider grants their client roles to both Datalab groups. Optional
+OAuth scopes select which assigned roles appear in Datalab client tokens.
 Roles are specific to an instance. See [token exchange](authentication.md#user-token-exchange)
 for a token limited to one selected profile.
 
@@ -62,7 +62,7 @@ profile cannot restrict a caller who already has the admin role.
 ### Download a profile
 
 Resolve its Secret reference from `status.connections`; do not construct the
-name. Each profile Secret contains `kubeconfig`, the public workspace
+name. Each profile Secret contains `kubeconfig`, the Datalab client's public
 `client-id`, and `issuer-url`. Public CA certificates can be included. It
 contains no client secret, token, private key, or client certificate. The
 provider keeps the recovery kubeconfig private.
@@ -99,27 +99,26 @@ login flow when the token expires. An ID token cannot replace an access token.
 ### Machine access
 
 An identity administrator must explicitly assign the required vcluster role
-to the existing workspace service account. For example,
+to the existing Datalab service account. For example,
 `vcluster_vc0_namespace-demo` permits the configured operations in `demo`.
 Do not add this account to a human group. Request the profile's optional scope
 when using a separately assigned role; the default machine token has only
 `ws_api`. The bundled helper requests no optional scopes.
 
-Obtain the workspace client secret from the source in `status.oauth2` through
-an authorized Secret-delivery process. This is the existing
-`<datalab>-oauth-client` Secret. Store the decoded client secret alone in a
-private file, outside the profile and repository:
+Obtain the Datalab client secret from the source in `status.oauth2` through
+an authorized Secret-delivery process. This is the `<datalab>-oauth-client`
+Secret. Use it to authenticate a token request with these parameters:
 
-```bash
-unset DATALAB_ACCESS_TOKEN_FILE
-export DATALAB_CLIENT_SECRET_FILE="$HOME/.config/datalab/client-secret"
-chmod 600 "$DATALAB_CLIENT_SECRET_FILE"
-kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
+```text
+grant_type=client_credentials
+client_id=s-joe
+scope=s-joe:vclusters_vc0_namespace-demo
 ```
 
-The helper exchanges it with `grant_type=client_credentials`. Every profile
-uses the same workspace identity and its explicitly assigned roles. A profile
-download does not supply credentials for another identity.
+Save the returned access token in a private file and use
+`DATALAB_ACCESS_TOKEN_FILE` as shown above. The helper's client-secret mode
+requests no optional scopes, so it gets only `ws_api` and cannot access the
+virtual API. A profile download supplies no credentials or role grants.
 
 ## Secret bindings
 

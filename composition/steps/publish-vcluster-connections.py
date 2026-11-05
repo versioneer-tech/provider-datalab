@@ -93,7 +93,9 @@ def compose(req, rsp):
                     "keycloak-optional-role-" + _resource_name(scope_resource, profile),
                     f"keycloak-defaultScopes-{name}",
                     f"keycloak-optionalScopes-{name}",
-                    f"keycloak-client-roles-{name}",
+                    "keycloak-selected-role-" + _resource_name(scope_resource, profile),
+                    f"keycloak-selected-role-{name}-ws-api",
+                    f"keycloak-selected-roles-{name}",
                 ]
             )
             kubeconfig = _render_template(

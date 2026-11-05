@@ -98,7 +98,7 @@ spec:
                     properties:
                       groups:
                         type: array
-                        description: Additional profiles granted to workspace users and admins. Only workspace admins receive the built-in cluster-admin profile.
+                        description: Additional profiles granted to Datalab users and administrators. Only Datalab administrators receive the built-in cluster-admin profile.
                         maxItems: 20
                         x-kubernetes-list-type: map
                         x-kubernetes-list-map-keys:

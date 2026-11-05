@@ -160,36 +160,6 @@ spec:
     policy: DeriveFromCelQuery
   watch: true
 ---
-apiVersion: client.keycloak.m.crossplane.io/v1alpha1
-kind: ProtocolMapper
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: keycloak-client-roles-s-jeff
-  name: s-jeff
-  namespace: default
-spec:
-  forProvider:
-    clientIdRef:
-      name: s-jeff
-      policy:
-        resolution: Required
-    config:
-      access.token.claim: 'true'
-      claim.name: resource_access.s-jeff.roles
-      id.token.claim: 'false'
-      introspection.token.claim: 'true'
-      jsonType.label: String
-      multivalued: 'true'
-      userinfo.token.claim: 'false'
-      usermodel.clientRoleMapping.clientId: s-jeff
-    name: workspace-client-roles
-    protocol: openid-connect
-    protocolMapper: oidc-usermodel-client-role-mapper
-    realmId: acme
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-keycloak
----
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
 metadata:
@@ -501,6 +471,46 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-policy-usage-s-jeff-exchange-policy-uses-clientpolicyprofile-970a33d92f
+  name: s-jeff-exchange-policy-uses-clientpolicyprofile-970a33d92f
+  namespace: default
+spec:
+  by:
+    apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientPolicyProfilePolicy
+    resourceRef:
+      name: s-jeff-reject-interactive-exchange-fc6c7e360a
+  of:
+    apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientPolicyProfile
+    resourceRef:
+      name: s-jeff-reject-interactive-exchange-fc6c7e360a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-policy-usage-s-jeff-exchange-policy-uses-clientscope-c30fb87fd1
+  name: s-jeff-exchange-policy-uses-clientscope-c30fb87fd1
+  namespace: default
+spec:
+  by:
+    apiVersion: realm.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientPolicyProfilePolicy
+    resourceRef:
+      name: s-jeff-reject-interactive-exchange-fc6c7e360a
+  of:
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    kind: ClientScope
+    resourceRef:
+      name: s-jeff-interactive-bd1da42b4c
+  replayDeletion: true
+---
 apiVersion: role.keycloak.m.crossplane.io/v1alpha1
 kind: Role
 metadata:
@@ -632,6 +642,110 @@ spec:
       policy:
         resolution: Required
         resolve: Always
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-selected-role-s-jeff-interactive-bd1da42b4c-s-jeff-ws-access-51ddbb0936
+  name: s-jeff-interactive-bd1da42b4c-s-jeff-ws-access-51ddbb0936
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jeff-interactive-bd1da42b4c
+      policy:
+        resolution: Required
+        resolve: Always
+    config:
+      new.role.name: ws_access
+      role: s-jeff.ws_access
+    name: selected-ws_access
+    protocol: openid-connect
+    protocolMapper: oidc-role-name-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-selected-role-s-jeff-interactive-bd1da42b4c-s-jeff-ws-admin-edffd60c93
+  name: s-jeff-interactive-bd1da42b4c-s-jeff-ws-admin-edffd60c93
+  namespace: default
+spec:
+  forProvider:
+    clientScopeIdRef:
+      name: s-jeff-interactive-bd1da42b4c
+      policy:
+        resolution: Required
+        resolve: Always
+    config:
+      new.role.name: ws_admin
+      role: s-jeff.ws_admin
+    name: selected-ws_admin
+    protocol: openid-connect
+    protocolMapper: oidc-role-name-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-selected-role-s-jeff-ws-api
+  name: s-jeff-ws-api
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jeff
+      policy:
+        resolution: Required
+        resolve: Always
+    config:
+      new.role.name: ws_api
+      role: s-jeff.ws_api
+    name: selected-ws_api
+    protocol: openid-connect
+    protocolMapper: oidc-role-name-mapper
+    realmId: acme
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-keycloak
+---
+apiVersion: client.keycloak.m.crossplane.io/v1alpha1
+kind: ProtocolMapper
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: keycloak-selected-roles-s-jeff
+  name: s-jeff-selected-roles-319240fb62
+  namespace: default
+spec:
+  forProvider:
+    clientIdRef:
+      name: s-jeff
+      policy:
+        resolution: Required
+    config:
+      access.token.claim: 'true'
+      claim.name: resource_access.s-jeff.roles
+      id.token.claim: 'false'
+      introspection.token.claim: 'true'
+      jsonType.label: String
+      multivalued: 'true'
+      userinfo.token.claim: 'false'
+    name: workspace-selected-roles
+    protocol: openid-connect
+    protocolMapper: oidc-usermodel-realm-role-mapper
+    realmId: acme
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

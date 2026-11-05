@@ -3,6 +3,8 @@
 
 apiVersion: client.keycloak.m.crossplane.io/v1alpha1
 kind: ProtocolMapper
+metadata:
+  name: ${mapper_resource}
 spec:
   providerConfigRef:
     name: provider-keycloak
@@ -14,10 +16,9 @@ spec:
       policy:
         resolution: Required
     protocol: openid-connect
-    protocolMapper: oidc-usermodel-client-role-mapper
-    name: workspace-client-roles
+    protocolMapper: oidc-usermodel-realm-role-mapper
+    name: workspace-selected-roles
     config:
-      usermodel.clientRoleMapping.clientId: ${xr_name}
       claim.name: ${claim_name}
       jsonType.label: String
       multivalued: 'true'

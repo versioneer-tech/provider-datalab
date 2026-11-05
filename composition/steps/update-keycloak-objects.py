@@ -59,8 +59,9 @@ def _security_ready(req, resources):
             condition.get("type"): condition.get("status")
             for condition in (state.get("status") or {}).get("conditions") or []
         }
+        required_conditions = ("Ready",) if desired["kind"] == "Usage" else ("Ready", "Synced")
         if (state.get("metadata") or {}).get("deletionTimestamp") or any(
-            conditions.get(name) != "True" for name in ("Ready", "Synced")
+            conditions.get(name) != "True" for name in required_conditions
         ) or not contains(state.get("spec") or {}, desired["spec"]):
             return False
     return True
@@ -98,6 +99,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
 
     security_resources = {}
+    security_kinds = {
+        "ClientScope", "ClientDefaultScopes", "ClientOptionalScopes",
+        "RoleMapper", "ProtocolMapper", "ClientPolicyProfile", "ClientPolicyProfilePolicy", "Usage",
+    }
 
     def put(key_base, body_base, name_override=xr_name):
         key = f"{key_base}-{name_override}"
@@ -108,10 +113,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         ann = md.setdefault("annotations", {})
         ann["crossplane.io/composition-resource-name"] = key
         rsp.desired.resources[key].resource.update(body)
-        if body["kind"] in {
-            "ClientScope", "ClientDefaultScopes", "ClientOptionalScopes",
-            "RoleMapper", "ProtocolMapper", "ClientPolicyProfile", "ClientPolicyProfilePolicy",
-        }:
+        if body["kind"] in security_kinds:
             security_resources[key] = body
 
     put(
@@ -207,6 +209,24 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     put_keycloak_role_mapper("keycloak-role-mapper-api", f"{xr_name}-ws-api")
 
+    def put_selected_role(resource, role, scope_resource=None):
+        # Keycloak includes all client-owned roles. Move only selected held roles
+        # into the request's realm role set before the claim mapper runs.
+        body = _render_template(
+            req, "keycloak/selected-role-mapper", realm=realm,
+            mapper_name=f"selected-{role}", source_role=f"{xr_name}.{role}",
+            role_name=role,
+        )
+        binding = "clientScopeIdRef" if scope_resource else "clientIdRef"
+        body["spec"]["forProvider"][binding] = {
+            "name": scope_resource or xr_name,
+            "policy": {"resolution": "Required", "resolve": "Always"},
+        }
+        put("keycloak-selected-role", body,
+            _resource_name(scope_resource, resource) if scope_resource else resource)
+
+    put_selected_role(f"{xr_name}-ws-api", "ws_api")
+
     interactive_scope = f"{xr_name}:interactive"
     interactive_resource = _resource_name(xr_name, "interactive")
     policy_name = _resource_name(xr_name, "reject-interactive-exchange")
@@ -217,16 +237,25 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         req, "keycloak/exchange-policy", realm=realm, policy_name=policy_name,
         interactive_scopes_json=json.dumps([interactive_scope]),
     ), policy_name)
+    for kind, api_version, used_name in (
+        ("ClientScope", "openidclient.keycloak.m.crossplane.io/v1alpha1", interactive_resource),
+        ("ClientPolicyProfile", "realm.keycloak.m.crossplane.io/v1alpha1", policy_name),
+    ):
+        put("keycloak-policy-usage", _render_template(
+            req, "keycloak/policy-usage", used_api_version=api_version,
+            used_kind=kind, used_name=used_name, policy_name=policy_name,
+        ), _resource_name(xr_name, "exchange-policy-uses", kind.lower()))
 
     def put_scope(name, resource, roles):
         put("keycloak-optional-scope", _render_template(
             req, "keycloak/client-scope", realm=realm, scope_name=name,
         ), resource)
-        for role in roles:
+        for role, role_name in roles:
             put("keycloak-optional-role", _render_template(
                 req, "keycloak/optional-role-scope-mapper", realm=realm,
                 scope_resource=resource, role_resource=role,
             ), _resource_name(resource, role))
+            put_selected_role(role, role_name, resource)
 
     instances = spec.get("vclusters") or {}
     additional_profiles = [
@@ -243,12 +272,15 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         for instance in sorted(instances)
     ]
     put_scope(interactive_scope, interactive_resource, [
-        f"{xr_name}-ws-access", f"{xr_name}-ws-admin", *admin_roles,
+        (f"{xr_name}-ws-access", "ws_access"),
+        (f"{xr_name}-ws-admin", "ws_admin"),
+        *[(_vcluster_profile(xr_name, instance, "cluster-admin"),
+           _vcluster_role(instance, "cluster-admin")) for instance in sorted(instances)],
     ])
     optional_scopes = [interactive_scope]
     for (instance, group), role in zip(additional_profiles, additional_roles):
         scope = f"{xr_name}:vclusters_{instance}_{group}"
-        put_scope(scope, _resource_name(role, "scope"), [role])
+        put_scope(scope, _resource_name(role, "scope"), [(role, _vcluster_role(instance, group))])
         optional_scopes.append(scope)
 
     for kind, field, names in (
@@ -263,9 +295,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 field: names,
             },
         ))
-    put("keycloak-client-roles", _render_template(
-        req, "keycloak/client-roles-mapper", realm=realm, xr_name=xr_name,
-        claim_name=f"resource_access.{xr_name}.roles",
+    claim_client = xr_name.replace(".", "\\.")
+    # A separate Kubernetes name keeps the old broad mapper in the deletion gate.
+    put("keycloak-selected-roles", _render_template(
+        req, "keycloak/selected-roles-mapper", realm=realm, xr_name=xr_name,
+        mapper_resource=_resource_name(xr_name, "selected-roles"),
+        claim_name=f"resource_access.{claim_client}.roles",
     ))
 
     for audience in extra_audiences:
@@ -423,7 +458,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     # Wait for scope restrictions and deletion of old broad mappings before exchange.
     stale_security = any(
         key not in security_resources
-        and _to_dict(observed.resource).get("kind") in {"RoleMapper", "ProtocolMapper", "ClientScope"}
+        and _to_dict(observed.resource).get("kind") in security_kinds
+        and (
+            _to_dict(observed.resource).get("kind") != "Usage"
+            or key.startswith("keycloak-policy-usage-")
+        )
         for key, observed in req.observed.resources.items()
     )
     rsp.desired.resources[f"keycloak-client-{xr_name}"].resource["spec"]["forProvider"][
