@@ -224,14 +224,14 @@ def identity(path, values=None, token=None, method=None):
 
 
 def token(client, secret, realm="integration", origin="https://keycloak.keycloak:8443", scope=""):
-    data = urlencode(
-        {
-            "grant_type": "client_credentials",
-            "client_id": client,
-            "client_secret": secret,
-            "scope": scope,
-        }
-    ).encode()
+    values = {
+        "grant_type": "client_credentials",
+        "client_id": client,
+        "client_secret": secret,
+    }
+    if scope:
+        values["scope"] = scope
+    data = urlencode(values).encode()
     context = ssl.create_default_context(cafile="/test/issuer.crt")
     with urlopen(
         Request(f"{origin}/realms/{realm}/protocol/openid-connect/token", data=data),
