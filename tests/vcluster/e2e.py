@@ -287,15 +287,15 @@ def verify_member_roles(removed, instances):
         roles = set(claims.get("resource_access", {}).get(LAB, {}).get("roles", []))
         if {role for role in roles if role.startswith("vcluster_")} != expected:
             return False
-        assert ("ws_access" in roles) == (not removed)
+        if ("ws_access" in roles) != (not removed):
+            return False
         account = identity(client + "/service-account-user", token=admin)
         mappings = identity(
             "/admin/realms/integration/users/" + account["id"]
             + "/role-mappings/clients/" + clients[0]["id"] + "/composite",
             token=admin,
         )
-        assert {role["name"] for role in mappings} == {"ws_api"}
-        return True
+        return {role["name"] for role in mappings} == {"ws_api"}
 
     wait_until(assigned, "Datalab member roles did not reach the expected state")
     print("PASS Datalab member token roles and separate ws_api automation permission", flush=True)

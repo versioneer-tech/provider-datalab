@@ -35,6 +35,17 @@ spec:
         - |
           set -eu
           expected=__PROBE_VALUE__
+          # Service routing can lag behind the Pod rollout.
+          remaining=30
+          until test "$(REDISCLI_AUTH="${REDIS_PASSWORD}" timeout 2 redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw PING 2>/dev/null)" = PONG; do
+            remaining=$((remaining - 1))
+            if test "${remaining}" -eq 0; then
+              printf 'Redis service did not become ready.\n' >&2
+              exit 1
+            fi
+            sleep 2
+          done
           REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
             -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
             SET provider-datalab:verify "${expected}" >/dev/null
