@@ -1,0 +1,1582 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.12.0-rc.6/how-to-guides/authentication/">
+      
+      
+        <link rel="prev" href="../vcluster/">
+      
+      
+        <link rel="next" href="../usage_concepts/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../imgs/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Authentication - provider-datalab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#authentication" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="provider-datalab" class="md-header__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            provider-datalab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Authentication
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="provider-datalab" class="md-nav__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    provider-datalab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vcluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#groups-and-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Groups and roles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth-scopes-and-direct-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth scopes and direct login
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-token-exchange" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User-token exchange
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential-secrets-and-machine-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential Secrets and machine access
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exchange-caller-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exchange caller checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth2-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth2 discovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-ingress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session ingress
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session ingress">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-the-shared-ingress-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set the shared ingress settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generated-session-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generated session resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply-ingress-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply ingress policy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Apply ingress policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nginx-ingress-with-oauth2-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NGINX Ingress with OAuth2 Proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apisix-ingress-configured-by-kyverno" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        APISIX Ingress configured by Kyverno
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage_concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use a Datalab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../s3-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../additional_services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/workspace-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/sandbox-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference-guides/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0001-use-the-datalab-crd-as-the-workspace-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001 Datalab as the Public Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0003-token-exchange-for-downscoping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-003 Token Exchange for Downscoping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#groups-and-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Groups and roles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth-scopes-and-direct-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth scopes and direct login
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-token-exchange" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User-token exchange
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential-secrets-and-machine-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential Secrets and machine access
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exchange-caller-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exchange caller checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth2-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth2 discovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-ingress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session ingress
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session ingress">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-the-shared-ingress-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set the shared ingress settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generated-session-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generated session resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply-ingress-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply ingress policy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Apply ingress policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nginx-ingress-with-oauth2-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NGINX Ingress with OAuth2 Proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apisix-ingress-configured-by-kyverno" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        APISIX Ingress configured by Kyverno
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="authentication">Authentication</h1>
+<p>Each Datalab has one confidential Keycloak client with the same name. For
+example, the Datalab <code>s-joe</code> has a client named <code>s-joe</code> and its own service account.
+Use that client for browser login, machine access, and restricted user-token
+exchange. The same client credentials and Secret references serve these flows.</p>
+<h2 id="groups-and-roles">Groups and roles</h2>
+<p>Users in <code>spec.users</code> must exist in the configured realm. The first user and
+users with <code>userOverrides.&lt;user&gt;.role: admin</code> belong to the administrator group.
+All listed users belong to the Datalab users group.</p>
+<table>
+<thead>
+<tr>
+<th>Managed group or account</th>
+<th>Assigned Datalab client roles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;datalab&gt;</code></td>
+<td><code>ws_access</code>, <code>ws_api</code>, all explicitly configured additional vcluster profiles</td>
+</tr>
+<tr>
+<td><code>&lt;datalab&gt;-admin</code></td>
+<td><code>ws_admin</code>, <code>ws_api</code>, all additional profiles, each instance's built-in cluster-admin role</td>
+</tr>
+<tr>
+<td>Datalab service account</td>
+<td><code>ws_api</code> only</td>
+</tr>
+</tbody>
+</table>
+<p>Administrators also inherit the users group's grants. The provider replaces
+managed group grants on each reconciliation. Profile removal or rename removes
+its grants. Direct user assignments are unchanged.</p>
+<p>Only <code>spec.vclusters.&lt;instance&gt;.groups</code> defines selectable exchange profiles.
+The reserved <code>cluster-admin</code> entry never adds an exchange scope, even when
+explicitly declared. Empty groups give regular members no vcluster roles;
+administrators retain each declared instance's built-in admin role and profile.
+Role names remain <code>vcluster_&lt;instance&gt;_&lt;group&gt;</code>.</p>
+<h2 id="oauth-scopes-and-direct-login">OAuth scopes and direct login</h2>
+<p>The Datalab client's dedicated role mapping permits only <code>ws_api</code>. It
+appears in a token only if its subject holds that role. Default scopes are
+<code>basic</code>, <code>profile</code>, and <code>email</code>; keep these scopes free of role grants and role
+mappers. Keycloak includes a client's own roles even with Full Scope Allowed
+off. The provider therefore uses Role Name mappers to select held roles for
+each request, then a Realm Roles mapper to write that temporary role set under
+<code>resource_access.&lt;datalab&gt;.roles</code>. This creates no realm roles or user grants.
+For the reason and a worked example, see
+<a href="../../architecture/0003-token-exchange-for-downscoping/">Token exchange for downscoping</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Optional OAuth scope</th>
+<th>Permitted roles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;datalab&gt;:vclusters_&lt;instance&gt;_&lt;group&gt;</code></td>
+<td>Exactly <code>vcluster_&lt;instance&gt;_&lt;group&gt;</code> for an additional configured profile</td>
+</tr>
+<tr>
+<td><code>&lt;datalab&gt;:interactive</code></td>
+<td><code>ws_access</code>, <code>ws_admin</code>, and each instance's built-in cluster-admin role</td>
+</tr>
+</tbody>
+</table>
+<p>Scopes permit only roles that the subject holds. They are never realm-default
+scopes. Scope names differ from role names: bare <code>ws_admin</code> or
+<code>vcluster_vc0_namespace-demo</code> are not generated OAuth scopes.</p>
+<p>A direct authorization-code request to <code>s-joe</code> can use these parameters:</p>
+<div class="highlight"><pre><span></span><code>client_id=s-joe
+response_type=code
+redirect_uri=http://localhost:8080/callback
+scope=openid profile email s-joe:interactive s-joe:vclusters_vc0_namespace-demo
+</code></pre></div>
+<p>Use the normal state and PKCE checks, then authenticate the confidential client
+when redeeming the code. Request only the scopes needed by the application.
+For a namespace-only direct login, omit <code>s-joe:interactive</code>.</p>
+<p>You can also use a separate login client in the same realm. Its scope mappings
+control the roles in its tokens. Before exchanging one of those tokens through
+the Datalab client, check that it contains the Datalab audience and the
+requested roles. Configure those claims on the separate login client.</p>
+<h2 id="user-token-exchange">User-token exchange</h2>
+<p>Each Datalab client enables exchange automatically after its scopes, mappers,
+and policy are ready. No extra setting is required.</p>
+<p>Standard Token Exchange V2 uses the existing Datalab client credentials. The caller's
+access token remains the subject; exchange does not use the service account's
+permissions. A managed client policy combines the <code>grant-type</code> and
+<code>client-scopes</code> conditions with <code>reject-request</code>. It rejects
+<code>&lt;datalab&gt;:interactive</code> during token exchange, including requests that combine
+it with allowed profile scopes. Direct interactive login can still use it.</p>
+<p>Send this form to the configured realm's token endpoint. Authenticate with the
+existing confidential <code>s-joe</code> client through the approved credential path.
+The placeholder below represents the original caller access token.</p>
+<div class="highlight"><pre><span></span><code>grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=&lt;caller access token&gt;
+subject_token_type=urn:ietf:params:oauth:token-type:access_token
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+scope=s-joe:vclusters_vc0_namespace-demo
+audience=s-joe
+</code></pre></div>
+<p>The caller token must contain <code>s-joe</code> in <code>aud</code>, unless it was issued to
+<code>s-joe</code> itself. Keycloak uses this check to confirm that the token was intended
+for the Datalab client. The Datalab audience is always available in tokens
+issued by that client. The <code>audience</code> parameter filters available audiences;
+it does not add missing mappings.</p>
+<p>For an eligible caller, the required authorization claims are:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">iss</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.acme.com/realms/acme</span>
+<span class="nt">sub</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;same user subject as the caller token&gt;</span>
+<span class="nt">aud</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">s-joe</span><span class="p p-Indicator">]</span>
+<span class="nt">resource_access</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">s-joe</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">roles</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ws_api</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">vcluster_vc0_namespace-demo</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<p>This applies to both members and administrators selecting the profile. The
+result must omit <code>ws_access</code>, <code>ws_admin</code>, built-in cluster-admin, unrequested
+profiles, and roles for other Datalabs. Identity claims can remain.</p>
+<p>To use tokens issued by the Datalab client with another service, add its client ID to
+<code>EnvironmentConfig.data.iam.extraAudiences</code>. For example, for
+<a href="https://github.com/EOEPCA/rm-workspace-api/">EOEPCA Workspace API</a>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">iam</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extraAudiences</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace-api</span>
+</code></pre></div>
+<p>An exchange request can then include both <code>audience=s-joe</code> and
+<code>audience=workspace-api</code> to retain those two recipients. Removing the setting
+removes its managed audience mapper. For tokens issued by a separate login
+client, configure the Datalab audience on that client.</p>
+<p>Keycloak checks the user's role grants before applying an optional profile
+scope. A user without the role can receive a successful response with that
+scope and role omitted. Consumers must reject a result missing a requested
+role. This is the documented server behavior; actual issuance must be checked
+against the deployed server. Render checks do not prove token contents. See
+<a href="https://www.keycloak.org/docs/latest/server_admin/index.html#_client_scopes_permissions">Keycloak scope permissions</a>.</p>
+<p>Reconciliation removes a deleted or renamed profile's optional association,
+role scope mapping, Client Scope, and managed group grants. Instance deletion
+removes its profiles too. Already-issued JWTs can retain their claims until
+expiry. Downloading a kubeconfig profile neither grants permissions nor
+reduces a supplied token's permissions. For delegated access, exchange the
+token first, then give the recipient the profile and returned access token.
+The additional profile helper reads that token from a file and needs no client
+secret. The virtual API still checks the realm issuer, Datalab audience,
+signature, validity, and configured Datalab roles.
+Its username is <code>sub</code>; groups are <code>datalab:&lt;datalab&gt;:&lt;role&gt;</code>. Existing virtual
+RoleBinding and ClusterRoleBinding rules apply without an authentication change.</p>
+<h2 id="credential-secrets-and-machine-access">Credential Secrets and machine access</h2>
+<table>
+<thead>
+<tr>
+<th>Secret</th>
+<th>Namespace</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;datalab&gt;-oauth-client</code></td>
+<td>Claim namespace</td>
+<td>Source credentials for the existing Datalab client</td>
+</tr>
+<tr>
+<td><code>&lt;datalab&gt;-oauth2-client</code></td>
+<td>Runtime namespace</td>
+<td>Created only for public Data/S3 OAuth2 proxies; contains <code>client_id</code>, <code>client_secret</code>, and <code>cookie_secret</code></td>
+</tr>
+</tbody>
+</table>
+<p>The runtime copy is needed only when Data is enabled and exposed through an
+Ingress or HTTPRoute. It is created after the runtime namespace is known and
+removed when that proxy is disabled. Token exchange and virtual-cluster access
+do not need this copy. The legacy aggregate Secret still includes OAuth fields
+delivered to sessions.</p>
+<p>Anyone with the client secret can request a service-account token. Grant read
+access only to authorized callers. With <code>grant_type=client_credentials</code> and no
+optional scopes, the Datalab service account receives only
+<code>ws_api</code>.</p>
+<p>Virtual API profile Secrets contain public settings and no credentials. See
+<a href="../vcluster/#api-access">virtual API access</a> for credential files. Permission to
+download a profile is separate from permission to read service credentials.</p>
+<h2 id="exchange-caller-checks">Exchange caller checks</h2>
+<p>A service that exchanges tokens for users must:</p>
+<ul>
+<li>Accept full profile scope names, or translate short names with the Datalab name.</li>
+<li>Allow only currently configured additional profiles and check each requested
+  role against the caller's validated token.</li>
+<li>Retain the original caller access token for <code>subject_token</code> and authenticate
+  exchange with the existing Datalab client credentials.</li>
+<li>Validate the returned signature, validity, issuer, exact audiences, user
+  subject, requested roles, and absence of unexpected authorization permissions.</li>
+<li>Reject missing requested roles even when the token endpoint returns success.</li>
+<li>Check that the caller is allowed to request token issuance through that
+  service, in addition to the token and role checks above.</li>
+</ul>
+<h2 id="oauth2-discovery">OAuth2 discovery</h2>
+<p>The provider publishes the existing client in <code>status.oauth2</code>, separately from
+service connections:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">status</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">oauth2</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-joe</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">client</span>
+<span class="w">    </span><span class="nt">issuerUrl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.acme.com/realms/acme</span>
+<span class="w">    </span><span class="nt">secretRef</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-joe-oauth-client</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="w">    </span><span class="nt">ready</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p><code>name</code> is the actual OAuth2 client ID, not Keycloak's internal UUID. Names are
+unique and <code>type</code> is always <code>client</code>. Entries contain only metadata and Secret
+references; credentials stay in the referenced Secret.</p>
+<p>Readiness requires the observed client and credential Secret to be ready, with
+matching client credentials. Removed sources clear stale entries. Discovery
+does not grant permission to read a Secret or authorize a service request.</p>
+<h2 id="session-ingress">Session ingress</h2>
+<p>Configure sign-in before users start a session. The examples use Kyverno to
+configure NGINX or APISIX session Ingress objects.</p>
+<h3 id="set-the-shared-ingress-settings">Set the shared ingress settings</h3>
+<p>Set the ingress class, domain, and TLS Secret in the
+<a href="../installation/#identity-and-endpoints">EnvironmentConfig</a>. Use the same
+values in the session runtime installation, for example:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">clusterIngressDomain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.acme.com</span>
+<span class="nt">clusterIngressClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apisix</span>
+<span class="nt">tlsCertificateRef</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wildcard-tls</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+</code></pre></div>
+<p>Use a wildcard certificate for <code>*.lab.acme.com</code>.</p>
+<h3 id="generated-session-resources">Generated session resources</h3>
+<p>For a Datalab named <code>s-jane</code> with a <code>default</code> session, set <code>ingress.domain</code> to
+<code>lab.acme.com</code>. The session ingress hosts include:</p>
+<div class="highlight"><pre><span></span><code>s-jane-default.lab.acme.com
+editor-s-jane-default.lab.acme.com
+s-jane-default-editor.lab.acme.com
+data-s-jane-default.lab.acme.com
+s-jane-default-data.lab.acme.com
+</code></pre></div>
+<p>The generated ingresses carry labels that are suitable for platform policy:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">training.educates.dev/application</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workshop</span>
+<span class="nt">training.educates.dev/component</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">session</span>
+<span class="nt">training.educates.dev/environment.name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-jane</span>
+</code></pre></div>
+<p>For <code>s-jane</code>, the generated client includes redirect and web-origin entries
+for the Datalab root and each declared session host:</p>
+<div class="highlight"><pre><span></span><code>https://s-jane.lab.acme.com/*
+https://s-jane-default.lab.acme.com/*
+https://editor-s-jane-default.lab.acme.com/*
+https://s-jane-default-editor.lab.acme.com/*
+https://data-s-jane-default.lab.acme.com/*
+https://s-jane-default-data.lab.acme.com/*
+http://localhost:*
+</code></pre></div>
+<p>A service that belongs to <code>s-jane</code> can use this client. Shared browser ingress
+can use a central platform client and check the generated Datalab roles.</p>
+<h3 id="apply-ingress-policy">Apply ingress policy</h3>
+<p>Apply controller settings through platform policy so they cover every session
+Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
+<code>MutatingPolicy</code> and <code>GeneratingPolicy</code> in <code>policies.kyverno.io/v1</code>.
+Kyverno is required for these policies, not for Provider Datalab itself.
+Adapt the domains, issuer, and controller settings in the linked manifests.</p>
+<h4 id="nginx-ingress-with-oauth2-proxy">NGINX Ingress with OAuth2 Proxy</h4>
+<p>Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
+URI such as <code>https://auth.lab.acme.com/oauth2/callback</code>. Its authorization
+policy must check access to the Datalab named in the requested host.</p>
+<p>Apply the <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml">NGINX policy</a>
+to add external-auth annotations to matching session Ingress objects.
+Set the proxy cookie domain to cover the session hosts, for example
+<code>.lab.acme.com</code>, and allow redirects only to that domain.</p>
+<h4 id="apisix-ingress-configured-by-kyverno">APISIX Ingress configured by Kyverno</h4>
+<p>The <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml">APISIX manifest</a>
+gives Kyverno permission to create <code>ApisixPluginConfig</code> resources, generates
+one in each session namespace, and attaches it to matching Ingress objects.
+APISIX checks incoming requests; Kyverno configures the resources.</p>
+<p>The example uses <code>openid-connect</code> with a central public client named
+<code>datalab-sessions</code>. Its <code>opa</code> entry points to an external OPA service.
+The manifest does not deploy that service or supply its policy. Configure
+both for your platform so that the authorizer checks access to the requested
+Datalab. OPA is needed only for this example.</p>
+<p>The policies do not read Secrets. For a confidential central client, use the
+ingress controller's supported Secret mechanism to supply its credential.</p>
+<p>The plugin forwards the access token in <code>Authorization</code> and disables ID token,
+userinfo, and refresh token forwarding. Check that your authorizer and
+upstream service accept these settings.</p>
+<p>Kyverno generates the plugin's session secret once. Synchronization is disabled
+to keep it stable. After changing the template, recreate an existing generated
+plugin config or restart its session to apply the change.</p>
+<p>For another ingress controller, match session Ingress objects by label and
+domain, then attach its authentication and authorization settings.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026, Versioneer
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "search.suggest", "toc.follow", "toc.permalink"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
