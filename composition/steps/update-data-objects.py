@@ -12,6 +12,7 @@ from composition.helpers import (
     _b64get_any,
     _boolish,
     _extract_manifest,
+    _http_route_timeouts,
     _safe_str,
     _to_dict,
 )
@@ -34,6 +35,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    images = environment.get("images") or {}
+    package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
+    rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
+    oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
     data_config = (environment.get("defaults") or {}).get("data") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
@@ -109,6 +114,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         ingress_annotations = {}
     gateway = environment.get("httpRoute") or {}
     route_enabled = _boolish(gateway.get("enabled"))
+    route_timeouts = _http_route_timeouts(environment) if route_enabled else {}
+    upstream_timeout = _safe_str((environment.get("oauth2Proxy") or {}).get("upstreamTimeout", "3600s"))
     permanent_access = ingress_enabled or route_enabled
     s3_enabled = _boolish(gateway.get("enableS3"))
     gateway_namespace = _safe_str(gateway.get("parentNamespace"))
@@ -181,11 +188,13 @@ mv "$work_database" "$database"
         workshop_namespace=workshop_namespace,
         labels=labels,
         storage_secret_checksum=storage_secret_checksum,
+        package_r_image=package_r_image,
         init_script=init_script,
         containers=[
             _render_template(
                 req,
                 "data/package-r-container",
+                package_r_image=package_r_image,
                 endpoint_env=endpoint_env,
                 storage_secret_name=storage_secret_name,
             )
@@ -195,6 +204,7 @@ mv "$work_database" "$database"
                 _render_template(
                     req,
                     "data/oauth2-proxy-container",
+                    oauth2_proxy_image=oauth2_proxy_image,
                     args=[
                         "--http-address=0.0.0.0:4180",
                         "--metrics-address=127.0.0.1:44180",
@@ -214,6 +224,7 @@ mv "$work_database" "$database"
                         "--code-challenge-method=S256",
                         f"--redirect-url=https://{xr_name}.{ingress_domain}/oauth2/callback",
                         "--upstream=http://127.0.0.1:8888/",
+                        f"--upstream-timeout={upstream_timeout}",
                         "--email-domain=*",
                         f"--allowed-group={xr_name}",
                         "--reverse-proxy=true",
@@ -392,6 +403,7 @@ mv "$work_database" "$database"
     s3_deployment = _render_template(
         req,
         "data/s3-deployment",
+        rclone_image=rclone_image,
         workshop_namespace=workshop_namespace,
         s3_labels=s3_labels,
         storage_secret_checksum=storage_secret_checksum,
@@ -609,7 +621,7 @@ mv "$work_database" "$database"
                         },
                     ],
                     "backendRefs": [{"name": "data-s3", "port": 8080}],
-                    "timeouts": {"request": "3600s"},
+                    "timeouts": route_timeouts,
                 }
             ]
             if s3_enabled
@@ -618,7 +630,7 @@ mv "$work_database" "$database"
         + [
             {
                 "backendRefs": [{"name": "package-r", "port": 4180}],
-                "timeouts": {"request": "3600s"},
+                "timeouts": route_timeouts,
             }
         ],
     )

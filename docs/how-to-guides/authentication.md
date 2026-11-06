@@ -2,8 +2,14 @@
 
 Each Datalab has one confidential Keycloak client with the same name. For
 example, the Datalab `s-joe` has a client named `s-joe` and its own service account.
-Use that client for browser login, machine access, and restricted user-token
-exchange. The same client credentials and Secret references serve these flows.
+Use that client for browser login, CLI device login, machine access, and
+restricted user-token exchange. The same client credentials and Secret
+references serve these flows.
+
+Use Keycloak 26.2 or later with Standard Token Exchange V2 and client policies
+enabled. Default scopes must not add the unrestricted client-role mapper.
+Enable the `grant-type`, `client-scopes`, and `reject-request` client-policy
+providers and the built-in Role Name and Realm Roles protocol mappers.
 
 ## Groups and roles
 
@@ -61,11 +67,45 @@ Use the normal state and PKCE checks, then authenticate the confidential client
 when redeeming the code. Request only the scopes needed by the application.
 For a namespace-only direct login, omit `s-joe:interactive`.
 
-
 You can also use a separate login client in the same realm. Its scope mappings
 control the roles in its tokens. Before exchanging one of those tokens through
 the Datalab client, check that it contains the Datalab audience and the
 requested roles. Configure those claims on the separate login client.
+
+### CLI device login
+
+The provider enables Device Authorization Grant on the existing confidential
+client. The built-in `cluster-admin` kubeconfig helper uses this flow with a
+separate client secret. It requests `openid <datalab>:interactive`,
+prints a verification URL and user code to stderr, and waits for the user to
+approve the login in a browser. No localhost callback is needed.
+
+The resulting access token represents the user who signs in. Only that user's
+assigned roles can appear. Possession of the client secret does not grant
+cluster-admin. The service account remains assigned only `ws_api`; the helper
+does not use `grant_type=client_credentials`.
+
+The helper reuses cached tokens and attempts refresh before starting a new
+login. A valid cached token needs no client secret. Login and refresh require
+the secret through a private file or a hidden terminal prompt. See
+[human access](vcluster.md#human-access) for commands and cache settings.
+Additional profiles use a caller-supplied access token and do not start login.
+
+### Login lifetime
+
+Keycloak sets these lifetimes; the helper uses the issued expiry values.
+
+| Lifetime | Setting |
+| --- | --- |
+| Time to approve a device code | Realm `oauth2DeviceCodeLifespan` |
+| Access token validity | Access Token Lifespan |
+| Refresh session validity | SSO Session Idle/Max and Client Session Idle/Max |
+
+Refresh extends the idle window within the maximum session duration. Access
+token and client session lifetimes can have per-client overrides. See
+[Keycloak timeouts](https://www.keycloak.org/docs/latest/server_admin/index.html#_timeouts).
+The provider leaves these settings with the platform. The helper requests
+no `offline_access`; an expired session requires device login again.
 
 ## User-token exchange
 
@@ -157,7 +197,7 @@ RoleBinding and ClusterRoleBinding rules apply without an authentication change.
 The runtime copy is needed only when Data is enabled and exposed through an
 Ingress or HTTPRoute. It is created after the runtime namespace is known and
 removed when that proxy is disabled. Token exchange and virtual-cluster access
-do not need this copy. The legacy aggregate Secret still includes OAuth fields
+do not need this copy. The aggregate session Secret includes OAuth fields
 delivered to sessions.
 
 Anyone with the client secret can request a service-account token. Grant read

@@ -73,7 +73,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                 ),
             }
-            if kind in ("postgres", "mongo", "redis", "custom"):
+            if kind in ("postgres", "mongo", "redis", "registry", "custom"):
                 connection = publish_connection(connection, source, present)
                 if kind == "custom" and connection is None:
                     return
@@ -86,6 +86,22 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     value = _b64get_any(data, [secret_key]) or storage_config.get(field)
                     if value:
                         connection[field] = value
+            if kind == "registry":
+                ingress, gateway = environment.get("ingress") or {}, environment.get("httpRoute") or {}
+                public = _boolish(ingress.get("enabled")) or _boolish(gateway.get("enabled"))
+                connection["endpoint"] = (
+                    f"https://{xr_name}.{ingress.get('domain', 'default')}/v2/" if public
+                    else f"http://registry.{workshop_namespace}.svc:5000/v2/"
+                )
+                keys = [f"registry-deployment-{xr_name}"]
+                if _boolish(gateway.get("enabled")):
+                    keys.append(f"registry-route-{xr_name}")
+                elif public:
+                    keys.append(f"registry-ingress-{xr_name}")
+                connection["ready"] = connection["ready"] and all(
+                    source_ready(_to_dict(observed[key].resource)) if key in observed else False
+                    for key in keys
+                )
             connections.append(connection)
 
     def publish_connection(connection, source, present):
@@ -100,6 +116,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "postgres": ("host", "port", "user", "password", "dbname", "uri"),
             "mongo": ("user", "password"),
             "redis": ("user", "password"),
+            "registry": ("user", "password"),
         }.get(kind, ())
         if kind != "custom":
             data = {name: value for name, value in data.items() if name in required}
@@ -243,11 +260,16 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                         instance=store_name,
                     )
 
+    registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+    if registry_enabled:
+        observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", workshop_namespace,
+                kind="registry", instance="primary")
+
     data_config = (environment.get("defaults") or {}).get("data") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
         data_enabled = True
-    if _boolish(data_enabled) and runtime_namespace:
+    if (_boolish(data_enabled) or registry_enabled) and runtime_namespace:
         observe(
             f"observe-runtime-storage-secret-{xr_name}",
             f"{xr_name}-datalab",

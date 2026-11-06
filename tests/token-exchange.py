@@ -41,7 +41,7 @@ def main():
     client, = params(initial, "Client")
     assert client["clientId"] == "s-joe" and client["accessType"] == "CONFIDENTIAL"
     assert client["serviceAccountsEnabled"] and not client["fullScopeAllowed"]
-    assert not client["oauth2DeviceAuthorizationGrantEnabled"] and not client["standardTokenExchangeEnabled"]
+    assert client["oauth2DeviceAuthorizationGrantEnabled"] and not client["standardTokenExchangeEnabled"]
     assert params(initial, "ClientDefaultScopes")[0]["defaultScopes"] == ["basic", "profile", "email"]
     scopes = {body["metadata"]["name"]: body["spec"]["forProvider"]["name"]
               for body in initial.values() if body.get("kind") == "ClientScope"}

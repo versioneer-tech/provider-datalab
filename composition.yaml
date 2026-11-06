@@ -71,6 +71,8 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
+        import re
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -88,6 +90,30 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
+        def _duration_milliseconds(value, setting):
+            text = _safe_str(value)
+            if not re.fullmatch(r"(?:[0-9]{1,5}(?:ms|h|m|s)){1,4}", text):
+                raise ValueError(f"{setting} must be a duration, such as 3600s, 1h30m, or 0s.")
+            units = {"h": 3600000, "m": 60000, "s": 1000, "ms": 1}
+            return sum(int(number) * units[unit] for number, unit in re.findall(r"([0-9]+)(ms|h|m|s)", text))
+
+        def _http_route_timeouts(environment):
+            configured = (environment.get("httpRoute") or {}).get("timeouts")
+            if configured is None:
+                configured = {}
+            if not isinstance(configured, dict):
+                raise ValueError("httpRoute.timeouts must contain request and backendRequest durations.")
+            request_timeout = _safe_str(configured.get("request", "3600s"))
+            timeouts = {"request": request_timeout,
+                        "backendRequest": _safe_str(configured.get("backendRequest", request_timeout))}
+            request, backend = (
+                _duration_milliseconds(timeouts[key], f"httpRoute.timeouts.{key}")
+                for key in ("request", "backendRequest")
+            )
+            if request and backend > request:
+                raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
+            return timeouts
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -104,7 +130,9 @@ spec:
             data_enabled = data.get("enabled")
             if data_enabled is None:
                 data_enabled = True
-            if not _boolish(data_enabled):
+            data_enabled = _boolish(data_enabled)
+            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            if not (data_enabled or registry_enabled):
                 return
 
             iam = environment.get("iam") or {}
@@ -113,13 +141,24 @@ spec:
             ingress_enabled = _boolish(ingress.get("enabled"))
             route_enabled = _boolish(http_route.get("enabled"))
             s3_enabled = _boolish(http_route.get("enableS3"))
+            try:
+                if route_enabled:
+                    _http_route_timeouts(environment)
+                if data_enabled:
+                    _duration_milliseconds(
+                        (environment.get("oauth2Proxy") or {}).get("upstreamTimeout", "3600s"),
+                        "oauth2Proxy.upstreamTimeout",
+                    )
+            except ValueError as error:
+                response.fatal(rsp, str(error))
+                return
             if ingress_enabled and route_enabled:
                 response.fatal(
                     rsp,
                     "Enable only one of EnvironmentConfig data.ingress.enabled and data.httpRoute.enabled.",
                 )
                 return
-            if s3_enabled and not route_enabled:
+            if data_enabled and s3_enabled and not route_enabled:
                 response.fatal(
                     rsp,
                     "EnvironmentConfig data.httpRoute.enableS3 requires data.httpRoute.enabled.",
@@ -128,11 +167,9 @@ spec:
             if not (ingress_enabled or route_enabled):
                 return
 
-            required = {
-                "iam.issuerURL": iam.get("issuerURL"),
-                "iam.internalURL": iam.get("internalURL"),
-                "ingress.domain": ingress.get("domain"),
-            }
+            required = {"ingress.domain": ingress.get("domain")}
+            if data_enabled:
+                required.update({"iam.issuerURL": iam.get("issuerURL"), "iam.internalURL": iam.get("internalURL")})
             if route_enabled:
                 required.update(
                     {
@@ -141,10 +178,11 @@ spec:
                             "parentName",
                             "parentNamespace",
                             "sectionName",
-                            "httpSectionName",
                         )
                     }
                 )
+                if data_enabled:
+                    required["httpRoute.httpSectionName"] = http_route.get("httpSectionName")
             else:
                 required.update(
                     {
@@ -156,7 +194,7 @@ spec:
             if missing:
                 response.fatal(
                     rsp,
-                    "EnvironmentConfig enables a permanent Data endpoint but is missing: "
+                    "EnvironmentConfig enables public services but is missing: "
                     + ", ".join(missing)
                     + ".",
                 )
@@ -326,7 +364,7 @@ spec:
                             and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                         ),
                     }
-                    if kind in ("postgres", "mongo", "redis", "custom"):
+                    if kind in ("postgres", "mongo", "redis", "registry", "custom"):
                         connection = publish_connection(connection, source, present)
                         if kind == "custom" and connection is None:
                             return
@@ -339,6 +377,22 @@ spec:
                             value = _b64get_any(data, [secret_key]) or storage_config.get(field)
                             if value:
                                 connection[field] = value
+                    if kind == "registry":
+                        ingress, gateway = environment.get("ingress") or {}, environment.get("httpRoute") or {}
+                        public = _boolish(ingress.get("enabled")) or _boolish(gateway.get("enabled"))
+                        connection["endpoint"] = (
+                            f"https://{xr_name}.{ingress.get('domain', 'default')}/v2/" if public
+                            else f"http://registry.{workshop_namespace}.svc:5000/v2/"
+                        )
+                        keys = [f"registry-deployment-{xr_name}"]
+                        if _boolish(gateway.get("enabled")):
+                            keys.append(f"registry-route-{xr_name}")
+                        elif public:
+                            keys.append(f"registry-ingress-{xr_name}")
+                        connection["ready"] = connection["ready"] and all(
+                            source_ready(_to_dict(observed[key].resource)) if key in observed else False
+                            for key in keys
+                        )
                     connections.append(connection)
 
             def publish_connection(connection, source, present):
@@ -353,6 +407,7 @@ spec:
                     "postgres": ("host", "port", "user", "password", "dbname", "uri"),
                     "mongo": ("user", "password"),
                     "redis": ("user", "password"),
+                    "registry": ("user", "password"),
                 }.get(kind, ())
                 if kind != "custom":
                     data = {name: value for name, value in data.items() if name in required}
@@ -496,11 +551,16 @@ spec:
                                 instance=store_name,
                             )
 
+            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            if registry_enabled:
+                observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", workshop_namespace,
+                        kind="registry", instance="primary")
+
             data_config = (environment.get("defaults") or {}).get("data") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
                 data_enabled = True
-            if _boolish(data_enabled) and runtime_namespace:
+            if (_boolish(data_enabled) or registry_enabled) and runtime_namespace:
                 observe(
                     f"observe-runtime-storage-secret-{xr_name}",
                     f"{xr_name}-datalab",
@@ -1584,7 +1644,7 @@ spec:
               directAccessGrantsEnabled: false
               serviceAccountsEnabled: true
               standardTokenExchangeEnabled: ${exchange_enabled}
-              oauth2DeviceAuthorizationGrantEnabled: false
+              oauth2DeviceAuthorizationGrantEnabled: true
               webOrigins: ${redirect_uris}
               validRedirectUris: ${redirect_uris}
               realmId: ${realm}
@@ -2168,7 +2228,6 @@ spec:
             if registry_enabled is None:
                 registry_enabled = True
             registry_enabled = _boolish(registry_enabled)
-            registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
             persistence_cfg = defaults.get("persistence") or {}
             requested_storage_class = _string_value(
@@ -2363,7 +2422,7 @@ spec:
                     ],
                 )
 
-            if external_egress or vcluster or data_enabled:
+            if external_egress or vcluster or data_enabled or registry_enabled:
                 _add_policy(
                     network_policies,
                     "allow-dns-egress",
@@ -2467,12 +2526,6 @@ spec:
                 workshop["spec"]["session"]["applications"]["docker"] = {
                     "enabled": True,
                     "storage": "20Gi",
-                }
-
-            if registry_enabled:
-                workshop["spec"]["session"]["applications"]["registry"] = {
-                    "enabled": True,
-                    "storage": registry_storage,
                 }
 
             if vcluster and service_cidr:
@@ -4854,6 +4907,8 @@ spec:
 
         import base64
 
+        import re
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -4870,6 +4925,30 @@ spec:
 
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
+
+        def _duration_milliseconds(value, setting):
+            text = _safe_str(value)
+            if not re.fullmatch(r"(?:[0-9]{1,5}(?:ms|h|m|s)){1,4}", text):
+                raise ValueError(f"{setting} must be a duration, such as 3600s, 1h30m, or 0s.")
+            units = {"h": 3600000, "m": 60000, "s": 1000, "ms": 1}
+            return sum(int(number) * units[unit] for number, unit in re.findall(r"([0-9]+)(ms|h|m|s)", text))
+
+        def _http_route_timeouts(environment):
+            configured = (environment.get("httpRoute") or {}).get("timeouts")
+            if configured is None:
+                configured = {}
+            if not isinstance(configured, dict):
+                raise ValueError("httpRoute.timeouts must contain request and backendRequest durations.")
+            request_timeout = _safe_str(configured.get("request", "3600s"))
+            timeouts = {"request": request_timeout,
+                        "backendRequest": _safe_str(configured.get("backendRequest", request_timeout))}
+            request, backend = (
+                _duration_milliseconds(timeouts[key], f"httpRoute.timeouts.{key}")
+                for key in ("request", "backendRequest")
+            )
+            if request and backend > request:
+                raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
+            return timeouts
 
         def _observed_manifests(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -4927,6 +5006,10 @@ spec:
 
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            images = environment.get("images") or {}
+            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
+            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
+            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
             data_config = (environment.get("defaults") or {}).get("data") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
@@ -5002,6 +5085,8 @@ spec:
                 ingress_annotations = {}
             gateway = environment.get("httpRoute") or {}
             route_enabled = _boolish(gateway.get("enabled"))
+            route_timeouts = _http_route_timeouts(environment) if route_enabled else {}
+            upstream_timeout = _safe_str((environment.get("oauth2Proxy") or {}).get("upstreamTimeout", "3600s"))
             permanent_access = ingress_enabled or route_enabled
             s3_enabled = _boolish(gateway.get("enableS3"))
             gateway_namespace = _safe_str(gateway.get("parentNamespace"))
@@ -5074,11 +5159,13 @@ spec:
                 workshop_namespace=workshop_namespace,
                 labels=labels,
                 storage_secret_checksum=storage_secret_checksum,
+                package_r_image=package_r_image,
                 init_script=init_script,
                 containers=[
                     _render_template(
                         req,
                         "data/package-r-container",
+                        package_r_image=package_r_image,
                         endpoint_env=endpoint_env,
                         storage_secret_name=storage_secret_name,
                     )
@@ -5088,6 +5175,7 @@ spec:
                         _render_template(
                             req,
                             "data/oauth2-proxy-container",
+                            oauth2_proxy_image=oauth2_proxy_image,
                             args=[
                                 "--http-address=0.0.0.0:4180",
                                 "--metrics-address=127.0.0.1:44180",
@@ -5107,6 +5195,7 @@ spec:
                                 "--code-challenge-method=S256",
                                 f"--redirect-url=https://{xr_name}.{ingress_domain}/oauth2/callback",
                                 "--upstream=http://127.0.0.1:8888/",
+                                f"--upstream-timeout={upstream_timeout}",
                                 "--email-domain=*",
                                 f"--allowed-group={xr_name}",
                                 "--reverse-proxy=true",
@@ -5285,6 +5374,7 @@ spec:
             s3_deployment = _render_template(
                 req,
                 "data/s3-deployment",
+                rclone_image=rclone_image,
                 workshop_namespace=workshop_namespace,
                 s3_labels=s3_labels,
                 storage_secret_checksum=storage_secret_checksum,
@@ -5502,7 +5592,7 @@ spec:
                                 },
                             ],
                             "backendRefs": [{"name": "data-s3", "port": 8080}],
-                            "timeouts": {"request": "3600s"},
+                            "timeouts": route_timeouts,
                         }
                     ]
                     if s3_enabled
@@ -5511,7 +5601,7 @@ spec:
                 + [
                     {
                         "backendRefs": [{"name": "package-r", "port": 4180}],
-                        "timeouts": {"request": "3600s"},
+                        "timeouts": route_timeouts,
                     }
                 ],
             )
@@ -5682,7 +5772,7 @@ spec:
                     type: RuntimeDefault
                 initContainers:
                 - name: prepare-database
-                  image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+                  image: ${package_r_image}
                   imagePullPolicy: IfNotPresent
                   command:
                   - /bin/sh
@@ -5790,7 +5880,7 @@ spec:
             egress: ${egress_rules}
         data/oauth2-proxy-container:
           name: oauth2-proxy
-          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+          image: ${oauth2_proxy_image}
           imagePullPolicy: IfNotPresent
           args: ${args}
           securityContext:
@@ -5830,7 +5920,7 @@ spec:
             readOnly: true
         data/package-r-container:
           name: package-r
-          image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+          image: ${package_r_image}
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -5961,7 +6051,7 @@ spec:
                     type: RuntimeDefault
                 containers:
                 - name: s3
-                  image: rclone/rclone:1.71.0
+                  image: ${rclone_image}
                   imagePullPolicy: IfNotPresent
                   args:
                   - serve
@@ -6053,6 +6143,420 @@ spec:
             type: ClusterIP
             selector: ${labels}
             ports: ${ports}
+  - step: update-registry-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import base64
+
+        import hashlib
+
+        import re
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _boolish(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes", "on")
+
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
+        def _duration_milliseconds(value, setting):
+            text = _safe_str(value)
+            if not re.fullmatch(r"(?:[0-9]{1,5}(?:ms|h|m|s)){1,4}", text):
+                raise ValueError(f"{setting} must be a duration, such as 3600s, 1h30m, or 0s.")
+            units = {"h": 3600000, "m": 60000, "s": 1000, "ms": 1}
+            return sum(int(number) * units[unit] for number, unit in re.findall(r"([0-9]+)(ms|h|m|s)", text))
+
+        def _http_route_timeouts(environment):
+            configured = (environment.get("httpRoute") or {}).get("timeouts")
+            if configured is None:
+                configured = {}
+            if not isinstance(configured, dict):
+                raise ValueError("httpRoute.timeouts must contain request and backendRequest durations.")
+            request_timeout = _safe_str(configured.get("request", "3600s"))
+            timeouts = {"request": request_timeout,
+                        "backendRequest": _safe_str(configured.get("backendRequest", request_timeout))}
+            request, backend = (
+                _duration_milliseconds(timeouts[key], f"httpRoute.timeouts.{key}")
+                for key in ("request", "backendRequest")
+            )
+            if request and backend > request:
+                raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
+            return timeouts
+
+        def _observed_manifests(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}, {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return (
+                at_provider.get("manifest") or {},
+                (at_provider.get("raw") or {}).get("manifest") or {},
+            )
+
+        def _extract_manifest(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return manifest or raw_manifest
+
+        def _extract_data(observed_resource):
+            manifest, raw_manifest = _observed_manifests(observed_resource)
+            return (
+                manifest.get("data")
+                or manifest.get("stringData")
+                or raw_manifest.get("data")
+                or raw_manifest.get("stringData")
+                or {}
+            )
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
+        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
+            # Keep each service's existing seed and length to prevent credential changes.
+            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
+            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import hashlib
+        import json
+
+
+
+        def compose(req, rsp):
+            rsp.meta.ttl.FromSeconds(300)
+            xr = _to_dict(req.observed.composite.resource)
+            meta = xr["metadata"]
+            name, namespace = meta["name"], meta.get("namespace") or "default"
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
+            if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
+                return
+            observed = req.observed.resources
+            runtime = (_extract_manifest(observed.get(f"workshopenvironment-{name}")).get("status") or {}).get("educates") or {}
+            runtime_namespace = runtime.get("namespace")
+            if not runtime_namespace:
+                return
+
+            def emit(suffix, manifest, readiness=None):
+                key = f"registry-{suffix}-{name}"
+                rsp.desired.resources[key].resource.update(_render_template(
+                    req, "common/object", key=key, xr_namespace=namespace, manifest=manifest,
+                    readiness=readiness or {"policy": "SuccessfulCreate"},
+                ))
+
+            auth = {"user": name, "password": _strong_token(f"{name}:registry", length=28),
+                    "http-secret": _strong_token(f"{name}:registry:http")}
+            emit("auth-secret", {
+                "apiVersion": "v1", "kind": "Secret",
+                "metadata": {"name": "registry-auth", "namespace": runtime_namespace},
+                "type": "Opaque", "stringData": auth,
+            })
+            storage_data = _extract_data(observed.get(f"observe-runtime-storage-secret-{name}"))
+            if not _b64get_any(storage_data, ["aws-credentials"]):
+                return
+            storage = env.get("storage") or {}
+            endpoint = _b64get_any(storage_data, ["AWS_ENDPOINT_URL"]) or storage.get("endpoint", "")
+            config = {
+                "version": 0.1,
+                "log": {"level": "info"},
+                "storage": {
+                    "s3": {"bucket": name, "region": _b64get_any(storage_data, ["AWS_REGION"]) or storage.get("region") or "us-east-1",
+                           "forcepathstyle": _boolish(
+                               _b64get_any(storage_data, ["AWS_S3_FORCE_PATH_STYLE"]) or storage.get("forcePathStyle", True)),
+                           "secure": not endpoint.startswith("http://")},
+                    # Keep downloads on the authenticated registry route.
+                    "redirect": {"disable": True},
+                },
+                "http": {"addr": "0.0.0.0:5000", "relativeurls": True,
+                         "debug": {"addr": "0.0.0.0:5001"}},
+                "auth": {"htpasswd": {"realm": "Datalab registry", "path": "/auth/htpasswd"}},
+                "health": {"storagedriver": {"enabled": True, "interval": "10s", "threshold": 3}},
+            }
+            config_text = json.dumps(config, indent=2, sort_keys=True)
+            checksum = hashlib.sha256(json.dumps([storage_data, auth, config_text], sort_keys=True).encode()).hexdigest()
+            labels = {"app.kubernetes.io/name": "registry", "app.kubernetes.io/instance": name}
+            emit("config", _render_template(req, "registry/config", runtime_namespace=runtime_namespace, config=config_text))
+            emit("deployment", _render_template(
+                req, "registry/deployment", runtime_namespace=runtime_namespace, labels=labels,
+                registry_image=registry_image,
+                checksum=checksum, storage_secret_name=f"{name}-datalab",
+            ), {"policy": "DeriveFromCelQuery", "celQuery":
+                "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1"})
+            emit("service", _render_template(req, "registry/service", runtime_namespace=runtime_namespace, labels=labels))
+            emit("networkpolicy", {
+                "apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+                "metadata": {"name": "registry", "namespace": runtime_namespace},
+                "spec": {"podSelector": {"matchLabels": labels}, "policyTypes": ["Ingress"],
+                         "ingress": [{"ports": [{"protocol": "TCP", "port": 5000}]}]},
+            })
+            ingress, gateway = env.get("ingress") or {}, env.get("httpRoute") or {}
+            hostname = f"{name}.{ingress.get('domain', 'default')}"
+            backend = {"name": "registry", "port": 5000}
+            if _boolish(gateway.get("enabled")):
+                parent = {"name": gateway["parentName"], "namespace": gateway["parentNamespace"],
+                          "sectionName": gateway["sectionName"]}
+                emit("route", {
+                    "apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
+                    "metadata": {"name": "registry", "namespace": runtime_namespace},
+                    "spec": {"parentRefs": [parent], "hostnames": [hostname], "rules": [
+                        {"matches": [{"path": {"type": "PathPrefix", "value": "/v2"}}],
+                         "backendRefs": [backend], "timeouts": _http_route_timeouts(env)},
+                    ]},
+                }, {"policy": "DeriveFromCelQuery", "celQuery":
+                    f"has(object.status) && has(object.status.parents) && object.status.parents.exists(p, p.parentRef.name == {json.dumps(parent['name'])} && has(p.parentRef.namespace) && p.parentRef.namespace == {json.dumps(parent['namespace'])} && has(p.parentRef.sectionName) && p.parentRef.sectionName == {json.dumps(parent['sectionName'])} && has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == object.metadata.generation) && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True' && c.observedGeneration == object.metadata.generation))"})
+            elif _boolish(ingress.get("enabled")):
+                emit("ingress", {
+                    "apiVersion": "networking.k8s.io/v1", "kind": "Ingress",
+                    "metadata": {"name": "registry", "namespace": runtime_namespace,
+                                 "annotations": ingress.get("annotations") or {}},
+                    "spec": {"ingressClassName": ingress.get("class", ""), "rules": [{"host": hostname,
+                        "http": {"paths": [{"path": "/v2", "pathType": "Prefix", "backend": {
+                            "service": {"name": "registry", "port": {"number": 5000}}}}]}}],
+                        "tls": [{"hosts": [hostname], "secretName": ingress.get("secret", "wildcard-tls")}]},
+                })
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
+        registry/config:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: registry
+            namespace: ${runtime_namespace}
+          data:
+            config.yml: ${config}
+        registry/deployment:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: registry
+            namespace: ${runtime_namespace}
+            labels: ${labels}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels: ${labels}
+            template:
+              metadata:
+                labels: ${labels}
+                annotations:
+                  datalabs.pkg.internal/registry-checksum: ${checksum}
+              spec:
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+                initContainers:
+                - name: prepare-auth
+                  image: httpd:2.4.69-alpine
+                  command:
+                  - /bin/sh
+                  - -ec
+                  args:
+                  - |
+                    umask 077
+                    printf '%s\n' "$REGISTRY_PASSWORD" | htpasswd -Bin "$REGISTRY_USER" > /auth/htpasswd
+                  env:
+                  - name: REGISTRY_USER
+                    valueFrom:
+                      secretKeyRef:
+                        name: registry-auth
+                        key: user
+                  - name: REGISTRY_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: registry-auth
+                        key: password
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  resources:
+                    requests:
+                      cpu: 50m
+                      memory: 32Mi
+                    limits:
+                      cpu: 500m
+                      memory: 64Mi
+                  volumeMounts:
+                  - name: auth
+                    mountPath: /auth
+                containers:
+                - name: registry
+                  image: ${registry_image}
+                  command:
+                  - /bin/registry
+                  args:
+                  - serve
+                  - /etc/distribution/config.yml
+                  env:
+                  - name: AWS_SHARED_CREDENTIALS_FILE
+                    value: /var/run/datalab/storage/aws-credentials
+                  - name: AWS_EC2_METADATA_DISABLED
+                    value: 'true'
+                  - name: AWS_REGION
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${storage_secret_name}
+                        key: AWS_REGION
+                  - name: AWS_ENDPOINT_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${storage_secret_name}
+                        key: AWS_ENDPOINT_URL
+                  - name: REGISTRY_STORAGE_S3_REGIONENDPOINT
+                    value: $(AWS_ENDPOINT_URL)
+                  - name: REGISTRY_HTTP_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: registry-auth
+                        key: http-secret
+                  - name: OTEL_TRACES_EXPORTER
+                    value: none
+                  ports:
+                  - name: registry
+                    containerPort: 5000
+                  - name: health
+                    containerPort: 5001
+                  startupProbe:
+                    httpGet:
+                      path: /debug/health
+                      port: health
+                    periodSeconds: 5
+                    failureThreshold: 30
+                  readinessProbe:
+                    httpGet:
+                      path: /debug/health
+                      port: health
+                    periodSeconds: 10
+                  livenessProbe:
+                    tcpSocket:
+                      port: registry
+                    periodSeconds: 20
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: '2'
+                      memory: 512Mi
+                  volumeMounts:
+                  - name: config
+                    mountPath: /etc/distribution
+                    readOnly: true
+                  - name: auth
+                    mountPath: /auth
+                    readOnly: true
+                  - name: storage-credentials
+                    mountPath: /var/run/datalab/storage
+                    readOnly: true
+                  - name: tmp
+                    mountPath: /tmp
+                volumes:
+                - name: config
+                  configMap:
+                    name: registry
+                - name: auth
+                  emptyDir:
+                    medium: Memory
+                    sizeLimit: 1Mi
+                - name: storage-credentials
+                  secret:
+                    secretName: ${storage_secret_name}
+                    defaultMode: 288
+                    items:
+                    - key: aws-credentials
+                      path: aws-credentials
+                - name: tmp
+                  emptyDir:
+                    sizeLimit: 64Mi
+        registry/service:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: registry
+            namespace: ${runtime_namespace}
+            labels: ${labels}
+          spec:
+            selector: ${labels}
+            ports:
+            - name: registry
+              port: 5000
+              targetPort: registry
   - step: update-postgres-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -6425,6 +6929,9 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
@@ -6461,6 +6968,8 @@ spec:
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
+        import re
+
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 
@@ -6481,6 +6990,12 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             mongo_env = environment.get("documentStore") or {}
+            images = environment.get("images") or {}
+            mongo_image = _safe_str(images.get("mongo"))
+            version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
+            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.12")
+            mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
+            backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
             mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
             backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
@@ -6591,6 +7106,8 @@ spec:
                 mongo = _render_template(
                     req,
                     "mongodb/store",
+                    mongo_version=mongo_version,
+                    mongo_image=mongo_image,
                     mongo_resource_name=mongo_resource_name,
                     workshop_ns=workshop_namespace,
                     app_username=app_username,
@@ -6599,7 +7116,6 @@ spec:
                     scram_secret_name=f"{store_name}-app-scram",
                     pvc_spec=pvc_spec,
                 )
-
                 backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
                 if _backup_enabled(backup_storage):
                     backup_name = f"{mongo_resource_name}-backup"
@@ -6635,7 +7151,7 @@ spec:
                         backup_secret_name=backup_secret_name,
                         backup_username=backup_username,
                         backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
-                        mongo_image=f"mongo:{mongo['spec']['version']}",
+                        mongo_image=backup_image,
                     )
                     mongo["spec"]["users"].append(
                         {
@@ -6879,7 +7395,7 @@ spec:
           spec:
             members: 1
             type: ReplicaSet
-            version: 8.0.12
+            version: ${mongo_version}
             security:
               authentication:
                 modes:
@@ -6899,6 +7415,11 @@ spec:
               scramCredentialsSecretName: ${scram_secret_name}
             statefulSet:
               spec:
+                template:
+                  spec:
+                    containers:
+                    - name: mongod
+                      image: ${mongo_image}
                 volumeClaimTemplates:
                 - metadata:
                     name: data-volume
@@ -6970,6 +7491,9 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _safe_str(value):
+            return str(value).strip() if value is not None else ""
+
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
@@ -7038,6 +7562,9 @@ spec:
 
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+            images = environment.get("images") or {}
+            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.0.15"
+            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.0.15"
             redis_env = environment.get("cacheStore") or {}
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
             backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
@@ -7130,6 +7657,7 @@ spec:
                 redis_manifest = _render_template(
                     req,
                     "redis/store",
+                    redis_image=redis_image,
                     store_name=store_name,
                     workshop_ns=workshop_namespace,
                     redis_auth_secret_name=redis_auth_secret_name,
@@ -7175,6 +7703,7 @@ spec:
                     backup_job = _render_template(
                         req,
                         "redis/backup-cronjob",
+                        redis_image=backup_image,
                         backup_name=backup_name,
                         workshop_ns=workshop_namespace,
                         backup_secret_name=backup_secret_name,
@@ -7337,7 +7866,7 @@ spec:
                         type: RuntimeDefault
                     containers:
                     - name: backup
-                      image: redis:7.0.15
+                      image: ${redis_image}
                       command:
                       - /bin/sh
                       - -ec
@@ -7397,7 +7926,7 @@ spec:
           spec:
             initContainer:
               enabled: true
-              image: quay.io/opstree/redis:v7.0.15
+              image: ${redis_image}
               imagePullPolicy: IfNotPresent
               command:
               - sh
@@ -7407,7 +7936,7 @@ spec:
               securityContext:
                 runAsUser: 0
             kubernetesConfig:
-              image: quay.io/opstree/redis:v7.0.15
+              image: ${redis_image}
               imagePullPolicy: IfNotPresent
               redisSecret:
                 name: ${redis_auth_secret_name}
@@ -7663,8 +8192,7 @@ spec:
         import hashlib
         import json
 
-        CREDENTIAL_HELPER = '#!/usr/bin/env python3\n\n"""Use a caller\'s access token or request one with the Datalab OAuth client."""\n\nimport argparse\nimport base64\nfrom datetime import datetime, timedelta, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\'--issuer\', required=True)\n    parser.add_argument(\'--client-id\', required=True)\n    source = parser.add_mutually_exclusive_group()\n    source.add_argument(\'--access-token-file\', default=os.environ.get(\'DATALAB_ACCESS_TOKEN_FILE\'))\n    source.add_argument(\'--client-secret-file\', default=os.environ.get(\'DATALAB_CLIENT_SECRET_FILE\'))\n    source.add_argument(\'--client-secret-env\')\n    parser.add_argument(\'--issuer-ca\')\n    parser.add_argument(\'--issuer-ca-data\')\n    args = parser.parse_args()\n    if sum(bool(value) for value in (args.access_token_file, args.client_secret_file, args.client_secret_env)) != 1:\n        parser.error(\'Supply one access token file or client secret source. Set DATALAB_ACCESS_TOKEN_FILE or DATALAB_CLIENT_SECRET_FILE.\')\n    if not args.issuer.startswith(\'https://\'):\n        parser.error(\'--issuer must use HTTPS\')\n    try:\n        if args.access_token_file:\n            status = {\'token\': Path(args.access_token_file).read_text().strip()}\n        else:\n            secret = (Path(args.client_secret_file).read_text().strip() if args.client_secret_file\n                      else os.environ[args.client_secret_env])\n            if not secret:\n                raise ValueError(\'Empty client secret\')\n            ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n            context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n            request = Request(args.issuer.rstrip(\'/\') + \'/protocol/openid-connect/token\',\n                              data=urlencode({\'grant_type\': \'client_credentials\', \'client_id\': args.client_id,\n                                              \'client_secret\': secret}).encode())\n            with urlopen(request, context=context, timeout=30) as result:\n                token = json.load(result)\n            expires = datetime.now(timezone.utc) + timedelta(seconds=int(token[\'expires_in\']) - 10)\n            status = {\'token\': token[\'access_token\'], \'expirationTimestamp\': expires.isoformat().replace(\'+00:00\', \'Z\')}\n        if not status[\'token\']:\n            raise ValueError(\'Empty access token\')\n        credential = {\n            \'apiVersion\': \'client.authentication.k8s.io/v1\', \'kind\': \'ExecCredential\',\n            \'status\': status,\n        }\n    except (OSError, HTTPError, URLError, ValueError, KeyError):\n        print(\'Could not obtain a Datalab API token. Check the token file or issuer and client credential.\', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == \'__main__\':\n    sys.exit(main())\n'
-        TOKEN_HELPER = '#!/usr/bin/env python3\n\n"""Use an access token supplied by the caller."""\n\nimport argparse\nimport base64\nfrom binascii import Error as Base64Error\nfrom datetime import datetime, timezone\nimport json\nimport os\nfrom pathlib import Path\nimport sys\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\'--access-token-file\', default=os.environ.get(\'DATALAB_ACCESS_TOKEN_FILE\'))\n    args = parser.parse_args()\n    if not args.access_token_file:\n        parser.error(\'Supply --access-token-file or set DATALAB_ACCESS_TOKEN_FILE.\')\n    try:\n        token = Path(args.access_token_file).read_text().strip()\n        if not token:\n            raise ValueError(\'Empty access token\')\n        payload = token.split(\'.\')[1]\n        claims = json.loads(base64.urlsafe_b64decode(payload + \'=\' * (-len(payload) % 4)))\n        # The API validates the token. Expiry tells kubectl when to call this helper again.\n        expires = datetime.fromtimestamp(claims[\'exp\'], timezone.utc)\n    except (OSError, ValueError, Base64Error, IndexError, KeyError, TypeError, OverflowError):\n        print(\'Could not read the access token or its expiry. Check the token file.\', file=sys.stderr)\n        return 1\n    credential = {\n        \'apiVersion\': \'client.authentication.k8s.io/v1\', \'kind\': \'ExecCredential\',\n        \'status\': {\'token\': token, \'expirationTimestamp\': expires.isoformat().replace(\'+00:00\', \'Z\')},\n    }\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == \'__main__\':\n    sys.exit(main())\n'
+        CREDENTIAL_HELPER = '#!/usr/bin/env python3\n\n"""Use a caller token or sign in through the Datalab device flow."""\n\nimport argparse\nimport base64\nfrom binascii import Error as Base64Error\nfrom datetime import datetime, timezone\nfrom getpass import getpass, GetPassWarning\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport ssl\nimport sys\nimport tempfile\nimport time\nimport warnings\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import urlencode\nfrom urllib.request import Request, urlopen\n\n\nclass OAuthError(ValueError):\n    pass\n\n\ndef token_expiry(token):\n    payload = token.split(\'.\')[1]\n    claims = json.loads(base64.urlsafe_b64decode(payload + \'=\' * (-len(payload) % 4)))\n    # The API validates the JWT. This value controls only local token reuse.\n    return float(claims[\'exp\'])\n\n\ndef post(issuer, endpoint, values, context):\n    request = Request(issuer + \'/protocol/openid-connect/\' + endpoint,\n                      data=urlencode(values).encode())\n    try:\n        with urlopen(request, context=context, timeout=30) as result:\n            return json.load(result)\n    except HTTPError as error:\n        try:\n            code = json.load(error).get(\'error\')\n        except (ValueError, AttributeError):\n            code = None\n        # Do not copy server responses: they can contain credentials.\n        raise OAuthError(code or \'token_request_failed\') from None\n\n\ndef device_login(issuer, client, scope, context):\n    device = post(issuer, \'auth/device\', {**client, \'scope\': scope}, context)\n    print(\'Open \' + device[\'verification_uri\'] + \' and enter code \' + device[\'user_code\']\n          + \' to sign in to \' + client[\'client_id\'] + \'.\', file=sys.stderr)\n    deadline = time.monotonic() + float(device[\'expires_in\'])\n    interval = max(1, float(device.get(\'interval\', 5)))\n    while time.monotonic() + interval < deadline:\n        time.sleep(interval)\n        try:\n            return post(issuer, \'token\', {\n                **client, \'grant_type\': \'urn:ietf:params:oauth:grant-type:device_code\',\n                \'device_code\': device[\'device_code\'],\n            }, context)\n        except OAuthError as error:\n            if str(error) == \'slow_down\':\n                interval += 5\n            elif str(error) != \'authorization_pending\':\n                raise\n    raise OAuthError(\'expired_token\')\n\n\ndef read_cache(path):\n    try:\n        value = json.loads(path.read_text())\n        return value if isinstance(value, dict) else {}\n    except (FileNotFoundError, ValueError):\n        return {}\n\n\ndef save_cache(path, value):\n    # Replace the file only after the complete token response is stored.\n    with tempfile.NamedTemporaryFile(mode=\'w\', dir=path.parent, prefix=\'.xyz-\', delete=False) as output:\n        temporary = Path(output.name)\n        try:\n            os.chmod(temporary, 0o600)\n            json.dump(value, output)\n            output.close()\n            os.replace(temporary, path)\n        finally:\n            temporary.unlink(missing_ok=True)\n\n\ndef client_secret(args):\n    if args.client_secret_file:\n        secret = Path(args.client_secret_file).read_text().strip()\n    elif args.client_secret_env:\n        secret = os.environ[args.client_secret_env]\n    else:\n        info = os.environ.get(\'KUBERNETES_EXEC_INFO\')\n        interactive = json.loads(info).get(\'spec\', {}).get(\'interactive\', False) if info else True\n        if not interactive or not sys.stdin.isatty():\n            raise ValueError(\'Client secret input requires an interactive terminal\')\n        # Stop instead of echoing the secret if terminal control is unavailable.\n        with warnings.catch_warnings():\n            warnings.simplefilter(\'error\', GetPassWarning)\n            secret = getpass(\'Client secret for \' + args.client_id + \': \', stream=sys.stderr)\n    if not secret:\n        raise ValueError(\'Empty client secret\')\n    return secret\n\n\ndef login(args):\n    scope = \' \'.join(sorted(set([\'openid\', *(args.scope or [args.client_id + \':interactive\'])])))\n    key = hashlib.sha256(json.dumps([args.issuer, args.client_id, scope]).encode()).hexdigest()\n    directory = Path(args.cache_dir).expanduser()\n    directory.mkdir(mode=0o700, parents=True, exist_ok=True)\n    if directory.is_symlink():\n        raise ValueError(\'The token cache directory must not be a symbolic link\')\n    os.chmod(directory, 0o700)\n    path = directory / (key + \'.json\')\n    cached = {} if args.force_login else read_cache(path)\n    try:\n        expires = min(float(cached[\'expires_at\']), token_expiry(cached[\'access_token\']))\n        if expires > time.time() + 30:\n            return cached[\'access_token\'], expires\n    except (ValueError, Base64Error, KeyError, IndexError, TypeError):\n        pass\n\n    ca_data = base64.b64decode(args.issuer_ca_data).decode() if args.issuer_ca_data else None\n    context = ssl.create_default_context(cafile=args.issuer_ca, cadata=ca_data)\n    client = {\'client_id\': args.client_id, \'client_secret\': client_secret(args)}\n    token = None\n    if cached.get(\'refresh_token\'):\n        try:\n            token = post(args.issuer, \'token\', {\n                **client, \'grant_type\': \'refresh_token\', \'refresh_token\': cached[\'refresh_token\'],\n            }, context)\n        except OAuthError as error:\n            if str(error) != \'invalid_grant\':\n                raise\n    if token is None:\n        cached = {}\n        token = device_login(args.issuer, client, scope, context)\n    expires = min(time.time() + float(token[\'expires_in\']), token_expiry(token[\'access_token\']))\n    if expires <= time.time() + 30:\n        raise ValueError(\'The issued token has expired\')\n    save_cache(path, {\n        \'access_token\': token[\'access_token\'], \'expires_at\': expires,\n        \'refresh_token\': token.get(\'refresh_token\', cached.get(\'refresh_token\')),\n    })\n    return token[\'access_token\'], expires\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\'--issuer\')\n    parser.add_argument(\'--client-id\')\n    parser.add_argument(\'--token-only\', action=\'store_true\', help=\'Use only a caller token file; never start login.\')\n    source = parser.add_mutually_exclusive_group()\n    source.add_argument(\'--access-token-file\', default=os.environ.get(\'DATALAB_ACCESS_TOKEN_FILE\'))\n    source.add_argument(\'--client-secret-file\')\n    source.add_argument(\'--client-secret-env\')\n    parser.add_argument(\'--scope\', action=\'append\', help=\'OAuth scope; repeat for more scopes. Default: <client-id>:interactive.\')\n    parser.add_argument(\'--cache-dir\', default=os.environ.get(\'DATALAB_TOKEN_CACHE_DIR\') or str(\n        Path(os.environ.get(\'XDG_CACHE_HOME\') or Path.home() / \'.cache\') / \'datalab\' / \'oidc\'))\n    parser.add_argument(\'--force-login\', action=\'store_true\', help=\'Ignore cached tokens and start device login.\')\n    parser.add_argument(\'--issuer-ca\')\n    parser.add_argument(\'--issuer-ca-data\')\n    args = parser.parse_args()\n    if args.token_only:\n        if args.client_secret_file or args.client_secret_env:\n            parser.error(\'--token-only does not accept client credentials.\')\n        if not args.access_token_file:\n            parser.error(\'Supply --access-token-file or set DATALAB_ACCESS_TOKEN_FILE.\')\n    else:\n        args.client_secret_file = args.client_secret_file or os.environ.get(\'DATALAB_CLIENT_SECRET_FILE\')\n    if sum(bool(value) for value in (args.access_token_file, args.client_secret_file, args.client_secret_env)) > 1:\n        parser.error(\'Supply one access token file or client secret source. Set DATALAB_ACCESS_TOKEN_FILE or DATALAB_CLIENT_SECRET_FILE.\')\n    if not args.access_token_file:\n        if not args.issuer or not args.client_id:\n            parser.error(\'Device login requires --issuer and --client-id.\')\n        if not args.issuer.startswith(\'https://\'):\n            parser.error(\'--issuer must use HTTPS\')\n        args.issuer = args.issuer.rstrip(\'/\')\n    try:\n        if args.access_token_file:\n            token = Path(args.access_token_file).read_text().strip()\n            expires = token_expiry(token)\n        else:\n            token, expires = login(args)\n            expires -= 10\n        credential = {\n            \'apiVersion\': \'client.authentication.k8s.io/v1\', \'kind\': \'ExecCredential\',\n            \'status\': {\'token\': token, \'expirationTimestamp\': datetime.fromtimestamp(\n                expires, timezone.utc).isoformat().replace(\'+00:00\', \'Z\')},\n        }\n    except OAuthError as error:\n        message = {\n            \'access_denied\': \'Device login was denied. Run kubectl again to retry.\',\n            \'expired_token\': \'The device code expired. Run kubectl again for a new code.\',\n            \'invalid_client\': \'Keycloak rejected the client credentials. Check the client ID and secret.\',\n            \'unauthorized_client\': \'Keycloak did not allow this login flow. Check the client settings.\',\n            \'invalid_scope\': \'Keycloak rejected the requested login scopes.\',\n        }.get(str(error), \'Keycloak rejected the token request. Check the client and login settings.\')\n        print(message, file=sys.stderr)\n        return 1\n    except (OSError, URLError, ValueError, Base64Error, KeyError, IndexError, TypeError, OverflowError,\n            EOFError, GetPassWarning):\n        print(\'Could not obtain a Datalab API token. Check the token file, client secret, or device login. \'\n              \'Set DATALAB_ACCESS_TOKEN_FILE or DATALAB_CLIENT_SECRET_FILE, or use an interactive terminal. \'\n              \'For a new login, use --force-login.\', file=sys.stderr)\n        return 1\n    print(json.dumps(credential))\n    return 0\n\n\nif __name__ == \'__main__\':\n    sys.exit(main())\n'
 
 
         def compose(req, rsp):
@@ -7715,7 +8243,7 @@ spec:
                         if issuer_ca:
                             args += ["--issuer-ca-data", base64.b64encode(issuer_ca.encode()).decode()]
                     else:
-                        args = ["-c", TOKEN_HELPER]
+                        args = ["-c", CREDENTIAL_HELPER, "--token-only"]
                     binding = hashlib.sha256(
                         f"{group['name']}:{group['namespace']}:{group['role']}".encode()
                     ).hexdigest()[:12]
@@ -7753,6 +8281,7 @@ spec:
                         contexts_0_context_namespace=(
                             "default" if group["namespace"] == "*" else group["namespace"]
                         ),
+                        interactive_mode="IfAvailable" if group["name"] == "cluster-admin" else "Never",
                         args=args,
                     )
                     key = _resource_name("connection", secret_name)
@@ -7819,7 +8348,7 @@ spec:
             user:
               exec:
                 apiVersion: client.authentication.k8s.io/v1
-                interactiveMode: Never
+                interactiveMode: ${interactive_mode}
                 command: python3
                 args: ${args}
   - step: protect-vcluster-resources

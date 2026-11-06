@@ -76,6 +76,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-data-objects.py
+  - step: update-registry-objects
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-registry-objects.py
   - step: update-postgres-objects
     functionRef:
       name: crossplane-contrib-function-python

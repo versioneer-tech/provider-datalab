@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# The custom environment supplies privileged sessions, registry, file bundles,
+# The custom environment supplies privileged sessions, an S3 registry, file bundles,
 # quotas, vCluster, and Gateway access. Jane uses PostgreSQL and apikey-1.
 apiVersion: pkg.internal/v1beta2
 kind: Datalab

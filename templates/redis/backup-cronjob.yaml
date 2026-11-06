@@ -30,7 +30,7 @@ spec:
               type: RuntimeDefault
           containers:
           - name: backup
-            image: redis:7.0.15
+            image: ${redis_image}
             command: [/bin/sh, -ec]
             args:
             - |

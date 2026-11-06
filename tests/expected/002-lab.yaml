@@ -178,7 +178,7 @@ spec:
     fullScopeAllowed: false
     implicitFlowEnabled: false
     name: s-jeff
-    oauth2DeviceAuthorizationGrantEnabled: false
+    oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
     rootUrl: https://s-jeff.lab.acme.com
     serviceAccountsEnabled: true
@@ -972,6 +972,11 @@ spec:
             - SCRAM
         statefulSet:
           spec:
+            template:
+              spec:
+                containers:
+                - image: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
+                  name: mongod
             volumeClaimTemplates:
             - metadata:
                 name: data-volume
@@ -1209,6 +1214,26 @@ spec:
       kind: Secret
       metadata:
         name: prod-redis-auth
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-registry-auth-secret-s-jeff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-auth
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -1657,9 +1682,6 @@ spec:
               enabled: false
             editor:
               enabled: true
-            registry:
-              enabled: true
-              storage: 5Gi
             slides:
               enabled: false
             terminal:

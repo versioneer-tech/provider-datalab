@@ -18,6 +18,6 @@ users:
   user:
     exec:
       apiVersion: client.authentication.k8s.io/v1
-      interactiveMode: Never
+      interactiveMode: ${interactive_mode}
       command: python3
       args: ${args}

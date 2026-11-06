@@ -10,6 +10,7 @@ from composition.helpers import (
     _backup_enabled,
     _extract_data,
     _extract_manifest,
+    _safe_str,
     _string_value,
     _strong_token,
     _to_dict,
@@ -31,6 +32,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
+    images = environment.get("images") or {}
+    redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.0.15"
+    backup_image = _safe_str(images.get("redisBackup")) or "redis:7.0.15"
     redis_env = environment.get("cacheStore") or {}
     redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
     backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
@@ -123,6 +127,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         redis_manifest = _render_template(
             req,
             "redis/store",
+            redis_image=redis_image,
             store_name=store_name,
             workshop_ns=workshop_namespace,
             redis_auth_secret_name=redis_auth_secret_name,
@@ -168,6 +173,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             backup_job = _render_template(
                 req,
                 "redis/backup-cronjob",
+                redis_image=backup_image,
                 backup_name=backup_name,
                 workshop_ns=workshop_namespace,
                 backup_secret_name=backup_secret_name,

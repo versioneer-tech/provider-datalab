@@ -24,7 +24,7 @@ tests/unit.bash
 | Profile | Datalabs | What the test verifies |
 | --- | --- | --- |
 | `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, MinIO, a controlled target with vCluster labels, and external access. |
-| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session with a 1 GiB registry and retains one stopped session. The test authenticates to the session registry and writes and reads a blob. |
+| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session and retains one stopped session. Its shared registry uses S3 storage. The test uses the published connection Secret to authenticate and write and read a blob. |
 | `verify-data` | `verify-data-enabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | File write/read, one credential update with workload restart, and read-only write rejection through the generated Secret. Render tests cover disabled Data and resource structure. |
 | `verify-s3` | `verify-s3` from [manifests/s3/datalab.yaml](manifests/s3/datalab.yaml) | Experimental S3 access with the generated Datalab client: TLS routing, list/HEAD/GET/range reads, write/delete rejection, shared browser hostname, and browser access after S3 is disabled. |
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
@@ -65,6 +65,7 @@ The registry profile installs Kyverno because the session runtime applies
 Kyverno policies. It then installs the EOEPCA+ dependency chart `2.2.1`, which
 contains the Educates session runtime `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
 retain successful resources.
+The profile creates the required disposable MinIO bucket before the Datalab.
 The registry probe allows time for the HTTP service to start. It reports
 the failed operation and HTTP status without printing credentials.
 

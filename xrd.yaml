@@ -147,7 +147,7 @@ spec:
                           properties:
                             type:
                               type: string
-                              enum: [s3, postgres, mongo, redis, custom]
+                              enum: [s3, postgres, mongo, redis, registry, custom]
                               description: Datalab connection type.
                             name:
                               type: string
@@ -367,7 +367,7 @@ spec:
                         type: string
                       type:
                         type: string
-                        enum: [s3, postgres, mongo, redis, custom, vcluster]
+                        enum: [s3, postgres, mongo, redis, registry, custom, vcluster]
                       instance:
                         type: string
                       group:

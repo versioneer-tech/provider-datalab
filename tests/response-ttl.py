@@ -114,6 +114,11 @@ class FunctionResponseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="datalab-ttl-") as directory:
             root = Path(directory)
             shutil.copytree(ROOT / "composition", root / "composition")
+            (root / "scripts").mkdir()
+            shutil.copyfile(
+                ROOT / "scripts/vcluster-credentials.py",
+                root / "scripts/vcluster-credentials.py",
+            )
             (root / "templates").symlink_to(
                 ROOT / "templates", target_is_directory=True
             )

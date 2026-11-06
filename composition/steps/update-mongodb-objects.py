@@ -1,11 +1,14 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import re
+
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _backup_enabled,
     _extract_manifest,
+    _safe_str,
     _string_value,
     _strong_token,
     _to_dict,
@@ -28,6 +31,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     mongo_env = environment.get("documentStore") or {}
+    images = environment.get("images") or {}
+    mongo_image = _safe_str(images.get("mongo"))
+    version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
+    mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.12")
+    mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
+    backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
     mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
     backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
@@ -138,6 +147,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         mongo = _render_template(
             req,
             "mongodb/store",
+            mongo_version=mongo_version,
+            mongo_image=mongo_image,
             mongo_resource_name=mongo_resource_name,
             workshop_ns=workshop_namespace,
             app_username=app_username,
@@ -146,7 +157,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             scram_secret_name=f"{store_name}-app-scram",
             pvc_spec=pvc_spec,
         )
-
         backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
         if _backup_enabled(backup_storage):
             backup_name = f"{mongo_resource_name}-backup"
@@ -182,7 +192,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 backup_secret_name=backup_secret_name,
                 backup_username=backup_username,
                 backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
-                mongo_image=f"mongo:{mongo['spec']['version']}",
+                mongo_image=backup_image,
             )
             mongo["spec"]["users"].append(
                 {

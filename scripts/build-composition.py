@@ -114,6 +114,28 @@ def set_response_ttl(script, seconds):
     return "".join(lines)
 
 
+def embed_scripts(script, root):
+    lines = script.splitlines(keepends=True)
+    for node in reversed(ast.parse(script).body):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "_embedded_script"):
+            continue
+        call = node.value
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name) \
+                or len(call.args) != 1 or call.keywords:
+            raise ValueError("_embedded_script requires one name and one source path.")
+        path = (root / ast.literal_eval(call.args[0])).resolve()
+        path.relative_to(root.resolve())
+        source = "".join(
+            line for line in path.read_text().splitlines(keepends=True)
+            if not line.startswith(("# Copyright", "# SPDX-License-Identifier"))
+        )
+        compile(source, str(path), "exec")
+        lines[node.lineno - 1:node.end_lineno] = [f"{node.targets[0].id} = {source!r}\n"]
+    return "".join(lines)
+
+
 def build(root=ROOT, response_ttl=None):
     settings = yaml.safe_load((root / "composition/settings.yaml").read_text())
     ttl = settings["responseTTL"] if response_ttl is None else response_ttl
@@ -136,7 +158,7 @@ def build(root=ROOT, response_ttl=None):
         script_file = data.pop("scriptFile", None)
         if not script_file:
             raise ValueError(f"Python step {step['step']} must set scriptFile.")
-        script = (root / "composition" / script_file).read_text()
+        script = embed_scripts((root / "composition" / script_file).read_text(), root)
         tree = ast.parse(script)
         names = sorted(
             {

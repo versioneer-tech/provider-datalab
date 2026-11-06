@@ -32,7 +32,7 @@ spec:
     fullScopeAllowed: false
     implicitFlowEnabled: false
     name: s-joe
-    oauth2DeviceAuthorizationGrantEnabled: false
+    oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
     rootUrl: https://s-joe.lab.acme.com
     serviceAccountsEnabled: true
@@ -650,6 +650,26 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: observe-registry-auth-secret-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-auth
+        namespace: s-joe
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: observe-storage-secret-s-joe
   namespace: default
 spec:
@@ -820,9 +840,6 @@ spec:
               enabled: false
             editor:
               enabled: true
-            registry:
-              enabled: true
-              storage: 5Gi
             slides:
               enabled: false
             terminal:

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: package-r
-image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+image: ${package_r_image}
 imagePullPolicy: IfNotPresent
 securityContext:
   allowPrivilegeEscalation: false

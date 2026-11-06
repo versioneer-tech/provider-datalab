@@ -83,6 +83,7 @@ for file in "${examples[@]}"; do
 done
 
 python3 tests/vclusters.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+python3 tests/registry.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 python3 tests/s3-connections.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 python3 tests/service-connections.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 python3 tests/sessions.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"

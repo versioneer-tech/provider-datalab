@@ -7,13 +7,13 @@ The read-only S3 endpoint is experimental. Range reads currently return HTTP
 
 Set `httpRoute.enableS3: true` in the selected
 [EnvironmentConfig](installation.md#identity-and-endpoints), with Gateway
-Data exposure configured as described under [Data address](installation.md#data-address).
+Data exposure configured under [Service addresses](installation.md#service-addresses).
 This adds the S3 endpoint to each Data-enabled Datalab's browser hostname.
 
 Use a Gateway API controller that supports HTTPRoute header regular
 expressions, such as Contour. Add a ReferenceGrant if its certificate Secret
-is in another namespace. With S3 disabled, the routes serve only the browser.
-The [network policies](../security/sandbox-controls.md#data-service-policies)
+is in another namespace. With S3 disabled, Data requests use the browser service.
+The [network policies](../security/sandbox-controls.md#service-policies)
 must permit access from the Gateway and access to object storage and IAM.
 
 ## S3 access to s-jane
@@ -31,27 +31,6 @@ issuer, audience, expiry, and Datalab role. After authorization, `rclone serve
 s3` checks the original AWS SigV4 request using `s-jane` as both signing
 values. It serves read-only data through separate upstream storage credentials.
 
-```text
-AWS CLI
-  │ HTTPS :443 → s-jane.lab.acme.com
-  ▼
-Contour / Envoy
-  │ HTTP → Service data-s3 :8080
-  ▼
-NGINX gateway :8080
-  ├─ Auth subrequest → oauth2-proxy 127.0.0.1:4180
-  │                     └─ Fetch signing keys → Keycloak
-  │                        (example internal URL: keycloak.keycloak:8080)
-  │
-  └─ If authorized → rclone 127.0.0.1:8081
-                         └─ HTTPS → upstream S3 storage (s3.acme.com :443)
-```
-
-NGINX, oauth2-proxy, and rclone share the `data-s3` Pod and use localhost for
-calls within that Pod. The Gateway implementation and upstream storage depend
-on your environment. The example internal Keycloak URL uses Service port
-`8080`; other installations can use a different Service port.
-
 | Credential field | Value |
 | --- | --- |
 | `AccessKeyId` | `s-jane` |
@@ -67,25 +46,28 @@ reads. The upstream storage policy limits which buckets and objects the
 Datalab can read. Missing or invalid tokens cannot use a browser cookie or an
 unsigned request as a fallback.
 
-The generated Datalab client adds its own audience when S3 is enabled. Other
+The generated Datalab client always adds its own audience. Other
 OAuth clients must emit the same audience and tenant roles. Service-account
 tokens do not need a verified email address.
 
 The following Bash commands use the
 [credential helper](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/s3/s3-credentials.py)
 from the repository root. It uses the client credentials grant with `s-jane`
-as the client ID. At the prompt, enter the `client_secret` from the generated
-`s-jane-oauth2-client` Secret in the runtime namespace. The commands read bucket
+as the client ID. At the prompt, enter `clientSecret` from the Secret referenced
+by the client's `status.oauth2[].secretRef`. The commands read bucket
 `s-jane` with path-style requests. Change the bucket name if your storage uses
 another name.
+
+Set the client secret for either method:
+
+```bash
+CLIENT_SECRET="$(python3 -c 'import getpass; print(getpass.getpass("CLIENT_SECRET: "))')"
+export CLIENT_SECRET
+```
 
 ### Manual token retrieval
 
 ```bash
-if [ -z "${CLIENT_SECRET:-}" ]; then
-  CLIENT_SECRET="$(python3 -c 'import getpass; print(getpass.getpass("CLIENT_SECRET: "))')"
-fi
-export CLIENT_SECRET
 export AWS_ACCESS_KEY_ID=s-jane AWS_SECRET_ACCESS_KEY=s-jane
 export AWS_ENDPOINT_URL=https://s-jane.lab.acme.com
 export AWS_DEFAULT_REGION=us-east-1
@@ -117,10 +99,6 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 unset AWS_CONFIG_FILE AWS_PROFILE AWS_ENDPOINT_URL
 unset AWS_DEFAULT_REGION AWS_REGION
 
-if [ -z "${CLIENT_SECRET:-}" ]; then
-  CLIENT_SECRET="$(python3 -c 'import getpass; print(getpass.getpass("CLIENT_SECRET: "))')"
-fi
-export CLIENT_SECRET
 export AWS_PROFILE=s-jane
 
 aws configure set region us-east-1 --profile s-jane

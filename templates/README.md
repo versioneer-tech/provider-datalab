@@ -11,6 +11,13 @@ Put shared Python functions in `composition/helpers.py` and import them from
 the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
 
+The vcluster exec helper is `scripts/vcluster-credentials.py`. Its
+`--token-only` mode reads a caller token; the administrator mode also supports
+device login. `_embedded_script("scripts/vcluster-credentials.py")` in the
+publishing step tells the build to embed this file. Edit the Python file,
+then rebuild. Downloaded kubeconfigs contain the helper and need no separate
+script installation.
+
 `composition/settings.yaml` sets `responseTTL` for all steps. Use a positive
 whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`). The build
 sets each Python response TTL before the step body and gives auto-ready the

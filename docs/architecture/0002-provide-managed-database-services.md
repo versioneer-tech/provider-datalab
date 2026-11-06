@@ -31,8 +31,8 @@ to request these managed services:
 
 Crossplane creates the service resources. The installed database operators
 manage their workloads. Services belong to the Datalab and continue to run
-when an interactive session stops. Connection settings are supplied through
-the Datalab connection Secret.
+when an interactive session stops. `status.connections` reports their endpoints
+and credential Secret references.
 
 ### Keep user configuration small
 

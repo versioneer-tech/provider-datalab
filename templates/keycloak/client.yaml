@@ -22,7 +22,7 @@ spec:
     directAccessGrantsEnabled: false
     serviceAccountsEnabled: true
     standardTokenExchangeEnabled: ${exchange_enabled}
-    oauth2DeviceAuthorizationGrantEnabled: false
+    oauth2DeviceAuthorizationGrantEnabled: true
     webOrigins: ${redirect_uris}
     validRedirectUris: ${redirect_uris}
     realmId: ${realm}

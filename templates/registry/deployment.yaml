@@ -1,0 +1,136 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: ${runtime_namespace}
+  labels: ${labels}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: ${labels}
+  template:
+    metadata:
+      labels: ${labels}
+      annotations:
+        datalabs.pkg.internal/registry-checksum: ${checksum}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: prepare-auth
+        image: httpd:2.4.69-alpine
+        command: [/bin/sh, -ec]
+        args:
+        - |
+          umask 077
+          printf '%s\n' "$REGISTRY_PASSWORD" | htpasswd -Bin "$REGISTRY_USER" > /auth/htpasswd
+        env:
+        - name: REGISTRY_USER
+          valueFrom:
+            secretKeyRef:
+              name: registry-auth
+              key: user
+        - name: REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: registry-auth
+              key: password
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 50m, memory: 32Mi}
+          limits: {cpu: 500m, memory: 64Mi}
+        volumeMounts:
+        - name: auth
+          mountPath: /auth
+      containers:
+      - name: registry
+        image: ${registry_image}
+        command: [/bin/registry]
+        args: [serve, /etc/distribution/config.yml]
+        env:
+        - name: AWS_SHARED_CREDENTIALS_FILE
+          value: /var/run/datalab/storage/aws-credentials
+        - name: AWS_EC2_METADATA_DISABLED
+          value: 'true'
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: ${storage_secret_name}
+              key: AWS_REGION
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: ${storage_secret_name}
+              key: AWS_ENDPOINT_URL
+        - name: REGISTRY_STORAGE_S3_REGIONENDPOINT
+          value: $(AWS_ENDPOINT_URL)
+        - name: REGISTRY_HTTP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: registry-auth
+              key: http-secret
+        - name: OTEL_TRACES_EXPORTER
+          value: none
+        ports:
+        - name: registry
+          containerPort: 5000
+        - name: health
+          containerPort: 5001
+        startupProbe:
+          httpGet: {path: /debug/health, port: health}
+          periodSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          httpGet: {path: /debug/health, port: health}
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket: {port: registry}
+          periodSeconds: 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: '2', memory: 512Mi}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/distribution
+          readOnly: true
+        - name: auth
+          mountPath: /auth
+          readOnly: true
+        - name: storage-credentials
+          mountPath: /var/run/datalab/storage
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: registry
+      - name: auth
+        emptyDir: {medium: Memory, sizeLimit: 1Mi}
+      - name: storage-credentials
+        secret:
+          secretName: ${storage_secret_name}
+          defaultMode: 288
+          items:
+          - key: aws-credentials
+            path: aws-credentials
+      - name: tmp
+        emptyDir: {sizeLimit: 64Mi}

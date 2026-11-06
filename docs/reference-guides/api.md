@@ -408,7 +408,7 @@ Virtual Kubernetes clusters keyed by instance name.
           <code>type</code>, <code>name</code>, and <code>target</code>, with a target <code>namespace</code>
           and <code>name</code>. Types include <code>custom</code> for predefined Secrets.
           Only ready connections generate mappings. Data keys do not change. See
-          <a href="../how-to-guides/vcluster.md#secret-bindings">Secret bindings</a>.<br/>
+          <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/docs/how-to-guides/vcluster.md#secret-bindings">Secret bindings</a>.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -518,6 +518,12 @@ virtual Secret delivery or caller authorization.
 Datalab readiness requires every published connection and the existing
 resource checks to be ready.
 
+The S3 connection is named `primary`. Its optional `endpoint` and `region`
+come from the input Secret's `AWS_ENDPOINT_URL` and `AWS_REGION`, with
+`storage.endpoint` and `storage.region` as fallbacks. Its endpoint is the
+backing object store. The registry connection is also named `primary`; it
+points to `/v2/` and a Secret with `user` and `password`.
+
 Virtual API profiles select an endpoint and default namespace. Their Secrets
 contain public connection settings only. Callers supply credentials separately;
 token roles and Kubernetes RBAC determine access. A ready profile does not grant
@@ -562,7 +568,7 @@ access, including for the built-in `cluster-admin` profile.
         <td>
           <br/>
           <br/>
-            <i>Enum</i>: s3, postgres, mongo, redis, custom, vcluster<br/>
+            <i>Enum</i>: s3, postgres, mongo, redis, registry, custom, vcluster<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -663,7 +669,6 @@ its entry when the client or credential source is removed. See
 ### Datalab.status.sessions[index]
 
 The list uses `x-kubernetes-list-type: map` with `name` as its key.
-It replaces the previous map keyed by session name.
 
 | Name | Type | Description | Required |
 | --- | --- | --- | --- |

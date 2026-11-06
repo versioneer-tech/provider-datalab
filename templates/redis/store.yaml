@@ -11,7 +11,7 @@ metadata:
 spec:
   initContainer:
     enabled: true
-    image: quay.io/opstree/redis:v7.0.15
+    image: ${redis_image}
     imagePullPolicy: IfNotPresent
     command:
     - sh
@@ -21,7 +21,7 @@ spec:
     securityContext:
       runAsUser: 0
   kubernetesConfig:
-    image: quay.io/opstree/redis:v7.0.15
+    image: ${redis_image}
     imagePullPolicy: IfNotPresent
     redisSecret:
       name: ${redis_auth_secret_name}

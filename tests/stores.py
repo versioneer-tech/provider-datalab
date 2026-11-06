@@ -37,8 +37,30 @@ def main():
     assert mongo["stringData"]["user"] == mongo_store["spec"]["users"][0]["name"] == "prod-app"
     redis = manifest(resources, "redis-auth-secret-s-jeff-prod")
     assert redis["stringData"]["user"] == "default"
+    assert mongo_store["spec"]["version"] == "8.0.12"
+    assert mongo_store["spec"]["statefulSet"]["spec"]["template"]["spec"]["containers"] == [
+        {"name": "mongod", "image": "quay.io/mongodb/mongodb-community-server:8.0.12-ubi8"}]
+    redis_store = manifest(resources, stores["cacheStore"])["spec"]
+    assert redis_store["kubernetesConfig"]["image"] == "quay.io/opstree/redis:v7.0.15"
+    assert redis_store["initContainer"]["image"] == "quay.io/opstree/redis:v7.0.15"
+    def backup_image(resources, store):
+        return manifest(resources, f"{store}-backup-cronjob-s-jeff-prod")["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"]
+    assert backup_image(resources, "mongodb") == "mongo:8.0.12"
+    assert backup_image(resources, "redis") == "redis:7.0.15"
     print("PASS MongoDB and Redis credentials match their configured users", flush=True)
     print("PASS store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
+    env["data"]["images"] = {"mongo": "xyz/mongo:8.0.13-ubi8", "mongoBackup": "xyz/mongo-tools:8.0.13",
+                             "redis": "xyz/redis:custom", "redisBackup": "xyz/redis-tools:custom"}
+    resources = render(args, env, "examples/base/002-lab.yaml", observed)
+    mongo_store = manifest(resources, stores["documentStore"])["spec"]
+    assert mongo_store["version"] == "8.0.13"
+    assert mongo_store["statefulSet"]["spec"]["template"]["spec"]["containers"] == [
+        {"name": "mongod", "image": env["data"]["images"]["mongo"]}]
+    redis_store = manifest(resources, stores["cacheStore"])["spec"]
+    assert redis_store["kubernetesConfig"]["image"] == redis_store["initContainer"]["image"] == env["data"]["images"]["redis"]
+    assert backup_image(resources, "mongodb") == env["data"]["images"]["mongoBackup"]
+    assert backup_image(resources, "redis") == env["data"]["images"]["redisBackup"]
+    print("PASS store image overrides select server, init, and backup images and match the MongoDB version", flush=True)
 
 
 if __name__ == "__main__":

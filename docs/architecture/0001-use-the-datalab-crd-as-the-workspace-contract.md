@@ -78,10 +78,7 @@ and reports the observed phase, message, and browser URL in
 
 Clients read the Datalab status. They do not look up the internal runtime.
 Diagnostic phase and message text is not a stable machine-readable lifecycle
-API; richer clients will need typed status fields.
-
-The current API does not have a separate environment or profile object. Add
-such concepts only through a separate decision and a compatible API change.
+API.
 
 ### Keep credentials out of the API
 
@@ -90,8 +87,7 @@ the runtime needs them. Secret values never belong in the Datalab spec, status,
 logs, or normal client output.
 
 Credentials and security settings currently apply to the whole Datalab. Use
-separate Datalabs when workloads need separate Kubernetes control planes or a
-stronger trust boundary.
+separate Datalabs when workloads need different membership or trust boundaries.
 
 ### Add tools without changing the contract
 

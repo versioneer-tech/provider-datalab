@@ -19,7 +19,7 @@ spec:
         role: edit
 ```
 
-Each entry creates one runtime in the Datalab namespace. Add
+Each entry creates one runtime in `status.runtimeNamespace`. Add
 `vc1` alongside `vc0` to create another cluster. An empty map creates none.
 Sessions and their environment-controlled vclusters remain separate.
 
@@ -69,11 +69,13 @@ provider keeps the recovery kubeconfig private.
 
 `ready: true` reports runtime, routing, role, scope, and RBAC readiness. It does
 not imply caller authorization or require caller credentials to be present.
-The kubeconfig uses Python 3. Additional profiles read an access token file
+The kubeconfig includes a Python 3 credential helper.
+Additional profiles select `--token-only` and read an access token file
 supplied by the caller. They require no OAuth client ID or client secret and
 make no token requests. The built-in `cluster-admin` profile retains the
 Datalab client ID and issuer. It accepts a caller token or a separate client
-secret for the client-credentials flow.
+secret for device login as a user. It never requests a service-account token.
+No separate helper file is needed on the caller's machine.
 
 ```bash
 umask 077
@@ -85,10 +87,57 @@ kubectl -n workspace get secret "${profile_secret}" \
 
 ### Human access
 
-Use the platform's browser OAuth2 authorization-code login to obtain an access
-token for your identity with the Datalab audience and assigned roles. Save the
-access token to a private file through the platform's login tool, then set its
-path for the kubeconfig helper:
+For the built-in `cluster-admin` profile, select group `cluster-admin` in the
+download command above and save the kubeconfig as `s-joe-vc0-admin.kubeconfig`.
+Obtain the existing Datalab client secret through the approved credential
+process. To avoid entering it at each refresh, save it in a private file,
+set its path, and run kubectl with the downloaded administrator profile:
+
+```bash
+unset DATALAB_ACCESS_TOKEN_FILE
+export DATALAB_CLIENT_SECRET_FILE="$HOME/.config/datalab/s-joe-client-secret"
+chmod 600 "$DATALAB_CLIENT_SECRET_FILE"
+kubectl --kubeconfig ./s-joe-vc0-admin.kubeconfig get namespaces
+```
+
+You can also leave both credential file variables unset. In an interactive
+terminal, the helper asks for the client secret without showing the input.
+It does not save that secret. A valid cached token needs no prompt; refresh or
+a new login needs the secret again. Noninteractive commands must have a secret
+source configured when refresh or login is needed.
+
+The helper first checks the local token cache. If login is needed, it prints
+a verification URL and code. Open that URL in a browser, enter the code, and
+sign in to Keycloak as your user. The browser can run on another device.
+After approval, kubectl continues with your access token. Your user must hold
+`vcluster_vc0_cluster-admin` for administrator access. The client secret alone
+does not grant that role.
+
+The helper requests `s-joe:interactive`, uses the token directly, and caches
+it with the refresh token. Later commands reuse or refresh that login. If
+refresh is no longer valid, the helper starts device login again. The default
+cache is `~/.cache/datalab/oidc`, or `$XDG_CACHE_HOME/datalab/oidc` when set.
+Set `DATALAB_TOKEN_CACHE_DIR` to use another private directory. Cache entries
+are separate by issuer, client, and scopes; administrator profiles for the
+same Datalab share the login.
+Login duration follows the realm and client settings. See
+[login lifetime](authentication.md#login-lifetime).
+
+To sign in as another user, run the standalone helper from this repository:
+
+```bash
+python3 scripts/vcluster-credentials.py \
+  --issuer https://identity.acme.com/realms/acme --client-id s-joe \
+  --force-login >/dev/null
+```
+
+Use the same cache directory and client secret source as kubectl. For a private
+issuer CA, add `--issuer-ca /path/to/issuer-ca.pem`. Generated administrator
+profiles include the configured issuer CA.
+
+You can also supply an access token from the platform's login tool. This is
+required for additional profiles. Save the token in a private file, then set
+its path for the kubeconfig helper:
 
 ```bash
 unset DATALAB_CLIENT_SECRET_FILE
@@ -97,8 +146,10 @@ chmod 600 "$DATALAB_ACCESS_TOKEN_FILE"
 kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
 ```
 
-The helper uses your access token directly. Renew the file through the same
-login flow when the token expires. An ID token cannot replace an access token.
+The helper uses a supplied access token directly and makes no login or refresh
+requests. Renew the file through the same login flow when the token expires.
+An ID token cannot replace an access token. Configure only one credential
+source: the client secret file or the access token file.
 
 ### Delegated access
 
@@ -138,8 +189,10 @@ scope=s-joe:vclusters_vc0_namespace-demo
 Save the returned access token in a private file and use
 `DATALAB_ACCESS_TOKEN_FILE` as shown above. The downloaded helper accepts only
 an access token file for additional profiles. The built-in `cluster-admin`
-helper still accepts a client secret, but requests no optional scopes. Its
-default machine token has only `ws_api` and cannot access the virtual API.
+helper uses a supplied client secret for user device login, not machine access.
+Client credentials alone produce a token with only `ws_api` and cannot access
+the virtual API. An explicitly granted machine role still requires its
+matching optional scope in a separate token request.
 A profile download supplies no credentials or role grants.
 
 ## Secret bindings
@@ -174,6 +227,7 @@ The connection sources are:
 | `postgres` | A key in `spec.databases` | A connection copy in the Datalab namespace |
 | `mongo` | A key in `spec.documentStores` | A connection copy in the Datalab namespace |
 | `redis` | A key in `spec.cacheStores` | A connection copy in the Datalab namespace |
+| `registry` | `primary` | A connection copy in the Datalab namespace |
 | `custom` | A predefined Secret name | A connection copy in the Datalab namespace |
 
 Only declared service instances can be selected. The storage source namespace
@@ -224,19 +278,20 @@ Merge these values into the Datalab's EnvironmentConfig:
 ```yaml
 data:
   iam:
-    issuerURL: https://identity.example.org/realms/datalab
+    issuerURL: https://identity.acme.com/realms/acme
   ingress:
     domain: lab.acme.com
   httpRoute:
     enabled: true
-    parentName: datalab
-    parentNamespace: gateway-system
-    sectionName: https
+    parentName: default
+    parentNamespace: contour
+    sectionName: workspaces-https
+    httpSectionName: workspaces-http
   vcluster:
     storage: 5Gi
     storageClasses:
-      allowed: [standard]
-      default: standard
+      allowed: [sbs-default]
+      default: sbs-default
 ```
 
 For a private issuer CA, set `vcluster.issuerCA`. An optional HTTPS

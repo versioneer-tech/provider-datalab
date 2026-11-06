@@ -32,7 +32,7 @@ spec:
           type: RuntimeDefault
       initContainers:
       - name: prepare-database
-        image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+        image: ${package_r_image}
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh

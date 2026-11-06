@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: s3
-        image: rclone/rclone:1.71.0
+        image: ${rclone_image}
         imagePullPolicy: IfNotPresent
         args:
         - serve

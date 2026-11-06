@@ -1,0 +1,29 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: verify-registry-bucket
+  namespace: __WORKSPACE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+  - name: bucket
+    image: __CLIENT_IMAGE__
+    envFrom:
+    - secretRef:
+        name: verify-registry
+    command: [/bin/sh, -ec]
+    args:
+    - |
+      status="$(curl --silent --show-error --output /tmp/bucket-response \
+        --connect-timeout 5 --max-time 30 --write-out '%{http_code}' \
+        --request PUT --data '' --aws-sigv4 "aws:amz:${AWS_REGION}:s3" \
+        --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+        "${AWS_ENDPOINT_URL}/verify-registry")"
+      case "${status}" in
+        200|409) printf 'PASS registry bucket prerequisite\n' ;;
+        *) printf 'FAIL registry bucket creation: HTTP %s\n' "${status}" >&2; exit 1 ;;
+      esac

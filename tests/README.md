@@ -40,11 +40,18 @@ than a snapshot comparison:
   workspace OAuth2 client with only the default `ws_api` account grant, exact
   human group grants, optional profile scopes, the exchange policy, public
   profile Secrets, and removal of old profile resources.
-- Caller credentials and discovery: human token files, separate machine
-  credentials, delegated token expiry without client credentials, missing sources, readiness, stale entry removal, and no
+- Caller credentials and discovery: human token files, device authorization,
+  private cache reuse and isolation, refresh rotation and rejection, polling
+  delays, denied or expired device codes, delegated token expiry without client
+  credentials, token-only mode with ambient client credentials, hidden secret
+  prompts, the kubectl stdin contract, missing sources,
+  readiness, stale entry removal, and no
   credential disclosure in status.
 - Service operation: stable generated passwords, credential rotation, Data
   exposure, network rules, and environment overrides.
+- OCI registry: shared S3 storage without an extra prefix, no registry PVC, Basic
+  credentials, native Docker routing, storage rotation,
+  connection readiness, and disable/removal behavior.
 - Service publication: copies in the Datalab namespace, connection fields,
   local ownership, rotation readiness, source loss and recovery, removal,
   and distinct names for Datalabs with the same service instances.

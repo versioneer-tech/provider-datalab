@@ -28,6 +28,32 @@ def _safe_str(value):
     return str(value).strip() if value is not None else ""
 
 
+def _duration_milliseconds(value, setting):
+    text = _safe_str(value)
+    if not re.fullmatch(r"(?:[0-9]{1,5}(?:ms|h|m|s)){1,4}", text):
+        raise ValueError(f"{setting} must be a duration, such as 3600s, 1h30m, or 0s.")
+    units = {"h": 3600000, "m": 60000, "s": 1000, "ms": 1}
+    return sum(int(number) * units[unit] for number, unit in re.findall(r"([0-9]+)(ms|h|m|s)", text))
+
+
+def _http_route_timeouts(environment):
+    configured = (environment.get("httpRoute") or {}).get("timeouts")
+    if configured is None:
+        configured = {}
+    if not isinstance(configured, dict):
+        raise ValueError("httpRoute.timeouts must contain request and backendRequest durations.")
+    request_timeout = _safe_str(configured.get("request", "3600s"))
+    timeouts = {"request": request_timeout,
+                "backendRequest": _safe_str(configured.get("backendRequest", request_timeout))}
+    request, backend = (
+        _duration_milliseconds(timeouts[key], f"httpRoute.timeouts.{key}")
+        for key in ("request", "backendRequest")
+    )
+    if request and backend > request:
+        raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
+    return timeouts
+
+
 def _string_value(value):
     """Keep the literal string for null values in existing resource settings."""
     return str(value).strip()

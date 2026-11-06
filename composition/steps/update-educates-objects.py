@@ -96,7 +96,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     if registry_enabled is None:
         registry_enabled = True
     registry_enabled = _boolish(registry_enabled)
-    registry_storage = str(registry_cfg.get("storage") or "5Gi")
 
     persistence_cfg = defaults.get("persistence") or {}
     requested_storage_class = _string_value(
@@ -291,7 +290,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             ],
         )
 
-    if external_egress or vcluster or data_enabled:
+    if external_egress or vcluster or data_enabled or registry_enabled:
         _add_policy(
             network_policies,
             "allow-dns-egress",
@@ -395,12 +394,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         workshop["spec"]["session"]["applications"]["docker"] = {
             "enabled": True,
             "storage": "20Gi",
-        }
-
-    if registry_enabled:
-        workshop["spec"]["session"]["applications"]["registry"] = {
-            "enabled": True,
-            "storage": registry_storage,
         }
 
     if vcluster and service_cidr:

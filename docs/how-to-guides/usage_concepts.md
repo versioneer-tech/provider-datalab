@@ -48,9 +48,6 @@ The reference identifies the target PVC; it does not report PVC readiness.
 `pvcSize` reports the requested capacity of the session PVC, including while
 stopped.
 
-This list replaces the previous map keyed by session name. Update consumers
-to select entries by `name`.
-
 ## Persistence
 
 Each declared session has a PVC mounted at `/home/eduk8s`. Its size and
@@ -60,18 +57,7 @@ Use this volume for code, libraries, and workspace files. Keep datasets in
 object storage and database records in a managed database. Arrange backup
 and recovery with the operator.
 
-## Managed service types
-
-Each service field accepts one type. The API sets that type when you omit it.
-The API name for MongoDB is `mongo`.
-
-| Field | Default type |
-| --- | --- |
-| `spec.databases` | `postgres` |
-| `spec.documentStores` | `mongo` |
-| `spec.cacheStores` | `redis` |
-
-## Database
+## PostgreSQL
 
 Use `spec.databases` to request a PostgreSQL cluster and its logical databases:
 
@@ -96,7 +82,16 @@ Sessions receive connection settings such as `POSTGRES_PG0_HOST`,
 external TLSRoute, it also supplies `POSTGRES_PG0_DEV_URL_EXTERNAL`.
 External connections require a client that supports direct TLS with SNI.
 
-## Document and cache stores
+### Connect from a session
+
+Use the connection variables supplied to the session, such as
+`POSTGRES_PG0_DEV_URL`. The PostgreSQL operator also creates user Secrets named
+`*-pguser-*`. Use the database role assigned to your task; the `postgres` role
+has administrative access.
+
+See [Additional services](additional_services.md) for a psql example.
+
+## MongoDB and Redis
 
 Use these fields to request MongoDB and Redis stores:
 
@@ -163,6 +158,23 @@ Public sharing needs a permanent Data address. Upload files through the Data
 browser when write access is allowed, or use your storage tools. Anyone with
 the link can browse and download those files without signing in.
 
+## OCI registry
+
+The shared registry is available at `https://s-jane.lab.acme.com/v2/` for
+Datalab `s-jane`. Use the `registry` connection named `primary` in
+`status.connections` to find its Secret. Enter that Secret's `user` and
+`password` at the Docker login prompt:
+
+```bash
+docker login s-jane.lab.acme.com
+docker tag example:latest s-jane.lab.acme.com/team/example:latest
+docker push s-jane.lab.acme.com/team/example:latest
+```
+
+Docker login and image references use the hostname without `/v2/`.
+Images use the Datalab's S3 bucket and remain available when sessions stop.
+The operator can disable the registry through the EnvironmentConfig.
+
 ## Files and the Workshop tab
 
 The operator sets `EnvironmentConfig.data.defaults.files` to load workshop
@@ -183,20 +195,6 @@ data:
 Adding a source enables the Workshop tab. With no sources, the tab is hidden.
 Use `includePaths`, `excludePaths`, `newRootPath`, and `path` to select and
 place the files.
-
-## Storage Secret
-
-The input object-storage Secret has the same name as the Datalab. The operator
-supplies the Secret and configures its namespace and endpoint during [installation](installation.md#5-supply-storage-credentials).
-
-## Environment settings
-
-The selected EnvironmentConfig controls quotas, persistence, security,
-vCluster, registry, Data, and workshop content. See
-[values and defaults](installation.md#environmentconfig-values-and-defaults)
-for all settings, [Session access](../security/workspace-sessions.md) for
-Kubernetes permissions, and [Network policies](../security/sandbox-controls.md)
-for allowed traffic.
 
 ## Examples
 
@@ -232,21 +230,7 @@ Session names, state, phase, messages, PVC references, and URLs are in
 Service connections and public virtual API profiles are in `status.connections`.
 Read each connection through its `secretRef`.
 
-The backing S3 connection has the fixed name `primary`, also used in Secret
-bindings. It identifies the connection, not a bucket or failover priority.
-Its optional `endpoint` and `region` come from the source Secret's
-`AWS_ENDPOINT_URL` and `AWS_REGION`, with `storage.endpoint` and
-`storage.region` from the EnvironmentConfig as fallbacks. Missing values are
-omitted. The endpoint is the backing object store, not the read-only S3 gateway.
-OAuth2 discovery is separate, in `status.oauth2`. Readiness does not confirm
-caller authorization. See [API access](vcluster.md#api-access) and
-[OAuth2 discovery](authentication.md#oauth2-discovery) for Secret references.
-
-### Connect to databases
-
-Use the connection variables supplied to the session, such as
-`POSTGRES_PG0_DEV_URL`. The PostgreSQL operator also creates user Secrets named
-`*-pguser-*`. Use the database role assigned to your task; the `postgres` role
-has administrative access.
-
-See [Additional services](additional_services.md) for a psql example.
+For connection fields and readiness, see the
+[API reference](../reference-guides/api.md#datalabstatusconnectionsindex).
+[OAuth2 discovery](authentication.md#oauth2-discovery) lists the Datalab client
+separately in `status.oauth2`.

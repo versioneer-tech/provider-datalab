@@ -34,6 +34,15 @@ def main():
             env["data"]["httpRoute"].pop("enableS3")
         if exposure == "disabled-data":
             env["data"]["defaults"] = {"data": {"enabled": False}}
+        if exposure == "ingress":
+            env["data"]["ingress"]["annotations"] = {
+                "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                "nginx.ingress.kubernetes.io/proxy-buffering": "off",
+                "nginx.ingress.kubernetes.io/proxy-request-buffering": "off",
+            }
+        if exposure == "gateway-s3":
+            env["data"]["httpRoute"]["timeouts"] = {"request": "2h", "backendRequest": "1h30m"}
+            env["data"]["oauth2Proxy"] = {"upstreamTimeout": "90m"}
         resources = render(args, env, observed=observed + [oauth_observer("initial-client-secret")])
         assert ("oauth2-client-secret-s-joe" in resources) == (
             exposure in ("ingress", "gateway", "gateway-s3")
@@ -43,6 +52,8 @@ def main():
         assert ("data-ingress-s-joe" in resources) == (exposure == "ingress")
         assert ("data-route-s-joe" in resources) == gateway
         assert ("data-redirect-s-joe" in resources) == gateway
+        if exposure == "ingress":
+            assert manifest(resources, "data-ingress-s-joe")["metadata"]["annotations"] == env["data"]["ingress"]["annotations"]
         if gateway:
             route = manifest(resources, "data-route-s-joe")
             assert route["kind"] == "HTTPRoute"
@@ -50,6 +61,8 @@ def main():
             backends = {backend["name"]: backend["port"] for rule in route["spec"]["rules"]
                         for backend in rule["backendRefs"]}
             assert backends == ({"package-r": 4180, "data-s3": 8080} if s3 else {"package-r": 4180})
+            assert all(rule["timeouts"] == env["data"]["httpRoute"].get("timeouts", {
+                "request": "3600s", "backendRequest": "3600s"}) for rule in route["spec"]["rules"])
             redirect = manifest(resources, "data-redirect-s-joe")
             assert redirect["spec"]["rules"][0]["filters"][0]["requestRedirect"]["scheme"] == "https"
         for kind in ("config", "deployment", "service", "networkpolicy"):
@@ -70,6 +83,10 @@ def main():
                 container_args = [arg for container in containers for arg in container.get("args", [])]
                 assert "--client-secret-file=/var/run/datalab/oauth2/client_secret" in container_args
                 assert "--cookie-secret-file=/var/run/datalab/oauth2/cookie_secret" in container_args
+                assert "--upstream-timeout=90m" in container_args
+        if exposure in ("ingress", "gateway"):
+            containers = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]["containers"]
+            assert "--upstream-timeout=3600s" in next(c["args"] for c in containers if c["name"] == "oauth2-proxy")
         print(f"PASS Data exposure: {exposure}", flush=True)
 
     env = environment()
@@ -137,6 +154,28 @@ def main():
     env["data"]["httpRoute"].update(enabled=False, enableS3=False)
     render(args, env, error="ingress.secret")
     print("PASS invalid exposure settings rejected", flush=True)
+
+    for request, backend, error in (
+        ("10s", "11s", "backendRequest must not exceed request"),
+        ("-1s", "1s", "httpRoute.timeouts.request must be a duration"),
+        ("1h", "invalid", "httpRoute.timeouts.backendRequest must be a duration"),
+    ):
+        env = environment()
+        env["data"]["httpRoute"]["timeouts"] = {"request": request, "backendRequest": backend}
+        render(args, env, error=error)
+    env = environment()
+    env["data"]["oauth2Proxy"] = {"upstreamTimeout": "invalid"}
+    render(args, env, error="oauth2Proxy.upstreamTimeout must be a duration")
+    for request in ("10m", "0s"):
+        env = environment()
+        env["data"]["httpRoute"]["timeouts"] = {"request": request}
+        env["data"]["oauth2Proxy"] = {"upstreamTimeout": "0s"}
+        resources = render(args, env)
+        assert all(rule["timeouts"] == {"request": request, "backendRequest": request}
+                   for rule in manifest(resources, "data-route-s-joe")["spec"]["rules"])
+        containers = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]["containers"]
+        assert "--upstream-timeout=0s" in next(c["args"] for c in containers if c["name"] == "oauth2-proxy")
+    print("PASS transfer deadlines apply to browser and S3 routes, inherit request limits, and preserve zero", flush=True)
 
 
 if __name__ == "__main__":

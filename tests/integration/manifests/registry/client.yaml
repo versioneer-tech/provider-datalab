@@ -18,13 +18,13 @@ spec:
         - name: REGISTRY_USERNAME
           valueFrom:
             secretKeyRef:
-              name: __SESSION_SECRET__
-              key: registry_username
+              name: __REGISTRY_SECRET__
+              key: user
         - name: REGISTRY_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: __SESSION_SECRET__
-              key: registry_password
+              name: __REGISTRY_SECRET__
+              key: password
       command:
         - sh
         - -c

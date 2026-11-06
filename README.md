@@ -4,11 +4,10 @@
 [![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab)
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
-Give your data team a virtual Kubernetes cluster with shared data and databases.
-
-Declare the team and its services in one `Datalab`.
-Crossplane provisions them under the platform's access, network, and storage
-rules. Team members can run Kubernetes workloads and work with the same data.
+Provider Datalab provisions virtual Kubernetes clusters, shared data,
+container registries, databases, and browser workspaces for a team.
+Declare users and services in a `Datalab`; Crossplane creates them from the
+platform's access, network, and storage settings.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2
@@ -27,16 +26,9 @@ spec:
       storage: 1Gi
 ```
 
-Team members receive the configured access profiles. Datalab administrators
-also receive virtual cluster administration. Workloads can use the team's
-databases and object storage. API access uses the caller's token roles;
-downloading a profile grants no access. Token exchange can select a configured
-profile without the caller's administrator roles through
-[restricted exchange](docs/how-to-guides/authentication.md#user-token-exchange).
-Downloaded delegated profiles read a caller-supplied access token file. Exchange the
-token before delegating access; the recipient needs no client secret.
-Keycloak 26.2 or later is required. Optional browser sessions provide editors
-and terminals for the same team.
+Use a downloaded kubeconfig and a user login or access token to connect to a
+virtual cluster. Browser sessions provide an editor and terminal for the same
+team and services.
 
 ## Get started
 
@@ -48,7 +40,7 @@ the guides in this checkout:
 | Install the package and set platform defaults | [Installation](docs/how-to-guides/installation.md) |
 | Run Kubernetes workloads and bind service Secrets | [Virtual clusters](docs/how-to-guides/vcluster.md) |
 | Configure sign-in, machine access, and OAuth2 discovery | [Authentication](docs/how-to-guides/authentication.md) |
-| Use stores, share files, and start browser sessions | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
+| Use databases, share files, push images, and start sessions | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
 | Read object storage with AWS tools | [S3 access](docs/how-to-guides/s3-access.md) |
 | Review permissions or look up fields | [Security](docs/security/index.md), [API reference](docs/reference-guides/api.md) |
 
@@ -68,6 +60,8 @@ pre-commit run --all-files
 ```
 
 Edit the Python steps in `composition/` and the manifests in `templates/`.
+Edit `scripts/vcluster-credentials.py` for both exec helper modes. The build
+embeds this file in the composition; do not maintain a second script copy.
 See [Manifest templates](templates/README.md) for the source layout and build.
 
 See [Unit tests](tests/README.md) for fixtures and focused checks, and

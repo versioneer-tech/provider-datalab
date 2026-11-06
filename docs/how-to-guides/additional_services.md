@@ -9,9 +9,9 @@ Use a vCluster for tools that need their own CRDs, controllers, or cluster
 roles. For a short-lived process, you can run it in the terminal and use the
 editor's Ports tab to open its web interface.
 
-Use the [Datalab service fields](usage_concepts.md#database) for managed
+Use the [Datalab service fields](usage_concepts.md#postgresql) for managed
 PostgreSQL, MongoDB, and Redis stores. The environment also supplies
-a session registry.
+a [shared OCI registry](usage_concepts.md#oci-registry).
 
 ## Dask
 

@@ -61,6 +61,13 @@ status:
       name: s-jeff-redis-prod-connection-d754ffa05f
       namespace: default
     type: redis
+  - endpoint: http://registry.s-jeff.svc:5000/v2/
+    name: primary
+    ready: false
+    secretRef:
+      name: s-jeff-registry-primary-connection-37485a31d8
+      namespace: default
+    type: registry
   oauth2: []
   sessions: []
 ---
@@ -219,7 +226,7 @@ spec:
     fullScopeAllowed: false
     implicitFlowEnabled: false
     name: s-jeff
-    oauth2DeviceAuthorizationGrantEnabled: false
+    oauth2DeviceAuthorizationGrantEnabled: true
     realmId: acme
     rootUrl: https://s-jeff.lab.acme.com
     serviceAccountsEnabled: true
@@ -1013,6 +1020,11 @@ spec:
             - SCRAM
         statefulSet:
           spec:
+            template:
+              spec:
+                containers:
+                - image: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
+                  name: mongod
             volumeClaimTemplates:
             - metadata:
                 name: data-volume
@@ -1250,6 +1262,26 @@ spec:
       kind: Secret
       metadata:
         name: prod-redis-auth
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: observe-registry-auth-secret-s-jeff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-auth
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -1568,6 +1600,31 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: registry-auth-secret-s-jeff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-auth
+        namespace: s-jeff
+      stringData:
+        http-secret: SLq1WZ-j6mJqvH1TU97tVelKQ8rAJZBG
+        password: eA17pt2ZFDrH95brqYkx9adnX6p_
+        user: s-jeff
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: resourcequota-s-jeff-overall-storage
   namespace: default
 spec:
@@ -1773,9 +1830,6 @@ spec:
               enabled: false
             editor:
               enabled: true
-            registry:
-              enabled: true
-              storage: 5Gi
             slides:
               enabled: false
             terminal:

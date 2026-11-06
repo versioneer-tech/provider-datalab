@@ -17,7 +17,7 @@ def encoded(values):
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}}
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["customSecrets"] = [{"name": "apikey"}]
     source = {
         "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",

@@ -15,7 +15,7 @@ repos:
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(composition/|templates/|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
+        files: ^(composition/|templates/|scripts/vcluster-credentials.py|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
       - id: copyright-header
         name: Copyright header
         entry: ./scripts/copyright.py

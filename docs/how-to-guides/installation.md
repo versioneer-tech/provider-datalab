@@ -27,23 +27,11 @@ Datalab integration tests use these versions:
 | `spec.cacheStores` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
 
 These are fixed test pins. Other versions need validation before use.
-The harness applies each chart's CRDs before it installs or upgrades the operator.
 
-See [managed service types](usage_concepts.md#managed-service-types) for the
-request fields and type defaults. Check the served APIs and fields before
-upgrading an operator. The
-[integration tests](https://github.com/versioneer-tech/provider-datalab/tree/main/tests/integration)
-contain the dependency settings used by this repository. Configure storage,
-backup and restore, monitoring, and deletion for each store you offer.
-
-PostgreSQL without backups requires Crunchy PGO 5.7 or later. MongoDB
-Community backups use a composition-managed CronJob and the matching MongoDB
-image's database tools. Redis backups use a CronJob with the standard Redis
-tools image at the same Redis version as the server. Provider Kubernetes
-needs the `batch/cronjobs`
-permissions in `dependencies/rbac.yaml`. Backup volumes need a StorageClass
-that supports `ReadWriteOnce`. See [backup settings](usage_concepts.md#backups)
-for schedules, retention, and restore limits.
+Install each operator's CRDs before its controller. The
+[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/integration/README.md) shows the tested
+installation settings. Backup volumes need a StorageClass that supports
+`ReadWriteOnce`; see [backup settings](usage_concepts.md#backups).
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
@@ -53,13 +41,6 @@ For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
 issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
-
-For virtual API access, role assignments, and Secret bindings, use the
-[virtual cluster guide](vcluster.md). Profile downloads contain public settings;
-callers supply credentials separately. Additional profiles use a JWT access
-token file and need no client ID or secret. Exchange the token before you
-delegate access. The built-in `cluster-admin` profile keeps client ID and
-separate client-secret support.
 
 ## 1. Choose the claim namespace
 
@@ -96,21 +77,8 @@ your platform's Secret tools. The Keycloak account needs permission to manage
 clients, client scopes, service-account roles, groups, memberships, role
 mappings, and client policies in the target realm.
 
-Public Data/S3 access needs a runtime credential copy for its OAuth2 proxy.
-The provider creates that copy only when the proxy is enabled.
-
-Use Keycloak 26.2 or later for
-[Standard Token Exchange V2](https://www.keycloak.org/2025/05/standard-token-exchange-kc-26-2).
-The server must have the `grant-type`, `client-scopes`, and `reject-request`
-client-policy providers enabled.
-It also needs the built-in Role Name and Realm Roles protocol mappers.
-Keep `basic`, `profile`, and `email` as identity-only scopes, without role
-grants or role mappers.
-
-Provider Datalab configures one Keycloak client per Datalab. If you use a
-separate login client, its tokens must include the Datalab client in `aud`
-before that Datalab client can exchange them. Set additional audiences for
-tokens issued by the Datalab client with `iam.extraAudiences`. See [authentication](authentication.md).
+Use Keycloak 26.2 or later. Configure identity scopes, client policies, and
+browser sign-in as described in [Authentication](authentication.md).
 
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
@@ -153,7 +121,7 @@ the pipeline response TTL before building a package.
 ## 4. Set the shared environment
 
 Create an `EnvironmentConfig` named `datalab` with values for your cluster.
-This example uses a permanent Data Ingress:
+This example uses NGINX Ingress for Data and the registry:
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -170,7 +138,14 @@ data:
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
-    annotations: {}
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  oauth2Proxy:
+    upstreamTimeout: 3600s
   storage:
     endpoint: https://s3.acme.com
     provider: Other
@@ -200,7 +175,6 @@ data:
       enabled: true
     registry:
       enabled: true
-      storage: 5Gi
     data:
       enabled: true
       readOnlyMount: false
@@ -214,11 +188,16 @@ Replace the example storage classes, network ranges, and DNS names before
 applying it. Configure [authentication](authentication.md) before users start
 sessions.
 
-### Data address
+### Service addresses
 
-Enable either `ingress.enabled` or `httpRoute.enabled` for a permanent Data
-address. Enabling both stops reconciliation. With neither enabled, Data is
-available through a session's authenticated ingress.
+Enable either `ingress.enabled` or `httpRoute.enabled` for public service
+access. Using both stops reconciliation. On each Datalab's
+hostname, `/v2/` serves the registry and other paths serve Data. Virtual API
+routes use their instance path, such as `/.vc0`. With `httpRoute.enableS3`,
+requests signed by S3 clients use the read-only S3 service on the same host.
+
+With neither exposure method enabled, Data is available through a session's
+authenticated ingress. The registry is available only inside the cluster.
 
 For Gateway API exposure, replace the example's `ingress.enabled: true` with
 `false` and add:
@@ -231,12 +210,39 @@ data:
     parentNamespace: contour
     sectionName: workspaces-https
     httpSectionName: workspaces-http
+    timeouts:
+      request: 3600s
+      backendRequest: 3600s
 ```
 
 The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
-routes from runtime namespaces. It manages the permanent Data certificate.
+routes from runtime namespaces. It manages the service certificate.
 Keep the ingress class and TLS Secret set for the session runtime. For the
 optional read-only S3 endpoint, see [S3 client access](s3-access.md).
+
+#### Large file transfers
+
+`ingress.annotations` applies to both Data and registry Ingress objects. The
+example permits any upload size, streams requests and responses, and allows
+one hour between read or write operations. These annotations require the
+community ingress-nginx controller. Use your controller's settings if you
+use another implementation. The composition does not add controller-specific
+annotations.
+
+`httpRoute.timeouts` applies to Data, read-only S3, and registry backend rules.
+Both timeouts default to one hour. If only `request` is set, `backendRequest`
+uses that value. A nonzero backend timeout must not exceed a nonzero request
+timeout. Use `0s` for both to disable these deadlines.
+
+Gateway API has no standard body-size or buffering setting. Configure the
+Gateway controller and any upstream load balancer to allow the required body
+size, stream transfers, and permit long connections. The controller must
+support HTTPRoute timeouts.
+
+`oauth2Proxy.upstreamTimeout` defaults to one hour. It limits the wait for
+packageR response headers after the request body is sent. It does not limit
+the time to transfer the request or response body. Use `0s` to disable this
+wait limit.
 
 packageR permits all browser origins (`*`) for public catalog access.
 To restrict origins, configure the Gateway to replace or remove backend CORS
@@ -263,8 +269,7 @@ fields, but extra fields in `spec` do not override these settings.
 | Setting | Default | Use |
 | --- | --- | --- |
 | `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started session. |
-| `defaults.registry.enabled` | `true` | Session Docker registry. |
-| `defaults.registry.storage` | `5Gi` | Registry volume size. |
+| `defaults.registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
 | `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |
 | `defaults.data.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
 | `defaults.quota.memory` | `2Gi` | Session memory request. |
@@ -280,16 +285,35 @@ fields, but extra fields in `spec` do not override these settings.
 | `packages` | `[]` | Session extension packages. |
 
 Session PVC names and namespaces are listed in `status.sessions[].pvcRef`.
-Read each PVC for its size and capacity.
+`status.sessions[].pvcSize` reports the requested size.
 
 File bundles and extension packages are passed to the session runtime
 unchanged. Set Data enablement before creating Datalabs because the runtime
 saves each environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
 for a file bundle example.
 
-The S3 entry in `status.connections` reports the configured `endpoint` and
-`region` when available. Source Secret settings take priority over the
-`storage` settings below.
+#### Service images
+
+Set these image references under `data.images` in the EnvironmentConfig.
+Use a full image reference with a tag or digest. Omitted settings use the
+defaults below.
+
+| Setting | Default image tag | Use |
+| --- | --- | --- |
+| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.0` | Data server and its database init container. |
+| `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
+| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service. Session extension packages are configured separately. |
+| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.12-ubi8` | MongoDB server. The default database version is `8.0.12`. |
+| `images.mongoBackup` | `mongo:8.0.12` | MongoDB backup tools. If omitted, its tag follows the database version. |
+| `images.redis` | `quay.io/opstree/redis:v7.0.15` | Redis server and its init container. |
+| `images.redisBackup` | `redis:7.0.15` | Redis backup tools. |
+| `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.4` | OAuth2 Proxy for Data and S3. |
+
+The default OAuth2 Proxy image is also pinned by digest in the composition.
+A MongoDB image tag that starts with `major.minor.patch` sets the database
+version. For a digest without a version tag, set
+`documentStore.version` to the image's MongoDB version. Use compatible server
+and backup images.
 
 #### Identity and endpoints
 
@@ -297,20 +321,23 @@ The S3 entry in `status.connections` reports the configured `endpoint` and
 | --- | --- | --- |
 | `iam.realm` | `default` | Keycloak realm; users must already exist here. |
 | `iam.namespace` | `keycloak` | Namespace selected by IAM egress rules. |
-| `iam.issuerURL` | Not set | Public login issuer; required for permanent Data exposure. |
+| `iam.issuerURL` | Not set | Public OIDC issuer for Data and virtual cluster access. |
 | `iam.internalURL` | Not set | Token and signing-key URL; required for permanent Data exposure. |
 | `iam.extraAudiences` | `[]` | Additional audiences for tokens issued by the Datalab client. The Datalab audience is always included. |
-| `ingress.enabled` | `false` | Permanent Data Ingress; mutually exclusive with `httpRoute.enabled`. |
-| `ingress.class` | Empty | Session ingress class; required for Data Ingress. |
-| `ingress.domain` | `default` for sessions | Host suffix; must be set for permanent Data exposure. |
+| `ingress.enabled` | `false` | Public Data and registry Ingress. |
+| `ingress.class` | Empty | Ingress class for sessions and services. |
+| `ingress.domain` | `default` for sessions | Public host suffix for sessions and services. |
 | `ingress.secret` | `wildcard-tls` for sessions | TLS Secret; must be set for Data Ingress. |
-| `ingress.annotations` | `{}` | Annotations on the permanent Data Ingress. |
-| `httpRoute.enabled` | `false` | Permanent Data Gateway routes. |
+| `ingress.annotations` | `{}` | Annotations on service Ingress objects. |
+| `httpRoute.enabled` | `false` | Public Data and registry Gateway routes. |
 | `httpRoute.enableS3` | `false` | Read-only S3 endpoint; requires `httpRoute.enabled`. |
 | `httpRoute.parentName` | Not set | Gateway name; required when Gateway exposure is enabled. |
 | `httpRoute.parentNamespace` | Not set | Gateway namespace; required when Gateway exposure is enabled. |
 | `httpRoute.sectionName` | Not set | HTTPS listener; required when Gateway exposure is enabled. |
-| `httpRoute.httpSectionName` | Not set | HTTP redirect listener; required when Gateway exposure is enabled. |
+| `httpRoute.httpSectionName` | Not set | HTTP redirect listener; required when Data uses Gateway exposure. |
+| `httpRoute.timeouts.request` | `3600s` | Request deadline for Data, S3, and registry routes; `0s` disables it. |
+| `httpRoute.timeouts.backendRequest` | Request timeout | Deadline for each backend request, including its response body. |
+| `oauth2Proxy.upstreamTimeout` | `3600s` | Wait for packageR response headers after sending the request body. |
 
 #### Storage and managed stores
 
@@ -339,6 +366,7 @@ The S3 entry in `status.connections` reports the configured `endpoint` and
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
+| `documentStore.version` | `8.0.12`, or version from `images.mongo` | Database version; set it for an image without a version tag. |
 | `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
 | `documentStore.backupStorageClassName` | Cluster default | MongoDB backup StorageClass. |
 | `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |
@@ -429,6 +457,12 @@ The Secret must exist in `storage.secretNamespace` and contain
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The storage identity must
 permit bucket listing with `s3:ListAllMyBuckets`. The endpoint must support
 path-style S3 requests.
+
+The registry needs a bucket with the same name as the Datalab and permission
+to read, write, list, delete, and use multipart uploads. Distribution uses its
+standard object layout without an extra prefix or PVC. Disabling the registry
+retains its S3 objects. Set `defaults.registry.enabled: false` when the
+platform does not provide this storage.
 
 For a manual setup, create the Secret with your credential values:
 

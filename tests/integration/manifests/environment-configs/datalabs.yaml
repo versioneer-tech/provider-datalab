@@ -6,12 +6,29 @@ kind: EnvironmentConfig
 metadata:
   name: datalab
 data:
+  images:
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    registry: registry:3.1.2
+    rclone: rclone/rclone:1.71.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
+    mongoBackup: mongo:8.0.12
+    redis: quay.io/opstree/redis:v7.0.15
+    redisBackup: redis:7.0.15
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   iam:
     realm: integration
   ingress:
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  oauth2Proxy:
+    upstreamTimeout: 3600s
   storage:
     endpoint: http://default-hl.minio:9000
     forcePathStyle: "true"
@@ -57,6 +74,15 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-custom
 data:
+  images:
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    registry: registry:3.1.2
+    rclone: rclone/rclone:1.71.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
+    mongoBackup: mongo:8.0.12
+    redis: quay.io/opstree/redis:v7.0.15
+    redisBackup: redis:7.0.15
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -66,6 +92,14 @@ data:
     class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  oauth2Proxy:
+    upstreamTimeout: 3600s
   storage:
     endpoint: http://default-hl.minio:9000
     forcePathStyle: "true"
@@ -102,7 +136,6 @@ data:
       storage: 100Gi
     registry:
       enabled: true
-      storage: 1Gi
     quota:
       storage: 2Gi
     security:
