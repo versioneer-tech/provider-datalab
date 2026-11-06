@@ -47,7 +47,9 @@ install_datalab() {
   composition_directory="$(mktemp -d /tmp/datalab-it-composition.XXXXXX)"
   python3 "${REPO_ROOT}/scripts/build-composition.py" --response-ttl 1m \
     --output "${composition_directory}/composition.yaml"
-  kube apply -f "${composition_directory}/composition.yaml"
+  # Client-side apply stores this large Composition in an annotation.
+  kube apply --server-side --field-manager=provider-datalab-integration \
+    -f "${composition_directory}/composition.yaml"
   rm -rf "${composition_directory}"
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
 }
