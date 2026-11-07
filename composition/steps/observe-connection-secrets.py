@@ -210,7 +210,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "secretRef": {"name": f"{xr_name}-oauth-client", "namespace": xr_namespace},
             "ready": bool(
                 source_ready(client_body) and source_ready(oauth_body)
-                and _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+                and _b64get_any(oauth_data, ["clientSecret", "client_secret"])
                 and (not credential_id or credential_id == client_id)
             ),
         })

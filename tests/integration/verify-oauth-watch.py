@@ -74,7 +74,7 @@ def main():
     original = get(SOURCE)["data"]
     secret_key = next(
         key
-        for key in ("clientSecret", "client_secret", "attribute.client_secret")
+        for key in ("clientSecret", "client_secret")
         if original.get(key)
     )
     previous_pause = get(CLIENT)["metadata"].get("annotations", {}).get(PAUSED)

@@ -43,7 +43,10 @@ spec:
       args:
         - |
           endpoint=http://package-r:8888
-          curl --fail --silent --show-error "${endpoint}/health"
+          # Service routing can lag behind Pod readiness after a restart.
+          curl --fail --silent --show-error --retry 30 --retry-connrefused \
+            --retry-delay 2 --retry-max-time 90 --connect-timeout 5 --max-time 10 \
+            "${endpoint}/health"
           token="$(curl --fail --silent --show-error \
             --request POST \
             --header 'X-Forwarded-Preferred-Username: datalab' \

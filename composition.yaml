@@ -501,7 +501,7 @@ spec:
                     "secretRef": {"name": f"{xr_name}-oauth-client", "namespace": xr_namespace},
                     "ready": bool(
                         source_ready(client_body) and source_ready(oauth_body)
-                        and _b64get_any(oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"])
+                        and _b64get_any(oauth_data, ["clientSecret", "client_secret"])
                         and (not credential_id or credential_id == client_id)
                     ),
                 })
@@ -827,7 +827,7 @@ spec:
 
             oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
             client_secret = _b64get_any(
-                oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"]
+                oauth_data, ["clientSecret", "client_secret"]
             )
             if client_secret:
                 manifest["stringData"]["OAUTH2_CLIENT_ID"] = (
@@ -1999,7 +1999,7 @@ spec:
             observed = getattr(req.observed, "resources", {}) or {}
             oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
             client_secret = _b64get_any(
-                oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"]
+                oauth_data, ["clientSecret", "client_secret"]
             )
             if not client_secret:
                 return

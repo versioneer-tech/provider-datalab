@@ -144,7 +144,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
     client_secret = _b64get_any(
-        oauth_data, ["clientSecret", "client_secret", "attribute.client_secret"]
+        oauth_data, ["clientSecret", "client_secret"]
     )
     if client_secret:
         manifest["stringData"]["OAUTH2_CLIENT_ID"] = (

@@ -305,7 +305,7 @@ def verify_user_exchange(api):
     admin = admin_token()
     context = ssl.create_default_context(cafile="/test/issuer.crt")
     secret = next((Path("/oauth") / key).read_text().strip()
-                  for key in ("clientSecret", "client_secret", "attribute.client_secret")
+                  for key in ("clientSecret", "client_secret")
                   if (Path("/oauth") / key).is_file())
     endpoint = ISSUER + "/protocol/openid-connect/token"
     profile = LAB + ":vclusters_vc0_namespace-demo"
@@ -539,7 +539,7 @@ def main():
         assert set(config["users"][0]["user"]) == {"exec"}
         command = config["users"][0]["user"]["exec"]
         assert "env" not in command
-        secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file())
+        secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file())
         with TemporaryDirectory(prefix="xyz-") as directory:
             # Automated probes supply a token and do not start user login.
             value = token(LAB, secret_file.read_text().strip())
@@ -564,7 +564,7 @@ def main():
             scope = (LAB + ":interactive" if role.endswith("_cluster-admin")
                      else LAB + ":vclusters_" + role.removeprefix("vcluster_"))
             value = token(LAB, next((Path("/oauth") / key).read_text().strip()
-                                   for key in ("clientSecret", "client_secret", "attribute.client_secret")
+                                   for key in ("clientSecret", "client_secret")
                                    if (Path("/oauth") / key).is_file()), scope=scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
@@ -1107,7 +1107,7 @@ def main():
     try:
         wrong_issuer = token(
             Path("/profiles/administrator/client-id").read_text().strip(),
-            next((Path("/oauth") / key).read_text().strip() for key in ("clientSecret", "client_secret", "attribute.client_secret") if (Path("/oauth") / key).is_file()),
+            next((Path("/oauth") / key).read_text().strip() for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file()),
             origin="http://keycloak.keycloak:8080",
             scope=LAB + ":interactive",
         )
