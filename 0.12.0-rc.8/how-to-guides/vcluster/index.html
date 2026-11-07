@@ -1,0 +1,2187 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://versioneer-tech.github.io/provider-datalab/0.12.0-rc.8/how-to-guides/vcluster/">
+      
+      
+        <link rel="prev" href="../installation/">
+      
+      
+        <link rel="next" href="../authentication/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../imgs/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Virtual clusters - provider-datalab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#use-a-datalab-virtual-cluster" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="provider-datalab" class="md-header__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            provider-datalab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Virtual clusters
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="provider-datalab" class="md-nav__button md-logo" aria-label="provider-datalab" data-md-component="logo">
+      
+  <img src="../../imgs/logo.png" alt="logo">
+
+    </a>
+    provider-datalab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/versioneer-tech/provider-datalab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    versioneer-tech/provider-datalab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Virtual clusters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#api-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#roles-and-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles and profiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#download-a-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download a profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#human-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Human access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Human access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-download-the-profile-with-device-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Download the profile with device login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-download-the-oauth-client-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download the OAuth client secret
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-start-kubectl-and-approve-the-device-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Start kubectl and approve the device login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-select-scopes-for-other-assigned-user-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Select scopes for other assigned user roles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-reuse-the-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Reuse the login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#human-login-lifetime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Human login lifetime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delegated-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delegated access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Delegated access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-obtain-a-token-for-the-selected-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Obtain a token for the selected profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-download-the-selected-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download the selected profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-set-the-token-file-and-run-kubectl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Set the token file and run kubectl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delegated-token-lifetime-and-revocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delegated token lifetime and revocation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#machine-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Machine access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secret-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secret bindings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Platform settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#host-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-control-plane-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and control-plane resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sqlite-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SQLite settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datalab-stac-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datalab STAC catalog
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#removal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removal
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage_concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use a Datalab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../s3-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    S3 client access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../additional_services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/workspace-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/sandbox-controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference-guides/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0001-use-the-datalab-crd-as-the-workspace-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001 Datalab as the Public Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0002-provide-managed-database-services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 Managed Database Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/0003-token-exchange-for-downscoping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-003 Token Exchange for Downscoping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#api-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#roles-and-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles and profiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#download-a-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download a profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#human-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Human access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Human access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-download-the-profile-with-device-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Download the profile with device login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-download-the-oauth-client-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download the OAuth client secret
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-start-kubectl-and-approve-the-device-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Start kubectl and approve the device login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-select-scopes-for-other-assigned-user-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Select scopes for other assigned user roles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-reuse-the-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Reuse the login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#human-login-lifetime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Human login lifetime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delegated-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delegated access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Delegated access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-obtain-a-token-for-the-selected-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Obtain a token for the selected profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-download-the-selected-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download the selected profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-set-the-token-file-and-run-kubectl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Set the token file and run kubectl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delegated-token-lifetime-and-revocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delegated token lifetime and revocation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#machine-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Machine access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secret-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secret bindings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Platform settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#host-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-and-control-plane-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and control-plane resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sqlite-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SQLite settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datalab-stac-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datalab STAC catalog
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#removal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removal
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="use-a-datalab-virtual-cluster">Use a Datalab virtual cluster</h1>
+<p>Declare each virtual Kubernetes cluster under <code>spec.vclusters</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pkg.internal/v1beta2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Datalab</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s-joe</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">users</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">joe</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">vclusters</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vc0</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+<span class="w">      </span><span class="nt">groups</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">namespace-demo</span>
+<span class="w">        </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="w">        </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edit</span>
+</code></pre></div>
+<p>Each entry creates one runtime in <code>status.runtimeNamespace</code>. Add
+<code>vc1</code> alongside <code>vc0</code> to create another cluster. An empty map creates none.
+Sessions and their environment-controlled vclusters remain separate.</p>
+<h2 id="api-access">API access</h2>
+<p>The virtual API for <code>vc0</code> is:</p>
+<div class="highlight"><pre><span></span><code>https://s-joe.lab.acme.com/.vc0
+</code></pre></div>
+<p>The Gateway removes <code>/.vc0</code> and forwards to that instance with backend TLS
+validation. Workload Ingress and Gateway synchronization is disabled; use
+Kubernetes port forwarding to reach a workload Service.</p>
+<h3 id="roles-and-profiles">Roles and profiles</h3>
+<p>The API validates issuer, Datalab audience, signature, expiry, and configured
+roles under <code>resource_access.&lt;datalab&gt;.roles</code>. Kubernetes RBAC controls which
+operations those roles permit.</p>
+<table>
+<thead>
+<tr>
+<th>Caller</th>
+<th>Virtual API access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A user in <code>spec.users</code></td>
+<td>Explicit additional profiles, through the Datalab users group</td>
+</tr>
+<tr>
+<td>A Datalab administrator</td>
+<td>Additional profiles and each instance's built-in <code>vcluster_&lt;instance&gt;_cluster-admin</code> role</td>
+</tr>
+<tr>
+<td>The Datalab service account</td>
+<td>None by default; its only default role is <code>ws_api</code></td>
+</tr>
+<tr>
+<td>An identity with an assigned <code>vcluster_&lt;instance&gt;_&lt;group&gt;</code> role</td>
+<td>The group's configured namespace and Kubernetes role</td>
+</tr>
+</tbody>
+</table>
+<p><code>groups</code> defines additional profiles with <code>view</code>, <code>edit</code>, or <code>admin</code> access.
+The provider grants their client roles to both Datalab groups. Optional
+OAuth scopes select which assigned roles appear in Datalab client tokens.
+Roles are specific to an instance. See <a href="../authentication/#user-token-exchange">token exchange</a>
+for a token limited to one selected profile.</p>
+<p>A downloaded profile selects the endpoint and default namespace. It neither
+grants access nor reduces permissions already present in the caller's token.
+The <code>cluster-admin</code> profile cannot elevate a namespace caller, and a namespace
+profile cannot restrict a caller who already has the admin role.</p>
+<p>Provider Datalab already assigns workspace administrators <code>ws_admin</code> and
+each instance's <code>vcluster_&lt;instance&gt;_cluster-admin</code> role through the managed
+administrators group. No additional manual role assignment is needed.
+The API checks the instance role in the token. An unrelated manual assignment
+of <code>ws_admin</code> alone does not grant virtual API access.</p>
+<h3 id="download-a-profile">Download a profile</h3>
+<p>Resolve its Secret reference from <code>status.connections</code>; do not construct the
+name. Each profile Secret contains <code>kubeconfig</code>, the Datalab client's public
+<code>client-id</code>, and <code>issuer-url</code>. Public CA certificates can be included. It
+contains no client secret, token, private key, or client certificate. The
+provider keeps the recovery kubeconfig private.</p>
+<p><code>ready: true</code> reports runtime, routing, role, scope, and RBAC readiness. It does
+not imply caller authorization or require caller credentials to be present.
+The kubeconfig includes a Python 3 credential helper.
+Additional profiles select <code>--token-only</code> and read an access token file
+supplied by the caller. They require no OAuth client ID or client secret and
+make no token requests. The built-in <code>cluster-admin</code> profile retains the
+Datalab client ID and issuer. It accepts a caller token or a separate client
+secret for device login as a user. It never requests a service-account token.
+No separate helper file is needed on the caller's machine.</p>
+<p>The following cases use Datalab <code>s-joe</code>, instance <code>vc0</code>, and the additional
+<code>namespace-demo</code> profile from the example above. Use Bash with <code>kubectl</code>,
+<code>jq</code>, <code>base64</code>, and Python 3 installed. Set the host context used to read
+Datalab metadata and download Secrets:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">set</span><span class="w"> </span>-euo<span class="w"> </span>pipefail
+<span class="nb">umask</span><span class="w"> </span><span class="m">077</span>
+<span class="nv">host_context</span><span class="o">=</span>your-host-context
+</code></pre></div>
+<p>Replace <code>your-host-context</code> with the platform context. Download commands use
+that context explicitly. Commands with <code>--kubeconfig</code> connect to the virtual
+cluster. If you cannot read the host Datalab or its Secrets, obtain the files
+from the platform operator and continue with the local steps.</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Local kubeconfig file</th>
+<th>Credential supplied by the caller</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Human device login</td>
+<td><code>s-joe-vc0.kubeconfig</code></td>
+<td>Datalab OAuth client secret; browser login identifies the user</td>
+</tr>
+<tr>
+<td>Delegated access</td>
+<td><code>s-joe-vcluster-vc0_namespace-demo.kubeconfig</code></td>
+<td>An exchanged user access token for the selected profile</td>
+</tr>
+</tbody>
+</table>
+<p>These are local filenames. Always resolve the host Secret names and namespaces
+from Datalab status. The download commands require a ready profile.</p>
+<h3 id="human-access">Human access</h3>
+<p>This case logs in as your Keycloak user. The client secret authenticates
+the Datalab client; your user identity and assigned roles control API access.</p>
+<h4 id="1-download-the-profile-with-device-login">1. Download the profile with device login</h4>
+<p>Select the built-in <code>cluster-admin</code> profile. Its helper supports device login
+even when your user has only an additional namespace role.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>profile_namespace<span class="w"> </span>profile_secret<span class="w"> </span>&lt;<span class="w"> </span>&lt;<span class="o">(</span>
+<span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span>workspace<span class="w"> </span>get<span class="w"> </span>datalab<span class="w"> </span>s-joe<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>jq<span class="w"> </span>-er<span class="w"> </span><span class="s1">'.status.connections[] |</span>
+<span class="s1">      select(.type == "vcluster" and .instance == "vc0" and</span>
+<span class="s1">             .group == "cluster-admin" and .ready == true) |</span>
+<span class="s1">      .secretRef | [.namespace, .name] | @tsv'</span>
+<span class="o">)</span>
+kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">profile_namespace</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>get<span class="w"> </span>secret<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">profile_secret</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.kubeconfig}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>base64<span class="w"> </span>--decode<span class="w"> </span>&gt;<span class="w"> </span>s-joe-vc0.kubeconfig
+</code></pre></div>
+<h4 id="2-download-the-oauth-client-secret">2. Download the OAuth client secret</h4>
+<p>Resolve the ready client credential reference from <code>status.oauth2</code>. Save
+only its decoded client secret value in a private file. The helper does not
+read a Secret YAML document.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">unset</span><span class="w"> </span>DATALAB_ACCESS_TOKEN_FILE
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.config/datalab"</span>
+chmod<span class="w"> </span><span class="m">700</span><span class="w"> </span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.config/datalab"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DATALAB_CLIENT_SECRET_FILE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.config/datalab/s-joe-client-secret"</span>
+<span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>oauth_namespace<span class="w"> </span>oauth_secret<span class="w"> </span>&lt;<span class="w"> </span>&lt;<span class="o">(</span>
+<span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span>workspace<span class="w"> </span>get<span class="w"> </span>datalab<span class="w"> </span>s-joe<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>jq<span class="w"> </span>-er<span class="w"> </span><span class="s1">'.status.oauth2[] |</span>
+<span class="s1">      select(.type == "client" and .ready == true) |</span>
+<span class="s1">      .secretRef | [.namespace, .name] | @tsv'</span>
+<span class="o">)</span>
+kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">oauth_namespace</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>get<span class="w"> </span>secret<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">oauth_secret</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span>-er<span class="w"> </span><span class="s1">'.data.clientSecret // .data.client_secret'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>base64<span class="w"> </span>--decode<span class="w"> </span>&gt;<span class="w"> </span><span class="s2">"</span><span class="nv">$DATALAB_CLIENT_SECRET_FILE</span><span class="s2">"</span>
+chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span><span class="s2">"</span><span class="nv">$DATALAB_CLIENT_SECRET_FILE</span><span class="s2">"</span>
+</code></pre></div>
+<p>You can instead obtain that value through the platform's credential process.
+If <code>DATALAB_CLIENT_SECRET_FILE</code> is unset, the helper asks for the secret in an
+interactive terminal without showing or saving the input. A valid cached
+access token needs no secret. Refresh and new login need the secret again.</p>
+<h4 id="3-start-kubectl-and-approve-the-device-login">3. Start kubectl and approve the device login</h4>
+<p>For a user with <code>vcluster_vc0_cluster-admin</code>, run:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0.kubeconfig<span class="w"> </span>get<span class="w"> </span>namespaces
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0.kubeconfig<span class="w"> </span>auth<span class="w"> </span>can-i<span class="w"> </span><span class="s1">'*'</span><span class="w"> </span><span class="s1">'*'</span><span class="w"> </span>--all-namespaces
+</code></pre></div>
+<p>On the first command, the helper prints a verification URL and a user code.
+Open the URL in a browser, enter the code, and sign in as your Keycloak user.
+The browser can run on another device. After approval, kubectl continues.
+The authorization check returns <code>yes</code> for a user whose token contains the
+built-in administrator role and whose binding is ready.</p>
+<p>The default login requests <code>openid offline_access s-joe:interactive</code>. The
+interactive scope permits
+<code>ws_access</code>, <code>ws_admin</code>, and built-in vCluster administrator roles that your
+user holds. It does not request all additional namespace profiles.</p>
+<h4 id="4-select-scopes-for-other-assigned-user-roles">4. Select scopes for other assigned user roles</h4>
+<p>For a user assigned <code>vcluster_vc0_namespace-demo</code>, add its OAuth scope to a
+local copy of the device-login profile:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0.kubeconfig<span class="w"> </span>config<span class="w"> </span>view<span class="w"> </span>--raw<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.users[].user.exec.args += [</span>
+<span class="s1">    "--scope", "s-joe:interactive",</span>
+<span class="s1">    "--scope", "s-joe:vclusters_vc0_namespace-demo"</span>
+<span class="s1">  ]'</span><span class="w"> </span>&gt;<span class="w"> </span>s-joe-vc0-human.kubeconfig
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0-human.kubeconfig<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>get<span class="w"> </span>pods
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0-human.kubeconfig<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>auth<span class="w"> </span>can-i<span class="w"> </span>create<span class="w"> </span>deployments
+</code></pre></div>
+<p>JSON is also a valid kubeconfig format. This copy keeps the embedded helper,
+endpoint, and CA settings. Add another <code>--scope</code> pair for each additional
+profile you need. Each scope includes only roles that your user holds.
+A user with only the example namespace role gets <code>edit</code> access in <code>demo</code>,
+not cluster administration. A user who also holds the built-in administrator
+role retains that wider access when requesting <code>s-joe:interactive</code>.</p>
+<h4 id="5-reuse-the-login">5. Reuse the login</h4>
+<p>The helper saves the access token, offline refresh token, and the local
+login deadline in:</p>
+<div class="highlight"><pre><span></span><code>~/.cache/datalab/oidc/&lt;hash&gt;.json
+</code></pre></div>
+<p>It uses <code>$XDG_CACHE_HOME/datalab/oidc</code> when <code>XDG_CACHE_HOME</code> is set. Set
+<code>DATALAB_TOKEN_CACHE_DIR</code> to select another private directory. The directory
+has mode <code>0700</code>; token files have mode <code>0600</code>. The hash separates issuer,
+client ID, and scopes. Different scopes can require a separate device login.
+The helper does not store the client secret in this cache.</p>
+<p>Later kubectl commands reuse a valid token without a browser prompt. Near
+expiry, the helper requests a new token with the cached offline refresh token
+and the client secret. It saves the updated token response, including any
+replacement refresh token. Refresh keeps the user's current assigned
+permissions within the login's requested scopes. If Keycloak rejects the
+refresh token with
+<code>invalid_grant</code>, it starts device login again. There is no background refresh
+while kubectl is idle. In a new shell, set <code>DATALAB_CLIENT_SECRET_FILE</code> again
+if refresh or login is needed.</p>
+<p>To sign in as another user, run the standalone helper from this repository:</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>scripts/vcluster-credentials.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--issuer<span class="w"> </span>https://identity.acme.com/realms/acme<span class="w"> </span>--client-id<span class="w"> </span>s-joe<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--force-login<span class="w"> </span>&gt;/dev/null
+</code></pre></div>
+<p>Use the same issuer, client ID, scopes, cache directory, and secret source as
+the downloaded profile. Add the same <code>--scope</code> pairs for the modified profile.
+For a private issuer CA, add <code>--issuer-ca /path/to/issuer-ca.pem</code>. Generated
+device-login profiles already contain the configured issuer CA.</p>
+<h4 id="human-login-lifetime">Human login lifetime</h4>
+<p>CLI device login requests offline access by default. Access tokens stay
+short-lived; the CLI obtains replacements without another device prompt while
+the offline session remains valid. Refresh does not extend the local login
+deadline.</p>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Default or setting</th>
+<th>Effect on kubectl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Access token</td>
+<td>Realm or client Access Token Lifespan; upstream default is 5 minutes</td>
+<td>The helper refreshes it when needed.</td>
+</tr>
+<tr>
+<td>CLI cached login</td>
+<td>30 days after device approval</td>
+<td>The helper starts device login again after this deadline.</td>
+</tr>
+<tr>
+<td>Client offline idle timeout</td>
+<td>Provider sets 30 days</td>
+<td>The session can expire if no refresh occurs within this period.</td>
+</tr>
+<tr>
+<td>Client offline maximum</td>
+<td>Provider sets 30 days</td>
+<td>Keycloak applies this limit when the realm enables Offline Session Max Limited.</td>
+</tr>
+<tr>
+<td>Realm offline limits and revocation</td>
+<td>Platform settings</td>
+<td>Shorter realm limits or revoked offline access can end the login sooner.</td>
+</tr>
+</tbody>
+</table>
+<p>The realm must permit <code>offline_access</code>, and the user must have the standard
+realm <code>offline_access</code> role. Provider Datalab adds the built-in offline scope
+to the client's optional scopes. Keycloak normally grants its role through
+the realm's default roles. Ordinary SSO Session Idle/Max limits do not govern
+an offline session. Check <strong>Realm settings &gt; Sessions</strong> and
+<strong>Clients &gt; s-joe &gt; Advanced</strong> for the deployed offline limits. The device
+code has a separate approval timeout.</p>
+<p>An existing cache from a login without <code>offline_access</code> is not reused for the
+new scope set. Download a current kubeconfig and approve device login once.
+The new cache then supports automatic refresh for the CLI login period.
+See <a href="https://www.keycloak.org/docs/latest/server_admin/index.html#_offline-access">Keycloak offline access</a>
+and <a href="../authentication/#login-lifetime">login lifetime</a>.</p>
+<blockquote>
+<p>[!NOTE]
+On Keycloak versions older than 26.8.1, device login token refresh is unreliable; use <code>--force-login</code> to start a new device login when refresh fails.</p>
+</blockquote>
+<h3 id="delegated-access">Delegated access</h3>
+<p>This case uses an access token issued for a human user and passed to another
+caller. The recipient needs the selected kubeconfig and token, with no client
+secret or browser login.</p>
+<h4 id="1-obtain-a-token-for-the-selected-profile">1. Obtain a token for the selected profile</h4>
+<p>The user or platform service performs
+<a href="../authentication/#user-token-exchange">token exchange</a> with the user's access
+token as <code>subject_token</code>. For the example profile, request:</p>
+<div class="highlight"><pre><span></span><code>scope=s-joe:vclusters_vc0_namespace-demo
+audience=s-joe
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+</code></pre></div>
+<p>The OAuth scope is <code>s-joe:vclusters_vc0_namespace-demo</code>; the corresponding
+Keycloak client role is <code>vcluster_vc0_namespace-demo</code>. Exchange can select
+only a role the user holds. Before passing on the result, the issuing service
+must check that <code>resource_access.s-joe.roles</code> contains that role and omits
+administrator and unrelated profile roles. <code>ws_api</code> can also be present.
+The token keeps the human user's subject. Selecting a kubeconfig alone does
+not restrict a token with wider permissions.</p>
+<p>Give the recipient the returned JWT access token through a private file.
+Keep the client secret, original user token, and refresh token with the user
+or service that performs exchange. An ID token cannot replace this access
+token.</p>
+<h4 id="2-download-the-selected-profile">2. Download the selected profile</h4>
+<p>Using the host context from the download setup, select <code>namespace-demo</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">read</span><span class="w"> </span>-r<span class="w"> </span>profile_namespace<span class="w"> </span>profile_secret<span class="w"> </span>&lt;<span class="w"> </span>&lt;<span class="o">(</span>
+<span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span>workspace<span class="w"> </span>get<span class="w"> </span>datalab<span class="w"> </span>s-joe<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>jq<span class="w"> </span>-er<span class="w"> </span><span class="s1">'.status.connections[] |</span>
+<span class="s1">      select(.type == "vcluster" and .instance == "vc0" and</span>
+<span class="s1">             .group == "namespace-demo" and .ready == true) |</span>
+<span class="s1">      .secretRef | [.namespace, .name] | @tsv'</span>
+<span class="o">)</span>
+kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">host_context</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">profile_namespace</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>get<span class="w"> </span>secret<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">profile_secret</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.kubeconfig}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>base64<span class="w"> </span>--decode<span class="w"> </span>&gt;<span class="w"> </span>s-joe-vcluster-vc0_namespace-demo.kubeconfig
+</code></pre></div>
+<p>The platform operator can supply this file if the recipient has no host
+access. The profile uses <code>--token-only</code>: it cannot start device login or make
+refresh requests.</p>
+<h4 id="3-set-the-token-file-and-run-kubectl">3. Set the token file and run kubectl</h4>
+<p>Save the received access token as
+<code>~/.config/datalab/s-joe-vc0-namespace-demo.token</code>. The file must contain only
+the JWT, without a JSON wrapper or <code>Bearer</code> prefix. Then run:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">unset</span><span class="w"> </span>DATALAB_CLIENT_SECRET_FILE
+<span class="nb">export</span><span class="w"> </span><span class="nv">DATALAB_ACCESS_TOKEN_FILE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.config/datalab/s-joe-vc0-namespace-demo.token"</span>
+chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span><span class="s2">"</span><span class="nv">$DATALAB_ACCESS_TOKEN_FILE</span><span class="s2">"</span>
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vcluster-vc0_namespace-demo.kubeconfig<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>get<span class="w"> </span>pods
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vcluster-vc0_namespace-demo.kubeconfig<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>auth<span class="w"> </span>can-i<span class="w"> </span>create<span class="w"> </span>deployments
+kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vcluster-vc0_namespace-demo.kubeconfig<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>auth<span class="w"> </span>can-i<span class="w"> </span>create<span class="w"> </span>namespaces
+</code></pre></div>
+<p>The example <code>edit</code> profile permits Deployment creation in <code>demo</code>; namespace
+creation is denied. <code>DATALAB_ACCESS_TOKEN_FILE</code> contains a file path, not the
+token value. The helper reads that file and returns the token to kubectl.
+It makes no login or refresh request and does not use the device-login cache.</p>
+<h4 id="delegated-token-lifetime-and-revocation">Delegated token lifetime and revocation</h4>
+<p>The received token's <code>exp</code> claim is its expiry time. The exchange response's
+<code>expires_in</code> reports its remaining lifetime when issued. Do not assume a
+fixed duration or that exchange starts a new full session. The helper sets
+<code>ExecCredential.expirationTimestamp</code> from <code>exp</code>. When the token expires, ask
+the issuing user or service for a new exchange result and replace the token
+file. The recipient has no refresh token to renew it.</p>
+<p>To display the expiry in UTC without printing the token, run:</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-<span class="w"> </span><span class="s2">"</span><span class="nv">$DATALAB_ACCESS_TOKEN_FILE</span><span class="s2">"</span><span class="w"> </span><span class="s">&lt;&lt;'PY'</span>
+<span class="s">import base64</span>
+<span class="s">from datetime import datetime, timezone</span>
+<span class="s">import json</span>
+<span class="s">from pathlib import Path</span>
+<span class="s">import sys</span>
+
+<span class="s">payload = Path(sys.argv[1]).read_text().strip().split('.')[1]</span>
+<span class="s">claims = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))</span>
+<span class="s">print(datetime.fromtimestamp(claims['exp'], timezone.utc).isoformat())</span>
+<span class="s">PY</span>
+</code></pre></div>
+<p>This command reads the expiry claim; the virtual API verifies the signature
+and decides whether to accept the token.</p>
+<p>The virtual API validates JWTs locally. It does not ask Keycloak whether each
+token has been revoked. Removing a user's Keycloak role, ending the login
+session, rotating the client secret, or deleting a local token file does not
+reliably invalidate copies of an already issued JWT at this API. Keycloak
+also documents that revoking the original access token does not revoke an
+exchanged access token. See <a href="https://www.keycloak.org/securing-apps/token-exchange#_revocation">token exchange revocation</a>.</p>
+<p>Without an API authorization change, expect an issued token to remain usable
+until <code>exp</code>. To deny access sooner, the platform operator can remove the
+affected configured profile or its Kubernetes RBAC binding. This removes
+access for all callers that depend on that role or binding, not just one
+token. Apply changes through the source configuration and allow for
+reconciliation. This setup has no individual JWT revocation list. The same
+limit applies to access tokens cached after human device login. Revoke its
+offline session in Keycloak to stop further CLI refresh. Ordinary browser
+logout does not revoke offline access. Neither action erases issued JWTs.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Human device login</th>
+<th>Delegated access token</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Access token expires</td>
+<td>Helper attempts refresh with the client secret.</td>
+<td>Recipient must obtain a new token.</td>
+</tr>
+<tr>
+<td>Offline session expires or is revoked</td>
+<td>Refresh stops; a new device login is needed.</td>
+<td>An issued token can remain usable until <code>exp</code>.</td>
+</tr>
+<tr>
+<td>Keycloak role assignment is removed</td>
+<td>New tokens lose the role; issued tokens can retain it.</td>
+<td>An issued token can retain the role until <code>exp</code>.</td>
+</tr>
+<tr>
+<td>Configured profile or required RBAC binding is removed</td>
+<td>Access is denied after the API configuration or binding changes.</td>
+<td>The same denial applies to the delegated token.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="machine-access">Machine access</h3>
+<p>An identity administrator must explicitly assign the required vcluster role
+to the existing Datalab service account. For example,
+<code>vcluster_vc0_namespace-demo</code> permits the configured operations in <code>demo</code>.
+Do not add this account to a human group. Request the profile's optional scope
+when using a separately assigned role; the default machine token has only
+<code>ws_api</code>. Obtain the token before using the downloaded profile.</p>
+<p>Obtain the Datalab client secret from the source in <code>status.oauth2</code> through
+an authorized Secret-delivery process. This is the <code>&lt;datalab&gt;-oauth-client</code>
+Secret. Use it to authenticate a token request with these parameters:</p>
+<div class="highlight"><pre><span></span><code>grant_type=client_credentials
+client_id=s-joe
+scope=s-joe:vclusters_vc0_namespace-demo
+</code></pre></div>
+<p>Save the returned access token in a private file and use
+<code>DATALAB_ACCESS_TOKEN_FILE</code> as shown above. The downloaded helper accepts only
+an access token file for additional profiles. The built-in <code>cluster-admin</code>
+helper uses a supplied client secret for user device login, not machine access.
+Client credentials alone produce a token with only <code>ws_api</code> and cannot access
+the virtual API. An explicitly granted machine role still requires its
+matching optional scope in a separate token request.
+A profile download supplies no credentials or role grants.</p>
+<h2 id="secret-bindings">Secret bindings</h2>
+<p>Select a Datalab connection by type and instance name:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">databases</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">pg0</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">names</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">analytics</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+<span class="w">  </span><span class="nt">vclusters</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vc0</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">secretBindings</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pg0</span>
+<span class="w">        </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">applications</span>
+<span class="w">          </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">database-credentials</span>
+</code></pre></div>
+<p>The provider publishes each service connection in <code>status.connections</code>, with its <code>type</code>,
+<code>name</code>, <code>secretRef</code>, and readiness. A binding selects the same <code>type</code>
+and <code>name</code> pair. The mapping uses that connection's <code>secretRef</code>.</p>
+<p>The connection sources are:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Name</th>
+<th>Published host Secret</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s3</code></td>
+<td><code>primary</code></td>
+<td>The Secret with the same name as the Datalab</td>
+</tr>
+<tr>
+<td><code>postgres</code></td>
+<td>A key in <code>spec.databases</code></td>
+<td>A connection copy in the Datalab namespace</td>
+</tr>
+<tr>
+<td><code>mongo</code></td>
+<td>A key in <code>spec.documentStores</code></td>
+<td>A connection copy in the Datalab namespace</td>
+</tr>
+<tr>
+<td><code>redis</code></td>
+<td>A key in <code>spec.cacheStores</code></td>
+<td>A connection copy in the Datalab namespace</td>
+</tr>
+<tr>
+<td><code>registry</code></td>
+<td><code>primary</code></td>
+<td>A connection copy in the Datalab namespace</td>
+</tr>
+<tr>
+<td><code>custom</code></td>
+<td>A predefined Secret name</td>
+<td>A connection copy in the Datalab namespace</td>
+</tr>
+</tbody>
+</table>
+<p>Only declared service instances can be selected. The storage source namespace
+comes from <code>EnvironmentConfig.data.storage.secretNamespace</code>, or the claim
+namespace when unset. Use a custom connection for credentials such as a
+GitHub token.</p>
+<p>The operator can list predefined custom Secrets in the EnvironmentConfig:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">customSecrets</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apikey-1</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apikey-2</span>
+</code></pre></div>
+<p>The provider checks these names in each Datalab's runtime namespace. Set
+<code>namespace</code> on an entry to use a shared source namespace. Names must be unique.
+It observes the source and does not create or change it. A custom connection
+is listed in <code>status.connections</code> after its source is confirmed ready. Its
+<code>ready</code> value stays false until the published copy is available and current.
+Missing custom sources do not block Datalab readiness.</p>
+<p>Bind an available custom connection through the same list:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vclusters</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vc0</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">secretBindings</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apikey-1</span>
+<span class="w">        </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">applications</span>
+<span class="w">          </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application-credentials</span>
+</code></pre></div>
+<p>vCluster creates the target namespace and syncs the whole Secret, including
+source updates and deletion. Secret keys keep their source names. Only ready,
+unambiguous connections generate mappings. Missing or unready references are
+skipped; reconciliation adds or removes mappings as source readiness changes.
+Source readiness does not confirm delivery inside the virtual cluster.</p>
+<h2 id="platform-settings">Platform settings</h2>
+<p>Merge these values into the Datalab's EnvironmentConfig:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">iam</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">issuerURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://identity.acme.com/realms/acme</span>
+<span class="w">  </span><span class="nt">ingress</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lab.acme.com</span>
+<span class="w">  </span><span class="nt">httpRoute</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">parentName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">    </span><span class="nt">parentNamespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contour</span>
+<span class="w">    </span><span class="nt">sectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-https</span>
+<span class="w">    </span><span class="nt">httpSectionName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspaces-http</span>
+<span class="w">  </span><span class="nt">vcluster</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+<span class="w">    </span><span class="nt">storageClasses</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">allowed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sbs-default</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbs-default</span>
+</code></pre></div>
+<p>For a private issuer CA, set <code>vcluster.issuerCA</code>. An optional HTTPS
+<code>vcluster.discoveryURL</code> can provide separate discovery routing with the same
+issuer. For a private Gateway CA, set <code>ingress.certificateAuthority</code>.</p>
+<h3 id="host-requirements">Host requirements</h3>
+<p>Apply <code>dependencies/rbac.yaml</code>. The host must serve
+<code>ValidatingAdmissionPolicy</code> and <code>ValidatingAdmissionPolicyBinding</code>. The Gateway
+must support HTTPRoute prefix rewriting, BackendTLSPolicy, and Kubernetes
+streaming requests. <code>vcluster.backendTLS.apiVersion</code> defaults to
+<code>gateway.networking.k8s.io/v1</code>; set it to the version served by your platform.</p>
+<p>Set <code>network.serviceCIDR</code> and <code>network.podCIDRs</code> to the host ranges. Virtual
+workloads follow the environment's network policy. Managed databases in the
+same runtime namespace are reachable through their generated connection
+endpoints. Cross-namespace backends need an approved <code>network.internalEgress</code>
+rule. Virtual clusters share the host namespace and node kernel; their RBAC
+boundaries apply to their virtual APIs.</p>
+<h3 id="storage-and-control-plane-resources">Storage and control-plane resources</h3>
+<p>The <code>vcluster</code> EnvironmentConfig section supplies defaults for all declared
+instances. <code>spec.vclusters.&lt;name&gt;.storage</code> overrides the control-plane PVC size.
+<code>vcluster.storageClassName</code> selects its class; otherwise the default class is
+used. Only classes in <code>vcluster.storageClasses.allowed</code> are exposed to virtual
+workloads. A host admission policy enforces this list for each syncer.
+Control-plane, workload, database, and session PVCs share the existing
+<code>defaults.overallQuota.storage</code> limit.</p>
+<p>Set <code>vcluster.resources.requests</code> and <code>vcluster.resources.limits</code> in the
+EnvironmentConfig to change control-plane resources. Both the native vCluster
+configuration and the host StatefulSet use these values. The defaults are CPU
+<code>200m</code> and memory <code>1Gi</code> for requests, and CPU <code>4</code> and memory <code>4Gi</code> for limits.
+Ephemeral storage defaults to a <code>1Gi</code> request and a <code>10Gi</code> limit. Each supplied
+field overrides its default.</p>
+<h3 id="sqlite-settings">SQLite settings</h3>
+<p>To limit SQLite to two open connections and one idle connection, merge:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vcluster</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">backingStore</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">database</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">embedded</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">dataSource</span><span class="p">:</span><span class="w"> </span><span class="s">"sqlite:///data/state.db?_journal=TRUNCATE&amp;_locking=NORMAL&amp;cache=shared&amp;_busy_timeout=30000&amp;_txlock=immediate&amp;_synchronous=FULL"</span>
+<span class="w">          </span><span class="nt">extraArgs</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--datastore-max-open-connections=2</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--datastore-max-idle-connections=1</span>
+</code></pre></div>
+<h2 id="datalab-stac-catalog">Datalab STAC catalog</h2>
+<p>The <a href="https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/stac-fastapi.yaml">STAC workload example</a>
+runs <code>stac-fastapi-pgstac</code> in virtual namespace <code>demo</code>. Its PostgreSQL database
+is a Datalab-managed service on the host. Add this request alongside <code>vclusters</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">databases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">pg0</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres</span>
+<span class="w">    </span><span class="nt">names</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">catalog</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5Gi</span>
+</code></pre></div>
+<p><a href="https://stac-utils.github.io/pgstac/pgstac/">PgSTAC</a> requires PostGIS and a schema
+migration. The example migration Job uses the generated PostgreSQL credentials
+from the Datalab Secret. It creates a separate <code>catalog</code> login with the
+<code>pgstac_ingest</code> role. The API uses that login and the standard
+<a href="https://stac-utils.github.io/stac-fastapi-pgstac/settings/">PostgreSQL settings</a>:
+<code>PGHOST</code>, <code>PGPORT</code>, <code>PGUSER</code>, <code>PGPASSWORD</code>, and <code>PGDATABASE</code>.</p>
+<p>PostgreSQL needs DNS and access to the host Kubernetes API for its controller.
+In a namespace with denied egress, approve these targets for the PostgreSQL
+Pods. Namespace selectors do not match host-network API endpoints on all CNIs.
+The integration has a PostgreSQL-specific policy for this case.</p>
+<p>The example expects <code>catalog-postgres-admin</code> and <code>catalog-postgres</code> Secrets in
+virtual namespace <code>demo</code>. The first contains migration credentials. The second
+contains the API login. Supply these through your Secret process. Build the
+image from <code>tests/vcluster/catalog.Dockerfile</code>, push it to your registry, and
+replace <code>__CATALOG_IMAGE__</code> with that image reference before applying the example.
+Wait for <code>catalog-migrate</code> to complete before starting the API Deployment.
+Remove the migration Secret after it completes.</p>
+<p>Connect to the catalog through the generated profile:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>--kubeconfig<span class="w"> </span>./s-joe-vc0.kubeconfig<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>port-forward<span class="w"> </span>service/catalog<span class="w"> </span><span class="m">8080</span>:8080
+</code></pre></div>
+<p>The catalog is available at <code>http://localhost:8080</code>. The example enables STAC
+transactions so a client can add collections and items. Its catalog records
+remain in PostgreSQL when the API Pod restarts.</p>
+<p>Run <code>tests/integration/run.bash verify-vcluster</code> to check both virtual clusters,
+caller role boundaries, public profiles, persistent volumes, and the catalog.
+The catalog test creates a collection and item, searches it, restarts the API,
+and repeats the search after a control-plane restart.</p>
+<h2 id="removal">Removal</h2>
+<p>Removing a group removes its role and binding after reconciliation while
+retaining its virtual namespace data. Removing an instance removes its runtime
+and control-plane PVC. Other instances, databases, sessions, and the shared
+namespace remain. Deletion follows the host StorageClass retention policy.
+Back up control-plane and database volumes before removing an instance or Datalab.</p>
+<p>Removing a Keycloak role assignment or client prevents new tokens with those
+grants. Already-issued JWTs can remain valid until expiry because the API
+validates them locally. To deny access sooner, remove the affected configured
+role or Kubernetes binding. Allow for reconciliation before checking revocation.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026, Versioneer
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "search.suggest", "toc.follow", "toc.permalink"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
