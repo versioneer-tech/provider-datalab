@@ -111,7 +111,7 @@ def client_secret(args):
 
 
 def login(args):
-    scope = ' '.join(sorted(set(['openid', *(args.scope or [args.client_id + ':interactive'])])))
+    scope = ' '.join(sorted(set(['openid', 'offline_access', *(args.scope or [args.client_id + ':interactive'])])))
     key = hashlib.sha256(json.dumps([args.issuer, args.client_id, scope]).encode()).hexdigest()
     directory = Path(args.cache_dir).expanduser()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -120,6 +120,12 @@ def login(args):
     os.chmod(directory, 0o700)
     path = directory / (key + '.json')
     cached = {} if args.force_login else read_cache(path)
+    try:
+        session_expires = float(cached.get('session_expires_at', 0))
+    except (ValueError, TypeError):
+        session_expires = 0
+    if session_expires <= time.time() + 30:
+        cached = {}
     try:
         expires = min(float(cached['expires_at']), token_expiry(cached['access_token']))
         if expires > time.time() + 30:
@@ -142,12 +148,14 @@ def login(args):
     if token is None:
         cached = {}
         token = device_login(args.issuer, client, scope, context)
-    expires = min(time.time() + float(token['expires_in']), token_expiry(token['access_token']))
+        session_expires = time.time() + 30 * 24 * 60 * 60
+    expires = min(time.time() + float(token['expires_in']), token_expiry(token['access_token']), session_expires)
     if expires <= time.time() + 30:
         raise ValueError('The issued token has expired')
     save_cache(path, {
         'access_token': token['access_token'], 'expires_at': expires,
         'refresh_token': token.get('refresh_token', cached.get('refresh_token')),
+        'session_expires_at': session_expires,
     })
     return token['access_token'], expires
 
@@ -202,6 +210,7 @@ def main():
             'invalid_client': 'Keycloak rejected the client credentials. Check the client ID and secret.',
             'unauthorized_client': 'Keycloak did not allow this login flow. Check the client settings.',
             'invalid_scope': 'Keycloak rejected the requested login scopes.',
+            'invalid_request': 'Keycloak rejected the request. Check client policies and the server refresh-event support.',
         }.get(str(error), 'Keycloak rejected the token request. Check the client and login settings.')
         print(message, file=sys.stderr)
         return 1

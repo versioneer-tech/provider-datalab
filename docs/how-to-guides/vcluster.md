@@ -59,6 +59,12 @@ grants access nor reduces permissions already present in the caller's token.
 The `cluster-admin` profile cannot elevate a namespace caller, and a namespace
 profile cannot restrict a caller who already has the admin role.
 
+Provider Datalab already assigns workspace administrators `ws_admin` and
+each instance's `vcluster_<instance>_cluster-admin` role through the managed
+administrators group. No additional manual role assignment is needed.
+The API checks the instance role in the token. An unrelated manual assignment
+of `ws_admin` alone does not grant virtual API access.
+
 ### Download a profile
 
 Resolve its Secret reference from `status.connections`; do not construct the
@@ -77,51 +83,148 @@ Datalab client ID and issuer. It accepts a caller token or a separate client
 secret for device login as a user. It never requests a service-account token.
 No separate helper file is needed on the caller's machine.
 
+The following cases use Datalab `s-joe`, instance `vc0`, and the additional
+`namespace-demo` profile from the example above. Use Bash with `kubectl`,
+`jq`, `base64`, and Python 3 installed. Set the host context used to read
+Datalab metadata and download Secrets:
+
 ```bash
+set -euo pipefail
 umask 077
-profile_secret="$(kubectl -n workspace get datalab s-joe -o json | \
-  jq -r '.status.connections[] | select(.instance == "vc0" and .group == "namespace-demo") | .secretRef.name')"
-kubectl -n workspace get secret "${profile_secret}" \
-  -o jsonpath='{.data.kubeconfig}' | base64 --decode > s-joe-vc0.kubeconfig
+host_context=your-host-context
 ```
+
+Replace `your-host-context` with the platform context. Download commands use
+that context explicitly. Commands with `--kubeconfig` connect to the virtual
+cluster. If you cannot read the host Datalab or its Secrets, obtain the files
+from the platform operator and continue with the local steps.
+
+| Case | Local kubeconfig file | Credential supplied by the caller |
+| --- | --- | --- |
+| Human device login | `s-joe-vc0.kubeconfig` | Datalab OAuth client secret; browser login identifies the user |
+| Delegated access | `s-joe-vcluster-vc0_namespace-demo.kubeconfig` | An exchanged user access token for the selected profile |
+
+These are local filenames. Always resolve the host Secret names and namespaces
+from Datalab status. The download commands require a ready profile.
 
 ### Human access
 
-For the built-in `cluster-admin` profile, select group `cluster-admin` in the
-download command above and save the kubeconfig as `s-joe-vc0-admin.kubeconfig`.
-Obtain the existing Datalab client secret through the approved credential
-process. To avoid entering it at each refresh, save it in a private file,
-set its path, and run kubectl with the downloaded administrator profile:
+This case logs in as your Keycloak user. The client secret authenticates
+the Datalab client; your user identity and assigned roles control API access.
+
+#### 1. Download the profile with device login
+
+Select the built-in `cluster-admin` profile. Its helper supports device login
+even when your user has only an additional namespace role.
+
+```bash
+read -r profile_namespace profile_secret < <(
+  kubectl --context "${host_context}" -n workspace get datalab s-joe -o json | \
+    jq -er '.status.connections[] |
+      select(.type == "vcluster" and .instance == "vc0" and
+             .group == "cluster-admin" and .ready == true) |
+      .secretRef | [.namespace, .name] | @tsv'
+)
+kubectl --context "${host_context}" -n "${profile_namespace}" \
+  get secret "${profile_secret}" -o jsonpath='{.data.kubeconfig}' | \
+  base64 --decode > s-joe-vc0.kubeconfig
+```
+
+#### 2. Download the OAuth client secret
+
+Resolve the ready client credential reference from `status.oauth2`. Save
+only its decoded client secret value in a private file. The helper does not
+read a Secret YAML document.
 
 ```bash
 unset DATALAB_ACCESS_TOKEN_FILE
+mkdir -p "$HOME/.config/datalab"
+chmod 700 "$HOME/.config/datalab"
 export DATALAB_CLIENT_SECRET_FILE="$HOME/.config/datalab/s-joe-client-secret"
+read -r oauth_namespace oauth_secret < <(
+  kubectl --context "${host_context}" -n workspace get datalab s-joe -o json | \
+    jq -er '.status.oauth2[] |
+      select(.type == "client" and .ready == true) |
+      .secretRef | [.namespace, .name] | @tsv'
+)
+kubectl --context "${host_context}" -n "${oauth_namespace}" \
+  get secret "${oauth_secret}" -o json | \
+  jq -er '.data.clientSecret // .data.client_secret' | \
+  base64 --decode > "$DATALAB_CLIENT_SECRET_FILE"
 chmod 600 "$DATALAB_CLIENT_SECRET_FILE"
-kubectl --kubeconfig ./s-joe-vc0-admin.kubeconfig get namespaces
 ```
 
-You can also leave both credential file variables unset. In an interactive
-terminal, the helper asks for the client secret without showing the input.
-It does not save that secret. A valid cached token needs no prompt; refresh or
-a new login needs the secret again. Noninteractive commands must have a secret
-source configured when refresh or login is needed.
+You can instead obtain that value through the platform's credential process.
+If `DATALAB_CLIENT_SECRET_FILE` is unset, the helper asks for the secret in an
+interactive terminal without showing or saving the input. A valid cached
+access token needs no secret. Refresh and new login need the secret again.
 
-The helper first checks the local token cache. If login is needed, it prints
-a verification URL and code. Open that URL in a browser, enter the code, and
-sign in to Keycloak as your user. The browser can run on another device.
-After approval, kubectl continues with your access token. Your user must hold
-`vcluster_vc0_cluster-admin` for administrator access. The client secret alone
-does not grant that role.
+#### 3. Start kubectl and approve the device login
 
-The helper requests `s-joe:interactive`, uses the token directly, and caches
-it with the refresh token. Later commands reuse or refresh that login. If
-refresh is no longer valid, the helper starts device login again. The default
-cache is `~/.cache/datalab/oidc`, or `$XDG_CACHE_HOME/datalab/oidc` when set.
-Set `DATALAB_TOKEN_CACHE_DIR` to use another private directory. Cache entries
-are separate by issuer, client, and scopes; administrator profiles for the
-same Datalab share the login.
-Login duration follows the realm and client settings. See
-[login lifetime](authentication.md#login-lifetime).
+For a user with `vcluster_vc0_cluster-admin`, run:
+
+```bash
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig get namespaces
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig auth can-i '*' '*' --all-namespaces
+```
+
+On the first command, the helper prints a verification URL and a user code.
+Open the URL in a browser, enter the code, and sign in as your Keycloak user.
+The browser can run on another device. After approval, kubectl continues.
+The authorization check returns `yes` for a user whose token contains the
+built-in administrator role and whose binding is ready.
+
+The default login requests `openid offline_access s-joe:interactive`. The
+interactive scope permits
+`ws_access`, `ws_admin`, and built-in vCluster administrator roles that your
+user holds. It does not request all additional namespace profiles.
+
+#### 4. Select scopes for other assigned user roles
+
+For a user assigned `vcluster_vc0_namespace-demo`, add its OAuth scope to a
+local copy of the device-login profile:
+
+```bash
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig config view --raw -o json | \
+  jq '.users[].user.exec.args += [
+    "--scope", "s-joe:interactive",
+    "--scope", "s-joe:vclusters_vc0_namespace-demo"
+  ]' > s-joe-vc0-human.kubeconfig
+kubectl --kubeconfig ./s-joe-vc0-human.kubeconfig -n demo get pods
+kubectl --kubeconfig ./s-joe-vc0-human.kubeconfig -n demo auth can-i create deployments
+```
+
+JSON is also a valid kubeconfig format. This copy keeps the embedded helper,
+endpoint, and CA settings. Add another `--scope` pair for each additional
+profile you need. Each scope includes only roles that your user holds.
+A user with only the example namespace role gets `edit` access in `demo`,
+not cluster administration. A user who also holds the built-in administrator
+role retains that wider access when requesting `s-joe:interactive`.
+
+#### 5. Reuse the login
+
+The helper saves the access token, offline refresh token, and the local
+login deadline in:
+
+```text
+~/.cache/datalab/oidc/<hash>.json
+```
+
+It uses `$XDG_CACHE_HOME/datalab/oidc` when `XDG_CACHE_HOME` is set. Set
+`DATALAB_TOKEN_CACHE_DIR` to select another private directory. The directory
+has mode `0700`; token files have mode `0600`. The hash separates issuer,
+client ID, and scopes. Different scopes can require a separate device login.
+The helper does not store the client secret in this cache.
+
+Later kubectl commands reuse a valid token without a browser prompt. Near
+expiry, the helper requests a new token with the cached offline refresh token
+and the client secret. It saves the updated token response, including any
+replacement refresh token. Refresh keeps the user's current assigned
+permissions within the login's requested scopes. If Keycloak rejects the
+refresh token with
+`invalid_grant`, it starts device login again. There is no background refresh
+while kubectl is idle. In a new shell, set `DATALAB_CLIENT_SECRET_FILE` again
+if refresh or login is needed.
 
 To sign in as another user, run the standalone helper from this repository:
 
@@ -131,41 +234,168 @@ python3 scripts/vcluster-credentials.py \
   --force-login >/dev/null
 ```
 
-Use the same cache directory and client secret source as kubectl. For a private
-issuer CA, add `--issuer-ca /path/to/issuer-ca.pem`. Generated administrator
-profiles include the configured issuer CA.
+Use the same issuer, client ID, scopes, cache directory, and secret source as
+the downloaded profile. Add the same `--scope` pairs for the modified profile.
+For a private issuer CA, add `--issuer-ca /path/to/issuer-ca.pem`. Generated
+device-login profiles already contain the configured issuer CA.
 
-You can also supply an access token from the platform's login tool. This is
-required for additional profiles. Save the token in a private file, then set
-its path for the kubeconfig helper:
+#### Human login lifetime
 
-```bash
-unset DATALAB_CLIENT_SECRET_FILE
-export DATALAB_ACCESS_TOKEN_FILE="$HOME/.config/datalab/access-token"
-chmod 600 "$DATALAB_ACCESS_TOKEN_FILE"
-kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo get pods
-```
+CLI device login requests offline access by default. Access tokens stay
+short-lived; the CLI obtains replacements without another device prompt while
+the offline session remains valid. Refresh does not extend the local login
+deadline.
 
-The helper uses a supplied access token directly and makes no login or refresh
-requests. Renew the file through the same login flow when the token expires.
-An ID token cannot replace an access token. Configure only one credential
-source: the client secret file or the access token file.
+| Limit | Default or setting | Effect on kubectl |
+| --- | --- | --- |
+| Access token | Realm or client Access Token Lifespan; upstream default is 5 minutes | The helper refreshes it when needed. |
+| CLI cached login | 30 days after device approval | The helper starts device login again after this deadline. |
+| Client offline idle timeout | Provider sets 30 days | The session can expire if no refresh occurs within this period. |
+| Client offline maximum | Provider sets 30 days | Keycloak applies this limit when the realm enables Offline Session Max Limited. |
+| Realm offline limits and revocation | Platform settings | Shorter realm limits or revoked offline access can end the login sooner. |
+
+The realm must permit `offline_access`, and the user must have the standard
+realm `offline_access` role. Provider Datalab adds the built-in offline scope
+to the client's optional scopes. Keycloak normally grants its role through
+the realm's default roles. Ordinary SSO Session Idle/Max limits do not govern
+an offline session. Check **Realm settings > Sessions** and
+**Clients > s-joe > Advanced** for the deployed offline limits. The device
+code has a separate approval timeout.
+
+An existing cache from a login without `offline_access` is not reused for the
+new scope set. Download a current kubeconfig and approve device login once.
+The new cache then supports automatic refresh for the CLI login period.
+See [Keycloak offline access](https://www.keycloak.org/docs/latest/server_admin/index.html#_offline-access)
+and [login lifetime](authentication.md#login-lifetime).
+
+> [!NOTE]
+> On Keycloak versions older than 26.8.1, device login token refresh is unreliable; use `--force-login` to start a new device login when refresh fails.
 
 ### Delegated access
 
-Before you give access to an agent or another caller, use
-[token exchange](authentication.md#user-token-exchange) to request the profile's
-scope. For example, `s-joe:vclusters_vc0_namespace-demo` selects the configured
-`namespace-demo` profile of `vc0`. Check that the returned token contains
-`vcluster_vc0_namespace-demo` and omits administrator and unrelated roles.
+This case uses an access token issued for a human user and passed to another
+caller. The recipient needs the selected kubeconfig and token, with no client
+secret or browser login.
 
-Give the caller that token through a private file and the downloaded profile.
-The caller sets `DATALAB_ACCESS_TOKEN_FILE` and uses the kubeconfig as shown
-above. Keep the client secret with the user or service that performs exchange.
-The helper uses the supplied JWT access token directly and sets
-`ExecCredential.expirationTimestamp` from its `exp` claim. The API validates
-the token. When it expires, supply a new token through the same exchange
-process.
+#### 1. Obtain a token for the selected profile
+
+The user or platform service performs
+[token exchange](authentication.md#user-token-exchange) with the user's access
+token as `subject_token`. For the example profile, request:
+
+```text
+scope=s-joe:vclusters_vc0_namespace-demo
+audience=s-joe
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+```
+
+The OAuth scope is `s-joe:vclusters_vc0_namespace-demo`; the corresponding
+Keycloak client role is `vcluster_vc0_namespace-demo`. Exchange can select
+only a role the user holds. Before passing on the result, the issuing service
+must check that `resource_access.s-joe.roles` contains that role and omits
+administrator and unrelated profile roles. `ws_api` can also be present.
+The token keeps the human user's subject. Selecting a kubeconfig alone does
+not restrict a token with wider permissions.
+
+Give the recipient the returned JWT access token through a private file.
+Keep the client secret, original user token, and refresh token with the user
+or service that performs exchange. An ID token cannot replace this access
+token.
+
+#### 2. Download the selected profile
+
+Using the host context from the download setup, select `namespace-demo`:
+
+```bash
+read -r profile_namespace profile_secret < <(
+  kubectl --context "${host_context}" -n workspace get datalab s-joe -o json | \
+    jq -er '.status.connections[] |
+      select(.type == "vcluster" and .instance == "vc0" and
+             .group == "namespace-demo" and .ready == true) |
+      .secretRef | [.namespace, .name] | @tsv'
+)
+kubectl --context "${host_context}" -n "${profile_namespace}" \
+  get secret "${profile_secret}" -o jsonpath='{.data.kubeconfig}' | \
+  base64 --decode > s-joe-vcluster-vc0_namespace-demo.kubeconfig
+```
+
+The platform operator can supply this file if the recipient has no host
+access. The profile uses `--token-only`: it cannot start device login or make
+refresh requests.
+
+#### 3. Set the token file and run kubectl
+
+Save the received access token as
+`~/.config/datalab/s-joe-vc0-namespace-demo.token`. The file must contain only
+the JWT, without a JSON wrapper or `Bearer ` prefix. Then run:
+
+```bash
+unset DATALAB_CLIENT_SECRET_FILE
+export DATALAB_ACCESS_TOKEN_FILE="$HOME/.config/datalab/s-joe-vc0-namespace-demo.token"
+chmod 600 "$DATALAB_ACCESS_TOKEN_FILE"
+kubectl --kubeconfig ./s-joe-vcluster-vc0_namespace-demo.kubeconfig -n demo get pods
+kubectl --kubeconfig ./s-joe-vcluster-vc0_namespace-demo.kubeconfig -n demo \
+  auth can-i create deployments
+kubectl --kubeconfig ./s-joe-vcluster-vc0_namespace-demo.kubeconfig \
+  auth can-i create namespaces
+```
+
+The example `edit` profile permits Deployment creation in `demo`; namespace
+creation is denied. `DATALAB_ACCESS_TOKEN_FILE` contains a file path, not the
+token value. The helper reads that file and returns the token to kubectl.
+It makes no login or refresh request and does not use the device-login cache.
+
+#### Delegated token lifetime and revocation
+
+The received token's `exp` claim is its expiry time. The exchange response's
+`expires_in` reports its remaining lifetime when issued. Do not assume a
+fixed duration or that exchange starts a new full session. The helper sets
+`ExecCredential.expirationTimestamp` from `exp`. When the token expires, ask
+the issuing user or service for a new exchange result and replace the token
+file. The recipient has no refresh token to renew it.
+
+To display the expiry in UTC without printing the token, run:
+
+```bash
+python3 - "$DATALAB_ACCESS_TOKEN_FILE" <<'PY'
+import base64
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+import sys
+
+payload = Path(sys.argv[1]).read_text().strip().split('.')[1]
+claims = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
+print(datetime.fromtimestamp(claims['exp'], timezone.utc).isoformat())
+PY
+```
+
+This command reads the expiry claim; the virtual API verifies the signature
+and decides whether to accept the token.
+
+The virtual API validates JWTs locally. It does not ask Keycloak whether each
+token has been revoked. Removing a user's Keycloak role, ending the login
+session, rotating the client secret, or deleting a local token file does not
+reliably invalidate copies of an already issued JWT at this API. Keycloak
+also documents that revoking the original access token does not revoke an
+exchanged access token. See [token exchange revocation](https://www.keycloak.org/securing-apps/token-exchange#_revocation).
+
+Without an API authorization change, expect an issued token to remain usable
+until `exp`. To deny access sooner, the platform operator can remove the
+affected configured profile or its Kubernetes RBAC binding. This removes
+access for all callers that depend on that role or binding, not just one
+token. Apply changes through the source configuration and allow for
+reconciliation. This setup has no individual JWT revocation list. The same
+limit applies to access tokens cached after human device login. Revoke its
+offline session in Keycloak to stop further CLI refresh. Ordinary browser
+logout does not revoke offline access. Neither action erases issued JWTs.
+
+| Action | Human device login | Delegated access token |
+| --- | --- | --- |
+| Access token expires | Helper attempts refresh with the client secret. | Recipient must obtain a new token. |
+| Offline session expires or is revoked | Refresh stops; a new device login is needed. | An issued token can remain usable until `exp`. |
+| Keycloak role assignment is removed | New tokens lose the role; issued tokens can retain it. | An issued token can retain the role until `exp`. |
+| Configured profile or required RBAC binding is removed | Access is denied after the API configuration or binding changes. | The same denial applies to the delegated token. |
 
 ### Machine access
 

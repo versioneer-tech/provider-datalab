@@ -172,7 +172,7 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertTrue(device_url.endswith("/auth/device"))
         self.assertEqual(authorization, {
             "client_id": ["s-joe"], "client_secret": ["separate-client-secret"],
-            "scope": ["openid s-joe:interactive"],
+            "scope": ["offline_access openid s-joe:interactive"],
         })
         for _, request in self.requests[1:]:
             self.assertEqual(request["grant_type"], ["urn:ietf:params:oauth:grant-type:device_code"])
@@ -213,6 +213,51 @@ class VclusterCredentialTests(unittest.TestCase):
             ), args)
             self.assertEqual(code, 0, error)
             self.assertIsNone(json.loads(next(Path(directory).glob("*.json")).read_text())["refresh_token"])
+
+    def test_cli_login_refreshes_after_online_session_limits_and_ends_after_thirty_days(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
+            args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
+            started = self.now
+            code, _, error = self.run_helper(files, self.response(self.device(), {
+                "access_token": self.access_token(), "expires_in": 300, "refresh_token": "offline-refresh",
+            }), args)
+            self.assertEqual(code, 0, error)
+            self.now = started + 29 * 24 * 60 * 60
+            code, _, error = self.run_helper(files, self.response({
+                "access_token": self.access_token(), "expires_in": 300, "refresh_token": "rotated-offline-refresh",
+            }), args)
+            self.assertEqual(code, 0, error)
+            self.assertEqual(error, "")
+            self.assertEqual(self.requests[-1][1]["grant_type"], ["refresh_token"])
+            cached = json.loads(next(Path(directory).glob("*.json")).read_text())
+            self.assertEqual(cached["session_expires_at"], started + 1 + 30 * 24 * 60 * 60)
+            self.now = started + 31 * 24 * 60 * 60
+            code, _, error = self.run_helper(files, self.response(self.device(), {
+                "access_token": self.access_token(), "expires_in": 300, "refresh_token": "new-offline-refresh",
+            }), args)
+            self.assertEqual(code, 0, error)
+            self.assertIn("TEST-CODE", error)
+            self.assertTrue(self.requests[-2][0].endswith('/auth/device'))
+
+    def test_refresh_policy_error_does_not_start_device_login_or_change_scopes(self):
+        with TemporaryDirectory(prefix="xyz-") as directory:
+            files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
+            args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
+            self.run_helper(files, self.response(self.device(), {
+                "access_token": self.access_token(), "expires_in": 300, "refresh_token": "offline-refresh",
+            }), args)
+            self.now += 400
+            requests_before = len(self.requests)
+            code, output, error = self.run_helper(files, self.response({
+                "error": "invalid_request", "error_description": "Request not allowed",
+            }), args)
+            self.assertEqual(code, 1)
+            self.assertEqual(output, "")
+            self.assertIn("client policies", error)
+            self.assertEqual(len(self.requests), requests_before + 1)
+            self.assertEqual(self.requests[-1][1]["grant_type"], ["refresh_token"])
+            self.assertNotIn("scope", self.requests[-1][1])
 
     def test_device_denial_expiry_and_bad_client_return_no_credentials(self):
         for responses in (

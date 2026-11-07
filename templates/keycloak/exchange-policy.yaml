@@ -17,6 +17,7 @@ spec:
         resolution: Required
         resolve: Always
     condition:
+    # Keycloak must evaluate this condition on token response events too.
     - name: grant-type
       configuration:
         grant_types: '["urn:ietf:params:oauth:grant-type:token-exchange"]'

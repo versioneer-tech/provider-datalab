@@ -79,6 +79,8 @@ mappings, and client policies in the target realm.
 
 Use Keycloak 26.2 or later. Configure identity scopes, client policies, and
 browser sign-in as described in [Authentication](authentication.md).
+The realm must permit the built-in `offline_access` scope and user role for
+[CLI device login](vcluster.md#human-access).
 
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration

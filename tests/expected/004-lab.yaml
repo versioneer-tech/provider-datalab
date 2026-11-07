@@ -45,7 +45,10 @@ spec:
   forProvider:
     accessType: CONFIDENTIAL
     adminUrl: https://s-john.lab.acme.com
+    allowRefreshTokenInStandardTokenExchange: 'NO'
     clientId: s-john
+    clientOfflineSessionIdleTimeout: '2592000'
+    clientOfflineSessionMaxLifespan: '2592000'
     directAccessGrantsEnabled: false
     fullScopeAllowed: false
     implicitFlowEnabled: false
@@ -382,6 +385,7 @@ spec:
         resolution: Required
     optionalScopes:
     - s-john:interactive
+    - offline_access
     realmId: acme
   providerConfigRef:
     kind: ProviderConfig

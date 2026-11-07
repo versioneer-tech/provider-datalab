@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 
 from render import arguments, environment, render
+from keycloak_policy import verify_keycloak_policy
 
 
 def main():
@@ -47,7 +48,10 @@ def main():
               for body in initial.values() if body.get("kind") == "ClientScope"}
     assert set(scopes.values()) == {"s-joe:interactive", "s-joe:vclusters_vc0_namespace-demo"}
     assert all(item["includeInTokenScope"] for item in params(initial, "ClientScope"))
-    assert set(params(initial, "ClientOptionalScopes")[0]["optionalScopes"]) == set(scopes.values())
+    assert set(params(initial, "ClientOptionalScopes")[0]["optionalScopes"]) == set(scopes.values()) | {"offline_access"}
+    assert client["clientOfflineSessionIdleTimeout"] == "2592000"
+    assert client["clientOfflineSessionMaxLifespan"] == "2592000"
+    assert client["allowRefreshTokenInStandardTokenExchange"] == "NO"
     dedicated = [item for item in params(initial, "RoleMapper") if "clientIdRef" in item]
     assert len(dedicated) == 1 and roles[dedicated[0]["roleIdRef"]["name"]] == "ws_api"
     optional = {}
@@ -143,16 +147,17 @@ def main():
     old_keys = {key for key, body in initial.items() if body["kind"] in {"ClientScope", "RoleMapper", "ProtocolMapper"}
                 and "namespace-demo" in json.dumps(body)}
     assert old_keys and old_keys.isdisjoint(changed)
-    assert set(params(changed, "ClientOptionalScopes")[0]["optionalScopes"]) == {"s-joe:interactive", "s-joe:vclusters_vc0_renamed"}
+    assert set(params(changed, "ClientOptionalScopes")[0]["optionalScopes"]) == {"s-joe:interactive", "s-joe:vclusters_vc0_renamed", "offline_access"}
     assert not params(changed, "Client")[0]["standardTokenExchangeEnabled"]
     empty = deepcopy(source)
     empty["spec"]["vclusters"] = {"vc1": {"groups": [{"name": "cluster-admin", "namespace": "*", "role": "cluster-admin"}]}}
     removed = render(args, env, empty, observed)
-    assert set(params(removed, "ClientOptionalScopes")[0]["optionalScopes"]) == {"s-joe:interactive"}
+    assert set(params(removed, "ClientOptionalScopes")[0]["optionalScopes"]) == {"s-joe:interactive", "offline_access"}
     assert old_keys.isdisjoint(removed)
     assert grants(removed, "s-joe") == {"ws_access", "ws_api"}
     assert grants(removed, "s-joe-admin") == {"ws_admin", "ws_api", "vcluster_vc1_cluster-admin"}
     print("PASS profile rename and instance deletion remove managed scopes, associations, mappings, and group grants")
+    verify_keycloak_policy(initial)
 
 
 if __name__ == "__main__":

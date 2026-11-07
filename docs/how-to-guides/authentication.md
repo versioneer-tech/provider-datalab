@@ -76,7 +76,7 @@ requested roles. Configure those claims on the separate login client.
 
 The provider enables Device Authorization Grant on the existing confidential
 client. The built-in `cluster-admin` kubeconfig helper uses this flow with a
-separate client secret. It requests `openid <datalab>:interactive`,
+separate client secret. It requests `openid offline_access <datalab>:interactive`,
 prints a verification URL and user code to stderr, and waits for the user to
 approve the login in a browser. No localhost callback is needed.
 
@@ -99,13 +99,10 @@ Keycloak sets these lifetimes; the helper uses the issued expiry values.
 | --- | --- |
 | Time to approve a device code | Realm `oauth2DeviceCodeLifespan` |
 | Access token validity | Access Token Lifespan |
-| Refresh session validity | SSO Session Idle/Max and Client Session Idle/Max |
+| CLI offline session validity | Offline Session Idle/Max and Client Offline Session Idle/Max |
 
-Refresh extends the idle window within the maximum session duration. Access
-token and client session lifetimes can have per-client overrides. See
-[Keycloak timeouts](https://www.keycloak.org/docs/latest/server_admin/index.html#_timeouts).
-The provider leaves these settings with the platform. The helper requests
-no `offline_access`; an expired session requires device login again.
+For the CLI cache duration, offline session limits, and revocation, see
+[human login lifetime](vcluster.md#human-login-lifetime).
 
 ## User-token exchange
 

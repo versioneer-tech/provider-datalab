@@ -23,6 +23,9 @@ spec:
     serviceAccountsEnabled: true
     standardTokenExchangeEnabled: ${exchange_enabled}
     oauth2DeviceAuthorizationGrantEnabled: true
+    clientOfflineSessionIdleTimeout: '2592000'
+    clientOfflineSessionMaxLifespan: '2592000'
+    allowRefreshTokenInStandardTokenExchange: 'NO'
     webOrigins: ${redirect_uris}
     validRedirectUris: ${redirect_uris}
     realmId: ${realm}

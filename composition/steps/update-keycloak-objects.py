@@ -277,7 +277,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         *[(_vcluster_profile(xr_name, instance, "cluster-admin"),
            _vcluster_role(instance, "cluster-admin")) for instance in sorted(instances)],
     ])
-    optional_scopes = [interactive_scope]
+    optional_scopes = [interactive_scope, "offline_access"]
     for (instance, group), role in zip(additional_profiles, additional_roles):
         scope = f"{xr_name}:vclusters_{instance}_{group}"
         put_scope(scope, _resource_name(role, "scope"), [(role, _vcluster_role(instance, group))])
