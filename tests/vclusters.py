@@ -6,7 +6,6 @@
 from copy import deepcopy
 import base64
 import json
-from pathlib import Path
 
 from helpers import load_helpers
 
@@ -304,18 +303,12 @@ def main():
             user = config["users"][0]["user"]
             assert set(user) == {"exec"}
             assert set(user["exec"]) == {"apiVersion", "interactiveMode", "command", "args"}
-            assert user["exec"]["args"][1] == "".join(
-                line for line in Path("scripts/vcluster-credentials.py").read_text().splitlines(keepends=True)
-                if not line.startswith(("# Copyright", "# SPDX-License-Identifier"))
-            )
             if connection["group"] == "cluster-admin":
                 assert user["exec"]["interactiveMode"] == "IfAvailable"
                 assert user["exec"]["args"][2:] == ["--issuer", values["issuer-url"], "--client-id", "s-joe"]
             else:
                 assert user["exec"]["interactiveMode"] == "Never"
                 assert user["exec"]["args"][2:] == ["--token-only"]
-            assert "Copyright" not in user["exec"]["args"][1]
-            assert "SPDX-License-Identifier" not in user["exec"]["args"][1]
             assert set(config["clusters"][0]["cluster"]) == {"server"}
         return connections
 

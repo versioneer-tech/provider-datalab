@@ -17,7 +17,7 @@ def main():
     for item in observed:
         if item["metadata"]["name"] == "observe-runtime-storage-secret-s-joe":
             item["status"]["atProvider"]["manifest"]["data"]["aws-credentials"] = base64.b64encode(
-                b"[default]\naws_access_key_id = xyz\naws_secret_access_key = xyz\n"
+                b"[default]\naws_access_key_id = test-access-key\naws_secret_access_key = test-secret-key\n"
             ).decode()
     env = environment()
     env["metadata"]["name"] = "datalab-custom"
@@ -33,8 +33,8 @@ def main():
     }
     env["data"]["storageClasses"] = {"allowed": ["sbs-default", "sbs-default-retain"]}
     env["data"]["network"] = {"externalEgressCIDRs": ["0.0.0.0/0"]}
-    env["data"]["images"] = {"packageR": "xyz/package-r:custom", "registry": "xyz/registry:custom",
-                             "rclone": "xyz/rclone:custom", "oauth2Proxy": "xyz/oauth2-proxy:custom"}
+    env["data"]["images"] = {"packageR": "test-images/package-r:custom", "registry": "test-images/registry:custom",
+                             "rclone": "test-images/rclone:custom", "oauth2Proxy": "test-images/oauth2-proxy:custom"}
     source = {
         "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
         "metadata": {"name": "s-joe", "annotations": {"datalabs.pkg.internal/environment": "datalab-custom"}},

@@ -50,7 +50,9 @@ MLflow, and psql examples. Operator requirements are in the installation guide.
 
 ## Local checks
 
-Docker must be running for the render tests:
+Use the [CI check selection](tests/README.md#select-checks) for local changes.
+Documentation-only changes use the documentation checks. Code and runtime
+changes need the full suite below, with Docker running:
 
 ```bash
 python3 -m pip install -r scripts/requirements.txt

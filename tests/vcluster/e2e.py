@@ -540,7 +540,7 @@ def main():
         command = config["users"][0]["user"]["exec"]
         assert "env" not in command
         secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file())
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-") as directory:
             # Automated probes supply a token and do not start user login.
             value = token(LAB, secret_file.read_text().strip())
             token_file = Path(directory) / "access-token"

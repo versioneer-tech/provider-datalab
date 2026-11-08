@@ -3,6 +3,40 @@
 The suite checks composition output and local helpers. It uses Docker for
 `crossplane render` and function calls, and needs no Kubernetes cluster.
 
+## Select checks
+
+[GitHub Actions](../.github/workflows/pr.yaml) defines the required checks.
+Use the same classifier locally, against the target branch or pull request
+base commit:
+
+```bash
+python3 scripts/ci-checks.py --base origin/main
+```
+
+Without `--head`, this includes committed, staged, unstaged, and untracked
+changes. CI passes `--head` to compare two commits. Markdown files, files under
+`docs/`, and `mkdocs.yml` select `docs_only=true`. Other or mixed changes,
+empty comparisons, and unavailable base commits select `docs_only=false`.
+Manual CI runs select the full checks.
+
+Run the documentation checks below in both cases. When `docs_only=false`,
+also run the full unit suite and the applicable integration checks.
+
+## Documentation changes
+
+Install `docs/requirements.txt` and run:
+
+```bash
+python3 tests/ci-checks.py
+mkdocs build --strict --site-dir /tmp/provider-datalab-docs
+pre-commit run --all-files
+git diff --check
+```
+
+Check changed commands and links in the affected guides. Documentation-only
+changes do not need Docker, the full unit suite, a local Keycloak server, or
+Kind integration. Use the classifier above when the scope is unclear.
+
 ## Run the suite
 
 Docker must be running for render and function checks.
@@ -26,8 +60,8 @@ Actual renders are written to `/tmp`. Expected snapshots are tracked in
 `tests/expected/`.
 Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml`
 before updating its expected snapshot. Review each output change. Run the full
-unit suite after repository changes, including documentation changes. Build
-the docs after documentation changes.
+unit suite after code or runtime changes. Use the documentation checks above
+when only documentation changes.
 
 ## What the checks cover
 

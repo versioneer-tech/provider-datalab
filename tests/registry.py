@@ -85,7 +85,7 @@ def main():
         "nginx.ingress.kubernetes.io/proxy-body-size": "2g",
         "nginx.ingress.kubernetes.io/proxy-read-timeout": "7200",
         "nginx.ingress.kubernetes.io/proxy-request-buffering": "on",
-        "xyz.example/annotation": "custom",
+        "test.example/annotation": "custom",
     }
     ingress_resources = run(ingress_env)
     assert manifest(ingress_resources, "registry-ingress-s-joe")["spec"]["rules"][0]["http"]["paths"][0]["path"] == "/v2"

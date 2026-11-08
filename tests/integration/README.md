@@ -130,10 +130,13 @@ REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
 
 ## GitHub Actions
 
-Pull requests to `main`, pushes to `main`, and manual workflow runs execute the
-unit suite and all eight integration profiles. The profiles share one Kind
-cluster in the job. Tag publication does not run the tests again. A release tag
-must point to a commit that passed the main-branch workflow.
+Pull requests and pushes to `main` use the
+[shared classifier](../README.md#select-checks). Documentation-only changes run
+the documentation and static checks. Other changes and manual runs execute
+the unit suite and all eight integration profiles. The profiles share one
+Kind cluster in the job. The final required check waits for every selected
+job. Tag publication does not run the tests again. A release tag must point
+to a commit that passed the main-branch workflow.
 
 ## Cleanup
 

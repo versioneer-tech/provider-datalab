@@ -16,6 +16,13 @@ namespace. For those tasks, we let a user
 delegate part of their access through token exchange. The request selects an
 OAuth scope, and the new token keeps the user's identity with fewer roles.
 
+Device and standard flows inherit the realm's access-token lifespan. Device
+login requests offline access, so the helper can refresh these short-lived
+tokens for up to 30 days, subject to the realm's offline-session limits.
+Exchanged access tokens inherit the same realm lifespan and have no refresh
+token in the current setup. Options for longer delegated access are discussed
+in [ADR-004](0004-token-lifetime-for-delegated-access.md).
+
 Selecting one scope does not always exclude the user's other roles. Keycloak
 includes user-held roles owned by the requesting client, even with Full Scope
 Allowed off.

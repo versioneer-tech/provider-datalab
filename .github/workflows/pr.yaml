@@ -17,7 +17,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit_and_datalab_integration:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      docs_only: ${{ steps.checks.outputs.docs_only }}
+    steps:
+      - name: Checkout comparison history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Select checks
+        id: checks
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_REVISION: ${{ github.sha }}
+        run: |
+          if [[ "${EVENT_NAME}" == workflow_dispatch ]]; then
+            python3 scripts/ci-checks.py >> "${GITHUB_OUTPUT}"
+          else
+            python3 scripts/ci-checks.py --base "${BASE_REVISION}" --head "${HEAD_REVISION}" >> "${GITHUB_OUTPUT}"
+          fi
+
+  documentation:
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install documentation tools
+        run: python3 -m pip install -r docs/requirements.txt pre-commit
+
+      - name: Check test selection
+        run: python3 tests/ci-checks.py
+
+      - name: Build documentation
+        run: mkdocs build --strict --site-dir /tmp/provider-datalab-docs
+
+      - name: Check repository files
+        run: |
+          pre-commit run --all-files
+          git diff --check
+
+  runtime_checks:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
@@ -106,3 +165,20 @@ jobs:
       - name: Collect integration diagnostics
         if: failure()
         run: tests/integration/diagnostics.bash
+
+  unit_and_datalab_integration:
+    needs: [changes, documentation, runtime_checks]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Reject missing or failed checks
+        if: >-
+          needs.changes.result != 'success' ||
+          needs.documentation.result != 'success' ||
+          (needs.changes.outputs.docs_only != 'true' && needs.runtime_checks.result != 'success')
+        run: exit 1
+
+      - name: Required checks passed
+        run: echo 'Required checks passed.'

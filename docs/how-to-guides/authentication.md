@@ -98,11 +98,18 @@ Keycloak sets these lifetimes; the helper uses the issued expiry values.
 | Lifetime | Setting |
 | --- | --- |
 | Time to approve a device code | Realm `oauth2DeviceCodeLifespan` |
-| Access token validity | Access Token Lifespan |
+| Access token validity | Inherited realm Access Token Lifespan |
 | CLI offline session validity | Offline Session Idle/Max and Client Offline Session Idle/Max |
 
 For the CLI cache duration, offline session limits, and revocation, see
 [human login lifetime](vcluster.md#human-login-lifetime).
+
+Device and standard flows inherit the realm's access-token lifespan. The
+device helper requests offline access and can refresh tokens for up to 30 days,
+subject to realm limits. Exchanged access tokens inherit the same lifespan
+and have no refresh token in the current setup. See
+[ADR-004](../architecture/0004-token-lifetime-for-delegated-access.md) for options
+for longer delegated access.
 
 ## User-token exchange
 

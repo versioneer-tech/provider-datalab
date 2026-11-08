@@ -80,7 +80,7 @@ def read_cache(path):
 
 def save_cache(path, value):
     # Replace the file only after the complete token response is stored.
-    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix='.xyz-', delete=False) as output:
+    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix='.datalab-token-cache-', delete=False) as output:
         temporary = Path(output.name)
         try:
             os.chmod(temporary, 0o600)

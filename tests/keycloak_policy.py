@@ -85,7 +85,7 @@ def verify_keycloak_policy(resources, image=None):
         manifest = yaml.safe_load_all(Path('tests/integration/manifests/s3/keycloak.yaml').read_text())
         image = next(item['spec']['template']['spec']['containers'][0]['image']
                      for item in manifest if item and item.get('kind') == 'Deployment')
-    name = 'xyz-keycloak-' + uuid.uuid4().hex[:12]
+    name = 'test-keycloak-' + uuid.uuid4().hex[:12]
 
     def docker(*arguments):
         result = subprocess.run(['docker', *arguments], capture_output=True, text=True)
@@ -110,7 +110,7 @@ def verify_keycloak_policy(resources, image=None):
         value = token.split('.')[1]
         return json.loads(base64.urlsafe_b64decode(value + '=' * (-len(value) % 4)))
 
-    with tempfile.TemporaryDirectory(prefix='xyz-keycloak-') as directory:
+    with tempfile.TemporaryDirectory(prefix='test-keycloak-') as directory:
         work = Path(directory)
         work.chmod(0o755)
         source = work / 'realm.json'

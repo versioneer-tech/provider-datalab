@@ -109,7 +109,7 @@ class VclusterCredentialTests(unittest.TestCase):
                 raise AssertionError('Unexpected client secret prompt')
             return prompt() if callable(prompt) else prompt
 
-        with TemporaryDirectory(prefix="xyz-") as directory, \
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory, \
                 patch.object(sys, "argv", argv), \
                 patch.object(module["os"], "environ", {"DATALAB_TOKEN_CACHE_DIR": directory, **files}), \
                 patch.dict(module["main"].__globals__, {"urlopen": response, "getpass": secret_prompt}), \
@@ -143,7 +143,7 @@ class VclusterCredentialTests(unittest.TestCase):
 
     def test_device_login_uses_user_authorization_and_caches_private_tokens(self):
         value = self.access_token()
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             secret = Path(directory) / "client-secret"
             secret.write_text("separate-client-secret\n")
             cache = Path(directory) / "cache"
@@ -180,7 +180,7 @@ class VclusterCredentialTests(unittest.TestCase):
             self.assertEqual(request["client_secret"], ["separate-client-secret"])
 
     def test_expired_access_token_refreshes_without_device_login(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
             code, _, error = self.run_helper(files, self.response(self.device(), {
@@ -200,7 +200,7 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertEqual(self.requests[-1][1]["refresh_token"], ["old-refresh"])
 
     def test_rejected_refresh_starts_new_login_and_discards_old_refresh_token(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
             self.run_helper(files, self.response(self.device(), {
@@ -215,7 +215,7 @@ class VclusterCredentialTests(unittest.TestCase):
             self.assertIsNone(json.loads(next(Path(directory).glob("*.json")).read_text())["refresh_token"])
 
     def test_cli_login_refreshes_after_online_session_limits_and_ends_after_thirty_days(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
             started = self.now
@@ -241,7 +241,7 @@ class VclusterCredentialTests(unittest.TestCase):
             self.assertTrue(self.requests[-2][0].endswith('/auth/device'))
 
     def test_refresh_policy_error_does_not_start_device_login_or_change_scopes(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
             self.run_helper(files, self.response(self.device(), {
@@ -265,7 +265,7 @@ class VclusterCredentialTests(unittest.TestCase):
             [self.device(expires_in=3), {"error": "authorization_pending"}, {"error": "authorization_pending"}],
             [{"error": "invalid_client"}],
         ):
-            with self.subTest(responses=responses), TemporaryDirectory(prefix="xyz-") as directory:
+            with self.subTest(responses=responses), TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
                 code, output, _ = self.run_helper({
                     "DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory,
                 }, self.response(*responses), ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"])
@@ -274,7 +274,7 @@ class VclusterCredentialTests(unittest.TestCase):
                 self.assertEqual(list(Path(directory).glob("*.json")), [])
 
     def test_cache_is_separate_for_issuer_client_and_scopes_and_can_force_login(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             for extra in ([], ["--issuer", "https://other.example/realm"], ["--client-id", "s-other"],
                           ["--scope", "s-joe:vclusters_vc0_demo"], ["--force-login"]):
@@ -286,7 +286,7 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertEqual(len(self.requests), 10)
 
     def test_missing_secret_prompts_once_and_cached_token_needs_no_secret(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_TOKEN_CACHE_DIR": directory,
                      "KUBERNETES_EXEC_INFO": json.dumps({"spec": {"interactive": True}})}
             value = self.access_token()
@@ -306,7 +306,7 @@ class VclusterCredentialTests(unittest.TestCase):
             self.assertEqual(self.requests[0][1]["client_secret"], ["prompted-secret"])
 
     def test_refresh_prompts_when_the_secret_is_not_stored(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_TOKEN_CACHE_DIR": directory}
             code, _, error = self.run_helper(files, self.response(self.device(), {
                 "access_token": self.access_token(), "expires_in": 300, "refresh_token": "test-refresh",
@@ -343,7 +343,7 @@ class VclusterCredentialTests(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_corrupt_cache_starts_device_login(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             files = {"DATALAB_CLIENT_SECRET_VALUE": "test-secret", "DATALAB_TOKEN_CACHE_DIR": directory}
             args = ["--client-secret-env", "DATALAB_CLIENT_SECRET_VALUE"]
             response = lambda: self.response(self.device(), {"access_token": self.access_token(), "expires_in": 300})
@@ -390,37 +390,23 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
         self.assertEqual(output, "")
         self.assertIn("DATALAB_ACCESS_TOKEN_FILE", error)
 
-    def test_human_token_is_used_without_an_identity_exchange(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+    def test_delegated_token_sources_need_no_client_credentials(self):
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             token = Path(directory) / "access-token"
             value = self.access_token()
             token.write_text(value + "\n")
-            code, output, _ = self.run_helper({"DATALAB_ACCESS_TOKEN_FILE": str(token)})
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(output)["status"], {
-            "token": value, "expirationTimestamp": "2030-01-01T00:00:00Z",
-        })
-
-    def test_delegated_token_needs_no_client_credentials(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
-            token = Path(directory) / "access-token"
-            value = self.access_token()
-            token.write_text(value + "\n")
-            code, output, _ = self.run_helper({}, ["--access-token-file", str(token)])
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(output)["status"]["token"], value)
-
-    def test_token_only_ignores_ambient_client_credentials(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
-            token = Path(directory) / "access-token"
-            value = self.access_token()
-            token.write_text(value)
-            code, output, _ = self.run_helper({
-                "DATALAB_ACCESS_TOKEN_FILE": str(token),
-                "DATALAB_CLIENT_SECRET_FILE": "/unused/client-secret",
-            })
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(output)["status"]["token"], value)
+            for files, args in (
+                ({"DATALAB_ACCESS_TOKEN_FILE": str(token)}, []),
+                ({}, ["--access-token-file", str(token)]),
+                ({"DATALAB_ACCESS_TOKEN_FILE": str(token),
+                  "DATALAB_CLIENT_SECRET_FILE": "/unused/client-secret"}, []),
+            ):
+                with self.subTest(files=files, args=args):
+                    code, output, error = self.run_helper(files, args)
+                    self.assertEqual(code, 0, error)
+                    self.assertEqual(json.loads(output)["status"], {
+                        "token": value, "expirationTimestamp": "2030-01-01T00:00:00Z",
+                    })
 
     def test_client_secret_cannot_replace_a_caller_token(self):
         code, output, _ = self.run_helper({"DATALAB_CLIENT_SECRET_FILE": "/unused/client-secret"})
@@ -428,7 +414,7 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
         self.assertEqual(output, "")
 
     def test_empty_or_missing_token_files_fail_without_a_credential(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             empty = Path(directory) / "empty"
             empty.write_text("")
             for token in (empty, Path(directory) / "missing"):
@@ -438,7 +424,7 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
                     self.assertEqual(output, "")
 
     def test_invalid_token_expiry_fails_without_a_credential(self):
-        with TemporaryDirectory(prefix="xyz-") as directory:
+        with TemporaryDirectory(prefix="test-vcluster-credentials-") as directory:
             token = Path(directory) / "access-token"
             for value in ("invalid", "header.e30.signature", self.access_token("invalid")):
                 with self.subTest(value=value):
