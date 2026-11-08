@@ -14,6 +14,8 @@ jobs:
   verify_release_commit:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      release_branch: ${{ steps.tests.outputs.release_branch }}
     permissions:
       actions: read
       contents: read
@@ -21,32 +23,39 @@ jobs:
       - name: Checkout release commit
         uses: actions/checkout@v7
 
-      - name: Verify successful main-branch tests
+      - name: Verify successful release-branch tests
+        id: tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           release_commit="$(git rev-parse HEAD)"
-          workflow_runs="$(
-            curl --fail --silent --show-error --location --get \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              --data-urlencode "branch=main" \
-              --data-urlencode "event=push" \
-              --data-urlencode "head_sha=${release_commit}" \
-              --data-urlencode "status=success" \
-              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/pr.yaml/runs"
-          )"
+          for release_branch in main legacy; do
+            workflow_runs="$(
+              curl --fail --silent --show-error --location --get \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                --data-urlencode "branch=${release_branch}" \
+                --data-urlencode "event=push" \
+                --data-urlencode "head_sha=${release_commit}" \
+                --data-urlencode "status=success" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/pr.yaml/runs"
+            )"
 
-          if ! jq -e --arg commit "${release_commit}" \
-            '.workflow_runs | any(.head_sha == $commit and .conclusion == "success")' \
-            <<<"${workflow_runs}" >/dev/null; then
-            printf 'Release commit %s has no successful main-branch Tests workflow run.\n' \
-              "${release_commit}" >&2
-            exit 1
-          fi
+            if jq -e --arg commit "${release_commit}" --arg branch "${release_branch}" \
+              '.workflow_runs | any(.head_sha == $commit and .head_branch == $branch
+                and .event == "push" and .conclusion == "success")' \
+              <<<"${workflow_runs}" >/dev/null; then
+              printf 'release_branch=%s\n' "${release_branch}" >>"${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          done
+
+          printf 'Release commit %s has no successful main or legacy push Tests workflow run.\n' \
+            "${release_commit}" >&2
+          exit 1
 
   build_and_publish_configuration_packages:
     runs-on: ubuntu-24.04
@@ -108,7 +117,7 @@ jobs:
   build_docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    needs: build_and_publish_configuration_packages
+    needs: [verify_release_commit, build_and_publish_configuration_packages]
     permissions:
       contents: write
     steps:
@@ -163,11 +172,12 @@ jobs:
       - name: Publish docs to GitHub Pages (gh-pages via mike)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ needs.verify_release_commit.outputs.release_branch }}
         run: |
           set -euo pipefail
           git fetch origin gh-pages --depth=1 || true
           TAG="${GITHUB_REF_NAME##*/}"
-          if [[ "${TAG}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${RELEASE_BRANCH}" == main && "${TAG}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             mike deploy -b gh-pages "${TAG}" latest --update-alias --push
             mike set-default -b gh-pages latest --push
           else

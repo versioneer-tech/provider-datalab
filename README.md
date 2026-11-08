@@ -9,6 +9,9 @@ container registries, databases, and browser workspaces for a team.
 Declare users and services in a `Datalab`; Crossplane creates them from the
 platform's access, network, and storage settings.
 
+> [!NOTE]
+> The `main` branch is preparing v1, planned for the end of 2026 with `apiVersion: datalab.versioneer.at/v1`; follow `legacy` for the latest `0.12.x` releases, the last series with direct Educates support and limited to `pkg.internal/v1beta2`.
+
 ```yaml
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
