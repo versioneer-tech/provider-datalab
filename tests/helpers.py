@@ -446,6 +446,19 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
+    def test_registry_bucket_has_storage_credentials(self):
+        manifests = ROOT / "tests/integration/manifests"
+        datalab = yaml.safe_load((manifests / "registry/datalab.yaml").read_text())
+        bucket = yaml.safe_load((manifests / "registry/bucket.yaml").read_text())
+        secrets = {
+            (item["metadata"]["namespace"], item["metadata"]["name"])
+            for item in yaml.safe_load_all((manifests / "storage-secrets.yaml").read_text())
+            if item["kind"] == "Secret"
+        }
+        secret_name = bucket["spec"]["containers"][0]["envFrom"][0]["secretRef"]["name"]
+        self.assertEqual(secret_name, datalab["metadata"]["name"])
+        self.assertIn((datalab["metadata"]["namespace"], secret_name), secrets)
+
     def test_ttl_override_cannot_replace_deployment_artifact(self):
         artifact = ROOT / "composition.yaml"
         original = artifact.read_bytes()
