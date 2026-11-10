@@ -13,12 +13,12 @@ from render import arguments, environment, render
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}}
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["storage"] = {"endpoint": "https://s3.acme.com", "region": "acme"}
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "test-storage", "namespace": "workspace"},
-        "spec": {"sessions": []},
+        "spec": {},
     }
     observer = {
         "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",

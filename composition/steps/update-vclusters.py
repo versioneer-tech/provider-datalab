@@ -8,9 +8,7 @@ import json
 import re
 from crossplane.function import request, response
 from composition.helpers import (
-    _extract_manifest,
     _resource_name,
-    _runtime_namespace,
     _to_dict,
     _vcluster_groups,
     _vcluster_role,
@@ -50,13 +48,23 @@ def _secret_mappings(connections, bindings):
 def compose(req, rsp):
     xr = _to_dict(req.observed.composite.resource)
     instances = (xr.get("spec") or {}).get("vclusters") or {}
+    sessions = (xr.get("spec") or {}).get("sessions") or []
+    if any(session["vcluster"] not in instances for session in sessions):
+        response.fatal(rsp, "Each session must select a declared virtual cluster.")
+        return
+    status = _to_dict(rsp.desired.composite.resource).get("status") or {}
+    status["sessions"] = [
+        {"name": session["name"], "vcluster": session["vcluster"],
+         "namespace": session.get("namespace", "default"),
+         "pvcName": _resource_name("session", session["name"])}
+        for session in sessions
+    ]
+    rsp.desired.composite.resource.update({"status": status})
     if not instances:
         return
     meta = xr["metadata"]
     name = meta["name"]
-    namespace = _runtime_namespace(req, name)
-    if not namespace:
-        return
+    namespace = name
     for instance, instance_config in sorted(instances.items()):
         _compose_instance(
             req,
@@ -91,6 +99,7 @@ def _compose_instance(
         "prefix": f"/.{instance}",
     }
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
+    images = env.get("images") or {}
     config = env.get("vcluster") or {}
     secret_mappings = _secret_mappings(
         (_to_dict(rsp.desired.composite.resource).get("status") or {}).get("connections") or [],
@@ -163,7 +172,7 @@ def _compose_instance(
                 **template_values,
             )
         )
-        rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.pkg.internal/vcluster": instance}
+        rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.versioneer.at/vcluster": instance}
 
     emit(
         "authentication",
@@ -175,18 +184,15 @@ def _compose_instance(
             **template_values,
         ),
     )
-    environment_manifest = (
-        _to_dict(rsp.desired.resources[f"workshop-{name}"].resource)
-        .get("spec", {})
-        .get("forProvider", {})
-        .get("manifest", {})
-    )
-    environment_objects = (
-        (environment_manifest.get("spec") or {}).get("environment") or {}
-    ).get("objects") or []
     workload_egress = [
         rule
-        for policy in environment_objects
+        for key in sorted(rsp.desired.resources)
+        for policy in [
+            _to_dict(rsp.desired.resources[key].resource)
+            .get("spec", {})
+            .get("forProvider", {})
+            .get("manifest", {})
+        ]
         if policy.get("kind") == "NetworkPolicy"
         and policy.get("metadata", {}).get("name")
         in ("allow-external-egress", "allow-internal-egress")
@@ -281,6 +287,16 @@ def _compose_instance(
         "enabled": bool(secret_mappings),
         "mappings": {"byName": secret_mappings},
     }
+    sandbox_manifests = _render_template(
+        req, "vcluster/sandbox-install"
+    )["manifests"]
+    sandbox_controller = _render_template(
+        req, "vcluster/sandbox-controller",
+        controller_image=images.get("sandbox") or "registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10",
+    )
+    configuration["experimental"]["deploy"]["vcluster"]["manifests"] = (
+        sandbox_manifests + "---\n" + json.dumps(sandbox_controller, sort_keys=True)
+    )
     configuration_json = json.dumps(configuration, sort_keys=True)
     checksum = hashlib.sha256(
         (configuration_json + authentication).encode()
@@ -333,12 +349,6 @@ def _compose_instance(
             "headless-service",
             _render_template(
                 req, "vcluster/headless-service", namespace=namespace, **template_values
-            ),
-        ),
-        (
-            "limitrange",
-            _render_template(
-                req, "vcluster/limitrange", namespace=namespace, **template_values
             ),
         ),
         (
@@ -421,7 +431,7 @@ def _compose_instance(
         ),
     )
 
-    def virtual(suffix, manifest, preserve=False):
+    def virtual(suffix, manifest, preserve=False, readiness=None):
         key = _resource_name("vcluster", name, instance, "access", suffix)
         body = _render_template(
             req,
@@ -434,10 +444,52 @@ def _compose_instance(
         )
         if preserve:
             body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
+        if readiness:
+            body["spec"]["readiness"] = readiness
         body["metadata"].setdefault("labels", {})[
-            "datalabs.pkg.internal/vcluster"
+            "datalabs.versioneer.at/vcluster"
         ] = instance
         rsp.desired.resources[key].resource.update(body)
+
+    virtual(
+        "sandbox-controller",
+        {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {
+            "name": "agent-sandbox-controller", "namespace": "agent-sandbox-system",
+        }},
+        readiness={
+            "policy": "DeriveFromCelQuery",
+            "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1",
+        },
+    )
+    controller_key = _resource_name("vcluster", name, instance, "access", "sandbox-controller")
+    rsp.desired.resources[controller_key].resource["spec"]["managementPolicies"] = ["Observe"]
+
+    sessions = [
+        session for session in (_to_dict(req.observed.composite.resource).get("spec") or {}).get("sessions", [])
+        if session["vcluster"] == instance
+    ]
+    targets = {"default", *(group["namespace"] for group in groups if group["namespace"] != "*"),
+               *(session.get("namespace", "default") for session in sessions)}
+    sandbox_image = images.get("sandboxd") or (
+        "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd"
+        ":v20261108-v1.0.10-23-g653e16f"
+    )
+    for target in sorted(targets):
+        virtual(
+            f"sandbox-template-{target}",
+            _render_template(req, "vcluster/sandbox-template", target=target, sandbox_image=sandbox_image),
+        )
+    for session in sessions:
+        target = session.get("namespace", "default")
+        virtual(
+            f"session-{session['name']}",
+            _render_template(
+                req, "vcluster/session-pvc", target=target,
+                pvc_name=_resource_name("session", session["name"]),
+                storage=session.get("pvcSize") or (env.get("defaults") or {}).get("session", {}).get("pvcSize") or "1Gi",
+                storage_class=default_class,
+            ),
+        )
 
     for storage_name in storage_classes:
         suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
@@ -491,7 +543,7 @@ def _compose_instance(
                 **fields,
             },
         )
-    for target in sorted({group["namespace"] for group in groups} - {"*"}):
+    for target in sorted(targets - {"default"}):
         virtual(
             f"namespace-{target}",
             _render_template(

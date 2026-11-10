@@ -12,8 +12,9 @@ from keycloak_policy import verify_keycloak_policy
 
 def main():
     args, env = arguments(), environment()
+    env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "workspace"},
         "spec": {"users": ["joe", "jane", "john"], "userOverrides": {"john": {"role": "admin"}},
                  "vclusters": {"vc0": {"groups": [{"name": "namespace-demo", "namespace": "demo", "role": "edit"}]},
@@ -69,7 +70,8 @@ def main():
     assert conditions["client-scopes"]["type"] == "Any"
     assert json.loads(conditions["client-scopes"]["scopes"]) == ["s-joe:interactive"]
     assert params(initial, "ClientPolicyProfile")[0]["executor"] == [{"name": "reject-request"}]
-    usages = [body["spec"] for body in initial.values() if body.get("kind") == "Usage"]
+    usages = [body["spec"] for body in initial.values() if body.get("kind") == "Usage"
+              and body["spec"]["by"]["kind"] == "ClientPolicyProfilePolicy"]
     assert {item["of"]["kind"] for item in usages} == {"ClientScope", "ClientPolicyProfile"}
     assert all(item["replayDeletion"] and item["by"]["kind"] == "ClientPolicyProfilePolicy"
                and item["by"]["resourceRef"]["name"] == policy["name"] for item in usages)
@@ -137,7 +139,8 @@ def main():
     next(body for body in pending if body["kind"] == "ClientPolicyProfilePolicy")["status"]["conditions"][0]["status"] = "False"
     assert not params(render(args, env, source, pending), "Client")[0]["standardTokenExchangeEnabled"]
     pending_usage = deepcopy(observed)
-    next(body for body in pending_usage if body["kind"] == "Usage")["status"]["conditions"][0]["status"] = "False"
+    next(body for body in pending_usage if body["kind"] == "Usage"
+         and body["spec"]["by"]["kind"] == "ClientPolicyProfilePolicy")["status"]["conditions"][0]["status"] = "False"
     assert not params(render(args, env, source, pending_usage), "Client")[0]["standardTokenExchangeEnabled"]
     print("PASS exchange waits for reconciled restrictions and removal of old broad mappings")
 

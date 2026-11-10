@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-joe
@@ -10,9 +10,232 @@ spec:
   users:
   - joe
 status:
-  connections: []
+  connections:
+  - endpoint: http://registry.s-joe.svc:5000/v2/
+    name: primary
+    ready: false
+    secretRef:
+      name: s-joe-registry-primary-connection-4e6791f3a1
+      namespace: default
+    type: registry
   oauth2: []
   sessions: []
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-0ef1b12c7a3f-s-joe-namespace-s-joe-lim-8824ad2ad4
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: limitrange-s-joe
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-14759054fd18-s-joe-namespace-s-joe-net-551cc31e21
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-internal-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-1f5dd464b26f-s-joe-namespace-s-joe-res-14558d3c5a
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: resourcequota-s-joe-overall-storage
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-33f50eaef1ed-s-joe-namespace-s-joe-net-f7a0f5f1ef
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-deny-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-6f9cb380ad34-s-joe-namespace-s-joe-obs-89aba04afd
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-runtime-storage-secret-s-joe
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b429a8b8c8ec-s-joe-namespace-s-joe-net-c8da8170ae
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-external-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-d48fd99fa814-s-joe-namespace-s-joe-net-dac138c854
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-namespace-ingress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-d7ee09379424-s-joe-namespace-s-joe-obs-fc0fec1ccd
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-registry-auth-secret-s-joe
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-dd91ea73c84d-s-joe-namespace-s-joe-net-0022c541e1
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-deny-ingress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-fa3ced2efbed-s-joe-namespace-s-joe-net-0b936f86c4
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-namespace-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-fba0e1c76f39-s-joe-namespace-s-joe-reg-2c4d47cc6d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: registry-auth-secret-s-joe
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-ffa9b12c8cf1-s-joe-namespace-s-joe-net-459783fda9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-joe-allow-dns-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-joe
+  replayDeletion: true
 ---
 apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
 kind: Client
@@ -42,11 +265,10 @@ spec:
     standardFlowEnabled: true
     standardTokenExchangeEnabled: false
     validRedirectUris:
-    - https://s-joe.lab.acme.com/*
-    - http://localhost:*
+    - https://s-joe.lab.acme.com/oauth2/callback
+    - http://localhost:8080/callback
     webOrigins:
-    - https://s-joe.lab.acme.com/*
-    - http://localhost:*
+    - https://s-joe.lab.acme.com
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -631,6 +853,328 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-2a7ccf8ae77a-s-joe-keycloak-role-user-87129e68c7
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-access
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-9fde38ddeaf8-s-joe-keycloak-role-api-4cd2fe0249
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-joe-ws-api
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-e8526acc777c-s-joe-keycloak-group-s-j-69dd3f8c34
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-joe
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-joe
+  replayDeletion: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: limitrange-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: datalab-limits
+        namespace: s-joe
+      spec:
+        limits:
+        - default:
+            cpu: '1'
+            ephemeral-storage: 8Gi
+            memory: 512Mi
+          defaultRequest:
+            cpu: 100m
+            ephemeral-storage: 3Gi
+            memory: 128Mi
+          type: Container
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: namespace-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        labels:
+          datalabs.versioneer.at/name: s-joe
+          datalabs.versioneer.at/namespace: default
+          pod-security.kubernetes.io/enforce: baseline
+        name: s-joe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-dns-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - ports:
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-external-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-external-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+              - 169.254.42.42/32
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+        - to:
+          - ipBlock:
+              cidr: ::/0
+              except:
+              - fd00:ec2::254/128
+              - fd00:42::42/128
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-internal-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 9000
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: minio
+            podSelector:
+              matchLabels:
+                v1.min.io/tenant: default
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-namespace-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-egress
+        namespace: s-joe
+      spec:
+        egress:
+        - to:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-allow-namespace-ingress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-ingress
+        namespace: s-joe
+      spec:
+        ingress:
+        - from:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-deny-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-egress
+        namespace: s-joe
+      spec:
+        egress: []
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-joe-deny-ingress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-ingress
+        namespace: s-joe
+      spec:
+        ingress: []
+        podSelector: {}
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -674,6 +1218,26 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: observe-runtime-storage-secret-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: s-joe-storage
+        namespace: s-joe
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: observe-storage-secret-s-joe
   namespace: default
 spec:
@@ -694,6 +1258,31 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: registry-auth-secret-s-joe
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        http-secret: MmhxMDJHUHVzRnNXNTU0S2FudHhXeEl4NHFiZUU1c1U=
+        password: d3pjY1NlYjdIV1BTcW1ZSVpJQVBsT0lDSjJvbQ==
+        user: cy1qb2U=
+      kind: Secret
+      metadata:
+        name: registry-auth
+        namespace: s-joe
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: resourcequota-s-joe-overall-storage
   namespace: default
 spec:
@@ -706,244 +1295,14 @@ spec:
         namespace: s-joe
       spec:
         hard:
+          limits.cpu: '16'
+          limits.memory: 32Gi
+          requests.cpu: '4'
+          requests.memory: 8Gi
           requests.storage: 100Gi
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshop-s-joe
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: Workshop
-      metadata:
-        name: s-joe
-      spec:
-        description: A default DataLab environment.
-        environment:
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: deny-egress
-            spec:
-              egress: []
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-namespace-egress
-            spec:
-              egress:
-              - to:
-                - podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-vcluster-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 8443
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/environment.name: s-joe
-                      training.educates.dev/session.objects: 'true'
-                  podSelector:
-                    matchLabels:
-                      app: vcluster
-                      release: my-vcluster
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns-egress
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-external-egress
-            spec:
-              egress:
-              - to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                    - 169.254.169.254/32
-                    - 169.254.42.42/32
-                    - 10.42.0.0/16
-                    - 10.43.0.0/16
-              - to:
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                    - fd00:ec2::254/128
-                    - fd00:42::42/128
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-internal-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 9000
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: minio
-                  podSelector:
-                    matchLabels:
-                      v1.min.io/tenant: default
-              podSelector: {}
-              policyTypes:
-              - Egress
-          secrets:
-          - name: s-joe-datalab
-            namespace: default
-        session:
-          applications:
-            console:
-              enabled: false
-            editor:
-              enabled: true
-            slides:
-              enabled: false
-            terminal:
-              enabled: true
-            vcluster:
-              enabled: true
-              services:
-                fromHost: []
-              version: '1.34'
-            workshop:
-              enabled: false
-          dashboards:
-          - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
-          envFrom:
-          - secretRef:
-              name: s-joe-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
-          namespaces:
-            budget: medium
-            role: edit
-            security:
-              policy: baseline
-              token:
-                enabled: true
-          objects:
-          - apiVersion: v1
-            data:
-              cidr: 10.43.0.0/16
-            kind: ConfigMap
-            metadata:
-              name: vc-cidr-my-vcluster
-              namespace: $(session_namespace)-vc
-          resources:
-            memory: 2Gi
-            storage: 1Gi
-        title: Default DataLab
-        version: '1.0'
-        workshop:
-          files: []
-          packages:
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-            name: awscli
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-            name: rclone
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshopenvironment-s-joe
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-joe
-      spec:
-        analytics:
-          amplitude:
-            trackingId: ''
-        cookies: {}
-        environment:
-          objects: []
-          secrets: []
-        request:
-          enabled: false
-        session:
-          ingress:
-            class: nginx
-            domain: lab.acme.com
-            secret: wildcard-tls
-        theme:
-          name: default-website-theme
-        workshop:
-          name: s-joe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
-    policy: DeriveFromCelQuery
   watch: true

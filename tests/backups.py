@@ -74,8 +74,7 @@ def main():
         assert ("backups" in cluster["spec"]) == enabled
         query = resources["db-postgrescluster-s-jeff-pg0"]["spec"]["readiness"]["celQuery"]
         assert ("pgbackrest" in query) == enabled
-        if not enabled:
-            assert "pg0-primary" in yaml.safe_dump(manifest(resources, "workshop-s-jeff"))
+        assert cluster["metadata"]["namespace"] == "s-jeff"
         mongo = manifest(resources, "mongodb-community-s-jeff-prod")
         backup_users = [user for user in mongo["spec"]["users"] if user["name"] == "prod-backup"]
         assert bool(backup_users) == enabled

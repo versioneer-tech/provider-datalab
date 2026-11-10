@@ -3,6 +3,7 @@
 
 """Check store settings and the PostgreSQL runtime namespace."""
 
+import base64
 from pathlib import Path
 
 import yaml
@@ -19,9 +20,6 @@ def main():
     for setting in stores:
         env["data"][setting] = {"storageClassName": f"test-{setting}"}
     observed = list(yaml.safe_load_all(Path("tests/observed/002-lab.yaml").read_text()))
-    for item in observed:
-        if item["metadata"]["name"] == "workshopenvironment-s-jeff":
-            item["status"]["atProvider"]["manifest"]["status"]["educates"]["namespace"] = "test-runtime"
     resources = render(args, env, "examples/base/002-lab.yaml", observed)
     route = manifest(resources, "db-tlsroute-s-jeff-pg0")
     assert route["kind"] == "TLSRoute"
@@ -31,12 +29,12 @@ def main():
         store = manifest(resources, name)
         assert f"test-{setting}" in yaml.safe_dump(store["spec"])
     for name in ("observe-database-secret-s-jeff-pg0", "db-postgrescluster-s-jeff-pg0"):
-        assert manifest(resources, name)["metadata"]["namespace"] == "test-runtime"
+        assert manifest(resources, name)["metadata"]["namespace"] == "s-jeff"
     mongo = manifest(resources, "mongodb-auth-secret-s-jeff-prod")
     mongo_store = manifest(resources, stores["documentStore"])
-    assert mongo["stringData"]["user"] == mongo_store["spec"]["users"][0]["name"] == "prod-app"
+    assert base64.b64decode(mongo["data"]["user"]).decode() == mongo_store["spec"]["users"][0]["name"] == "prod-app"
     redis = manifest(resources, "redis-auth-secret-s-jeff-prod")
-    assert redis["stringData"]["user"] == "default"
+    assert base64.b64decode(redis["data"]["user"]).decode() == "default"
 
     def backup_image(resources, store):
         return manifest(resources, f"{store}-backup-cronjob-s-jeff-prod")["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"]

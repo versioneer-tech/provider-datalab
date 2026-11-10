@@ -2,7 +2,7 @@
 
 A virtual API uses caller token roles and Kubernetes RBAC. A downloaded
 profile selects an endpoint and namespace; it grants no access. Virtual
-workloads and sessions can use the credentials, volumes, permissions, and
+workloads can use the credentials, volumes, permissions, and
 network access available to their Pods.
 
 The platform operator sets the

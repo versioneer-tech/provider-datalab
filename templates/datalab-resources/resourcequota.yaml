@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ResourceQuota
 metadata:
   name: overall-storage
-  namespace: ${workshop_ns}
+  namespace: ${xr_name}
 spec:
   hard:
     requests.storage: ${overall_storage}

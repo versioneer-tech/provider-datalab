@@ -4,26 +4,6 @@
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: workshopenvironment-s-john
-  namespace: datalab
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-john
-status:
-  atProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-john
-        namespace: datalab
-      status:
-        educates:
-          namespace: s-john
-          phase: Running
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: observe-runtime-storage-secret-s-john
   namespace: default
   annotations:
@@ -34,7 +14,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-john-datalab
+        name: s-john-storage
         namespace: s-john
       data:
         AWS_ACCESS_KEY_ID: am9obi1hY2Nlc3Mta2V5

@@ -4,7 +4,7 @@
 apiVersion: meta.pkg.crossplane.io/v1alpha1
 kind: Configuration
 metadata:
-  name: datalab-educates
+  name: datalab
   annotations:
     meta.crossplane.io/maintainer: "Versioneer <info@versioneer.at>"
     meta.crossplane.io/source: "github.com/versioneer-tech/provider-datalab"

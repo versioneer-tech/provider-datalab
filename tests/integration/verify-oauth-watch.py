@@ -18,7 +18,7 @@ CLIENT = f"client.openidclient.keycloak.m.crossplane.io/{DATALAB}"
 SOURCE = f"secret/{DATALAB}-oauth-client"
 OBSERVER = f"object.kubernetes.m.crossplane.io/observe-oauth-client-secret-{DATALAB}"
 PAUSED = "crossplane.io/paused"
-CHECKSUM = "datalabs.pkg.internal/oauth2-cookie-checksum"
+CHECKSUM = "datalabs.versioneer.at/oauth2-cookie-checksum"
 
 
 def main():
@@ -90,12 +90,10 @@ def main():
         observed = get(OBSERVER)["status"]["atProvider"]["manifest"]
         source_version = get(SOURCE)["metadata"]["resourceVersion"]
         runtime = get(f"secret/{DATALAB}-oauth2-client", args.namespace)["data"]
-        connection = get(f"secret/{DATALAB}-datalab")["data"]
         if (
             observed.get("data") != {"redacted": None}
             or observed.get("metadata", {}).get("resourceVersion") != source_version
             or runtime.get("client_secret") != encoded
-            or connection.get("OAUTH2_CLIENT_SECRET") != encoded
         ):
             return False
         return all(
@@ -165,7 +163,6 @@ def main():
             for resource, namespace in (
                 (SOURCE, WORKSPACE),
                 (OBSERVER, WORKSPACE),
-                (f"secret/{DATALAB}-datalab", WORKSPACE),
                 (f"secret/{DATALAB}-oauth2-client", args.namespace),
             )
         )

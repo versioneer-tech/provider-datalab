@@ -29,7 +29,7 @@ to `10m`. These functions use their own inputs and do not read the Python
 override. New function types must have build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
-Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step
+Secrets before publishing service and OAuth2 proxy Secrets. The Data step
 uses the desired OAuth2 proxy Secret. Publish status before the final resource
 and connection readiness checks.
 
@@ -61,3 +61,11 @@ python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-
 
 A TTL override requires a separate output file. The build does not change
 `composition/settings.yaml` or the normal deployment artifact.
+
+`vcluster/sandbox-install.yaml` contains the Agent Sandbox CRDs and supporting
+resources. `vcluster/sandbox-controller.yaml` contains its Deployment, with
+resource limits, health probes, and a non-root security context. Their headers
+record the source release and checksum. Virtual cluster startup applies both
+inside the virtual API. EnvironmentConfig `images.sandbox` selects the controller
+image; `images.sandboxd` selects the runtime image in SandboxTemplates. Check
+controller compatibility when changing its image or CRD schema.

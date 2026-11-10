@@ -15,7 +15,7 @@ spec:
     metadata:
       labels: ${labels}
       annotations:
-        datalabs.pkg.internal/registry-checksum: ${checksum}
+        datalabs.versioneer.at/registry-checksum: ${checksum}
     spec:
       automountServiceAccountToken: false
       securityContext:

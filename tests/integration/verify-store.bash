@@ -28,8 +28,8 @@ case "${store_type}" in
     SERVICE_NAME=mongodb-verify-svc
     CLIENT_IMAGE="${MONGO_CLIENT_IMAGE}"
     SECRET_KEYS=(
-      MONGO_VERIFY_HOST MONGO_VERIFY_PORT MONGO_VERIFY_DATABASE
-      MONGO_VERIFY_USER MONGO_VERIFY_PASSWORD MONGO_VERIFY_URI
+      host port database
+      user password uri
     )
     ;;
   redis)
@@ -43,8 +43,8 @@ case "${store_type}" in
     SERVICE_NAME=verify
     CLIENT_IMAGE="${REDIS_CLIENT_IMAGE}"
     SECRET_KEYS=(
-      REDIS_VERIFY_HOST REDIS_VERIFY_PORT REDIS_VERIFY_USER
-      REDIS_VERIFY_PASSWORD REDIS_VERIFY_DATABASE REDIS_VERIFY_URL
+      host port user
+      password database url
     )
     ;;
   *)
@@ -56,7 +56,7 @@ esac
 readonly DATALAB_NAME OPERATOR_NAMESPACE OPERATOR_RELEASE OPERATOR_DEPLOYMENT
 readonly RESOURCE_TYPE RESOURCE_NAME POD_NAME SERVICE_NAME CLIENT_IMAGE
 readonly STORAGE_SECRET="${DATALAB_NAME}"
-readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
+readonly CONNECTION_SECRET="${DATALAB_NAME}-${store_type}-verify"
 readonly PROBE_NAME="${DATALAB_NAME}"
 readonly STORE_NAMESPACE="${DATALAB_NAME}"
 probe_value=""
@@ -124,11 +124,6 @@ install_operator() {
 
 apply_store_datalab() {
   log "Applying the ${store_type} verification Datalab"
-  if ! kube get customresourcedefinition.apiextensions.k8s.io/workshopenvironments.training.educates.dev \
-    >/dev/null 2>&1; then
-    kube create namespace "${STORE_NAMESPACE}" \
-      --dry-run=client -o yaml | kube apply -f -
-  fi
   apply_template "${MANIFEST_DIR}/${store_type}/datalab.yaml" \
     DATALAB_NAME "${DATALAB_NAME}" \
     WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
@@ -162,11 +157,12 @@ wait_for_store() {
     return 1
   fi
 
-  wait_for_connection_secret "${DATALAB_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
+  wait_for_connection_secret "${CONNECTION_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
 }
 
 run_store_probe() {
-
+  kube wait networkpolicy/allow-internal-ingress --namespace "${STORE_NAMESPACE}" \
+    --for=create --timeout=5m
   log "Running an in-cluster ${store_type} write/read probe"
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
@@ -175,7 +171,7 @@ run_store_probe() {
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${CLIENT_IMAGE}" \
     PROBE_VALUE "${probe_value}" \
-    DATALAB_SECRET "${DATALAB_SECRET}" | kube apply -f -
+    CONNECTION_SECRET "${CONNECTION_SECRET}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
 }
@@ -203,10 +199,10 @@ verify_mongo_backup() {
 
 set_redis_backup_storage() {
   local size="$1" previous_checksum checksum deadline=$((SECONDS + 600))
-  local annotation='{.metadata.annotations.datalabs\.pkg\.internal/redis-acl-checksum}'
+  local annotation='{.metadata.annotations.datalabs\.versioneer\.at/redis-acl-checksum}'
   previous_checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
     --namespace "${STORE_NAMESPACE}" -o "jsonpath=${annotation}")" || return 1
-  kube patch "datalab.pkg.internal/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
+  kube patch "datalabs.versioneer.at/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --type=merge --patch "{\"spec\":{\"cacheStores\":{\"verify\":{\"backupStorage\":\"${size}\"}}}}" || return 1
   while true; do
     checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
@@ -219,7 +215,7 @@ set_redis_backup_storage() {
     sleep 5
   done
   kube wait "statefulset/${RESOURCE_NAME}" --namespace "${STORE_NAMESPACE}" \
-    --for="jsonpath={.spec.template.metadata.annotations.datalabs\.pkg\.internal/redis-acl-checksum}=${checksum}" \
+    --for="jsonpath={.spec.template.metadata.annotations.datalabs\.versioneer\.at/redis-acl-checksum}=${checksum}" \
     --timeout=5m || return 1
   kube rollout status "statefulset/${RESOURCE_NAME}" --namespace "${STORE_NAMESPACE}" --timeout=5m
 }
@@ -253,7 +249,7 @@ verify_redis_backup() {
 }
 
 show_store_diagnostics() {
-  kube get "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube get "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" -o wide || true
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
@@ -261,7 +257,7 @@ show_store_diagnostics() {
   kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
     --namespace "${STORE_NAMESPACE}" -o yaml || true
   kube get pod,pvc,service,secret --namespace "${STORE_NAMESPACE}" || true
-  kube get "secret/${DATALAB_SECRET}" \
+  kube get "secret/${CONNECTION_SECRET}" \
     --namespace "${WORKSPACE_NAMESPACE}" || true
   kube get events --namespace "${STORE_NAMESPACE}" \
     --sort-by=.lastTimestamp || true
@@ -273,9 +269,9 @@ cleanup_successful_verification() {
   fi
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
-  kube delete "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube delete "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
-  if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
+  if kube wait "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
     python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
       --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}" --deleted

@@ -83,7 +83,7 @@ spec:
                 memory: 128Mi
               limits:
                 cpu: 500m
-                memory: 1Gi
+                memory: 512Mi
 ---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
@@ -109,6 +109,10 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            # Sandbox bootstrap data is present in desired and observed cluster configuration.
+            args:
+            - --max-recv-message-size=64
+            - --max-send-message-size=64
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
@@ -139,6 +143,8 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            args:
+            - --max-recv-message-size=64
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:

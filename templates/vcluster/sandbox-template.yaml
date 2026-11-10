@@ -1,0 +1,56 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: sandboxd
+  namespace: ${target}
+spec:
+  podTemplate:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: sandboxd
+        image: ${sandbox_image}
+        imagePullPolicy: IfNotPresent
+        workingDir: /workspace
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        ports:
+        - name: filesystem
+          containerPort: 8080
+        - name: process
+          containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /v1/health
+            port: filesystem
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+  volumeClaimTemplates:
+  - metadata:
+      name: workspace
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi

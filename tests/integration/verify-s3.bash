@@ -7,12 +7,10 @@ set -Eeuo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
-# shellcheck source=educates.bash
-source "${INTEGRATION_DIR}/educates.bash"
+# shellcheck source=runtime.bash
+source "${INTEGRATION_DIR}/runtime.bash"
 
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${KEEP_S3_RESOURCES:=0}"
-readonly EDUCATES_NAMESPACE=educates
 readonly S3_DATALAB=verify-s3
 readonly CONTOUR_VERSION=v1.33.7
 runtime_namespace=""
@@ -25,7 +23,7 @@ cleanup_local() {
 trap cleanup_local EXIT
 
 show_s3_diagnostics() {
-  kube get datalab "${S3_DATALAB}" --namespace workspace || true
+  kube get datalabs.versioneer.at "${S3_DATALAB}" --namespace workspace || true
   kube get objects.kubernetes.m.crossplane.io --namespace workspace \
     --selector "crossplane.io/composite=${S3_DATALAB}" || true
   kube get pods --namespace keycloak || true
@@ -47,7 +45,7 @@ report_s3_failure() {
 trap report_s3_failure ERR
 
 install_s3_prerequisites() {
-  install_educates
+  create_ingress_certificate
   log 'Checking the Contour Gateway provisioner and Keycloak test realm'
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
@@ -96,7 +94,7 @@ verify_s3() {
   kube rollout status deployment/data-s3 --namespace "${runtime_namespace}" --timeout=10m
   kube wait deployment/package-r --namespace "${runtime_namespace}" --for=create --timeout=10m
   kube rollout status deployment/package-r --namespace "${runtime_namespace}" --timeout=10m
-  kube wait datalab/verify-s3 --namespace workspace --for=condition=Ready --timeout=10m
+  kube wait datalabs.versioneer.at/verify-s3 --namespace workspace --for=condition=Ready --timeout=10m
 
   gateway_service="$(kube get services --namespace projectcontour \
     --selector gateway.networking.k8s.io/gateway-name=verify-s3 -o json | \
@@ -138,7 +136,7 @@ verify_s3() {
     ((SECONDS < deadline)) || return 1
     sleep 2
   done
-  kube wait datalab/verify-s3 --namespace workspace --for=condition=Ready --timeout=5m
+  kube wait datalabs.versioneer.at/verify-s3 --namespace workspace --for=condition=Ready --timeout=5m
   [[ "$(kube get ingresses --namespace "${runtime_namespace}" -o json | jq '.items | length')" == 0 ]]
   kube exec verify-s3-client --namespace "${runtime_namespace}" -- python -u /test/e2e.py --browser-only
 }
@@ -152,8 +150,8 @@ main() {
   install_s3_prerequisites
   verify_s3
   if [[ "${KEEP_S3_RESOURCES}" != 1 ]]; then
-    kube delete datalab/verify-s3 --namespace workspace --wait=false
-    kube wait datalab/verify-s3 --namespace workspace --for=delete --timeout=10m
+    kube delete datalabs.versioneer.at/verify-s3 --namespace workspace --wait=false
+    kube wait datalabs.versioneer.at/verify-s3 --namespace workspace --for=delete --timeout=10m
     kube delete secret/verify-s3 --namespace workspace --ignore-not-found
   fi
 }

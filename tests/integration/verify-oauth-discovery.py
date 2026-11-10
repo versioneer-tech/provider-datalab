@@ -42,7 +42,7 @@ def main():
 
     source = f"secret/{args.datalab}-oauth-client"
     client = f"client.openidclient.keycloak.m.crossplane.io/{args.datalab}"
-    datalab = f"datalab/{args.datalab}"
+    datalab = f"datalabs.versioneer.at/{args.datalab}"
     paused = "crossplane.io/paused"
     client_state = get(client)
     previous_pause = client_state["metadata"].get("annotations", {}).get(paused)

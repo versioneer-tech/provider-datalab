@@ -11,6 +11,8 @@ nav:
   - How-to guides:
     - Installation: how-to-guides/installation.md
     - Virtual clusters: how-to-guides/vcluster.md
+    - Sandboxes: how-to-guides/sandboxes.md
+    - Connections: how-to-guides/connections.md
     - Authentication: how-to-guides/authentication.md
     - Use a Datalab: how-to-guides/usage_concepts.md
     - S3 client access: how-to-guides/s3-access.md

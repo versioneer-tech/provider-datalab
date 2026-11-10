@@ -2,9 +2,9 @@
 
 Packages:
 
-- [pkg.internal/v1beta2](#pkginternalv1beta2)
+- [versioneer.at/v1](#versioneeratv1)
 
-# pkg.internal/v1beta2
+# versioneer.at/v1
 
 Resource Types:
 
@@ -14,14 +14,14 @@ Resource Types:
 
 
 ## Datalab
-<sup><sup>[↩ Parent](#pkginternalv1beta2 )</sup></sup>
+<sup><sup>[↩ Parent](#versioneeratv1 )</sup></sup>
 
 
 
 
 
 
-A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+A Datalab is a tenant-facing, namespaced composite resource. It defines membership, data services, and virtual clusters.
 
 <table>
     <thead>
@@ -35,7 +35,7 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
     <tbody><tr>
       <td><b>apiVersion</b></td>
       <td>string</td>
-      <td>pkg.internal/v1beta2</td>
+      <td>versioneer.at/v1</td>
       <td>true</td>
       </tr>
       <tr>
@@ -54,6 +54,8 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
         <td>object</td>
         <td>
           Desired configuration of the datalab.<br/>
+          <br/>
+            <i>Validations</i>:<li>!has(self.sessions) || self.sessions.all(s, has(self.vclusters) && s.vcluster in self.vclusters): Each session must select a declared virtual cluster.</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -106,7 +108,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecdatabaseskey">databases</a></b></td>
         <td>map[string]object</td>
         <td>
-          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and an optional pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
+          PostgreSQL clusters with data storage, optional backup storage, and named databases. The operator creates the databases for the postgres account and adds logins from spec.users. Application setup manages additional ownership and grants.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
@@ -133,7 +135,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
         <td>[]object</td>
         <td>
-          Sessions declared for this datalab.<br/>
+          Durable workspace PVCs inside named virtual clusters. Workloads use the PVC independently; public session URLs are not provided.<br/>
           <br/>
             <i>Default</i>: []<br/>
         </td>
@@ -327,18 +329,33 @@ Desired configuration of the datalab.
         <td><b>name</b></td>
         <td>string</td>
         <td>
-          Session name.<br/>
+          <br/>
         </td>
         <td>true</td>
       </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
+        <td><b>vcluster</b></td>
+        <td>string</td>
         <td>
-          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.
-<br/>
           <br/>
-            <i>Enum</i>: started, stopped<br/>
-            <i>Default</i>: started<br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A session cannot move to another virtual cluster.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A session cannot move to another namespace.</li><li>!self.startsWith("kube-") && self != "agent-sandbox-system": Sessions must use a workload namespace.</li>
+            <i>Default</i>: default<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>pvcSize</b></td>
+        <td>string</td>
+        <td>
+          PVC size. Defaults to the platform session size, or 1Gi.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -583,7 +600,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatussessionsindex">sessions</a></b></td>
         <td>[]object</td>
         <td>
-          Session lifecycle state, persistent storage requests, workspace PVC references, and runtime details.<br/>
+          Session PVC references inside virtual clusters.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -812,78 +829,7 @@ Current observed state of the datalab.
 
 
 
-Observed state of a single datalab session.
 
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Session name from spec.sessions.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b><a href="#datalabstatussessionsindexpvcref">pvcRef</a></b></td>
-        <td>object</td>
-        <td>
-          Workspace PVC reference. Does not report PVC readiness.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired lifecycle state for the declared session.<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>message</b></td>
-        <td>string</td>
-        <td>
-          Latest observed status message for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>phase</b></td>
-        <td>string</td>
-        <td>
-          Latest observed lifecycle phase for the session runtime.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>pvcSize</b></td>
-        <td>string</td>
-        <td>
-          Persistent session PVC request as a Kubernetes quantity. Retained while stopped, zero when none, and omitted when unknown. Shared PVCs are counted once.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
-        <td>
-          Public URL of the active session.<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-
-### Datalab.status.sessions[index].pvcRef
-<sup><sup>[↩ Parent](#datalabstatussessionsindex)</sup></sup>
-
-
-
-Workspace PVC reference. Does not report PVC readiness.
 
 <table>
     <thead>
@@ -903,6 +849,20 @@ Workspace PVC reference. Does not report PVC readiness.
         <td>true</td>
       </tr><tr>
         <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>pvcName</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>vcluster</b></td>
         <td>string</td>
         <td>
           <br/>

@@ -8,11 +8,9 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${DATA_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${KEEP_DATA_RESOURCES:=0}"
 
-readonly EDUCATES_NAMESPACE=educates
 readonly ENABLED_DATALAB=verify-data-enabled
 readonly ENABLED_STORAGE_SECRET=verify-data-enabled
 readonly PACKAGE_R_NAME=package-r
@@ -24,8 +22,8 @@ readonly MINIO_ACCESS_KEY_B64=bWluaW9hZG1pbg==
 enabled_runtime_namespace=""
 data_payload=""
 
-# shellcheck source=educates.bash
-source "${INTEGRATION_DIR}/educates.bash"
+# shellcheck source=runtime.bash
+source "${INTEGRATION_DIR}/runtime.bash"
 
 apply_data_datalabs() {
   log 'Applying the Data verification Datalab'
@@ -58,7 +56,7 @@ verify_package_access() {
     CLIENT_IMAGE "${DATA_CLIENT_IMAGE}" \
     DATA_PAYLOAD "${data_payload}" \
     DATA_READ_ONLY "${read_only}" \
-    DATALAB_SECRET "${ENABLED_DATALAB}-datalab" | kube apply -f -; then
+    DATALAB_SECRET "${ENABLED_DATALAB}-storage" | kube apply -f -; then
     return 1
   fi
 
@@ -70,7 +68,7 @@ deployment_checksum() {
 
   kube get "deployment/${PACKAGE_R_NAME}" --namespace "${namespace}" -o json | \
     jq -r '.spec.template.metadata.annotations[
-      "datalabs.pkg.internal/storage-secret-checksum"
+      "datalabs.versioneer.at/storage-secret-checksum"
     ] // ""'
 }
 
@@ -88,7 +86,7 @@ wait_for_runtime_access_key() {
   local actual=""
 
   while true; do
-    actual="$(kube get "secret/${ENABLED_DATALAB}-datalab" \
+    actual="$(kube get "secret/${ENABLED_DATALAB}-storage" \
       --namespace "${namespace}" \
       -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null || true)"
     if [[ "${actual}" == "${expected}" ]]; then
@@ -170,12 +168,12 @@ verify_read_only_access() {
 
 show_data_diagnostics() {
   kube get \
-    "datalab.pkg.internal/${ENABLED_DATALAB}" \
+    "datalabs.versioneer.at/${ENABLED_DATALAB}" \
     --namespace "${WORKSPACE_NAMESPACE}" -o wide || true
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${ENABLED_DATALAB}" || true
-  kube get "datalab.pkg.internal/${ENABLED_DATALAB}" \
+  kube get "datalabs.versioneer.at/${ENABLED_DATALAB}" \
     --namespace "${WORKSPACE_NAMESPACE}" \
     -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.reason}{": "}{.message}{"\n"}{end}' || true
   kube get events --namespace "${WORKSPACE_NAMESPACE}" \
@@ -199,10 +197,10 @@ cleanup_successful_verification() {
       --ignore-not-found --wait=true
   fi
   kube delete \
-    "datalab.pkg.internal/${ENABLED_DATALAB}" \
+    "datalabs.versioneer.at/${ENABLED_DATALAB}" \
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   if kube wait \
-    "datalab.pkg.internal/${ENABLED_DATALAB}" \
+    "datalabs.versioneer.at/${ENABLED_DATALAB}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
     kube delete secret \
       "${ENABLED_STORAGE_SECRET}" \
@@ -215,7 +213,6 @@ cleanup_successful_verification() {
 main() {
   require_cluster
   require_command jq
-  install_educates
   data_payload="verify-data-$(openssl rand -hex 12)"
   apply_data_datalabs
 

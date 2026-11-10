@@ -16,7 +16,7 @@ data:
     mongoBackup: mongo:8.0.12
     redis: quay.io/opstree/redis:v7.0.15
     redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
   iam:
     realm: integration
   ingress:
@@ -38,9 +38,6 @@ data:
     region: us-east-1
     secretNamespace: workspace
     type: s3
-  storageClasses:
-    allowed:
-      - standard
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -49,6 +46,15 @@ data:
       - 10.244.0.0/16
     blacklistIPs:
       - 169.254.169.254/32
+    internalIngress:
+      - namespace: workspace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: datalab-service-probe
+        ports:
+          - {protocol: TCP, port: 5432}
+          - {protocol: TCP, port: 27017}
+          - {protocol: TCP, port: 6379}
     internalEgress:
       - namespace: minio
         podSelector:
@@ -58,8 +64,6 @@ data:
           - protocol: TCP
             port: 9000
   defaults:
-    vcluster:
-      enabled: false
     registry:
       enabled: false
     data:
@@ -68,7 +72,6 @@ data:
     overallQuota:
       storage: 100Gi
     security:
-      kubernetesAccess: false
       externalEgress: true
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -86,7 +89,7 @@ data:
     mongoBackup: mongo:8.0.12
     redis: quay.io/opstree/redis:v7.0.15
     redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -111,9 +114,6 @@ data:
     region: us-east-1
     secretNamespace: workspace
     type: s3
-  storageClasses:
-    allowed:
-      - standard
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -122,6 +122,15 @@ data:
       - 10.244.0.0/16
     blacklistIPs:
       - 169.254.169.254/32
+    internalIngress:
+      - namespace: workspace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: datalab-service-probe
+        ports:
+          - {protocol: TCP, port: 5432}
+          - {protocol: TCP, port: 27017}
+          - {protocol: TCP, port: 6379}
     internalEgress:
       - namespace: minio
         podSelector:
@@ -131,17 +140,12 @@ data:
           - protocol: TCP
             port: 9000
   defaults:
-    vcluster:
-      enabled: false
     data:
       enabled: false
       readOnlyMount: false
     overallQuota:
       storage: 100Gi
     registry:
-      enabled: true
-    quota:
-      storage: 2Gi
+      enabled: false
     security:
-      kubernetesAccess: false
       externalEgress: false

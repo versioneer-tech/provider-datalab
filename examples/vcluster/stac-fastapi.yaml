@@ -16,11 +16,29 @@ spec:
       - name: initialize
         image: __CATALOG_IMAGE__
         imagePullPolicy: IfNotPresent
-        command: [python, /opt/catalog/initialize.py]
-        envFrom:
-        - secretRef:
-            name: catalog-postgres-admin
+        command: [python, /opt/catalog/migrate.py]
         env:
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: catalog-postgres-admin
+              key: host
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              name: catalog-postgres-admin
+              key: port
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: catalog-postgres-admin
+              key: user
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: catalog-postgres-admin
+              key: password
+        - {name: PGDATABASE, value: catalog}
         - name: CATALOG_PASSWORD
           valueFrom:
             secretKeyRef:

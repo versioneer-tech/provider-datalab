@@ -5,7 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: package-r
-  namespace: ${workshop_namespace}
+  namespace: ${runtime_namespace}
   labels: ${labels}
 spec:
   replicas: 1
@@ -18,7 +18,7 @@ spec:
     metadata:
       labels: ${labels}
       annotations:
-        datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+        datalabs.versioneer.at/storage-secret-checksum: ${storage_secret_checksum}
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
