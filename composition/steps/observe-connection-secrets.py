@@ -28,12 +28,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     observed = getattr(req.observed, "resources", {}) or {}
-    environment_manifest = _extract_manifest(
-        observed.get(f"workshopenvironment-{xr_name}")
-    )
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    runtime_namespace = _safe_str(educates_status.get("namespace"))
-    workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
+    runtime_namespace = xr_name
     status = _to_dict(rsp.desired.composite.resource).get("status") or xr.get("status") or {}
     connections = []
 
@@ -50,7 +45,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         )
         if kind == "custom":
             rsp.desired.resources[key].ready = fnv1.READY_TRUE
-        if kind and (kind in ("s3", "custom") or educates_status.get("namespace")):
+        if kind:
             source = observed.get(key)
             body = _to_dict(source.resource) if source else {}
             conditions = (body.get("status") or {}).get("conditions") or []
@@ -91,7 +86,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 public = _boolish(ingress.get("enabled")) or _boolish(gateway.get("enabled"))
                 connection["endpoint"] = (
                     f"https://{xr_name}.{ingress.get('domain', 'default')}/v2/" if public
-                    else f"http://registry.{workshop_namespace}.svc:5000/v2/"
+                    else f"http://registry.{runtime_namespace}.svc:5000/v2/"
                 )
                 keys = [f"registry-deployment-{xr_name}"]
                 if _boolish(gateway.get("enabled")):
@@ -238,7 +233,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 observe(
                     f"observe-database-secret-{xr_name}-{cluster_name}",
                     f"{cluster_name}-pguser-postgres",
-                    workshop_namespace,
+                    runtime_namespace,
                     kind="postgres",
                     instance=cluster_name,
                 )
@@ -255,14 +250,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     observe(
                         f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                         f"{store_name}-{backend}-auth",
-                        workshop_namespace,
+                        runtime_namespace,
                         kind="mongo" if backend == "mongodb" else "redis",
                         instance=store_name,
                     )
 
     registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
     if registry_enabled:
-        observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", workshop_namespace,
+        observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                 kind="registry", instance="primary")
 
     data_config = (environment.get("defaults") or {}).get("data") or {}
@@ -272,7 +267,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     if (_boolish(data_enabled) or registry_enabled) and runtime_namespace:
         observe(
             f"observe-runtime-storage-secret-{xr_name}",
-            f"{xr_name}-datalab",
+            f"{xr_name}-storage",
             runtime_namespace,
         )
     status["connections"] = connections + [

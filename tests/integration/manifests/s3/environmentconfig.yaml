@@ -30,9 +30,6 @@ data:
     region: us-east-1
     secretNamespace: workspace
     type: s3
-  storageClasses:
-    allowed:
-      - standard
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -67,8 +64,6 @@ data:
           - protocol: TCP
             port: 8443
   defaults:
-    vcluster:
-      enabled: false
     registry:
       enabled: false
     data:
@@ -77,5 +72,4 @@ data:
     overallQuota:
       storage: 100Gi
     security:
-      kubernetesAccess: false
       externalEgress: false

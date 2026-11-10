@@ -1,0 +1,56 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: analysis
+  namespace: demo
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        datalabs.versioneer.at/session: analysis
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: sandboxd
+        image: us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f
+        imagePullPolicy: IfNotPresent
+        workingDir: /workspace
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        ports:
+        - name: filesystem
+          containerPort: 8080
+        - name: process
+          containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /v1/health
+            port: filesystem
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: session-analysis

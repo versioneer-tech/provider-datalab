@@ -6,6 +6,8 @@ kind: Pod
 metadata:
   name: __PROBE_NAME__
   namespace: __PROBE_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: datalab-service-probe
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
@@ -17,18 +19,18 @@ spec:
         - name: REDIS_HOST
           valueFrom:
             secretKeyRef:
-              name: __DATALAB_SECRET__
-              key: REDIS_VERIFY_HOST
+              name: __CONNECTION_SECRET__
+              key: host
         - name: REDIS_PORT
           valueFrom:
             secretKeyRef:
-              name: __DATALAB_SECRET__
-              key: REDIS_VERIFY_PORT
+              name: __CONNECTION_SECRET__
+              key: port
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: __DATALAB_SECRET__
-              key: REDIS_VERIFY_PASSWORD
+              name: __CONNECTION_SECRET__
+              key: password
       command:
         - sh
         - -c

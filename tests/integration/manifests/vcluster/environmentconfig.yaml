@@ -50,18 +50,15 @@ data:
     - 0.0.0.0/0
     blacklistIPs:
     - 169.254.169.254/32
-  storageClasses:
-    allowed: [standard]
   defaults:
-    vcluster:
+    registry:
       enabled: false
     data:
       enabled: false
-    registry:
-      enabled: false
     overallQuota:
       storage: 20Gi
+      hard:
+        limits.cpu: '20'
     security:
       policy: baseline
-      kubernetesAccess: false
       externalEgress: false

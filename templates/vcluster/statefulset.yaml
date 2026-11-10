@@ -20,7 +20,7 @@ spec:
   template:
     metadata:
       annotations:
-        datalabs.pkg.internal/configuration-checksum: ${configuration_checksum}
+        datalabs.versioneer.at/configuration-checksum: ${configuration_checksum}
       labels:
         app: ${runtime}
         release: ${runtime}

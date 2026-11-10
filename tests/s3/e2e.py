@@ -59,6 +59,12 @@ def main():
         assert response.headers.get('Access-Control-Allow-Origin') == '*'
         assert 'GET' in response.headers.get('Access-Control-Allow-Methods', '')
         assert 'Range' in response.headers.get('Access-Control-Allow-Headers', '')
+    other_origin = urllib.request.Request(endpoint + '/share/public/', headers={
+        'Origin': 'https://other.example',
+    })
+    with opener.open(other_origin, timeout=10) as response:
+        assert response.status == 200
+        assert response.headers.get('Access-Control-Allow-Origin') == '*'
     print('PASS public package wildcard CORS and preflight', flush=True)
     if args.browser_only:
         return

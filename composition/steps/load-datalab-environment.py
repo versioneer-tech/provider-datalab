@@ -17,8 +17,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     annotations = metadata.get("annotations", {}) or {}
     labels = metadata.get("labels", {}) or {}
     env_name = (
-        annotations.get("datalabs.pkg.internal/environment")
-        or labels.get("datalabs.pkg.internal/environment")
+        annotations.get("datalabs.versioneer.at/environment")
+        or labels.get("datalabs.versioneer.at/environment")
         or "datalab"
     ).strip() or "datalab"
 

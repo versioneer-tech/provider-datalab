@@ -10,6 +10,9 @@ Provider Storage. It creates fixed profile-named Secrets for the disposable
 in-cluster MinIO service because the Datalab composition needs object-storage
 credentials.
 
+Platform setup waits for the generated Datalab CRD to match the current XRD.
+An established CRD alone does not prove that a schema update was accepted.
+
 Crossplane `2.4.1` is the reproducible test pin. See
 [`crossplane.yaml`](../../crossplane.yaml) for the supported Crossplane range.
 
@@ -23,19 +26,18 @@ tests/unit.bash
 
 | Profile | Datalabs | What the test verifies |
 | --- | --- | --- |
-| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | The closed Datalab disables external egress and vCluster access. The open Datalab enables both. The test applies their generated NetworkPolicies and verifies namespace isolation, MinIO, a controlled target with vCluster labels, and external access. |
-| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The Datalab starts one session and retains one stopped session. Its shared registry uses S3 storage. The test uses the published connection Secret to authenticate and write and read a blob. |
+| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | Same-namespace access, cross-namespace ingress and egress isolation, explicit MinIO access, external egress settings, host LimitRange defaults, and CPU/memory quota rejection. |
+| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The registry runs in the Datalab service namespace and uses S3 storage. The test uses the published connection Secret to authenticate and write and read a blob. |
 | `verify-data` | `verify-data-enabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | File write/read, one credential update with workload restart, and read-only write rejection through the generated Secret. Render tests cover disabled Data and resource structure. |
 | `verify-s3` | `verify-s3` from [manifests/s3/datalab.yaml](manifests/s3/datalab.yaml) | Experimental S3 access with the generated Datalab client: TLS routing, list/HEAD/GET/range reads, write/delete rejection, shared browser hostname, and browser access after S3 is disabled. |
 | `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
 | `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | Document write and read through the generated connection Secret. Runs the backup CronJob and restores its archive with oplog replay into an isolated local MongoDB process. Checks the restored probe document. |
 | `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | Key write and read through the generated connection Secret. Enables backups on the running store, runs the CronJob, and checks the restored value in an isolated Redis process. Disables backups and checks that the backup PVC remains and Redis still accepts writes. |
-| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, implicit admin profiles, member token claims and membership removal, caller role isolation, credential-free profiles, streaming, PVC persistence, role downgrade and revocation, independent removal, and a PostgreSQL-backed STAC catalog. |
+| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, profile and member authorization, streaming, role revocation, independent removal, and a PostgreSQL-backed STAC catalog. Checks Sandbox CRDs and controllers, sandboxd command and file APIs, and session PVC data after workload replacement. |
 
 All Datalabs use a matching profile-named prerequisite Secret. The Data
-fixture and the S3 fixture enable Data, and only the registry fixture starts a
-session. Each profile removes its successful test resources. A failed profile
-keeps its resources for diagnosis.
+fixture and the S3 fixture enable Data. Each profile removes its successful
+test resources. A failed profile keeps its resources for diagnosis.
 
 ## Run profiles locally
 
@@ -45,12 +47,12 @@ source manifests, and runs one profile. Matching dependency releases are reused:
 ```bash
 tests/integration/run.bash all              # Full suite; one shared platform setup.
 tests/integration/run.bash verify-network
-tests/integration/run.bash verify-registry
 tests/integration/run.bash verify-data
 tests/integration/run.bash verify-s3
 tests/integration/run.bash verify-postgres
 tests/integration/run.bash verify-mongo
 tests/integration/run.bash verify-redis
+tests/integration/run.bash verify-registry
 tests/integration/run.bash verify-vcluster
 ```
 
@@ -59,28 +61,27 @@ It does not start a real vCluster or test admission policy. Each connection
 check runs once after the policies have converged. A denied connection must
 fail with a connection error or timeout; an HTTP, DNS, or command error fails
 the check. The external connectivity target is `https://www.iana.org/`.
+An unrestricted peer also checks denied ingress into both team namespaces.
+Server-side dry runs check that the host LimitRange supplies missing container
+resources and that all four CPU and memory quotas reject oversized Pods.
 Set `KEEP_NETWORK_RESOURCES=1` to retain successful resources.
 
-The registry profile installs Kyverno because the session runtime applies
-Kyverno policies. It then installs the EOEPCA+ dependency chart `2.2.1`, which
-contains the Educates session runtime `3.7.1`. Set `KEEP_REGISTRY_RESOURCES=1` to
-retain successful resources.
-The profile creates the required disposable MinIO bucket before the Datalab.
 The registry probe allows time for the HTTP service to start. It reports
 the failed operation and HTTP status without printing credentials.
 
-The Data profile reuses the session runtime installation and seeds one
+The Data profile seeds one
 disposable MinIO bucket for file operations. It tests access through the
 runtime Service.
 It allows ten minutes for deployment creation. Startup watch throttling can
 delay resource generation after the runtime Secret observer is ready.
 Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 
-Integration fixtures also use only `datalab` and `datalab-custom`; profiles
-explicitly disable services that are outside their checks.
-The network, registry, and Data profiles restore the common environment
+The network, Data, and store fixtures use `datalab` and `datalab-custom`.
+The virtual cluster profile uses `datalab-vcluster-it` for its issuer,
+Gateway, and Secret binding settings. Profiles disable services outside their checks.
+The network and Data profiles restore the common environment
 settings before creating their Datalabs. The network profile disables
-external egress in `datalab` and enables external egress and vCluster access
+external egress in `datalab` and enables external egress
 in `datalab-custom`. The S3 profile replaces
 `datalab-custom` with its Gateway and identity settings.
 
@@ -109,6 +110,10 @@ resources emitted by the composition:
 - Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`) serves
   `redis.redis.opstreelabs.in/v1beta2`.
 
+Service probes run in `workspace`, where the published connection Secrets live.
+The test environment permits ingress only from Pods with the service-probe label
+on PostgreSQL, MongoDB, and Redis ports. Other outside clients remain blocked.
+
 Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB or Redis
 resources. Each operator remains installed after its profile finishes. Successful
 cleanup scales it to zero after the Datalab, namespace, workloads, and finalizers
@@ -120,7 +125,7 @@ Dependencies with matching pins are reused after readiness checks. Set
 `REUSE_DEPENDENCIES=0` to force Helm installation or upgrade, for example after
 changing chart values. The current Composition and XRD are applied on each run.
 The S3 client image is rebuilt when its source changes and loaded only when
-absent from Kind. Full runs start Keycloak before the network, registry, and
+absent from Kind. Full runs start Keycloak before the network and
 Data profiles so that its startup can run at the same time. The S3 profile
 waits for it before making requests. The runner prints setup and profile durations.
 
@@ -130,39 +135,23 @@ REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
 
 ## GitHub Actions
 
-Pull requests and pushes to `main` and `legacy` use the
+The [test workflow](../../.github/workflows/pr.yaml) uses the
 [shared classifier](../README.md#select-checks). Documentation-only changes run
 the documentation and static checks. Other changes and manual runs execute
 the unit suite and all eight integration profiles. The profiles share one
 Kind cluster in the job. The final required check waits for every selected
-job. Tag publication does not run the tests again. A release tag must point
-to a commit with a successful push test run on `main` or `legacy`.
-The release uses the workflow files at the tagged commit. Use release tags
-such as `0.12.1`, without a `v` prefix.
+job. Tag publication requires a successful push test run for the tagged commit
+and does not repeat the tests. Use release tags such as `1.0.0`, without a
+`v` prefix.
 
-Stable releases tested on `main` update the documentation's `latest` alias
-and default version. Releases tested only on `legacy` publish versioned
-documentation without changing the alias or default. If both branches have
-successful push test runs for the same commit, `main` takes precedence.
-
-## Cleanup
-
-Delete only the dedicated cluster when the validation cycle is complete:
-
-```bash
-KUBECONFIG=/tmp/provider-datalab-it.kubeconfig \
-  kind delete cluster --name provider-datalab-it
-```
+## Virtual cluster checks
 
 Platform setup creates a fresh disposable TLS certificate for `*.lab.acme.com`.
+The profile sets `defaults.overallQuota.hard.limits.cpu` to `20`. Its two
+control planes, controllers, DNS, database, and catalog need room for rolling
+updates. Other quota entries keep their defaults.
 
-The session runtime controllers receive read-only CRD discovery permissions
-from `manifests/educates-rbac.yaml` before startup. The harness checks both
-controller rollouts before it creates a Datalab runtime. Controllers request
-CPU and memory so they receive a CPU share under local load. Their health
-probes allow five minutes for cold starts.
-
-The vcluster profile installs the session runtime, PGO, Keycloak, and Contour.
+The vcluster profile installs PGO, Keycloak, and Contour.
 Its identity fixture creates `test-login` to check exchange of tokens from
 another client. The test EnvironmentConfig explicitly adds it through
 `iam.extraAudiences`. The fixture permits a password grant to obtain real human
@@ -182,6 +171,13 @@ checks that an admin profile cannot elevate a namespace caller and that role
 scopes and Kubernetes RBAC permit only the configured access. The probe
 mounts the workspace credential Secret separately from public profile Secrets.
 These test grants are not composition behavior.
+The client runs outside both virtual clusters and uses their HTTPS APIs.
+It checks Agent Sandbox CRDs and controller readiness, then creates a Sandbox
+from the sandboxd template with a declared session PVC. Through Kubernetes
+port-forwarding, it writes and reads a file over REST and runs a command over
+gRPC. It deletes and recreates the Sandbox, then checks the file and PVC UID.
+It also submits oversized virtual Pods and checks that host CPU and memory
+quota rejections appear in their events.
 The profile also rejects duplicate OAuth2 discovery names and checks removal
 and recovery of discovery when the source credential Secret is deleted and
 restored. Its producer is paused for that check; credential values stay private.
@@ -203,7 +199,7 @@ PostgreSQL, MongoDB, and Redis operators to zero. Each database profile scales
 its operator to one and waits for readiness, including when it reuses a Helm
 release. Successful cleanup waits for resource deletion before scaling it down.
 An operator stays running if resources remain or cleanup fails. Crossplane,
-providers, storage, Educates, and identity services remain available.
+providers, storage, and identity services remain available.
 
 Integration uses a temporary composition with a `1m` response TTL. The generated
 deployment artifact and its `5m` default remain unchanged. This reduces periodic

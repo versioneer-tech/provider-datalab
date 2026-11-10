@@ -10,7 +10,6 @@ from composition.helpers import (
     _b64get_any,
     _boolish,
     _extract_data,
-    _runtime_namespace,
     _to_dict,
 )
 from composition.render import _render_template
@@ -32,9 +31,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         or _boolish((environment.get("httpRoute") or {}).get("enabled"))
     ):
         return
-    workshop_namespace = _runtime_namespace(req, xr_name)
-    if not workshop_namespace:
-        return
+    runtime_namespace = xr_name
 
     observed = getattr(req.observed, "resources", {}) or {}
     oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
@@ -55,7 +52,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         req,
         "oauth2-client-secret/manifest",
         secret_name=secret_name,
-        workshop_ns=workshop_namespace,
+        runtime_namespace=runtime_namespace,
         data={
             key: _base64.b64encode(value.encode("utf-8")).decode("ascii")
             for key, value in {

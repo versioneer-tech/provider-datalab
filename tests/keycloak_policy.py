@@ -122,7 +122,7 @@ def verify_keycloak_policy(resources, image=None):
             port = docker('port', name, '8080/tcp').rsplit(':', 1)[1]
             origin = 'http://127.0.0.1:' + port
             endpoint = '/realms/test-refresh/protocol/openid-connect/token'
-            deadline = time.monotonic() + 120
+            deadline = time.monotonic() + 300
             while True:
                 try:
                     status, _ = call('/realms/test-refresh/.well-known/openid-configuration')

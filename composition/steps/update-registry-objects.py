@@ -8,7 +8,6 @@ from composition.helpers import (
     _b64get_any,
     _boolish,
     _extract_data,
-    _extract_manifest,
     _http_route_timeouts,
     _safe_str,
     _strong_token,
@@ -26,10 +25,7 @@ def compose(req, rsp):
     if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
         return
     observed = req.observed.resources
-    runtime = (_extract_manifest(observed.get(f"workshopenvironment-{name}")).get("status") or {}).get("educates") or {}
-    runtime_namespace = runtime.get("namespace")
-    if not runtime_namespace:
-        return
+    runtime_namespace = name
 
     def emit(suffix, manifest, readiness=None):
         key = f"registry-{suffix}-{name}"
@@ -73,7 +69,7 @@ def compose(req, rsp):
     emit("deployment", _render_template(
         req, "registry/deployment", runtime_namespace=runtime_namespace, labels=labels,
         registry_image=registry_image,
-        checksum=checksum, storage_secret_name=f"{name}-datalab",
+        checksum=checksum, storage_secret_name=f"{name}-storage",
     ), {"policy": "DeriveFromCelQuery", "celQuery":
         "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1"})
     emit("service", _render_template(req, "registry/service", runtime_namespace=runtime_namespace, labels=labels))

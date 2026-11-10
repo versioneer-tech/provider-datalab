@@ -13,11 +13,13 @@ from render import arguments, environment, render
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}}
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
+    env["data"]["iam"]["redirectURIs"] = ["http://localhost:8080/callback"] * 2
+    env["data"]["iam"]["webOrigins"] = ["https://tools.example"]
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "workspace"},
-        "spec": {"users": [], "sessions": []},
+        "spec": {"users": []},
         "status": {"connections": [{"name": "retired-client", "type": "oauth2", "ready": True,
                                     "secretRef": {"name": "retired", "namespace": "workspace"}}],
                    "oauth2": [{"name": "retired-client", "type": "client",
@@ -53,16 +55,24 @@ def main():
         }}},
     }
 
-    def status(observed):
-        resources = render(args, env, source, observed, include_composite=True)
-        assert "oauth2-client-secret-s-joe" not in resources
+    def discovery(resources):
         result = resources["composite"]["status"]
         assert all(c["type"] != "oauth2" for c in result["connections"])
         assert "oauth2-sensitive-value" not in json.dumps(result)
         assert base64.b64encode(b"oauth2-sensitive-value").decode() not in json.dumps(result)
         return result["oauth2"]
 
-    assert status([client, observer]) == expected
+    def status(observed):
+        return discovery(render(args, env, source, observed, include_composite=True))
+
+    initial = render(args, env, source, [client, observer], include_composite=True)
+    client_config = initial["keycloak-client-s-joe"]["spec"]["forProvider"]
+    assert client_config["validRedirectUris"] == [
+        "https://s-joe.lab.acme.com/oauth2/callback", "http://localhost:8080/callback",
+    ]
+    assert client_config["webOrigins"] == ["https://s-joe.lab.acme.com", "https://tools.example"]
+    assert "oauth2-client-secret-s-joe" not in initial
+    assert discovery(initial) == expected
     print("PASS OAuth2 discovery uses the actual client ID, contains only metadata, and stays outside connections")
 
     for index in (0, 1):

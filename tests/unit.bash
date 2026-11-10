@@ -82,16 +82,9 @@ for file in "${examples[@]}"; do
   fi
 done
 
-python3 tests/vclusters.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/registry.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/s3-connections.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/service-connections.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/sessions.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/oauth2.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-python3 tests/token-exchange.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-
-python3 tests/session-storage.py "${render_dir##*/}-python"
-
+for suite in vclusters registry s3-connections service-connections oauth2 token-exchange; do
+  python3 "tests/${suite}.py" --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
+done
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
   python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
@@ -101,8 +94,8 @@ fi
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
   render examples/base/001-lab.yaml \
     --observed-resources tests/observed/001-rotated-lab.yaml >"${render_dir}/rotated.yaml"
-  baseline_checksum="$(awk '/datalabs.pkg.internal\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/001x-lab.yaml")"
-  rotated_checksum="$(awk '/datalabs.pkg.internal\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/rotated.yaml")"
+  baseline_checksum="$(awk '/datalabs.versioneer.at\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/001x-lab.yaml")"
+  rotated_checksum="$(awk '/datalabs.versioneer.at\/storage-secret-checksum:/ {print $2; exit}' "${render_dir}/rotated.yaml")"
   if [[ -z "${baseline_checksum}" || -z "${rotated_checksum}" || "${baseline_checksum}" == "${rotated_checksum}" ]]; then
     printf 'The package-r storage Secret checksum did not change after token rotation.\n' >&2
     exit 1

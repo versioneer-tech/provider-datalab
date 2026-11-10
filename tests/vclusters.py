@@ -1,61 +1,40 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check independent virtual clusters and legacy session coexistence."""
+"""Check independent virtual clusters, access, and instance removal."""
 
 from copy import deepcopy
 import base64
 import json
+import yaml
 
 from helpers import load_helpers
+from render import arguments, environment, manifest, render
 
 NAMING = load_helpers("_resource_name", "_vcluster_profile")
 resource_name = NAMING["_resource_name"]
 profile_name = NAMING["_vcluster_profile"]
 
-from render import arguments, environment, manifest, render
 
-
-def main():
-    args = arguments()
-    env = environment()
-    env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
-    group = {"name": "demo", "namespace": "demo", "role": "edit"}
-    source = {
-        "apiVersion": "pkg.internal/v1beta2",
-        "kind": "Datalab",
-        "metadata": {"name": "s-joe", "namespace": "workspace"},
-        "spec": {
-            "users": ["joe"],
-            "sessions": [{"name": "work"}],
-            "vclusters": {
-                key: {"groups": [group], "storage": "2Gi"} for key in ("vc0", "vc1")
-            },
-        },
+def user_roles(resources):
+    return {
+        ref["name"]
+        for ref in resources["keycloak-roles-user-s-joe"]["spec"]["forProvider"]["roleIdsRefs"]
     }
-    observed = [
-        {
-            "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
-            "kind": "Object",
-            "metadata": {
-                "name": "workshopenvironment-s-joe",
-                "namespace": "workspace",
-                "annotations": {
-                    "crossplane.io/composition-resource-name": "workshopenvironment-s-joe"
-                },
-            },
-            "status": {
-                "atProvider": {
-                    "manifest": {"status": {"educates": {"namespace": "s-joe-runtime"}}}
-                }
-            },
-        }
-    ]
-    resources = render(args, env, source, observed, include_composite=True)
-    assert "workshopsession-s-joe-work" in resources
-    assert manifest(resources, "workshop-s-joe")["spec"]["session"]["applications"][
-        "vcluster"
-    ]["enabled"]
+
+
+def configuration(resources, instance):
+    secret = manifest(resources, resource_name("vcluster", "s-joe", instance, "config"))
+    assert "stringData" not in secret
+    return json.loads(base64.b64decode(secret["data"]["config.yaml"]))
+
+
+def connections(resources):
+    return [c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]
+
+
+def check_instance_isolation(resources):
+    assert "namespace-s-joe" in resources
     for instance in ("vc0", "vc1"):
 
         def key(suffix):
@@ -63,7 +42,7 @@ def main():
 
         runtime = f"vcluster-{instance}"
         statefulset = manifest(resources, key("statefulset"))
-        assert statefulset["metadata"]["namespace"] == "s-joe-runtime"
+        assert statefulset["metadata"]["namespace"] == "s-joe"
         assert statefulset["metadata"]["name"] == runtime
         assert (
             statefulset["spec"]["template"]["metadata"]["labels"]
@@ -83,7 +62,7 @@ def main():
         assert route["filters"][0]["urlRewrite"]["path"]["replacePrefixMatch"] == "/"
         tls = manifest(resources, key("backend-tls"))["spec"]
         assert tls["targetRefs"][0]["name"] == runtime
-        assert tls["validation"]["hostname"] == f"{runtime}.s-joe-runtime.svc"
+        assert tls["validation"]["hostname"] == f"{runtime}.s-joe.svc"
         authentication = json.loads(
             manifest(resources, key("authentication"))["data"]["authentication.json"]
         )
@@ -96,18 +75,32 @@ def main():
             f"vcluster_{other}_demo"
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
-    assert len([c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]) == 4
-    assert resources["composite"]["status"]["sessions"][0]["state"] == "started"
-    print(
-        "PASS two virtual clusters have separate routes, roles, selectors, and session status"
-    )
-
-    def user_roles(rendered):
-        return {
-            ref["name"]
-            for ref in rendered["keycloak-roles-user-s-joe"]["spec"]["forProvider"]["roleIdsRefs"]
+        bundle = configuration(resources, instance)["experimental"]["deploy"]["vcluster"]["manifests"]
+        installed = list(yaml.safe_load_all(bundle))
+        crds = {item["metadata"]["name"] for item in installed if item["kind"] == "CustomResourceDefinition"}
+        assert crds == {
+            "sandboxes.agents.x-k8s.io", "sandboxclaims.extensions.agents.x-k8s.io",
+            "sandboxwarmpools.extensions.agents.x-k8s.io", "sandboxtemplates.extensions.agents.x-k8s.io",
         }
+        controller = next(item for item in installed if item["kind"] == "Deployment")
+        assert controller["spec"]["template"]["spec"]["containers"][0]["image"].endswith(":v1.0.10")
+        template = manifest(resources, resource_name("vcluster", "s-joe", instance, "access", "sandbox-template-demo"))
+        pod = template["spec"]["podTemplate"]["spec"]
+        assert pod["containers"][0]["name"] == "sandboxd"
+        assert pod["automountServiceAccountToken"] is False
+        assert (resource_name("vcluster", "s-joe", instance, "access", "session-analysis") in resources) == (instance == "vc0")
+    pvc = manifest(resources, resource_name("vcluster", "s-joe", "vc0", "access", "session-analysis"))
+    assert pvc["metadata"] == {"name": "session-analysis", "namespace": "demo"}
+    assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
+    assert pvc["spec"]["storageClassName"] == "standard"
+    assert resources["composite"]["status"]["sessions"] == [{
+        "name": "analysis", "vcluster": "vc0", "namespace": "demo", "pvcName": "session-analysis",
+    }]
+    print("PASS virtual clusters have separate routes, roles, and session storage")
 
+
+def check_membership(args, env, source, resources):
+    observed = []
     implicit = deepcopy(source)
     implicit["spec"]["users"] = ["joe", "jane"]
     implicit["spec"]["vclusters"] = {"vc0": {}, "vc1": {"groups": []}}
@@ -133,7 +126,7 @@ def main():
             body["spec"]["forProvider"]["manifest"]
             for body in automatic.values()
             if body.get("kind") == "Object"
-            and body["metadata"].get("labels", {}).get("datalabs.pkg.internal/vcluster") == instance
+            and body["metadata"].get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
             and body["spec"]["forProvider"].get("manifest", {}).get("kind") == "ClusterRoleBinding"
         ]
         assert len(bindings) == 1
@@ -152,6 +145,7 @@ def main():
     assert all(body.get("spec") == automatic[key].get("spec") for key, body in compatible.items() if key != "composite")
     implicit["spec"]["users"].remove("jane")
     implicit["spec"]["vclusters"] = {}
+    implicit["spec"]["sessions"] = []
     disabled = render(args, env, implicit, observed)
     assert user_roles(disabled) == {"s-joe-ws-access", "s-joe-ws-api"}
     assert disabled["keycloak-memberships-users-s-joe"]["spec"]["forProvider"]["members"] == ["joe"]
@@ -166,6 +160,9 @@ def main():
     assert manifest(vacant, resource_name("vcluster", "s-joe", "vc0", "statefulset")) == manifest(resources, resource_name("vcluster", "s-joe", "vc0", "statefulset"))
     print("PASS only administrators receive built-in administration; removal clears managed grants")
 
+
+def check_secret_bindings(args, env, source):
+    observed = []
     bound_source, bound_env = deepcopy(source), deepcopy(env)
     bound_source["spec"]["databases"] = {"pg0": {"names": ["analytics"]}}
     bound_env["data"]["customSecrets"] = [
@@ -182,7 +179,7 @@ def main():
         )
     ]
     custom_key = resource_name(
-        "observe-custom-secret", "s-joe", "s-joe-runtime", "github-development"
+        "observe-custom-secret", "s-joe", "s-joe", "github-development"
     )
     custom_source = {
         "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
@@ -192,7 +189,7 @@ def main():
             "conditions": [{"type": "Ready", "status": "True"}],
             "atProvider": {"manifest": {
                 "apiVersion": "v1", "kind": "Secret",
-                "metadata": {"namespace": "s-joe-runtime", "name": "github-development"},
+                "metadata": {"namespace": "s-joe", "name": "github-development"},
                 "data": {"token": base64.b64encode(b"test-token").decode()},
             }},
         },
@@ -202,15 +199,14 @@ def main():
     copy = next(body for body in pending.values() if body.get("kind") == "Secret"
                 and body["metadata"]["name"] == custom_ref["name"])
     bound = render(args, bound_env, bound_source, [*observed, custom_source, copy], include_composite=True)
-    connections = bound["composite"]["status"]["connections"]
-    custom = [c for c in connections if c["type"] == "custom"]
+    published = bound["composite"]["status"]["connections"]
+    custom = [c for c in published if c["type"] == "custom"]
     assert custom == [{"name": "github-development", "type": "custom", "ready": True,
                        "secretRef": {"namespace": "workspace", "name": copy["metadata"]["name"]}}]
-    assert not next(c for c in connections if c["type"] == "postgres")["ready"]
+    assert not next(c for c in published if c["type"] == "postgres")["ready"]
 
     def native_secrets(rendered, instance):
-        config = manifest(rendered, resource_name("vcluster", "s-joe", instance, "config"))
-        return json.loads(base64.b64decode(config["data"]["config.yaml"]))["sync"]["fromHost"]["secrets"]
+        return configuration(rendered, instance)["sync"]["fromHost"]["secrets"]
 
     source_ref = custom[0]["secretRef"]
     assert native_secrets(bound, "vc0") == {
@@ -225,18 +221,16 @@ def main():
     assert native_secrets(unavailable, "vc0") == {"enabled": False, "mappings": {"byName": {}}}
     print("PASS only ready connection references generate native Secret mappings")
 
-    def settings(rendered, instance="vc0"):
-        def key(suffix):
-            return resource_name("vcluster", "s-joe", instance, suffix)
 
-        secret = manifest(rendered, key("config"))
-        assert "stringData" not in secret
-        configuration_text = base64.b64decode(secret["data"]["config.yaml"]).decode()
-        configuration = json.loads(configuration_text)
-        pod = manifest(rendered, key("statefulset"))["spec"]["template"]
-        checksum = pod["metadata"]["annotations"]["datalabs.pkg.internal/configuration-checksum"]
-        assert configuration["controlPlane"]["statefulSet"]["resources"] == pod["spec"]["containers"][0]["resources"]
-        return configuration["controlPlane"], checksum
+def check_control_plane_settings(args, env, source, resources):
+    observed = []
+
+    def settings(rendered, instance="vc0"):
+        control_plane = configuration(rendered, instance)["controlPlane"]
+        pod = manifest(rendered, resource_name("vcluster", "s-joe", instance, "statefulset"))["spec"]["template"]
+        checksum = pod["metadata"]["annotations"]["datalabs.versioneer.at/configuration-checksum"]
+        assert control_plane["statefulSet"]["resources"] == pod["spec"]["containers"][0]["resources"]
+        return control_plane, checksum
 
     defaults, _ = settings(resources)
     tuned_env = deepcopy(env)
@@ -259,6 +253,10 @@ def main():
     }
     resource_env = deepcopy(tuned_env)
     resource_env["data"]["vcluster"]["resources"] = resource_overrides
+    resource_env["data"]["images"] = {
+        "sandbox": "test-images/sandbox:custom",
+        "sandboxd": "test-images/sandboxd:custom",
+    }
     changed = render(args, resource_env, source, observed)
     expected = {
         section: {**defaults["statefulSet"]["resources"][section], **values}
@@ -268,16 +266,23 @@ def main():
         control_plane, checksum = settings(changed, instance)
         assert control_plane["statefulSet"]["resources"] == expected
         assert checksum != settings(tuned, instance)[1]
+        installed = yaml.safe_load_all(
+            configuration(changed, instance)["experimental"]["deploy"]["vcluster"]["manifests"]
+        )
+        controller = next(item for item in installed if item["kind"] == "Deployment")
+        assert controller["spec"]["template"]["spec"]["containers"][0]["image"] == resource_env["data"]["images"]["sandbox"]
+        for target in ("default", "demo"):
+            template = manifest(changed, resource_name(
+                "vcluster", "s-joe", instance, "access", f"sandbox-template-{target}"
+            ))
+            assert template["spec"]["podTemplate"]["spec"]["containers"][0]["image"] == resource_env["data"]["images"]["sandboxd"]
     reordered_env = deepcopy(tuned_env)
     reordered_env["data"]["vcluster"]["backingStore"]["database"]["embedded"] = dict(reversed(list(embedded.items())))
     assert settings(render(args, reordered_env, source, observed)) == settings(tuned)
-    print("PASS resource overrides reach both control planes and reordered settings keep the rollout checksum")
+    print("PASS resource and Sandbox image overrides reach both instances; reordered settings keep the rollout checksum")
 
-    clients = [body for body in resources.values() if body.get("kind") == "Client"]
-    assert len(clients) == 1 and clients[0]["spec"]["forProvider"]["clientId"] == "s-joe"
-    assignments = [body for body in resources.values() if body.get("kind") == "ClientServiceAccountRole"]
-    assert len(assignments) == 1
-    assert assignments[0]["spec"]["forProvider"]["roleRef"]["name"] == "s-joe-ws-api"
+
+def check_public_profiles(args, env, source, resources):
     for instance in ("vc0", "vc1"):
         profile = profile_name("s-joe", instance, "demo")
         scope_resource = resource_name(profile, "scope")
@@ -287,96 +292,66 @@ def main():
                     if body.get("kind") == "RoleMapper"
                     and body["spec"]["forProvider"].get("clientScopeIdRef", {}).get("name") == scope_resource]
         assert len(mappings) == 1 and mappings[0]["roleIdRef"]["name"] == profile
-    print("PASS one OAuth client, only ws_api assigned to its account, and optional profile role scopes")
+    print("PASS each instance has its own optional profile role scope")
 
-    def connection_secrets(rendered):
-        connections = [c for c in rendered["composite"]["status"]["connections"] if c["type"] == "vcluster"]
-        for connection in connections:
-            secret = rendered[resource_name("connection", connection["secretRef"]["name"])]
-            assert "stringData" not in secret
-            assert set(secret["data"]) == {"kubeconfig", "client-id", "issuer-url"}
-            values = {key: base64.b64decode(value).decode() for key, value in secret["data"].items()}
-            assert values["client-id"] == "s-joe"
-            config = json.loads(values["kubeconfig"])
-            assert config["clusters"][0]["cluster"]["server"] == f"https://s-joe.lab.acme.com/.{connection['instance']}"
-            assert config["contexts"][0]["context"]["namespace"] == ("default" if connection["targetNamespace"] == "*" else connection["targetNamespace"])
-            user = config["users"][0]["user"]
-            assert set(user) == {"exec"}
-            assert set(user["exec"]) == {"apiVersion", "interactiveMode", "command", "args"}
-            if connection["group"] == "cluster-admin":
-                assert user["exec"]["interactiveMode"] == "IfAvailable"
-                assert user["exec"]["args"][2:] == ["--issuer", values["issuer-url"], "--client-id", "s-joe"]
-            else:
-                assert user["exec"]["interactiveMode"] == "Never"
-                assert user["exec"]["args"][2:] == ["--token-only"]
-            assert set(config["clusters"][0]["cluster"]) == {"server"}
-        return connections
-
-    connections = connection_secrets(resources)
-    assert all(not c["ready"] for c in connections)
-    ready_observed = deepcopy(observed)
+    profiles = connections(resources)
+    assert len(profiles) == 4
+    assert all(not c["ready"] for c in profiles)
+    for connection in profiles:
+        secret = resources[resource_name("connection", connection["secretRef"]["name"])]
+        assert "stringData" not in secret
+        assert set(secret["data"]) == {"kubeconfig", "client-id", "issuer-url"}
+        values = {key: base64.b64decode(value).decode() for key, value in secret["data"].items()}
+        assert values["client-id"] == "s-joe"
+        config = json.loads(values["kubeconfig"])
+        assert config["clusters"][0]["cluster"]["server"] == (
+            f"https://s-joe.lab.acme.com/.{connection['instance']}"
+        )
+        namespace = connection["targetNamespace"]
+        assert config["contexts"][0]["context"]["namespace"] == (
+            "default" if namespace == "*" else namespace
+        )
+        user = config["users"][0]["user"]
+        assert set(user) == {"exec"}
+        assert set(user["exec"]) == {"apiVersion", "interactiveMode", "command", "args"}
+        if connection["group"] == "cluster-admin":
+            assert user["exec"]["interactiveMode"] == "IfAvailable"
+            assert user["exec"]["args"][2:] == ["--issuer", values["issuer-url"], "--client-id", "s-joe"]
+        else:
+            assert user["exec"]["interactiveMode"] == "Never"
+            assert user["exec"]["args"][2:] == ["--token-only"]
+        assert set(config["clusters"][0]["cluster"]) == {"server"}
+    ready_observed = []
     for body in resources.values():
         if body.get("kind") not in ("Secret", "Datalab"):
             body = deepcopy(body)
             body["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
             ready_observed.append(body)
     ready_resources = render(args, env, source, ready_observed, include_composite=True)
-    assert all(c["ready"] for c in connection_secrets(ready_resources))
+    ready_profiles = connections(ready_resources)
+    assert len(ready_profiles) == len(profiles)
+    assert all(c["ready"] for c in ready_profiles)
     assert not any("observe-client" in key for key in ready_resources)
     print("PASS profiles contain no credentials and become ready without credential observers or vcluster account grants")
 
-    legacy = []
-    profile = profile_name("s-joe", "vc0", "demo")
-    for suffix, api, kind, params in (
-        ("client", "openidclient", "Client", {"clientId": profile}),
-        ("assignment", "openidclient", "ClientServiceAccountRole", {"serviceAccountUserClientIdRef": {"name": profile}}),
-        ("audience", "client", "ProtocolMapper", {"clientIdRef": {"name": profile}}),
-    ):
-        key = f"keycloak-vcluster-{suffix}-{profile}"
-        legacy.append({
-            "apiVersion": f"{api}.keycloak.m.crossplane.io/v1alpha1", "kind": kind,
-            "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": key}},
-            "spec": {"forProvider": params},
-        })
-    old_connection_key = resource_name("connection", profile)
-    legacy.append({
-        "apiVersion": "v1", "kind": "Secret",
-        "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": old_connection_key}},
-        "data": {"client-secret": base64.b64encode(b"retired-profile-credential").decode()},
-    })
-    observer_key = resource_name("vcluster", "s-joe", "vc0", "observe-client-demo")
-    legacy.append({
-        "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-        "metadata": {"name": observer_key, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": observer_key}},
-        "status": {"atProvider": {"manifest": {"data": {"clientSecret": base64.b64encode(b"retired-profile-credential").decode()}}}},
-    })
-    upgraded = render(args, env, source, [*ready_observed, *legacy], include_composite=True)
-    assert all(c["ready"] for c in connection_secrets(upgraded))
-    for body in legacy:
-        assert body["metadata"]["annotations"]["crossplane.io/composition-resource-name"] not in upgraded
-    assert all(c["secretRef"]["name"] != profile for c in connection_secrets(upgraded))
-    print("PASS upgrade omits old clients, assignments, mappers, observers, and credential-bearing profile Secrets")
 
+def check_instance_removal(args, env, source, resources):
     reduced = deepcopy(source)
     del reduced["spec"]["vclusters"]["vc0"]
-    reduced_resources = render(args, env, reduced, observed)
-    assert "vcluster-s-joe-vc0-statefulset-1987a0016d" not in reduced_resources
+    reduced["spec"]["sessions"] = []
+    reduced_resources = render(args, env, reduced, [])
+    assert resource_name("vcluster", "s-joe", "vc0", "statefulset") not in reduced_resources
     assert user_roles(reduced_resources) == {
         "s-joe-ws-access", "s-joe-ws-api", profile_name("s-joe", "vc1", "demo")
     }
     assert manifest(
-        reduced_resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58"
-    ) == manifest(resources, "vcluster-s-joe-vc1-statefulset-b6c1325e58")
-    assert manifest(reduced_resources, "workshopsession-s-joe-work") == manifest(
-        resources, "workshopsession-s-joe-work"
-    )
-    print("PASS removing one instance preserves the other instance and session")
+        reduced_resources, resource_name("vcluster", "s-joe", "vc1", "statefulset")
+    ) == manifest(resources, resource_name("vcluster", "s-joe", "vc1", "statefulset"))
+    print("PASS removing one instance preserves the other instance")
 
-    pending = render(args, env, source, [])
-    assert "vcluster-s-joe-vc0-statefulset-1987a0016d" not in pending
-    assert "workshopenvironment-s-joe" in pending
-    print("PASS native runtimes wait for the Educates namespace")
 
+def check_name_collisions(args, env, source):
+    group = source["spec"]["vclusters"]["vc0"]["groups"][0]
     hyphenated = deepcopy(source)
     hyphenated["spec"]["vclusters"] = {
         instance: {"groups": [{**group, "name": profile}]}
@@ -387,10 +362,10 @@ def main():
             ("vc0-headless", "demo"),
         )
     }
-    distinct = render(args, env, hyphenated, observed, include_composite=True)
-    connections = [c for c in distinct["composite"]["status"]["connections"] if c["type"] == "vcluster"]
-    assert len({c["name"] for c in connections}) == 8
-    assert len({c["secretRef"]["name"] for c in connections}) == 8
+    distinct = render(args, env, hyphenated, [], include_composite=True)
+    profiles = connections(distinct)
+    assert len({c["name"] for c in profiles}) == 8
+    assert len({c["secretRef"]["name"] for c in profiles}) == 8
     host_objects = [
         resource["spec"]["forProvider"]["manifest"]
         for resource in distinct.values()
@@ -415,6 +390,33 @@ def main():
     print(
         "PASS hyphenated instance and profile names keep separate host objects and connection references"
     )
+
+
+def main():
+    args = arguments()
+    env = environment()
+    env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
+    group = {"name": "demo", "namespace": "demo", "role": "edit"}
+    source = {
+        "apiVersion": "versioneer.at/v1",
+        "kind": "Datalab",
+        "metadata": {"name": "s-joe", "namespace": "workspace"},
+        "spec": {
+            "users": ["joe"],
+            "sessions": [{"name": "analysis", "vcluster": "vc0", "namespace": "demo", "pvcSize": "2Gi"}],
+            "vclusters": {
+                key: {"groups": [group], "storage": "2Gi"} for key in ("vc0", "vc1")
+            },
+        },
+    }
+    resources = render(args, env, source, [], include_composite=True)
+    check_instance_isolation(resources)
+    check_membership(args, env, source, resources)
+    check_secret_bindings(args, env, source)
+    check_control_plane_settings(args, env, source, resources)
+    check_public_profiles(args, env, source, resources)
+    check_instance_removal(args, env, source, resources)
+    check_name_collisions(args, env, source)
 
 
 if __name__ == "__main__":

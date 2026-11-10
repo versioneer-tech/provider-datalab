@@ -17,10 +17,10 @@ def encoded(values):
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": True}}
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": True}, "security": {"externalEgress": False}}
     env["data"]["storage"] = {"region": "us-east-1", "forcePathStyle": True}
-    source = {"apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
-              "metadata": {"name": "s-joe", "namespace": "teams"}, "spec": {"sessions": []}}
+    source = {"apiVersion": "versioneer.at/v1", "kind": "Datalab",
+              "metadata": {"name": "s-joe", "namespace": "teams"}, "spec": {}}
 
     def observer(key, body):
         return {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
@@ -29,22 +29,21 @@ def main():
                 "status": {"atProvider": {"manifest": body}, "conditions": [
                     {"type": "Ready", "status": "True"}, {"type": "Synced", "status": "True"}]}}
 
-    runtime = observer("workshopenvironment-s-joe", {"status": {"educates": {"namespace": "s-joe-runtime"}}})
     storage = observer("observe-runtime-storage-secret-s-joe", {
-        "apiVersion": "v1", "kind": "Secret", "metadata": {"name": "s-joe-datalab", "namespace": "s-joe-runtime"},
+        "apiVersion": "v1", "kind": "Secret", "metadata": {"name": "s-joe-storage", "namespace": "s-joe"},
         "data": encoded({"aws-credentials": "[default]\naws_access_key_id = test-access\naws_secret_access_key = test-secret\n",
                          "AWS_REGION": "us-east-1", "AWS_ENDPOINT_URL": "http://minio.storage:9000"}),
     })
 
     def run(config=env, observed=None):
-        return render(args, config, source, [runtime, storage] if observed is None else observed, include_composite=True)
+        return render(args, config, source, [storage] if observed is None else observed, include_composite=True)
 
     def connection(resources):
         return next(c for c in resources["composite"]["status"]["connections"] if c["type"] == "registry")
 
-    empty = run(observed=[])
-    assert "registry-auth-secret-s-joe" not in empty and "registry-deployment-s-joe" not in empty
-    waiting = run(observed=[runtime])
+    waiting = run(observed=[])
+    assert "namespace-s-joe" in waiting
+    assert "networkpolicy-s-joe-allow-dns-egress" in waiting
     assert "registry-auth-secret-s-joe" in waiting and "registry-deployment-s-joe" not in waiting
     resources = run()
     deployment = manifest(resources, "registry-deployment-s-joe")
@@ -61,12 +60,11 @@ def main():
     variables = {entry["name"]: entry for entry in container["env"]}
     assert variables["AWS_SHARED_CREDENTIALS_FILE"]["value"] == "/var/run/datalab/storage/aws-credentials"
     assert variables["REGISTRY_STORAGE_S3_REGIONENDPOINT"]["value"] == "$(AWS_ENDPOINT_URL)"
-    assert variables["AWS_ENDPOINT_URL"]["valueFrom"]["secretKeyRef"] == {"name": "s-joe-datalab", "key": "AWS_ENDPOINT_URL"}
+    assert variables["AWS_ENDPOINT_URL"]["valueFrom"]["secretKeyRef"] == {"name": "s-joe-storage", "key": "AWS_ENDPOINT_URL"}
     assert "test-secret" not in json.dumps(deployment) + json.dumps(config)
     assert not any("persistentVolumeClaim" in volume for volume in pod["spec"]["volumes"])
     assert container["readinessProbe"]["httpGet"] == {"path": "/debug/health", "port": "health"}
     assert manifest(resources, "registry-service-s-joe")["spec"]["ports"][0]["port"] == 5000
-    assert "registry" not in manifest(resources, "workshop-s-joe")["spec"]["session"]["applications"]
     print("PASS shared S3 registry needs runtime credentials, not sessions, Data, or a registry PVC")
 
     route = manifest(resources, "registry-route-s-joe")["spec"]
@@ -99,7 +97,7 @@ def main():
     custom["data"]["httpRoute"]["timeouts"] = {"request": "0s", "backendRequest": "2h"}
     assert manifest(run(custom), "registry-route-s-joe")["spec"]["rules"][0]["timeouts"] == custom["data"]["httpRoute"]["timeouts"]
     custom["data"]["httpRoute"]["timeouts"] = {"request": "5m", "backendRequest": "10m"}
-    render(args, custom, source, [runtime, storage], error="backendRequest must not exceed request")
+    render(args, custom, source, [storage], error="backendRequest must not exceed request")
     print("PASS registry-only exposure uses configured timeouts and rejects an invalid backend deadline")
 
     rotated = deepcopy(storage)
@@ -107,7 +105,7 @@ def main():
         "aws-credentials": "[default]\naws_access_key_id = rotated\naws_secret_access_key = rotated-secret\n",
         "AWS_ENDPOINT_URL": "https://s3.example", "AWS_REGION": "eu-west-1",
     }))
-    changed = run(observed=[runtime, rotated])
+    changed = run(observed=[rotated])
     assert manifest(changed, "registry-deployment-s-joe")["spec"]["template"]["metadata"]["annotations"] != pod["metadata"]["annotations"]
     changed_config = json.loads(manifest(changed, "registry-config-s-joe")["data"]["config.yml"])
     assert changed_config["storage"]["s3"]["secure"] and changed_config["storage"]["s3"]["region"] == "eu-west-1"
@@ -115,8 +113,7 @@ def main():
     print("PASS storage rotation restarts the registry and preserves its client credentials")
 
     auth = manifest(resources, "registry-auth-secret-s-joe")
-    auth["data"] = encoded(auth.pop("stringData"))
-    observed = [runtime, storage, observer("observe-registry-auth-secret-s-joe", auth)]
+    observed = [storage, observer("observe-registry-auth-secret-s-joe", auth)]
     pending = run(observed=observed)
     info = connection(pending)
     assert info["name"] == "primary" and info["endpoint"] == "https://s-joe.lab.acme.com/v2/" and not info["ready"]

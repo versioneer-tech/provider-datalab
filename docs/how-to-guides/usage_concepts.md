@@ -6,56 +6,54 @@ Complete [installation](installation.md) before applying these examples.
 
 ## Sessions
 
-A session is a named workspace with an editor, terminal, and persistent home
-directory. Declare the sessions you need in `spec.sessions`:
+A session provides a named workspace PVC in a virtual cluster. Declare its
+cluster, namespace, and storage size in `spec.sessions`:
 
 ```yaml
 spec:
+  vclusters:
+    vc0: {}
   sessions:
-  - name: default
   - name: analysis
-    state: stopped
+    vcluster: vc0
+    namespace: demo
+    pvcSize: 2Gi
 ```
 
-The state defaults to `started`. A started session has a workspace Pod.
-A stopped session keeps its PVC without a running workspace. Change its state
-to `started` to use the same PVC again.
-Several sessions can run at once; each has its own Pod and PVC and shares the
-Datalab's credentials and managed services.
+The provider creates `demo/session-analysis` in `vc0`. Start a Sandbox that
+mounts this PVC to use the workspace. See [Run a sandbox](sandboxes.md) for
+local connection scripts, file operations, commands, and workload replacement.
+Declaring a session does not start a workload. Several sessions can share the
+Datalab's managed services while using separate PVCs.
 
-With no declared sessions, the Datalab still creates its shared services.
-It creates no session Pods or workspace PVCs.
-
-`status.sessions` is a list keyed by `name`:
+`status.sessions` reports the virtual cluster and PVC location:
 
 ```yaml
 status:
   sessions:
-  - name: default
-    state: started
-    phase: Running
-    pvcSize: "1Gi"
-    pvcRef:
-      name: s-jane-default-persistent
-      namespace: s-jane
-    url: https://s-jane-default.lab.acme.com
+  - name: analysis
+    vcluster: vc0
+    namespace: demo
+    pvcName: session-analysis
 ```
-
-`state` reports the desired lifecycle. `phase` and optional `message` report
-observed runtime details. The URL is present only when the runtime is
-`Running`. Stopped sessions keep `pvcRef` but have no runtime details or URL.
-The reference identifies the target PVC; it does not report PVC readiness.
-`pvcSize` reports the requested capacity of the session PVC, including while
-stopped.
 
 ## Persistence
 
-Each declared session has a PVC mounted at `/home/eduk8s`. Its size and
-StorageClass come from the selected
-[EnvironmentConfig](installation.md#runtime-and-service-defaults).
-Use this volume for code, libraries, and workspace files. Keep datasets in
-object storage and database records in a managed database. Arrange backup
-and recovery with the operator.
+A Sandbox can mount its session PVC at `/workspace`. Removing the Sandbox
+keeps that PVC and its files. Stop workloads before removing a session entry
+from the Datalab; entry removal deletes the PVC. Keep datasets in object
+storage and database records in a managed database. Arrange backup and
+recovery with the operator.
+
+## Service namespace and storage
+
+The provider creates a namespace with the Datalab name. Data, the registry,
+managed stores, and virtual cluster control planes run there. Quotas and
+network policies come from EnvironmentConfig. A host ResourceQuota bounds the
+team's CPU, memory, and storage; one LimitRange supplies missing container
+requests and limits. These controls also apply to virtual cluster workloads.
+Connection Secrets are published in the Datalab claim namespace. Data and the
+registry use a separate storage-only Secret in the service namespace.
 
 ## PostgreSQL
 
@@ -74,22 +72,21 @@ spec:
 
 This creates the `pg0` cluster with `dev` and `prod` databases. The PostgreSQL
 operator manages the database Pods, credentials, and configured backups.
-Stopping a session does not stop the database.
-
-Sessions receive connection settings such as `POSTGRES_PG0_HOST`,
-`POSTGRES_PG0_PORT`, and `POSTGRES_PG0_DEV_URL`. The generated
-`<datalab>-datalab` Secret holds these values. When the platform enables an
-external TLSRoute, it also supplies `POSTGRES_PG0_DEV_URL_EXTERNAL`.
+Stopping a Sandbox does not stop the database.
+The `<datalab>-postgres-pg0` connection Secret supplies `host`, `port`,
+`user`, `password`, and `dev_url` or `prod_url`. When the platform enables an
+external TLSRoute, it also supplies `dev_url_external` and `prod_url_external`.
 External connections require a client that supports direct TLS with SNI.
 
-### Connect from a session
+### Connect from a workload
 
-Use the connection variables supplied to the session, such as
-`POSTGRES_PG0_DEV_URL`. The PostgreSQL operator also creates user Secrets named
-`*-pguser-*`. Use the database role assigned to your task; the `postgres` role
-has administrative access.
+Use a [Secret binding](connections.md#bind-a-connection) to make the PostgreSQL
+connection available in a virtual namespace. The generated connection uses
+the `postgres` account, which has administrative access. Create a separate
+database login and grants for applications that need less access.
 
-See [Additional services](additional_services.md) for a psql example.
+See [Additional services](additional_services.md#postgresql-with-psql) for a
+psql example.
 
 ## MongoDB and Redis
 
@@ -108,13 +105,13 @@ spec:
 ```
 
 Each store needs its operator installed in the cluster. For the name `prod`,
-sessions receive `MONGO_PROD_URI` and `REDIS_PROD_URL`,
-along with separate host and credential fields where available.
+read `uri` from `<datalab>-mongo-prod` or `url` from `<datalab>-redis-prod`.
+The connection Secrets also contain host and credential fields.
 
-The composition creates `<store>-mongodb-auth` and `<store>-redis-auth`
-Secrets. It watches their values and copies connection
-settings into `<datalab>-datalab`. Sessions import those settings as environment
-variables. Restart a session to load changed values.
+The composition watches the operator authentication Secrets and updates each
+service connection separately. Clients must reload changed values. See
+[connections and Secret bindings](connections.md) for discovery and selected
+credential delivery into virtual namespaces.
 
 ## Backups
 
@@ -135,8 +132,8 @@ Enabling or disabling Redis backups restarts its Pod.
 ## Data and sharing
 
 The Data service, packageR, is a file browser for the Datalab's object storage.
-A session's Data tab opens this shared service. With a permanent Data address,
-you can also use it without a running session.
+The operator can publish a permanent authenticated Data address. Without one,
+Data accepts trusted callers inside the service namespace.
 
 The file browser requires sign-in. Share individual files through temporary
 download URLs, or folders through public share links. Recipients do not need
@@ -172,29 +169,8 @@ docker push s-jane.lab.acme.com/team/example:latest
 ```
 
 Docker login and image references use the hostname without `/v2/`.
-Images use the Datalab's S3 bucket and remain available when sessions stop.
+Images use the Datalab's S3 bucket and remain in storage when the registry is disabled.
 The operator can disable the registry through the EnvironmentConfig.
-
-## Files and the Workshop tab
-
-The operator sets `EnvironmentConfig.data.defaults.files` to load workshop
-content from Git, an OCI image, or an HTTP archive. For example:
-
-```yaml
-data:
-  defaults:
-    files:
-    - git:
-        url: https://github.com/versioneer-tech/datalab-example
-        ref: origin/main
-      includePaths:
-      - /workshop/**
-      path: .
-```
-
-Adding a source enables the Workshop tab. With no sources, the tab is hidden.
-Use `includePaths`, `excludePaths`, `newRootPath`, and `path` to select and
-place the files.
 
 ## Examples
 
@@ -203,15 +179,15 @@ before you apply these manifests in your claim namespace.
 
 | Manifest | Environment | Use |
 | --- | --- | --- |
-| [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data without a session. |
+| [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data and storage access. |
 | [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
-| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and a started session. |
-| [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Started and stopped sessions with workshop files. |
+| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and the shared registry. |
+| [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Read-only Data, custom connections, and namespace policy. |
 
 The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/environmentconfig.yaml)
 show the two configurations. `datalab-custom` demonstrates read-only Data,
-custom quotas and StorageClasses, privileged security with the Kubernetes
-admin role, vCluster, registry, file bundles, Gateway and S3 access, and
+custom quotas and StorageClasses, Pod security, named virtual clusters,
+Gateway and S3 access, and
 internal network rules. Adapt these settings to your platform's access policy.
 
 ## Check provisioning
@@ -225,8 +201,7 @@ kubectl describe datalab s-jeff -n workspace
 
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
-Session names, state, phase, messages, PVC references, and URLs are in
-`status.sessions`.
+Session PVC names and locations are in `status.sessions`.
 Service connections and public virtual API profiles are in `status.connections`.
 Read each connection through its `secretRef`.
 

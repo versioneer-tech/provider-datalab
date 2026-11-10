@@ -17,18 +17,13 @@ readonly DATALAB_NAME=verify-postgres
 readonly POSTGRES_NAMESPACE="${DATALAB_NAME}"
 readonly POSTGRES_CLUSTER=pg0
 readonly STORAGE_SECRET=verify-postgres
-readonly DATALAB_SECRET="${DATALAB_NAME}-datalab"
-readonly POSTGRES_URL_KEY=POSTGRES_PG0_VERIFY_URL
+readonly CONNECTION_SECRET="${DATALAB_NAME}-postgres-pg0"
+readonly POSTGRES_URL_KEY=verify_url
 readonly PROBE_NAME=verify-postgres
 
 
 apply_postgres_datalab() {
   log 'Applying the PostgreSQL verification Datalab'
-  if ! kube get customresourcedefinition.apiextensions.k8s.io/workshopenvironments.training.educates.dev \
-    >/dev/null 2>&1; then
-    kube create namespace "${POSTGRES_NAMESPACE}" \
-      --dry-run=client -o yaml | kube apply -f -
-  fi
   apply_template "${MANIFEST_DIR}/postgres/datalab.yaml" \
     DATALAB_NAME "${DATALAB_NAME}" \
     WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
@@ -79,15 +74,15 @@ wait_for_postgres() {
   kube wait object.kubernetes.m.crossplane.io/db-postgrescluster-verify-postgres-pg1 \
     --namespace "${WORKSPACE_NAMESPACE}" --for=condition=Ready --timeout=5m
 
-  wait_for_connection_secret "${DATALAB_SECRET}" "${DATALAB_NAME}" 900 \
-    POSTGRES_PG0_HOST POSTGRES_PG0_PORT POSTGRES_PG0_USER POSTGRES_PG0_PASSWORD \
-    POSTGRES_PG0_DATABASES "${POSTGRES_URL_KEY}" POSTGRES_PG1_VERIFY_URL
+  wait_for_connection_secret "${CONNECTION_SECRET}" "${DATALAB_NAME}" 900 \
+    host port user password databases "${POSTGRES_URL_KEY}"
+  wait_for_connection_secret "${DATALAB_NAME}-postgres-pg1" "${DATALAB_NAME}" 900 verify_url
 
   log 'Waiting for the Datalab credentials to match the current operator Secret'
   until {
     kube get "secret/${POSTGRES_CLUSTER}-pguser-postgres" --namespace "${POSTGRES_NAMESPACE}" -o json
-    kube get "secret/${DATALAB_SECRET}" --namespace "${WORKSPACE_NAMESPACE}" -o json
-  } | jq -se 'length == 2 and .[0].data.password == .[1].data.POSTGRES_PG0_PASSWORD' >/dev/null; do
+    kube get "secret/${CONNECTION_SECRET}" --namespace "${WORKSPACE_NAMESPACE}" -o json
+  } | jq -se 'length == 2 and .[0].data.password == .[1].data.password' >/dev/null; do
     if ((SECONDS >= deadline)); then
       printf 'Datalab PostgreSQL credentials did not update from the operator Secret.\n' >&2
       return 1
@@ -97,8 +92,11 @@ wait_for_postgres() {
 }
 
 run_postgres_probe() {
-  local url_key="${1:-${POSTGRES_URL_KEY}}"
+  local secret_name="${1:-${CONNECTION_SECRET}}"
+  local url_key="${2:-${POSTGRES_URL_KEY}}"
 
+  kube wait networkpolicy/allow-internal-ingress --namespace "${POSTGRES_NAMESPACE}" \
+    --for=create --timeout=5m
   log 'Running an in-cluster write/read probe through the Datalab Secret'
   resource_budget
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
@@ -107,7 +105,7 @@ run_postgres_probe() {
     PROBE_NAME "${PROBE_NAME}" \
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${POSTGRES_CLIENT_IMAGE}" \
-    DATALAB_SECRET "${DATALAB_SECRET}" \
+    CONNECTION_SECRET "${secret_name}" \
     POSTGRES_URL_KEY "${url_key}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
@@ -120,9 +118,9 @@ cleanup_successful_verification() {
 
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
-  kube delete "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube delete "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
-  if kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
+  if kube wait "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=5m; then
     python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
       --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}" --deleted
@@ -136,14 +134,14 @@ cleanup_successful_verification() {
 }
 
 show_postgres_diagnostics() {
-  kube get "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube get "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" -o wide || true
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${DATALAB_NAME}" || true
   kube get postgrescluster,pod,pvc,secret \
     --namespace "${POSTGRES_NAMESPACE}" || true
-  kube get "secret/${DATALAB_SECRET}" \
+  kube get "secret/${CONNECTION_SECRET}" \
     --namespace "${WORKSPACE_NAMESPACE}" || true
   kube get events --namespace "${POSTGRES_NAMESPACE}" \
     --sort-by=.lastTimestamp || true
@@ -159,7 +157,7 @@ main() {
     show_postgres_diagnostics
     exit 1
   fi
-  if ! run_postgres_probe || ! run_postgres_probe POSTGRES_PG1_VERIFY_URL; then
+  if ! run_postgres_probe || ! run_postgres_probe "${DATALAB_NAME}-postgres-pg1" verify_url; then
     show_postgres_diagnostics
     printf 'PostgreSQL verification resources were kept for diagnosis.\n' >&2
     exit 1

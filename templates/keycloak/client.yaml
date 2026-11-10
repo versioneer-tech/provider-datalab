@@ -26,7 +26,7 @@ spec:
     clientOfflineSessionIdleTimeout: '2592000'
     clientOfflineSessionMaxLifespan: '2592000'
     allowRefreshTokenInStandardTokenExchange: 'NO'
-    webOrigins: ${redirect_uris}
+    webOrigins: ${web_origins}
     validRedirectUris: ${redirect_uris}
     realmId: ${realm}
   writeConnectionSecretToRef:

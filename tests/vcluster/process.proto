@@ -1,0 +1,22 @@
+// Copyright 2026 The Kubernetes Authors.
+// SPDX-License-Identifier: Apache-2.0
+
+// Execute subset of agent-sandbox v1.0.10 packages/sandboxd/spec/process/v1/process.proto.
+syntax = "proto3";
+package process.v1;
+service ProcessService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+}
+message ProcessConfig {
+  repeated string command = 1;
+  map<string, string> env_vars = 2;
+  optional string cwd = 3;
+}
+message ExecuteRequest {
+  ProcessConfig config = 1;
+}
+message ExecuteResponse {
+  int32 exit_code = 1;
+  bytes stdout = 2;
+  bytes stderr = 3;
+}

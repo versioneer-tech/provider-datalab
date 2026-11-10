@@ -17,6 +17,7 @@ import socket
 import threading
 import ssl
 import subprocess
+import sys
 import time
 from tempfile import TemporaryDirectory
 from urllib.parse import urlencode
@@ -40,6 +41,87 @@ def wait_until(check, message, seconds=300):
         time.sleep(3)
 
 
+def check_sandbox(api, bearer, other, command):
+    sys.path.insert(0, "/opt/sandbox")
+    import grpc
+    import process_pb2
+    import process_pb2_grpc
+
+    for instance in ("vc0", "vc1"):
+        for name in (
+            "sandboxes.agents.x-k8s.io", "sandboxclaims.extensions.agents.x-k8s.io",
+            "sandboxtemplates.extensions.agents.x-k8s.io", "sandboxwarmpools.extensions.agents.x-k8s.io",
+        ):
+            api("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/" + name, bearer if instance == "vc0" else other, instance=instance)
+    template = api("/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/demo/sandboxtemplates/sandboxd", bearer)
+    pod = template["spec"]["podTemplate"]
+    labels = {"datalabs.versioneer.at/session": "analysis"}
+    pod.setdefault("metadata", {}).setdefault("labels", {}).update(labels)
+    pod["spec"]["volumes"] = [{"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}]
+    # These limits also exceed the larger budget used by this profile.
+    for resource, limit in (("cpu", "1000"), ("memory", "1Ti")):
+        name = f"test-{resource}-quota"
+        limits = {"cpu": "1", "memory": "512Mi", resource: limit}
+        api("/api/v1/namespaces/demo/pods", bearer, {
+            "apiVersion": "v1", "kind": "Pod", "metadata": {"name": name},
+            "spec": {"restartPolicy": "Never", "automountServiceAccountToken": False,
+                "securityContext": pod["spec"]["securityContext"],
+                "containers": [{"name": "probe", "image": pod["spec"]["containers"][0]["image"],
+                    "securityContext": pod["spec"]["containers"][0]["securityContext"],
+                    "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": limits}}]},
+        }, method="POST", expected=201)
+        wait_until(lambda: any(
+            "exceeded quota" in event.get("message", "") and f"limits.{resource}" in event["message"]
+            for event in api(f"/api/v1/namespaces/demo/events?fieldSelector=involvedObject.name%3D{name}", bearer)["items"]
+        ), f"Virtual {resource} probe did not report host quota rejection", seconds=60)
+        api(f"/api/v1/namespaces/demo/pods/{name}", bearer, method="DELETE", expected=(200, 202))
+    print("PASS virtual workloads cannot exceed host CPU and memory quotas", flush=True)
+    path = "/apis/agents.x-k8s.io/v1beta1/namespaces/demo/sandboxes"
+    pvc = api("/api/v1/namespaces/demo/persistentvolumeclaims/session-analysis", bearer)
+    for attempt in range(2):
+        api(path + "?fieldValidation=Strict", bearer, {"apiVersion": "agents.x-k8s.io/v1beta1", "kind": "Sandbox",
+            "metadata": {"name": "analysis"}, "spec": {"podTemplate": pod}}, method="POST", expected=201)
+        wait_until(lambda: any(c["type"] == "Ready" and c["status"] == "True"
+            for c in api(path + "/analysis", bearer).get("status", {}).get("conditions", [])),
+            "sandboxd workload did not become ready")
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            rest_port = listener.getsockname()[1]
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            grpc_port = listener.getsockname()[1]
+        forward = subprocess.Popen([*command, "port-forward", "pod/analysis", f"{rest_port}:8080", f"{grpc_port}:9090"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            def healthy():
+                try:
+                    with urlopen(f"http://127.0.0.1:{rest_port}/v1/health", timeout=2) as result:
+                        return result.status == 200
+                except OSError:
+                    return False
+            wait_until(healthy, "sandboxd port-forward did not start", seconds=60)
+            if attempt == 0:
+                with urlopen(Request(f"http://127.0.0.1:{rest_port}/v1/files/marker",
+                    data=b"persistent", method="PUT", headers={"Content-Type": "application/octet-stream"}), timeout=10) as result:
+                    assert result.status in (200, 201, 204)
+            with urlopen(f"http://127.0.0.1:{rest_port}/v1/files/marker", timeout=10) as result:
+                assert result.read() == b"persistent"
+            with grpc.insecure_channel(f"127.0.0.1:{grpc_port}") as channel:
+                result = process_pb2_grpc.ProcessServiceStub(channel).Execute(
+                    process_pb2.ExecuteRequest(config=process_pb2.ProcessConfig(command=["cat", "/workspace/marker"])), timeout=15)
+                assert result.exit_code == 0 and result.stdout == b"persistent"
+        finally:
+            forward.terminate()
+            forward.communicate(timeout=10)
+        api(path + "/analysis", bearer, method="DELETE", expected=(200, 202))
+        wait_until(lambda: api(path + "/analysis", bearer, expected=(200, 404)).get("kind") == "Status",
+            "Sandbox was not removed")
+        wait_until(lambda: api("/api/v1/namespaces/demo/pods/analysis", bearer, expected=(200, 404)).get("kind") == "Status",
+            "Sandbox Pod was not removed")
+        assert api("/api/v1/namespaces/demo/persistentvolumeclaims/session-analysis", bearer)["metadata"]["uid"] == pvc["metadata"]["uid"]
+    print("PASS sandboxd command and file APIs, port-forwarding, and session PVC persistence after replacement", flush=True)
+
+
 def check_catalog(api, bearer):
     result = api(
         CATALOG_PATH + "/search",
@@ -56,18 +138,14 @@ def check_catalog(api, bearer):
 
 def deploy_catalog(api, bearer):
     postgres = Path("/postgres")
-    values = {
-        target: (postgres / source).read_text().strip()
-        for target, source in (
-            ("PGHOST", "POSTGRES_PG0_HOST"),
-            ("PGPORT", "POSTGRES_PG0_PORT"),
-            ("PGUSER", "POSTGRES_PG0_USER"),
-            ("PGPASSWORD", "POSTGRES_PG0_PASSWORD"),
-        )
+    admin_values = {
+        key: (postgres / key).read_text().strip()
+        for key in ("host", "port", "user", "password")
     }
+    values = {"PG" + key.upper(): value for key, value in admin_values.items()}
     values["PGDATABASE"] = "catalog"
     for name, data in (
-        ("catalog-postgres-admin", values),
+        ("catalog-postgres-admin", admin_values),
         (
             "catalog-postgres",
             {**values, "PGUSER": "catalog", "PGPASSWORD": secrets.token_urlsafe(32)},
@@ -1081,6 +1159,7 @@ def main():
             "PASS kubectl exec, logs, watch, and port forwarding through /.vc0",
             flush=True,
         )
+        check_sandbox(api, bearer, other, command)
     finally:
         proxy.shutdown()
         proxy.server_close()

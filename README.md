@@ -5,15 +5,25 @@
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
 Provider Datalab provisions virtual Kubernetes clusters, shared data,
-container registries, databases, and browser workspaces for a team.
+container registries, and databases for a team.
 Declare users and services in a `Datalab`; Crossplane creates them from the
 platform's access, network, and storage settings.
 
+Each Datalab represents one team. The `datalab` composition creates a
+same-named service namespace with quotas, resource defaults, and network
+policies.
+
+Each virtual cluster includes Agent Sandbox CRDs, its controller, and a
+`sandboxd` template. Named sessions keep workspace PVCs independent of workload
+Pods. Use Kubernetes port-forwarding for access.
+
 > [!NOTE]
-> The `main` branch is preparing v1, planned for the end of 2026 with `apiVersion: datalab.versioneer.at/v1`; follow `legacy` for the latest `0.12.x` releases, the last series with direct Educates support and limited to `pkg.internal/v1beta2`.
+> Development continues on `main` with `versioneer.at/v1`.
+> The `legacy` branch maintains the latest `0.12.x` releases, the last series
+> with direct Educates support and limited to `pkg.internal/v1beta2`.
 
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-jeff
@@ -30,8 +40,8 @@ spec:
 ```
 
 Use a downloaded kubeconfig and a user login or access token to connect to a
-virtual cluster. Browser sessions provide an editor and terminal for the same
-team and services.
+virtual cluster. Services run in a namespace with the same name as the
+Datalab.
 
 ## Get started
 
@@ -42,8 +52,10 @@ the guides in this checkout:
 | --- | --- |
 | Install the package and set platform defaults | [Installation](docs/how-to-guides/installation.md) |
 | Run Kubernetes workloads and bind service Secrets | [Virtual clusters](docs/how-to-guides/vcluster.md) |
+| Run sandboxd and keep workspace PVCs | [Sandboxes](docs/how-to-guides/sandboxes.md) |
+| Find service credentials and bind Secrets | [Connections](docs/how-to-guides/connections.md) |
 | Configure sign-in, machine access, and OAuth2 discovery | [Authentication](docs/how-to-guides/authentication.md) |
-| Use databases, share files, push images, and start sessions | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
+| Use databases, share files, and push images | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
 | Read object storage with AWS tools | [S3 access](docs/how-to-guides/s3-access.md) |
 | Review permissions or look up fields | [Security](docs/security/index.md), [API reference](docs/reference-guides/api.md) |
 

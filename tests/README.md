@@ -39,9 +39,10 @@ Kind integration. Use the classifier above when the scope is unclear.
 
 ## Run the suite
 
+Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, and `pre-commit`.
 Docker must be running for render and function checks.
 Install the [build dependencies and generate the composition](../templates/README.md)
-before running the suite. It rejects a generated composition that differs
+before running the suite. The suite rejects a generated composition that differs
 from its Python and YAML sources.
 
 ```bash
@@ -54,7 +55,7 @@ checks without Docker. Install `scripts/requirements.txt` first.
 
 To check one example, use `bash tests/unit.bash 001`. This example also runs
 `exposure.py` for Data and S3 settings. Example `002` runs `backups.py` and
-`stores.py`. Example `003` runs `settings.py` for environment precedence.
+`stores.py`. Example `003` runs `settings.py` for environment settings.
 These checks share the render function in `render.py`.
 Actual renders are written to `/tmp`. Expected snapshots are tracked in
 `tests/expected/`.
@@ -65,43 +66,25 @@ when only documentation changes.
 
 ## What the checks cover
 
-Snapshots retain resource specs, readiness rules, and session status. They
+Snapshots retain resource specs, readiness rules, and connection status. They
 omit generated owner references, framework conditions, and resource references
 that repeat the resource list. Behavior checks cover outcomes that need more
 than a snapshot comparison:
 
-- Virtual clusters: instance isolation and removal, member grants, one
-  workspace OAuth2 client with only the default `ws_api` account grant, exact
-  human group grants, optional profile scopes, the exchange policy, public
-  profile Secrets, and removal of old profile resources.
-- Caller credentials and discovery: human token files, device authorization,
-  private cache reuse and isolation, refresh rotation and rejection, polling
-  delays, denied or expired device codes, delegated token expiry without client
-  credentials, token-only mode with ambient client credentials, hidden secret
-  prompts, the kubectl stdin contract, missing sources,
-  readiness, stale entry removal, and no
-  credential disclosure in status.
-- Service operation: stable generated passwords, credential rotation, Data
-  exposure, network rules, and environment overrides.
-- OCI registry: shared S3 storage without an extra prefix, no registry PVC, Basic
-  credentials, native Docker routing, storage rotation,
-  connection readiness, and disable/removal behavior.
-- Service publication: copies in the Datalab namespace, connection fields,
-  local ownership, rotation readiness, source loss and recovery, removal,
-  and distinct names for Datalabs with the same service instances.
-- Session storage: effective defaults and overrides, retained stopped-session
-  storage, exclusion of service volumes, shared-volume counting, known zero,
-  and omission of unknown or invalid sizes.
-- Backups: enabled and disabled storage settings, usable PostgreSQL without
-  backups, retained backups after export failure, and invalid Redis snapshots.
-- Function TTL: configured responses on normal and early-return paths, a
-  separate integration build, and rejection of invalid build settings.
+| Tests | Purpose |
+| --- | --- |
+| `vclusters.py` | Instance isolation, Sandbox setup, session storage, membership, Secret bindings, public profiles, settings, and removal. Each `check_*` function covers one scenario. |
+| `helpers.py` | Stable passwords, backup quantities, caller tokens, device login, private caches, refresh, secret prompts, and local build and harness errors. |
+| `token-exchange.py` and `keycloak_policy.py` | Exact group grants, scope restrictions, policy readiness, and issued tokens from a disposable Keycloak server. |
+| `oauth2.py`, `s3-connections.py`, and `service-connections.py` | Discovery metadata, credential publication, rotation, source loss and recovery, removal, and distinct connection names. |
+| `exposure.py`, `settings.py`, `stores.py`, and `registry.py` | Service access, routes, storage, network rules, quotas, resource defaults, and environment overrides. |
+| `backups.py` | Backup enablement, retained archives after export failure, and rejection of invalid Redis snapshots. |
+| `response-ttl.py` | Response TTL on normal and early returns, separate integration builds, and invalid build settings. |
 
 Render tests cannot prove live authorization, routing, persistence, or timing.
 `token-exchange.py` checks rendered authorization boundaries and exchange
-enablement after scope reconciliation. It does not simulate token issuance.
-It rejects broad client-role mappers and checks role selection per scope.
-It also checks policy deletion dependencies.
+enablement after scope reconciliation. It also uses `keycloak_policy.py` to
+check real refresh and token exchange with the rendered identity settings.
 The [Kind integration suite](integration/README.md) checks those outcomes.
 Its `verify-vcluster` profile also checks OAuth2 name uniqueness through
 Kubernetes admission and rejects API access without a vcluster role.
@@ -118,10 +101,10 @@ the environment settings.
 
 | Example | Environment | Main checks |
 | --- | --- | --- |
-| `001` | `datalab` | Data without sessions, default environment, credential rotation |
+| `001` | `datalab` | Independent Data, default environment, credential rotation |
 | `002` | `datalab` | Default environment selection, writable Data, managed stores |
-| `003` | `datalab-custom` | Named virtual cluster, vCluster session, read-only Data, PostgreSQL |
-| `004` | `datalab-custom` | Started and stopped sessions, file bundles, workspace PVCs |
+| `003` | `datalab-custom` | Virtual cluster, durable session PVC, sandboxd template, read-only Data, PostgreSQL |
+| `004` | `datalab-custom` | Direct services with custom environment settings |
 
 For API or composition changes, use an existing scenario when it covers the
 required behavior. Add a scenario only for a missing observable outcome.

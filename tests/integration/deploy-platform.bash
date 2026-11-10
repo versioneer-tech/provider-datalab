@@ -7,7 +7,7 @@ set -euo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
-source "${INTEGRATION_DIR}/educates.bash"
+source "${INTEGRATION_DIR}/runtime.bash"
 
 install_crossplane() {
   require_command helm
@@ -39,10 +39,46 @@ install_datalab() {
   wait_for_provider_runtime provider-keycloak
   wait_for_crd_established protocolmappers.client.keycloak.m.crossplane.io
   wait_for_provider_runtime provider-kubernetes
-  wait_for_provider_runtime provider-helm
   kube apply -f "${REPO_ROOT}/dependencies/03-providerConfigs.yaml"
   kube apply -f "${REPO_ROOT}/xrd.yaml"
-  wait_for_crd_established datalabs.pkg.internal
+  wait_for_crd_established datalabs.versioneer.at
+  python3 - "${REPO_ROOT}/xrd.yaml" "${PROVIDER_DATALAB_KUBECONFIG}" "${KUBECTL_CONTEXT}" <<'DEFINITION'
+import json
+from pathlib import Path
+import subprocess
+import sys
+import time
+import yaml
+
+expected = yaml.safe_load(Path(sys.argv[1]).read_text())["spec"]["versions"]
+
+def contains(expected, actual):
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual and contains(value, actual[key]) for key, value in expected.items()
+        )
+    return expected == actual
+
+deadline = time.monotonic() + 120
+while True:
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", sys.argv[2], "--context", sys.argv[3],
+         "get", "crd/datalabs.versioneer.at", "-o", "json"],
+        capture_output=True, text=True, check=True,
+    )
+    actual = {version["name"]: version for version in json.loads(result.stdout)["spec"]["versions"]}
+    if all(
+        version["name"] in actual and contains(
+            version["schema"]["openAPIV3Schema"]["properties"],
+            actual[version["name"]]["schema"]["openAPIV3Schema"]["properties"],
+        ) for version in expected
+    ):
+        print("PASS generated Datalab CRD matches the current XRD schema")
+        break
+    if time.monotonic() >= deadline:
+        raise SystemExit("The Datalab CRD schema is stale. Inspect the XRD events for validation errors.")
+    time.sleep(2)
+DEFINITION
   local composition_directory
   composition_directory="$(mktemp -d /tmp/datalab-it-composition.XXXXXX)"
   python3 "${REPO_ROOT}/scripts/build-composition.py" --response-ttl 1m \

@@ -31,6 +31,17 @@ def load_helpers(*names):
 
 
 class HelperTests(unittest.TestCase):
+    def test_build_rejects_duplicate_pipeline_steps(self):
+        with TemporaryDirectory(prefix="test-pipeline-") as directory:
+            root = Path(directory)
+            (root / "composition").mkdir()
+            (root / "composition/settings.yaml").write_text("responseTTL: 5m\n")
+            (root / "composition/pipeline.yaml").write_text(
+                "spec:\n  pipeline:\n  - step: registry\n  - step: registry\n"
+            )
+            with self.assertRaisesRegex(ValueError, "step names must be unique"):
+                BUILDER["build"](root)
+
     def test_backup_size_controls_enablement(self):
         enabled = load_helpers("_backup_enabled")["_backup_enabled"]
         for size in (None, "", "0", "0Gi", "0.0Gi", "0.0G", "0e3"):
@@ -435,7 +446,7 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
-    def test_test_ttl_override_cannot_replace_the_deployment_artifact(self):
+    def test_ttl_override_cannot_replace_deployment_artifact(self):
         artifact = ROOT / "composition.yaml"
         original = artifact.read_bytes()
         result = subprocess.run(

@@ -34,6 +34,7 @@ def main():
             env["data"]["httpRoute"].pop("enableS3")
         if exposure == "disabled-data":
             env["data"]["defaults"] = {"data": {"enabled": False}}
+        env["data"].setdefault("defaults", {})["registry"] = {"enabled": False}
         if exposure == "ingress":
             env["data"]["ingress"]["annotations"] = {
                 "nginx.ingress.kubernetes.io/proxy-body-size": "0",
@@ -69,6 +70,13 @@ def main():
             assert (f"data-s3-{kind}-s-joe" in resources) == s3
         assert any(item["metadata"]["name"] == "s-joe-s-joe-audience" for item in resources.values())
         assert ("data-deployment-s-joe" in resources) == (exposure != "disabled-data")
+        assert ("runtime-storage-secret-s-joe" in resources) == (exposure != "disabled-data")
+        if "observe-runtime-storage-secret-s-joe" in resources:
+            assert manifest(resources, "observe-runtime-storage-secret-s-joe")["metadata"]["name"] == "s-joe-storage"
+        if exposure != "disabled-data":
+            storage = manifest(resources, "runtime-storage-secret-s-joe")["data"]
+            assert "aws-credentials" in storage
+            assert all(key.startswith("AWS_") or key == "aws-credentials" for key in storage)
         if s3:
             for name in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):
                 pod = manifest(resources, name)["spec"]["template"]["spec"]
@@ -99,7 +107,7 @@ def main():
                for target in destinations)
     assert "Egress" in policy["policyTypes"]
     assert any(port["port"] == 8080 for rule in policy["egress"] for port in rule.get("ports", []))
-    generated = resources["secret-s-joe-datalab"]["stringData"]
+    generated = resources["connection-s-joe-s3"]["stringData"]
     assert generated["AWS_S3_FORCE_PATH_STYLE"] == "false"
     containers = manifest(resources, "data-s3-deployment-s-joe")["spec"]["template"]["spec"]["containers"]
     assert any(entry == {"name": "RCLONE_CONFIG_UPSTREAM_FORCE_PATH_STYLE", "value": "false"}
@@ -115,19 +123,19 @@ def main():
             "client_id": "s-joe", "client_secret": secret,
             "cookie_secret": hashlib.sha256(secret.encode()).hexdigest()[:32],
         }
-        generated = resources["secret-s-joe-datalab"]["stringData"]
-        assert generated["OAUTH2_CLIENT_ID"] == "s-joe"
-        assert generated["OAUTH2_CLIENT_SECRET"] == secret
+        generated = resources["connection-s-joe-s3"]["stringData"]
+        assert not any(key.startswith("OAUTH2_") for key in generated)
+        assert "secret-s-joe-datalab" not in resources
         assert "[default]" in generated["aws-credentials"]
         outputs.append(resources)
     for name in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):
         checksums = [manifest(output, name)["spec"]["template"]["metadata"]["annotations"][
-            "datalabs.pkg.internal/oauth2-cookie-checksum"] for output in outputs]
+            "datalabs.versioneer.at/oauth2-cookie-checksum"] for output in outputs]
         assert checksums[0] != checksums[1]
     print("PASS OAuth credential projection and rotation", flush=True)
 
     pending = render(args, environment(), observed=[oauth_observer("initial-client-secret")])
-    assert "oauth2-client-secret-s-joe" not in pending
+    assert "oauth2-client-secret-s-joe" in pending
     disabled_env = environment()
     disabled_env["data"]["defaults"] = {"data": {"enabled": False}}
     disabled = render(args, disabled_env, observed=observed + [
@@ -136,7 +144,7 @@ def main():
     assert "oauth2-client-secret-s-joe" not in disabled
     assert "observe-oauth-client-secret-s-joe" in disabled
     assert disabled["keycloak-client-s-joe"]["spec"]["writeConnectionSecretToRef"]["name"] == "s-joe-oauth-client"
-    print("PASS runtime OAuth credentials wait for the namespace and are removed with the proxy", flush=True)
+    print("PASS runtime OAuth credentials use the service namespace and are removed with the proxy", flush=True)
 
     for path, value, error in (
         (("ingress", "enabled"), True, "Enable only one"),

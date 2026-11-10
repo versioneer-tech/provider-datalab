@@ -1,0 +1,76 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright 2026 The Kubernetes Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+# Source: kubernetes-sigs/agent-sandbox v1.0.10, sandbox-with-extensions.yaml.
+# Source SHA-256: 7cc1eca2fb45844b0ec0c35fc975340dc01af2994301ffa8bf05db1ad1e397ee
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: agent-sandbox-controller
+  name: agent-sandbox-controller
+  namespace: agent-sandbox-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-sandbox-controller
+  template:
+    metadata:
+      labels:
+        app: agent-sandbox-controller
+    spec:
+      containers:
+      - args:
+        - --leader-elect=true
+        - --extensions
+        image: ${controller_image}
+        name: agent-sandbox-controller
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/sandbox-config
+          name: config-volume
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          periodSeconds: 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+      serviceAccountName: agent-sandbox-controller
+      volumes:
+      - configMap:
+          name: agent-sandbox-config
+          optional: true
+        name: config-volume
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

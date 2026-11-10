@@ -6,18 +6,13 @@ platform's GitOps and Secret tools.
 
 ## Prerequisites
 
-The cluster needs Crossplane, the Educates session runtime, an ingress
+The cluster needs Crossplane, an ingress or Gateway
 controller, Keycloak, and an S3-compatible object store. The CNI must enforce
 Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
-Install the session runtime with its CRDs and controller RBAC before creating
-Datalabs. Follow the [runtime installation guide](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html).
-The runtime ingress class, domain, and TLS Secret must match the settings
-below.
-
-Install the operators for the managed stores you plan to offer. Provider
+Install the operators for the managed stores you offer. Provider
 Datalab integration tests use these versions:
 
 | Datalab field | Operator | Test version | Required resource API |
@@ -41,6 +36,9 @@ For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
 issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
+Each virtual cluster installs Agent Sandbox CRDs, its controller, and a
+sandboxd template. Use [Run a sandbox](sandboxes.md) to check command access,
+file access, and session storage after the virtual cluster is ready.
 
 ## 1. Choose the claim namespace
 
@@ -53,8 +51,15 @@ kubectl create namespace datalab
 ```
 
 Input storage Secrets live in `datalab`, as set by `storage.secretNamespace`
-in the environment examples. Each Datalab also has a separate namespace for
-its runtime and shared services.
+in the environment examples. The composition creates a separate namespace
+named after each Datalab for its runtime and shared services. Choose a Datalab
+name that is unique across the host cluster and differs from its claim
+namespace and Kubernetes system namespaces. Datalab manifests use
+`apiVersion: versioneer.at/v1`.
+
+Each service publishes a [separate connection Secret](connections.md) in the
+claim namespace. Data and the registry use a storage-only Secret in the
+service namespace; their OAuth2 proxy credentials remain separate.
 
 ## 2. Install provider dependencies
 
@@ -65,8 +70,8 @@ in this order:
 | File | Purpose |
 | --- | --- |
 | `00-mrap.yaml` | Activate the managed resource kinds used by the composition. |
-| `01-deploymentRuntimeConfigs.yaml` | Set provider and function Pod security. |
-| `02-providers.yaml` | Install the Kubernetes, Helm, and Keycloak providers. |
+| `01-deploymentRuntimeConfigs.yaml` | Set Pod security and function message limits. |
+| `02-providers.yaml` | Install the Kubernetes and Keycloak providers. |
 | `03-providerConfigs.yaml` | Configure those providers in the claim namespace. |
 | `functions.yaml` | Install the composition functions. |
 | `rbac.yaml` | Grant provider-kubernetes access to the resources it manages. |
@@ -85,7 +90,11 @@ The realm must permit the built-in `offline_access` scope and user role for
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
 package. The provider-kubernetes RBAC includes access to Pods for readiness
-checks and PVCs for session storage.
+checks, namespaces, quotas, and service PVCs.
+
+Keep the supplied 64 MiB function message limits when you manage functions
+separately. Sandbox bootstrap manifests add to each virtual cluster's desired
+and observed configuration in pipeline requests.
 
 ## 3. Install the configuration package
 
@@ -155,10 +164,6 @@ data:
     forcePathStyle: "true"
     secretNamespace: datalab
     type: s3
-  storageClasses:
-    allowed:
-    - sbs-default
-    - sbs-default-retain
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0
@@ -173,8 +178,6 @@ data:
     - fd00:42::42/128
     excludePolicies: []
   defaults:
-    vcluster:
-      enabled: true
     registry:
       enabled: true
     data:
@@ -182,13 +185,27 @@ data:
       readOnlyMount: false
     overallQuota:
       storage: 100Gi
+      hard:
+        requests.cpu: '4'
+        requests.memory: 8Gi
+        limits.cpu: '16'
+        limits.memory: 32Gi
+    limitRange:
+      default:
+        cpu: '1'
+        memory: 512Mi
+        ephemeral-storage: 8Gi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+        ephemeral-storage: 3Gi
     security:
       externalEgress: true
 ```
 
 Replace the example storage classes, network ranges, and DNS names before
-applying it. Configure [authentication](authentication.md) before users start
-sessions.
+applying it. Configure [authentication](authentication.md) before users access
+the services.
 
 ### Service addresses
 
@@ -198,8 +215,12 @@ hostname, `/v2/` serves the registry and other paths serve Data. Virtual API
 routes use their instance path, such as `/.vc0`. With `httpRoute.enableS3`,
 requests signed by S3 clients use the read-only S3 service on the same host.
 
-With neither exposure method enabled, Data is available through a session's
-authenticated ingress. The registry is available only inside the cluster.
+With neither exposure method enabled, use port-forwarding to the Data
+Service. The registry is available only inside the cluster.
+
+For Ingress, supply `ingress.secret` in each Datalab service namespace. Use
+your platform's certificate tools to create it. Gateway routes use the
+Gateway's TLS settings.
 
 For Gateway API exposure, replace the example's `ingress.enabled: true` with
 `false` and add:
@@ -219,8 +240,7 @@ data:
 
 The Gateway needs HTTP and TLS-terminating HTTPS listeners and must accept
 routes from runtime namespaces. It manages the service certificate.
-Keep the ingress class and TLS Secret set for the session runtime. For the
-optional read-only S3 endpoint, see [S3 client access](s3-access.md).
+For the optional read-only S3 endpoint, see [S3 client access](s3-access.md).
 
 #### Large file transfers
 
@@ -258,7 +278,7 @@ when a setting is omitted; example values such as cluster CIDRs, endpoints,
 and StorageClass names are not built-in defaults.
 
 Select a specific EnvironmentConfig with the
-`datalabs.pkg.internal/environment` annotation or label to use its settings
+`datalabs.versioneer.at/environment` annotation or label to use its settings
 without per-Datalab overrides, as shown in the
 [`datalab-custom` example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml).
 The annotation takes priority over the label; the default selection is `datalab`.
@@ -270,52 +290,60 @@ fields, but extra fields in `spec` do not override these settings.
 
 | Setting | Default | Use |
 | --- | --- | --- |
-| `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started session. |
 | `defaults.registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
 | `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |
 | `defaults.data.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
-| `defaults.quota.memory` | `2Gi` | Session memory request. |
-| `defaults.quota.storage` | `1Gi` | Workspace PVC size. |
-| `defaults.quota.budget` | `medium` | Session namespace budget. |
-| `defaults.overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the environment namespace. |
+| `defaults.overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the Datalab service namespace. |
+| `defaults.overallQuota.hard.requests.cpu` | `4` | Aggregate CPU requests in the host service namespace. |
+| `defaults.overallQuota.hard.requests.memory` | `8Gi` | Aggregate memory requests in the host service namespace. |
+| `defaults.overallQuota.hard.limits.cpu` | `16` | Aggregate CPU limits in the host service namespace. |
+| `defaults.overallQuota.hard.limits.memory` | `32Gi` | Aggregate memory limits in the host service namespace. |
 | `defaults.security.policy` | `baseline` | Pod security level: `restricted`, `baseline`, or `privileged`. |
-| `defaults.security.kubernetesAccess` | `true` | Session Kubernetes service account token. |
-| `defaults.security.kubernetesRole` | `edit` | Session role: `view`, `edit`, or `admin`. |
 | `defaults.security.externalEgress` | `true` | Broad egress to the configured external CIDRs. |
-| `defaults.persistence.storageClassName` | First allowed class, or cluster default | Workspace StorageClass; a value outside the allowlist falls back to its first entry. |
-| `defaults.files` | `[]` | Workshop file bundles. |
-| `packages` | `[]` | Session extension packages. |
-
-Session PVC names and namespaces are listed in `status.sessions[].pvcRef`.
-`status.sessions[].pvcSize` reports the requested size.
-
-File bundles and extension packages are passed to the session runtime
-unchanged. Set Data enablement before creating Datalabs because the runtime
-saves each environment's Workshop specification. See [file sources](usage_concepts.md#files-and-the-workshop-tab)
-for a file bundle example.
 
 #### Service images
 
 Set these image references under `data.images` in the EnvironmentConfig.
-Use a full image reference with a tag or digest. Omitted settings use the
+Use a full image reference with a tag. Omitted settings use the
 defaults below.
 
 | Setting | Default image tag | Use |
 | --- | --- | --- |
 | `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.0` | Data server and its database init container. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
-| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service. Session extension packages are configured separately. |
+| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service.  |
 | `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.12-ubi8` | MongoDB server. The default database version is `8.0.12`. |
 | `images.mongoBackup` | `mongo:8.0.12` | MongoDB backup tools. If omitted, its tag follows the database version. |
 | `images.redis` | `quay.io/opstree/redis:v7.0.15` | Redis server and its init container. |
 | `images.redisBackup` | `redis:7.0.15` | Redis backup tools. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.4` | OAuth2 Proxy for Data and S3. |
+| `images.sandbox` | `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10` | Agent Sandbox controller inside each virtual cluster. |
+| `images.sandboxd` | `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f` | Runtime for the virtual sandboxd templates. Use a compatible image that starts sandboxd and contains the required tools. |
 
-The default OAuth2 Proxy image is also pinned by digest in the composition.
 A MongoDB image tag that starts with `major.minor.patch` sets the database
 version. For a digest without a version tag, set
 `documentStore.version` to the image's MongoDB version. Use compatible server
 and backup images.
+
+#### Resource quotas and container defaults
+
+The composition creates one ResourceQuota and one LimitRange in each Datalab's
+host service namespace. All its services, virtual control planes, and synced
+workload Pods share this quota, across all virtual namespaces and clusters.
+Host admission rejects new Pods that exceed it. Quotas do not reserve capacity;
+size them for the host cluster and the number of teams. Include control planes,
+service sidecars, and temporary Pod overlap during rolling updates.
+
+Override individual quota entries under `defaults.overallQuota.hard`. Unset
+entries keep their defaults. Additional native ResourceQuota entries are also
+accepted. `defaults.overallQuota.storage` sets the PVC request limit; an explicit
+`hard.requests.storage` takes priority.
+
+Use `defaults.limitRange.default` for missing container limits and
+`defaults.limitRange.defaultRequest` for missing requests. Default limits are
+CPU `1`, memory `512Mi`, and ephemeral storage `8Gi`. Default requests are
+CPU `100m`, memory `128Mi`, and ephemeral storage `3Gi`. These defaults apply
+to containers without the corresponding resource settings.
 
 #### Identity and endpoints
 
@@ -325,11 +353,13 @@ and backup images.
 | `iam.namespace` | `keycloak` | Namespace selected by IAM egress rules. |
 | `iam.issuerURL` | Not set | Public OIDC issuer for Data and virtual cluster access. |
 | `iam.internalURL` | Not set | Token and signing-key URL; required for permanent Data exposure. |
+| `iam.redirectURIs` | `[]` | Additional OAuth redirect URIs. The Data `/oauth2/callback` URI is always included. Add a localhost callback only when needed. |
+| `iam.webOrigins` | `[]` | Additional browser origins. The Datalab HTTPS origin is always included. |
 | `iam.extraAudiences` | `[]` | Additional audiences for tokens issued by the Datalab client. The Datalab audience is always included. |
 | `ingress.enabled` | `false` | Public Data and registry Ingress. |
-| `ingress.class` | Empty | Ingress class for sessions and services. |
-| `ingress.domain` | `default` for sessions | Public host suffix for sessions and services. |
-| `ingress.secret` | `wildcard-tls` for sessions | TLS Secret; must be set for Data Ingress. |
+| `ingress.class` | Empty | Ingress class for public services. |
+| `ingress.domain` | `default` | Public host suffix for services. |
+| `ingress.secret` | Empty | TLS Secret; must be set for Data Ingress. |
 | `ingress.annotations` | `{}` | Annotations on service Ingress objects. |
 | `httpRoute.enabled` | `false` | Public Data and registry Gateway routes. |
 | `httpRoute.enableS3` | `false` | Read-only S3 endpoint; requires `httpRoute.enabled`. |
@@ -351,10 +381,10 @@ and backup images.
 | `storage.provider` | Empty for rclone; `Other` for the S3 proxy | Object-store provider. |
 | `storage.forcePathStyle` | `true` | Path-style S3 requests. |
 | `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
-| `storageClasses.allowed` | `[]` | Allowed workspace StorageClasses; an empty list permits any configured class. |
 | `vcluster.resources.requests` | CPU `200m`, memory `1Gi`, ephemeral storage `1Gi` | Control-plane requests; supplied fields override these defaults. |
 | `vcluster.resources.limits` | CPU `4`, memory `4Gi`, ephemeral storage `10Gi` | Control-plane limits; supplied fields override these defaults. |
 | `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
+| `defaults.session.pvcSize` | `1Gi` | Default size of durable session PVCs. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
 | `vcluster.storageClasses.allowed` | Required when virtual clusters are declared | Host classes exposed to virtual workloads. |
 | `vcluster.storageClasses.default` | First allowed class | Virtual workload default class. |
@@ -395,6 +425,11 @@ PostgreSQL TLSRoutes are created only when all three
 | `network.internalEgress[].ports[].protocol`, `network.internalIngress[].ports[].protocol` | Kubernetes default (`TCP`) | Port protocol. |
 | `network.internalEgress[].ports[].endPort`, `network.internalIngress[].ports[].endPort` | Not set | End of a numeric port range. |
 | `network.internalIngress[].targetPodSelector` | `{}` | Runtime Pods selected by the ingress policy; omitted means all runtime Pods. |
+
+### Secret exports
+
+`customSecrets` lists optional sources for native virtual Secret bindings.
+See [connection bindings](connections.md#bind-a-connection).
 
 ### Network access
 
@@ -484,7 +519,7 @@ Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provide
 with an explicit claim namespace.
 
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-joe
@@ -502,8 +537,7 @@ kubectl get datalabs -n workspace
 kubectl describe datalab s-joe -n workspace
 ```
 
-See [Use a Datalab](usage_concepts.md) for session state, managed services,
-workshop files, and sharing.
+See [Use a Datalab](usage_concepts.md) for sessions, managed services, and sharing.
 
 ## 7. Check the installation
 
@@ -525,11 +559,11 @@ the required APIs are served. The provider APIs used here are namespaced:
 
 ```bash
 kubectl api-resources --api-group=kubernetes.m.crossplane.io
-kubectl api-resources --api-group=helm.m.crossplane.io
 kubectl api-resources --api-group=keycloak.m.crossplane.io
 kubectl api-resources --api-group=gateway.networking.k8s.io
 ```
 
 For a managed store, also check its API group from the prerequisite table.
-Verify the Data address, storage access, and each requested service. If you
-declared a session, also check its browser login before giving users access.
+Verify the Data address, storage access, and each requested service before
+giving users access. For virtual clusters, also check user login and the
+[sandboxd APIs](sandboxes.md#5-check-files-and-commands-from-your-computer).

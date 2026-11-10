@@ -1,16 +1,15 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: verify-s3
   namespace: workspace
   annotations:
-    datalabs.pkg.internal/environment: datalab-custom
+    datalabs.versioneer.at/environment: datalab-custom
 spec:
   users: [verify-s3]
-  sessions: []
 ---
 apiVersion: v1
 kind: Secret

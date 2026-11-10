@@ -5,7 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: data-s3
-  namespace: ${workshop_namespace}
+  namespace: ${runtime_namespace}
   labels: ${s3_labels}
 spec:
   replicas: 1
@@ -16,7 +16,7 @@ spec:
     metadata:
       labels: ${s3_labels}
       annotations:
-        datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+        datalabs.versioneer.at/storage-secret-checksum: ${storage_secret_checksum}
     spec:
       automountServiceAccountToken: false
       securityContext:

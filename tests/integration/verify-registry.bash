@@ -8,23 +8,22 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${REGISTRY_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${KEEP_REGISTRY_RESOURCES:=0}"
 
-readonly EDUCATES_NAMESPACE=educates
 readonly DATALAB_NAME=verify-registry
-readonly SESSION_NAME=default
 readonly PROBE_NAME=verify-registry
 registry_runtime_namespace=""
 registry_connection_secret=""
 
-# shellcheck source=educates.bash
-source "${INTEGRATION_DIR}/educates.bash"
+# shellcheck source=runtime.bash
+source "${INTEGRATION_DIR}/runtime.bash"
 
 apply_registry_datalab() {
   log 'Applying the registry verification Datalab'
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
+  kube patch environmentconfig datalab-custom --type=merge \
+    --patch '{"data":{"defaults":{"registry":{"enabled":true}}}}'
   kube delete pod/verify-registry-bucket --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/registry/bucket.yaml" \
@@ -34,41 +33,11 @@ apply_registry_datalab() {
   kube apply -f "${MANIFEST_DIR}/registry/datalab.yaml"
 }
 
-wait_for_registry_session() {
-  local deadline=$((SECONDS + 900))
-
-  log 'Waiting for the Educates environment and session'
-  if ! kube wait \
-    "object.kubernetes.m.crossplane.io/workshopenvironment-${DATALAB_NAME}" \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    --for=create --timeout=5m; then
-    return 1
-  fi
-  if ! kube wait \
-    "object.kubernetes.m.crossplane.io/workshopenvironment-${DATALAB_NAME}" \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    --for=condition=Ready --timeout=15m; then
-    return 1
-  fi
-  if ! kube wait \
-    "object.kubernetes.m.crossplane.io/workshopsession-${DATALAB_NAME}-${SESSION_NAME}" \
-    --namespace "${WORKSPACE_NAMESPACE}" \
-    --for=condition=Ready --timeout=15m; then
-    return 1
-  fi
-
-  until [[ -n "${registry_runtime_namespace}" ]]; do
-    registry_runtime_namespace="$(kube get \
-      "object.kubernetes.m.crossplane.io/workshopenvironment-${DATALAB_NAME}" \
-      --namespace "${WORKSPACE_NAMESPACE}" \
-      -o jsonpath='{.status.atProvider.manifest.status.educates.namespace}' \
-      2>/dev/null || true)"
-    if ((SECONDS >= deadline)); then
-      printf 'The registry Educates runtime namespace was not reported within 15 minutes.\n' >&2
-      return 1
-    fi
-    [[ -n "${registry_runtime_namespace}" ]] || sleep 5
-  done
+wait_for_registry() {
+  log 'Waiting for the registry in the Datalab service namespace'
+  registry_runtime_namespace="$(wait_for_runtime_namespace "${DATALAB_NAME}")"
+  kube wait deployment/registry --namespace "${registry_runtime_namespace}" --for=create --timeout=10m
+  kube rollout status deployment/registry --namespace "${registry_runtime_namespace}" --timeout=10m
 }
 
 find_registry_service() {
@@ -121,7 +90,7 @@ run_registry_probe() {
   fi
   local deadline=$((SECONDS + 300))
   until [[ -n "${registry_connection_secret}" ]]; do
-    registry_connection_secret="$(kube get "datalab.pkg.internal/${DATALAB_NAME}" \
+    registry_connection_secret="$(kube get "datalabs.versioneer.at/${DATALAB_NAME}" \
       --namespace "${WORKSPACE_NAMESPACE}" -o json | jq -r '
         [.status.connections[]? | select(.type == "registry" and .name == "primary" and .ready)
           | .secretRef.name] | first // ""
@@ -152,12 +121,11 @@ run_registry_probe() {
 show_registry_diagnostics() {
   local runtime_namespace="${1:-verify-registry}"
 
-  kube get "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube get "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" -o wide || true
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${DATALAB_NAME}" || true
-  kube get workshop,workshopenvironment,workshopsession --all-namespaces || true
   kube get pod,pvc,service,secret --namespace "${runtime_namespace}" || true
   kube logs "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" || true
   kube get events --namespace "${runtime_namespace}" \
@@ -170,9 +138,9 @@ cleanup_successful_verification() {
   fi
   kube delete "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
-  kube delete "datalab.pkg.internal/${DATALAB_NAME}" \
+  kube delete "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
-  if ! kube wait "datalab.pkg.internal/${DATALAB_NAME}" \
+  if ! kube wait "datalabs.versioneer.at/${DATALAB_NAME}" \
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m; then
     printf 'Registry cleanup is still running; resources were kept for diagnosis.\n' >&2
   fi
@@ -181,9 +149,8 @@ cleanup_successful_verification() {
 main() {
   require_cluster
   require_command jq
-  install_educates
   apply_registry_datalab
-  if ! wait_for_registry_session; then
+  if ! wait_for_registry; then
     show_registry_diagnostics
     exit 1
   fi
@@ -192,8 +159,6 @@ main() {
     printf 'Registry verification resources were kept for diagnosis.\n' >&2
     exit 1
   fi
-  python3 "${INTEGRATION_DIR}/verify-session-storage.py" \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}"
   cleanup_successful_verification
 }
 

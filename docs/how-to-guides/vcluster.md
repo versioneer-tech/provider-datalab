@@ -3,7 +3,7 @@
 Declare each virtual Kubernetes cluster under `spec.vclusters`:
 
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-joe
@@ -19,9 +19,16 @@ spec:
         role: edit
 ```
 
-Each entry creates one runtime in `status.runtimeNamespace`. Add
+Each entry creates one control plane in the Datalab-named service namespace. Add
 `vc1` alongside `vc0` to create another cluster. An empty map creates none.
-Sessions and their environment-controlled vclusters remain separate.
+
+Use one Datalab per team and add virtual clusters as needed. Configure
+explicit service Secret bindings for application namespaces. See
+[connection bindings](connections.md#bind-a-connection).
+
+Each virtual cluster installs Agent Sandbox CRDs and its controller. See
+[Sandboxes](sandboxes.md) to start sandboxd, use its APIs, and keep workspace
+files on a session PVC.
 
 ## API access
 
@@ -550,8 +557,10 @@ instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
 `vcluster.storageClassName` selects its class; otherwise the default class is
 used. Only classes in `vcluster.storageClasses.allowed` are exposed to virtual
 workloads. A host admission policy enforces this list for each syncer.
-Control-plane, workload, database, and session PVCs share the existing
-`defaults.overallQuota.storage` limit.
+Control-plane, workload, database, and session PVCs share the
+`defaults.overallQuota.storage` limit. All Pod CPU and memory requests and limits
+count against the same [host namespace quota](installation.md#resource-quotas-and-container-defaults),
+across every virtual namespace and cluster in the Datalab.
 
 Set `vcluster.resources.requests` and `vcluster.resources.limits` in the
 EnvironmentConfig to change control-plane resources. Both the native vCluster
@@ -593,7 +602,7 @@ databases:
 
 [PgSTAC](https://stac-utils.github.io/pgstac/pgstac/) requires PostGIS and a schema
 migration. The example migration Job uses the generated PostgreSQL credentials
-from the Datalab Secret. It creates a separate `catalog` login with the
+from the separate PostgreSQL connection. It creates a separate `catalog` login with the
 `pgstac_ingest` role. The API uses that login and the standard
 [PostgreSQL settings](https://stac-utils.github.io/stac-fastapi-pgstac/settings/):
 `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
@@ -604,12 +613,16 @@ Pods. Namespace selectors do not match host-network API endpoints on all CNIs.
 The integration has a PostgreSQL-specific policy for this case.
 
 The example expects `catalog-postgres-admin` and `catalog-postgres` Secrets in
-virtual namespace `demo`. The first contains migration credentials. The second
-contains the API login. Supply these through your Secret process. Build the
-image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
+virtual namespace `demo`. The migration Secret uses `host`, `port`, `user`, and
+`password`. The API Secret uses the PostgreSQL environment variable names above.
+Use an operator-approved [Secret binding](connections.md#bind-a-connection)
+with `type: postgres` and `name: pg0` for migration. Supply the API login
+separately with suitable backend permissions.
+Build the image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
 replace `__CATALOG_IMAGE__` with that image reference before applying the example.
 Wait for `catalog-migrate` to complete before starting the API Deployment.
-Remove the migration Secret after it completes.
+Remove the migration binding after it completes so the provider removes its
+managed copy. A direct Secret deletion would be reconciled.
 
 Connect to the catalog through the generated profile:
 
@@ -631,7 +644,7 @@ and repeats the search after a control-plane restart.
 
 Removing a group removes its role and binding after reconciliation while
 retaining its virtual namespace data. Removing an instance removes its runtime
-and control-plane PVC. Other instances, databases, sessions, and the shared
+and control-plane PVC. Other instances, databases, the registry, and the shared
 namespace remain. Deletion follows the host StorageClass retention policy.
 Back up control-plane and database volumes before removing an instance or Datalab.
 

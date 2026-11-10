@@ -1,18 +1,13 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-# The custom environment supplies the workspace StorageClass and file bundles.
-# John has both API keys. Each declared session keeps its PVC.
-apiVersion: pkg.internal/v1beta2
+# The custom environment sets service, storage, and network policy.
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-john
   annotations:
-    datalabs.pkg.internal/environment: datalab-custom
+    datalabs.versioneer.at/environment: datalab-custom
 spec:
   users:
   - john
-  sessions:
-  - name: default
-  - name: analysis
-    state: stopped

@@ -8,7 +8,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _safe_str,
     _resource_name,
-    _session_name,
     _to_dict,
     _vcluster_groups,
     _vcluster_exchange_groups,
@@ -20,23 +19,6 @@ from composition.render import _render_template
 
 def _distinct(seq):
     return list(dict.fromkeys(seq))
-
-
-def _workspace_redirect_uris(xr_name, domain, session_names):
-    uris = [f"https://{xr_name}.{domain}/*"]
-    for sid in session_names:
-        session_host = f"{xr_name}-{sid}"
-        uris.extend(
-            [
-                f"https://{session_host}.{domain}/*",
-                f"https://editor-{session_host}.{domain}/*",
-                f"https://{session_host}-editor.{domain}/*",
-                f"https://data-{session_host}.{domain}/*",
-                f"https://{session_host}-data.{domain}/*",
-            ]
-        )
-    uris.append("http://localhost:*")
-    return _distinct(uris)
 
 
 def _security_ready(req, resources):
@@ -91,12 +73,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     ])
     domain = ingress_env.get("domain", "default")
     url = f"https://{xr_name}.{domain}"
-    session_names = [
-        _session_name(session)
-        for session in (spec.get("sessions") or [])
-        if _session_name(session)
-    ]
-    redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
+    redirect_uris = _distinct([
+        f"https://{xr_name}.{domain}/oauth2/callback",
+        *[uri for uri in iam_env.get("redirectURIs", []) if isinstance(uri, str) and uri.strip()],
+    ])
 
     security_resources = {}
     security_kinds = {
@@ -155,6 +135,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             xr_name=xr_name,
             url=url,
             redirect_uris=redirect_uris,
+            web_origins=_distinct([
+                f"https://{xr_name}.{domain}",
+                *[origin for origin in iam_env.get("webOrigins", []) if isinstance(origin, str) and origin.strip()],
+            ]),
             realm=realm,
             connection_secret_name=f"{xr_name}-oauth-client",
             exchange_enabled=False,

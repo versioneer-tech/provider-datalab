@@ -6,6 +6,8 @@ kind: Pod
 metadata:
   name: __PROBE_NAME__
   namespace: __PROBE_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: datalab-service-probe
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
@@ -17,8 +19,8 @@ spec:
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:
-              name: __DATALAB_SECRET__
-              key: MONGO_VERIFY_URI
+              name: __CONNECTION_SECRET__
+              key: uri
       command:
         - sh
         - -c

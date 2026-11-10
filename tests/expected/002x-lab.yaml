@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-jeff
@@ -72,6 +72,68 @@ status:
   sessions: []
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jeff-mongo-prod
+  labels:
+    datalabs.versioneer.at/connection: mongo-prod
+    datalabs.versioneer.at/name: s-jeff
+  name: s-jeff-mongo-prod
+  namespace: default
+stringData:
+  auth_source: admin
+  database: prod
+  host: mongodb-prod-svc.s-jeff.svc
+  password: 4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW
+  port: '27017'
+  uri: mongodb://prod-app:4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW@mongodb-prod-svc.s-jeff.svc:27017/prod?authSource=admin
+  user: prod-app
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jeff-postgres-pg0
+  labels:
+    datalabs.versioneer.at/connection: postgres-pg0
+    datalabs.versioneer.at/name: s-jeff
+  name: s-jeff-postgres-pg0
+  namespace: default
+stringData:
+  databases: dev,prod
+  dev_url: postgresql://postgres:pg-secret@pg0-primary.s-jeff.svc:5432/dev
+  dev_url_external: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/dev?sslmode=require&sslnegotiation=direct
+  host: pg0-primary.s-jeff.svc
+  host_external: pg0-s-jeff.lab.acme.com
+  password: pg-secret
+  port: '5432'
+  prod_url: postgresql://postgres:pg-secret@pg0-primary.s-jeff.svc:5432/prod
+  prod_url_external: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/prod?sslmode=require&sslnegotiation=direct
+  user: postgres
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jeff-redis-prod
+  labels:
+    datalabs.versioneer.at/connection: redis-prod
+    datalabs.versioneer.at/name: s-jeff
+  name: s-jeff-redis-prod
+  namespace: default
+stringData:
+  database: '0'
+  host: prod.s-jeff.svc
+  password: MqZoLXDLQrwPOuwgM1dj6LzOTOML
+  port: '6379'
+  url: redis://default:MqZoLXDLQrwPOuwgM1dj6LzOTOML@prod.s-jeff.svc:6379/0
+  user: default
+type: Opaque
+---
+apiVersion: v1
 data:
   password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
   user: ZGVmYXVsdA==
@@ -80,11 +142,694 @@ metadata:
   annotations:
     crossplane.io/composition-resource-name: connection-s-jeff-redis-prod-connection-d754ffa05f-7006a59e31
   labels:
-    datalabs.pkg.internal/connection: redis-prod
-    datalabs.pkg.internal/name: s-jeff
+    datalabs.versioneer.at/connection: redis-prod
+    datalabs.versioneer.at/name: s-jeff
   name: s-jeff-redis-prod-connection-d754ffa05f
   namespace: default
 type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: connection-s-jeff-s3
+  labels:
+    datalabs.versioneer.at/connection: s3
+    datalabs.versioneer.at/name: s-jeff
+  name: s-jeff-s3
+  namespace: default
+stringData:
+  AWS_ACCESS_KEY_ID: jeff-access-key
+  AWS_ENDPOINT_URL: https://s3.acme.com
+  AWS_REGION: acme
+  AWS_S3_FORCE_PATH_STYLE: 'true'
+  AWS_SECRET_ACCESS_KEY: jeff-secret-key
+  AWS_SESSION_TOKEN: integration-session-token
+  aws-credentials: |
+    [default]
+    aws_access_key_id = jeff-access-key
+    aws_secret_access_key = jeff-secret-key
+    aws_session_token = integration-session-token
+  configData: |
+    [jeff-access-key]
+    type = s3
+    provider = Other
+    endpoint = https://s3.acme.com
+    region = acme
+    access_key_id = jeff-access-key
+    secret_access_key = jeff-secret-key
+    force_path_style = true
+  remote: jeff-access-key
+  remotePath: /
+type: Opaque
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-00e87cec9632-s-jeff-namespace-s-jeff-r-db4c01a096
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-backup-pvc-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-03811ac34fb3-s-jeff-namespace-s-jeff-n-4a99721c18
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-allow-internal-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-0852b5f26864-s-jeff-namespace-s-jeff-r-e87964f190
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: registry-auth-secret-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-0aa2e5629281-s-jeff-namespace-s-jeff-r-f20e62de80
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-backup-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-17db6362f9e3-s-jeff-namespace-s-jeff-m-928768d8d6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-backup-cronjob-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-1806a68fc449-s-jeff-namespace-s-jeff-n-1c3a7f077f
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-deny-ingress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-223815648326-s-jeff-namespace-s-jeff-r-074f33bbc9
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-pod-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-22e484463850-s-jeff-namespace-s-jeff-d-c05782e90b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-tlsroute-s-jeff-pg0
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-242238df2b24-s-jeff-namespace-s-jeff-l-de77c161b4
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: limitrange-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-25b8886373b8-s-jeff-namespace-s-jeff-m-30ecb137ef
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-sa-appdb-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-298745a85597-s-jeff-namespace-s-jeff-n-9b600d06b8
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-allow-dns-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-2b1722ae6b6b-s-jeff-namespace-s-jeff-r-c39275e32d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-304e74316b93-s-jeff-namespace-s-jeff-m-5d317339b3
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-sa-database-pods-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-339a9ecd7414-s-jeff-namespace-s-jeff-r-595caf2b04
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-acl-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-47d628446e68-s-jeff-namespace-s-jeff-m-2a744de53d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-backup-pvc-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-496b459e1af6-s-jeff-namespace-s-jeff-m-89dbf15642
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-community-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-5130d7826349-s-jeff-namespace-s-jeff-m-331e680e09
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-backup-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-5a39224e0e75-s-jeff-namespace-s-jeff-r-df4745ded5
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: runtime-storage-secret-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-6914388f6276-s-jeff-namespace-s-jeff-m-ace555aaff
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-rb-appdb-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-6b4e021bded3-s-jeff-namespace-s-jeff-d-f2996b5566
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-postgrescluster-s-jeff-pg0
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-76d499f3f187-s-jeff-namespace-s-jeff-n-9890616f1f
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-allow-external-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-8d5c04476a89-s-jeff-namespace-s-jeff-n-2d1325c7ef
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-deny-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-8f82af7b7ffa-s-jeff-namespace-s-jeff-n-c61246be40
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-allow-namespace-ingress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-97ff71022f3b-s-jeff-namespace-s-jeff-r-68ad6a49fe
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-cache-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-99f230efc234-s-jeff-namespace-s-jeff-r-3b30e97c8a
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: redis-backup-cronjob-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-a340a3d94c03-s-jeff-namespace-s-jeff-m-71843c235d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-sa-ops-manager-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-ac24a6920efa-s-jeff-namespace-s-jeff-m-d1a20610fd
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-role-appdb-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-affdb3f1d5b7-s-jeff-namespace-s-jeff-r-002958a27b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: resourcequota-s-jeff-overall-storage
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b679e00d2bbb-s-jeff-namespace-s-jeff-o-69cf3e88b2
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-redis-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b8700d5d5703-s-jeff-namespace-s-jeff-n-d0c66100e6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: networkpolicy-s-jeff-allow-namespace-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b9eee395a5c5-s-jeff-namespace-s-jeff-o-f1b91268cb
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-runtime-storage-secret-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-c0a2c72d5b2e-s-jeff-namespace-s-jeff-m-1015cac489
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: mongodb-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-e99cd7e342b8-s-jeff-namespace-s-jeff-o-44ff342efc
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-mongodb-auth-secret-s-jeff-prod
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-eb1d813672f7-s-jeff-namespace-s-jeff-d-c4979653bb
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-configmap-s-jeff-pg0
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-eb28512c4df7-s-jeff-namespace-s-jeff-o-156eac14f6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-database-secret-s-jeff-pg0
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-f04c7ec9a53a-s-jeff-namespace-s-jeff-o-25a94a34c0
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: observe-registry-auth-secret-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
@@ -236,11 +981,10 @@ spec:
     standardFlowEnabled: true
     standardTokenExchangeEnabled: false
     validRedirectUris:
-    - https://s-jeff.lab.acme.com/*
-    - http://localhost:*
+    - https://s-jeff.lab.acme.com/oauth2/callback
+    - http://localhost:8080/callback
     webOrigins:
-    - https://s-jeff.lab.acme.com/*
-    - http://localhost:*
+    - https://s-jeff.lab.acme.com
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -828,6 +1572,91 @@ spec:
     kind: ProviderConfig
     name: provider-keycloak
 ---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-427f79564150-s-jeff-keycloak-group-s-63e441e1ff
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-jeff
+  of:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Group
+    resourceRef:
+      name: s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-7911023e3c33-s-jeff-keycloak-role-api-f5e84835c8
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-jeff
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jeff-ws-api
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: keycloak-usage-ba074089560f-s-jeff-keycloak-role-use-31721e1e72
+  namespace: default
+spec:
+  by:
+    apiVersion: group.keycloak.m.crossplane.io/v1alpha1
+    kind: Roles
+    resourceRef:
+      name: s-jeff
+  of:
+    apiVersion: role.keycloak.m.crossplane.io/v1alpha1
+    kind: Role
+    resourceRef:
+      name: s-jeff-ws-access
+  replayDeletion: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: limitrange-s-jeff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: datalab-limits
+        namespace: s-jeff
+      spec:
+        limits:
+        - default:
+            cpu: '1'
+            ephemeral-storage: 8Gi
+            memory: 512Mi
+          defaultRequest:
+            cpu: 100m
+            ephemeral-storage: 3Gi
+            memory: 128Mi
+          type: Container
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -837,13 +1666,13 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        password: NGhxNVdxN3pWeXdBRUkwaEM3SVAtaXlMWGlMWkVsUVc=
+        user: cHJvZC1hcHA=
       kind: Secret
       metadata:
         name: prod-mongodb-auth
         namespace: s-jeff
-      stringData:
-        password: 4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW
-        user: prod-app
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -861,14 +1690,13 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        config.yaml: cGFzc3dvcmQ6IDE2ZkdocS1jNkQ3dTJhTFlsdmN6S3NlbHpVQ0hnU21NCg==
+        password: MTZmR2hxLWM2RDd1MmFMWWx2Y3pLc2VselVDSGdTbU0=
       kind: Secret
       metadata:
         name: prod-mongodb-backup-auth
         namespace: s-jeff
-      stringData:
-        config.yaml: |
-          password: 16fGhq-c6D7u2aLYlvczKselzUCHgSmM
-        password: 16fGhq-c6D7u2aLYlvczKselzUCHgSmM
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1197,6 +2025,243 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
+  name: namespace-s-jeff
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        labels:
+          datalabs.versioneer.at/name: s-jeff
+          datalabs.versioneer.at/namespace: default
+          pod-security.kubernetes.io/enforce: baseline
+        name: s-jeff
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-allow-dns-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns-egress
+        namespace: s-jeff
+      spec:
+        egress:
+        - ports:
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-allow-external-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-external-egress
+        namespace: s-jeff
+      spec:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+              - 169.254.42.42/32
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+        - to:
+          - ipBlock:
+              cidr: ::/0
+              except:
+              - fd00:ec2::254/128
+              - fd00:42::42/128
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-allow-internal-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-internal-egress
+        namespace: s-jeff
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 9000
+            protocol: TCP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: minio
+            podSelector:
+              matchLabels:
+                v1.min.io/tenant: default
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-allow-namespace-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-egress
+        namespace: s-jeff
+      spec:
+        egress:
+        - to:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-allow-namespace-ingress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-namespace-ingress
+        namespace: s-jeff
+      spec:
+        ingress:
+        - from:
+          - podSelector: {}
+        podSelector: {}
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-deny-egress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-egress
+        namespace: s-jeff
+      spec:
+        egress: []
+        podSelector: {}
+        policyTypes:
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: networkpolicy-s-jeff-deny-ingress
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-ingress
+        namespace: s-jeff
+      spec:
+        ingress: []
+        podSelector: {}
+        policyTypes:
+        - Ingress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
   name: observe-database-secret-s-jeff-pg0
   namespace: default
 spec:
@@ -1305,7 +2370,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: s-jeff-datalab
+        name: s-jeff-storage
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -1366,13 +2431,13 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
+        user: ZGVmYXVsdA==
       kind: Secret
       metadata:
         name: prod-redis-auth
         namespace: s-jeff
-      stringData:
-        password: MqZoLXDLQrwPOuwgM1dj6LzOTOML
-        user: default
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1390,13 +2455,13 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        password: YmZiZWRlM2pPc2ZKZUhPRDdOR3pqUWlUQUFqM0xMd00=
+        user: YmFja3Vw
       kind: Secret
       metadata:
         name: prod-redis-backup-auth
         namespace: s-jeff
-      stringData:
-        password: bfbede3jOsfJeHOD7NGzjQiTAAj3LLwM
-        user: backup
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1534,7 +2599,7 @@ spec:
       kind: Redis
       metadata:
         annotations:
-          datalabs.pkg.internal/redis-acl-checksum: 51b2df2ef6452aae4bafd5faa377b6115b82e3fa4b3b5f79431317adec2c917a
+          datalabs.versioneer.at/redis-acl-checksum: 51b2df2ef6452aae4bafd5faa377b6115b82e3fa4b3b5f79431317adec2c917a
         name: prod
         namespace: s-jeff
       spec:
@@ -1610,14 +2675,14 @@ spec:
   forProvider:
     manifest:
       apiVersion: v1
+      data:
+        http-secret: U0xxMVdaLWo2bUpxdkgxVFU5N3RWZWxLUThyQUpaQkc=
+        password: ZUExN3B0MlpGRHJIOTVicnFZa3g5YWRuWDZwXw==
+        user: cy1qZWZm
       kind: Secret
       metadata:
         name: registry-auth
         namespace: s-jeff
-      stringData:
-        http-secret: SLq1WZ-j6mJqvH1TU97tVelKQ8rAJZBG
-        password: eA17pt2ZFDrH95brqYkx9adnX6p_
-        user: s-jeff
       type: Opaque
   providerConfigRef:
     kind: ProviderConfig
@@ -1641,6 +2706,10 @@ spec:
         namespace: s-jeff
       spec:
         hard:
+          limits.cpu: '16'
+          limits.memory: 32Gi
+          requests.cpu: '4'
+          requests.memory: 8Gi
           requests.storage: 100Gi
   providerConfigRef:
     kind: ProviderConfig
@@ -1649,293 +2718,31 @@ spec:
     policy: SuccessfulCreate
   watch: true
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: secret-s-jeff-datalab
-  name: s-jeff-datalab
-  namespace: default
-stringData:
-  AWS_ACCESS_KEY_ID: jeff-access-key
-  AWS_ENDPOINT_URL: https://s3.acme.com
-  AWS_REGION: acme
-  AWS_S3_FORCE_PATH_STYLE: 'true'
-  AWS_SECRET_ACCESS_KEY: jeff-secret-key
-  AWS_SESSION_TOKEN: integration-session-token
-  MONGO_PROD_AUTH_SOURCE: admin
-  MONGO_PROD_DATABASE: prod
-  MONGO_PROD_HOST: mongodb-prod-svc.s-jeff.svc
-  MONGO_PROD_PASSWORD: 4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW
-  MONGO_PROD_PORT: '27017'
-  MONGO_PROD_URI: mongodb://prod-app:4hq5Wq7zVywAEI0hC7IP-iyLXiLZElQW@mongodb-prod-svc.s-jeff.svc:27017/prod?authSource=admin
-  MONGO_PROD_USER: prod-app
-  POSTGRES_PG0_DATABASES: dev,prod
-  POSTGRES_PG0_DEV_URL: postgresql://postgres:pg-secret@pg0-primary.s-jeff.svc:5432/dev
-  POSTGRES_PG0_DEV_URL_EXTERNAL: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/dev?sslmode=require&sslnegotiation=direct
-  POSTGRES_PG0_HOST: pg0-primary.s-jeff.svc
-  POSTGRES_PG0_HOST_EXTERNAL: pg0-s-jeff.lab.acme.com
-  POSTGRES_PG0_PASSWORD: pg-secret
-  POSTGRES_PG0_PORT: '5432'
-  POSTGRES_PG0_PROD_URL: postgresql://postgres:pg-secret@pg0-primary.s-jeff.svc:5432/prod
-  POSTGRES_PG0_PROD_URL_EXTERNAL: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/prod?sslmode=require&sslnegotiation=direct
-  POSTGRES_PG0_USER: postgres
-  REDIS_PROD_DATABASE: '0'
-  REDIS_PROD_HOST: prod.s-jeff.svc
-  REDIS_PROD_PASSWORD: MqZoLXDLQrwPOuwgM1dj6LzOTOML
-  REDIS_PROD_PORT: '6379'
-  REDIS_PROD_URL: redis://default:MqZoLXDLQrwPOuwgM1dj6LzOTOML@prod.s-jeff.svc:6379/0
-  REDIS_PROD_USER: default
-  aws-credentials: |
-    [default]
-    aws_access_key_id = jeff-access-key
-    aws_secret_access_key = jeff-secret-key
-    aws_session_token = integration-session-token
-  configData: |
-    [jeff-access-key]
-    type = s3
-    provider = Other
-    endpoint = https://s3.acme.com
-    region = acme
-    access_key_id = jeff-access-key
-    secret_access_key = jeff-secret-key
-    force_path_style = true
-  remote: jeff-access-key
-  remotePath: /
-type: Opaque
----
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: workshop-s-jeff
+  name: runtime-storage-secret-s-jeff
   namespace: default
 spec:
   forProvider:
     manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: Workshop
+      apiVersion: v1
+      data:
+        AWS_ACCESS_KEY_ID: amVmZi1hY2Nlc3Mta2V5
+        AWS_ENDPOINT_URL: aHR0cHM6Ly9zMy5hY21lLmNvbQ==
+        AWS_REGION: YWNtZQ==
+        AWS_S3_FORCE_PATH_STYLE: dHJ1ZQ==
+        AWS_SECRET_ACCESS_KEY: amVmZi1zZWNyZXQta2V5
+        AWS_SESSION_TOKEN: aW50ZWdyYXRpb24tc2Vzc2lvbi10b2tlbg==
+        aws-credentials: W2RlZmF1bHRdCmF3c19hY2Nlc3Nfa2V5X2lkID0gamVmZi1hY2Nlc3Mta2V5CmF3c19zZWNyZXRfYWNjZXNzX2tleSA9IGplZmYtc2VjcmV0LWtleQphd3Nfc2Vzc2lvbl90b2tlbiA9IGludGVncmF0aW9uLXNlc3Npb24tdG9rZW4K
+      kind: Secret
       metadata:
-        name: s-jeff
-      spec:
-        description: A default DataLab environment.
-        environment:
-          objects:
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: deny-egress
-            spec:
-              egress: []
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-namespace-egress
-            spec:
-              egress:
-              - to:
-                - podSelector: {}
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-vcluster-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 8443
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      training.educates.dev/environment.name: s-jeff
-                      training.educates.dev/session.objects: 'true'
-                  podSelector:
-                    matchLabels:
-                      app: vcluster
-                      release: my-vcluster
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-dns-egress
-            spec:
-              egress:
-              - ports:
-                - port: 53
-                  protocol: UDP
-                - port: 53
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: kube-system
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-external-egress
-            spec:
-              egress:
-              - to:
-                - ipBlock:
-                    cidr: 0.0.0.0/0
-                    except:
-                    - 169.254.169.254/32
-                    - 169.254.42.42/32
-                    - 10.42.0.0/16
-                    - 10.43.0.0/16
-              - to:
-                - ipBlock:
-                    cidr: ::/0
-                    except:
-                    - fd00:ec2::254/128
-                    - fd00:42::42/128
-              podSelector: {}
-              policyTypes:
-              - Egress
-          - apiVersion: networking.k8s.io/v1
-            kind: NetworkPolicy
-            metadata:
-              name: allow-internal-egress
-            spec:
-              egress:
-              - ports:
-                - port: 443
-                  protocol: TCP
-                - port: 9000
-                  protocol: TCP
-                to:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: minio
-                  podSelector:
-                    matchLabels:
-                      v1.min.io/tenant: default
-              podSelector: {}
-              policyTypes:
-              - Egress
-          secrets:
-          - name: s-jeff-datalab
-            namespace: default
-        session:
-          applications:
-            console:
-              enabled: false
-            editor:
-              enabled: true
-            slides:
-              enabled: false
-            terminal:
-              enabled: true
-            vcluster:
-              enabled: true
-              services:
-                fromHost:
-                - from: $(workshop_namespace)/pg0-primary
-                  to: $(workshop_namespace)/pg0-primary
-              version: '1.34'
-            workshop:
-              enabled: false
-          dashboards:
-          - name: Data
-            url: $(ingress_protocol)://data-$(session_name).$(ingress_domain)/
-          envFrom:
-          - secretRef:
-              name: s-jeff-datalab
-          ingresses:
-          - authentication:
-              type: session
-            headers:
-            - name: X-Package-R-User
-              value: datalab
-            host: package-r.$(workshop_namespace).svc.$(cluster_domain)
-            name: data
-            port: 8888
-            protocol: http
-          namespaces:
-            budget: medium
-            role: edit
-            security:
-              policy: baseline
-              token:
-                enabled: true
-          objects:
-          - apiVersion: v1
-            data:
-              cidr: 10.43.0.0/16
-            kind: ConfigMap
-            metadata:
-              name: vc-cidr-my-vcluster
-              namespace: $(session_namespace)-vc
-          resources:
-            memory: 2Gi
-            storage: 1Gi
-        title: Default DataLab
-        version: '1.0'
-        workshop:
-          files: []
-          packages:
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-            name: awscli
-          - files:
-            - image:
-                url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
-            name: rclone
+        name: s-jeff-storage
+        namespace: s-jeff
+      type: Opaque
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
     policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: workshopenvironment-s-jeff
-  namespace: datalab
-spec:
-  forProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-jeff
-      spec:
-        analytics:
-          amplitude:
-            trackingId: ''
-        cookies: {}
-        environment:
-          objects: []
-          secrets: []
-        request:
-          enabled: false
-        session:
-          ingress:
-            class: nginx
-            domain: lab.acme.com
-            secret: wildcard-tls
-        theme:
-          name: default-website-theme
-        workshop:
-          name: s-jeff
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    celQuery: has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'
-    policy: DeriveFromCelQuery
   watch: true

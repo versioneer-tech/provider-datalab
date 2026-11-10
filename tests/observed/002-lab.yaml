@@ -4,26 +4,6 @@
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: workshopenvironment-s-jeff
-  namespace: datalab
-  annotations:
-    crossplane.io/composition-resource-name: workshopenvironment-s-jeff
-status:
-  atProvider:
-    manifest:
-      apiVersion: training.educates.dev/v1beta1
-      kind: WorkshopEnvironment
-      metadata:
-        name: s-jeff
-        namespace: datalab
-      status:
-        educates:
-          namespace: s-jeff
-          phase: Running
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: observe-storage-secret-s-jeff
   namespace: default
   annotations:

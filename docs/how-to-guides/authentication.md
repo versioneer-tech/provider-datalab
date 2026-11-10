@@ -63,6 +63,10 @@ redirect_uri=http://localhost:8080/callback
 scope=openid profile email s-joe:interactive s-joe:vclusters_vc0_namespace-demo
 ```
 
+Add `http://localhost:8080/callback` to `EnvironmentConfig.data.iam.redirectURIs`
+for this example. Set `iam.webOrigins` only for additional browser origins.
+The Data callback is included by default.
+
 Use the normal state and PKCE checks, then authenticate the confidential client
 when redeeming the code. Request only the scopes needed by the application.
 For a namespace-only direct login, omit `s-joe:interactive`.
@@ -199,10 +203,9 @@ RoleBinding and ClusterRoleBinding rules apply without an authentication change.
 | `<datalab>-oauth2-client` | Runtime namespace | Created only for public Data/S3 OAuth2 proxies; contains `client_id`, `client_secret`, and `cookie_secret` |
 
 The runtime copy is needed only when Data is enabled and exposed through an
-Ingress or HTTPRoute. It is created after the runtime namespace is known and
-removed when that proxy is disabled. Token exchange and virtual-cluster access
-do not need this copy. The aggregate session Secret includes OAuth fields
-delivered to sessions.
+Ingress or HTTPRoute. It uses the Datalab service namespace and is removed
+when that proxy is disabled. Token exchange and virtual-cluster access do not
+need this copy. Storage and database Secrets do not contain OAuth credentials.
 
 Anyone with the client secret can request a service-account token. Grant read
 access only to authorized callers. With `grant_type=client_credentials` and no
@@ -252,107 +255,3 @@ references; credentials stay in the referenced Secret.
 Readiness requires the observed client and credential Secret to be ready, with
 matching client credentials. Removed sources clear stale entries. Discovery
 does not grant permission to read a Secret or authorize a service request.
-
-## Session ingress
-
-Configure sign-in before users start a session. The examples use Kyverno to
-configure NGINX or APISIX session Ingress objects.
-
-### Set the shared ingress settings
-
-Set the ingress class, domain, and TLS Secret in the
-[EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
-values in the session runtime installation, for example:
-
-```yaml
-clusterIngressDomain: lab.acme.com
-clusterIngressClass: apisix
-tlsCertificateRef:
-  name: wildcard-tls
-  namespace: workspace
-```
-
-Use a wildcard certificate for `*.lab.acme.com`.
-
-### Generated session resources
-
-For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
-`lab.acme.com`. The session ingress hosts include:
-
-```text
-s-jane-default.lab.acme.com
-editor-s-jane-default.lab.acme.com
-s-jane-default-editor.lab.acme.com
-data-s-jane-default.lab.acme.com
-s-jane-default-data.lab.acme.com
-```
-
-The generated ingresses carry labels that are suitable for platform policy:
-
-```yaml
-training.educates.dev/application: workshop
-training.educates.dev/component: session
-training.educates.dev/environment.name: s-jane
-```
-
-For `s-jane`, the generated client includes redirect and web-origin entries
-for the Datalab root and each declared session host:
-
-```text
-https://s-jane.lab.acme.com/*
-https://s-jane-default.lab.acme.com/*
-https://editor-s-jane-default.lab.acme.com/*
-https://s-jane-default-editor.lab.acme.com/*
-https://data-s-jane-default.lab.acme.com/*
-https://s-jane-default-data.lab.acme.com/*
-http://localhost:*
-```
-
-A service that belongs to `s-jane` can use this client. Shared browser ingress
-can use a central platform client and check the generated Datalab roles.
-
-### Apply ingress policy
-
-Apply controller settings through platform policy so they cover every session
-Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
-`MutatingPolicy` and `GeneratingPolicy` in `policies.kyverno.io/v1`.
-Kyverno is required for these policies, not for Provider Datalab itself.
-Adapt the domains, issuer, and controller settings in the linked manifests.
-
-#### NGINX Ingress with OAuth2 Proxy
-
-Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
-URI such as `https://auth.lab.acme.com/oauth2/callback`. Its authorization
-policy must check access to the Datalab named in the requested host.
-
-Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
-to add external-auth annotations to matching session Ingress objects.
-Set the proxy cookie domain to cover the session hosts, for example
-`.lab.acme.com`, and allow redirects only to that domain.
-
-#### APISIX Ingress configured by Kyverno
-
-The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
-gives Kyverno permission to create `ApisixPluginConfig` resources, generates
-one in each session namespace, and attaches it to matching Ingress objects.
-APISIX checks incoming requests; Kyverno configures the resources.
-
-The example uses `openid-connect` with a central public client named
-`datalab-sessions`. Its `opa` entry points to an external OPA service.
-The manifest does not deploy that service or supply its policy. Configure
-both for your platform so that the authorizer checks access to the requested
-Datalab. OPA is needed only for this example.
-
-The policies do not read Secrets. For a confidential central client, use the
-ingress controller's supported Secret mechanism to supply its credential.
-
-The plugin forwards the access token in `Authorization` and disables ID token,
-userinfo, and refresh token forwarding. Check that your authorizer and
-upstream service accept these settings.
-
-Kyverno generates the plugin's session secret once. Synchronization is disabled
-to keep it stable. After changing the template, recreate an existing generated
-plugin config or restart its session to apply the change.
-
-For another ingress controller, match session Ingress objects by label and
-domain, then attach its authentication and authorization settings.

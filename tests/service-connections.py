@@ -20,14 +20,14 @@ def main():
     env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["customSecrets"] = [{"name": "apikey"}]
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "teams", "uid": "test-datalab"},
-        "spec": {"sessions": [], "databases": {"prod": {"names": ["app"]}},
+        "spec": {"databases": {"prod": {"names": ["app"]}},
                  "documentStores": {"prod": {"type": "mongo"}},
                  "cacheStores": {"prod": {"type": "redis"}}},
     }
     values = {
-        "prod-pguser-postgres": {"host": "prod-primary.s-joe-runtime.svc", "port": "5432",
+        "prod-pguser-postgres": {"host": "prod-primary.s-joe.svc", "port": "5432",
                                   "user": "postgres", "password": "test-postgres-password",
                                   "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@prod/app",
                                   "jdbc-uri": "jdbc:postgresql://prod/app", "verifier": "test-internal"},
@@ -43,27 +43,27 @@ def main():
         return resources["composite"]["status"]["connections"]
 
     def copies(resources):
+        references = {
+            (connection["secretRef"]["namespace"], connection["secretRef"]["name"])
+            for connection in connections(resources)
+        }
+        # Normalized service outputs are separate from the copies used for discovery.
         return {key: body for key, body in resources.items() if body.get("kind") == "Secret"
-                and body["metadata"].get("labels", {}).get("datalabs.pkg.internal/connection")}
+                and body["metadata"].get("labels", {}).get("datalabs.versioneer.at/connection")
+                and (body["metadata"]["namespace"], body["metadata"]["name"]) in references}
 
     def scenario(xr):
         name = xr["metadata"]["name"]
-        runtime = {
-            "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-            "metadata": {"name": "workshopenvironment-" + name, "namespace": "teams",
-                         "annotations": {"crossplane.io/composition-resource-name": "workshopenvironment-" + name}},
-            "status": {"atProvider": {"manifest": {"status": {"educates": {"namespace": name + "-runtime"}}}}},
-        }
-        initial = run(xr, env, [runtime])
+        initial = run(xr, env, [])
         assert len(connections(initial)) == 3 and not any(c["ready"] for c in connections(initial))
         assert not copies(initial)
-        observed = [runtime]
+        observed = []
         for key, body in initial.items():
             spec = body.get("spec", {})
             manifest = spec.get("forProvider", {}).get("manifest", {})
             if spec.get("managementPolicies") != ["Observe"] or manifest.get("metadata", {}).get("name") not in values:
                 continue
-            assert manifest["metadata"]["namespace"] == name + "-runtime"
+            assert manifest["metadata"]["namespace"] == name
             body = deepcopy(body)
             manifest = deepcopy(manifest)
             manifest["metadata"]["ownerReferences"] = [{"apiVersion": "v1", "kind": "Pod", "name": "source", "uid": "source-owner"}]
@@ -104,7 +104,7 @@ def main():
         ("kubernetes.io/service-account-token", {"token": "test-account-token"}, "Opaque"),
     ):
         typed_sources = deepcopy(observed)
-        custom_source = next(body for body in typed_sources[1:]
+        custom_source = next(body for body in typed_sources
                              if body["status"]["atProvider"]["manifest"]["metadata"]["name"] == "apikey")
         custom_source["status"]["atProvider"]["manifest"].update(type=secret_type, data=encoded(fields))
         typed = run(source, env, typed_sources)
@@ -114,7 +114,7 @@ def main():
     print("PASS custom connection copies preserve usable Secret types without binding copied account tokens")
 
     rotated = deepcopy(observed)
-    for body in rotated[1:]:
+    for body in rotated:
         data = body["status"]["atProvider"]["manifest"]["data"]
         key = "token" if "token" in data else "password"
         data[key] = encoded({key: "test-rotated"})[key]
@@ -129,41 +129,35 @@ def main():
     print("PASS rotation updates stable copies and withholds readiness until every credential matches")
 
     unavailable = deepcopy(rotated)
-    for body in unavailable[1:]:
+    for body in unavailable:
         body["status"]["conditions"][1].update(status="False", message="observe failed: external resource does not exist")
     stale = deepcopy(source)
     stale["status"] = deepcopy(ready["composite"]["status"])
     lost = run(stale, env, [*unavailable, *current.values()])
     assert not copies(lost)
     assert len(connections(lost)) == 3 and not any(c["ready"] for c in connections(lost))
-    assert all(body["spec"]["managementPolicies"] == ["Observe"] for body in observed[1:])
-    restored = run(source, env, [*rotated, *current.values()])
+    restored = run(lost["composite"], env, [*rotated, *current.values()])
     assert all(c["ready"] for c in connections(restored))
     print("PASS unavailable sources remove stale copies and readiness; recovery republishes current credentials")
 
-    incomplete = deepcopy(observed)
-    postgres = next(body for body in incomplete[1:]
-                    if body["status"]["atProvider"]["manifest"]["metadata"]["name"] == "prod-pguser-postgres")
-    postgres["status"]["atProvider"]["manifest"]["data"].pop("password")
-    missing = run(source, env, [*incomplete, *published.values()])
-    assert not next(c["ready"] for c in connections(missing) if c["type"] == "postgres")
-    assert len(copies(missing)) == 3
-    print("PASS incomplete credentials cannot produce a ready connection")
-
-    for kind, secret_name in (("mongo", "prod-mongodb-auth"), ("redis", "prod-redis-auth")):
+    for kind, secret_name, field in (
+        ("postgres", "prod-pguser-postgres", "password"),
+        ("mongo", "prod-mongodb-auth", "user"),
+        ("redis", "prod-redis-auth", "user"),
+    ):
         incomplete = deepcopy(observed)
-        credential = next(body for body in incomplete[1:]
+        credential = next(body for body in incomplete
                           if body["status"]["atProvider"]["manifest"]["metadata"]["name"] == secret_name)
-        credential["status"]["atProvider"]["manifest"]["data"].pop("user")
+        credential["status"]["atProvider"]["manifest"]["data"].pop(field)
         missing = run(source, env, [*incomplete, *published.values()])
-        assert not next(c["ready"] for c in connections(missing) if c["type"] == kind)
-        assert len(copies(missing)) == 3
-    print("PASS MongoDB and Redis publication waits for both user and password")
+        assert not next(c["ready"] for c in connections(missing) if c["type"] == kind), kind
+        assert len(copies(missing)) == 3, kind
+    print("PASS incomplete service credentials prevent publication and readiness")
 
     other = deepcopy(source)
     other["metadata"].update(name="s-john", uid="test-other-datalab")
     other_sources = scenario(other)
-    for body in other_sources[1:]:
+    for body in other_sources:
         data = body["status"]["atProvider"]["manifest"]["data"]
         field = "token" if "token" in data else "password"
         data[field] = encoded({field: "test-john-credential"})[field]

@@ -4,12 +4,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: datalab-educates
-  labels:
-    provider: educates
+  name: datalab
 spec:
   compositeTypeRef:
-    apiVersion: pkg.internal/v1beta2
+    apiVersion: versioneer.at/v1
     kind: Datalab
   mode: Pipeline
   pipeline:
@@ -34,13 +32,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/observe-connection-secrets.py
-  - step: update-datalab-secret
+  - step: publish-service-connections
     functionRef:
       name: crossplane-contrib-function-python
     input:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
-      scriptFile: steps/update-datalab-secret.py
+      scriptFile: steps/publish-service-connections.py
   - step: update-keycloak-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -55,13 +53,20 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-oauth2-proxy-secret.py
-  - step: update-educates-objects
+  - step: update-datalab-resources
     functionRef:
       name: crossplane-contrib-function-python
     input:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
-      scriptFile: steps/update-educates-objects.py
+      scriptFile: steps/update-datalab-resources.py
+  - step: update-runtime-secret
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/update-runtime-secret.py
   - step: update-vclusters
     functionRef:
       name: crossplane-contrib-function-python
@@ -104,13 +109,6 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-redis-objects.py
-  - step: update-session-status
-    functionRef:
-      name: crossplane-contrib-function-python
-    input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      scriptFile: steps/update-session-status.py
   - step: publish-vcluster-connections
     functionRef:
       name: crossplane-contrib-function-python
@@ -118,6 +116,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/publish-vcluster-connections.py
+  - step: encode-provider-secrets
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/encode-provider-secrets.py
   - step: protect-vcluster-resources
     functionRef:
       name: crossplane-contrib-function-python

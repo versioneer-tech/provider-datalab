@@ -10,7 +10,7 @@ spec:
   automountServiceAccountToken: false
   containers:
   - name: client
-    image: python:3.13-alpine
+    image: __CLIENT_IMAGE__
     command: [sleep, infinity]
     volumeMounts:
     - name: test
@@ -49,7 +49,7 @@ spec:
       defaultMode: 256
   - name: postgres
     secret:
-      secretName: verify-vcluster-datalab
+      secretName: verify-vcluster-postgres-pg0
       defaultMode: 256
   - name: oauth
     secret:

@@ -10,7 +10,6 @@ source "${INTEGRATION_DIR}/lib.bash"
 
 : "${NETWORK_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
 : "${NETWORK_SERVER_IMAGE:=nginx:1.27-alpine}"
-: "${NETWORK_VCLUSTER_IMAGE:=busybox:1.36.1}"
 : "${NETWORK_EXTERNAL_URL:=https://www.iana.org/}"
 : "${NETWORK_POLICY_SETTLE_SECONDS:=10}"
 : "${KEEP_NETWORK_RESOURCES:=0}"
@@ -20,108 +19,39 @@ readonly DATALAB_CLOSED=verify-network-closed
 readonly NS_OPEN=verify-network-open
 readonly NS_CLOSED=verify-network-closed
 readonly NS_PEER=verify-network-peer
-readonly NS_VCLUSTER=verify-network-vcluster
-readonly OPEN_STORAGE_SECRET=verify-network-open
-readonly CLOSED_STORAGE_SECRET=verify-network-closed
 
 pass_count=0
 fail_count=0
 
-workshop_object_name() {
-  printf 'workshop-%s\n' "$1"
-}
-
 wait_for_generated_policies() {
-  local datalab deadline count
-
-  log 'Waiting for Datalab-generated NetworkPolicies'
+  local datalab
   for datalab in "${DATALAB_OPEN}" "${DATALAB_CLOSED}"; do
-    deadline=$((SECONDS + 300))
-    while true; do
-      count="$(kube get \
-        "object.kubernetes.m.crossplane.io/$(workshop_object_name "${datalab}")" \
-        --namespace "${WORKSPACE_NAMESPACE}" -o json 2>/dev/null | \
-        jq '[
-          .spec.forProvider.manifest.spec.environment.objects[]?
-          | select(
-              .apiVersion == "networking.k8s.io/v1" and
-              .kind == "NetworkPolicy"
-            )
-        ] | length' 2>/dev/null || true)"
-      if [[ "${count}" =~ ^[1-9][0-9]*$ ]]; then
-        break
-      fi
-      if ((SECONDS >= deadline)); then
-        printf 'Datalab %s did not generate NetworkPolicies within five minutes.\n' \
-          "${datalab}" >&2
-        exit 1
-      fi
-      sleep 5
-    done
+    kube wait "namespace/${datalab}" --for=create --timeout=5m
+    kube wait "networkpolicy/deny-egress" --namespace "${datalab}" --for=create --timeout=5m
+    kube wait "networkpolicy/deny-ingress" --namespace "${datalab}" --for=create --timeout=5m
+    kube wait "networkpolicy/allow-internal-egress" --namespace "${datalab}" --for=create --timeout=5m
+    kube wait "resourcequota/overall-storage" --namespace "${datalab}" --for=create --timeout=5m
+    kube wait "limitrange/datalab-limits" --namespace "${datalab}" --for=create --timeout=5m
   done
-}
-
-apply_generated_policies() {
-  local datalab="$1" namespace="$2"
-
-  kube get "object.kubernetes.m.crossplane.io/$(workshop_object_name "${datalab}")" \
-    --namespace "${WORKSPACE_NAMESPACE}" -o json | \
-    jq --arg namespace "${namespace}" '{
-      apiVersion: "v1",
-      kind: "List",
-      items: [
-        .spec.forProvider.manifest.spec.environment.objects[]?
-        | select(
-            .apiVersion == "networking.k8s.io/v1" and
-            .kind == "NetworkPolicy"
-          )
-        | .metadata.namespace = $namespace
-      ]
-    }' | kube apply -f -
 }
 
 apply_verification_resources() {
   log 'Applying network verification resources'
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
-  kube patch environmentconfig datalab --type=merge \
-    --patch '{"data":{"defaults":{"security":{"externalEgress":false}}}}'
-  kube patch environmentconfig datalab-custom --type=merge \
-    --patch '{"data":{"defaults":{"security":{"externalEgress":true},"vcluster":{"enabled":true}}}}'
-  for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}" "${NS_VCLUSTER}"; do
-    kube create namespace "${namespace}" --dry-run=client -o yaml | kube apply -f -
-  done
+  kube patch environmentconfig datalab --type=merge --patch '{"data":{"defaults":{"security":{"externalEgress":false}}}}'
+  kube patch environmentconfig datalab-custom --type=merge --patch '{"data":{"defaults":{"security":{"externalEgress":true}}}}'
+  kube create namespace "${NS_PEER}" --dry-run=client -o yaml | kube apply -f -
 
   apply_template "${MANIFEST_DIR}/network/datalabs.yaml" \
     OPEN_DATALAB "${DATALAB_OPEN}" \
     CLOSED_DATALAB "${DATALAB_CLOSED}" \
-    WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
-    OPEN_STORAGE_SECRET "${OPEN_STORAGE_SECRET}" \
-    CLOSED_STORAGE_SECRET "${CLOSED_STORAGE_SECRET}"
+    WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}"
   wait_for_generated_policies
-  apply_generated_policies "${DATALAB_OPEN}" "${NS_OPEN}"
-  apply_generated_policies "${DATALAB_CLOSED}" "${NS_CLOSED}"
-
-  kube label namespace "${NS_VCLUSTER}" \
-    "training.educates.dev/environment.name=${DATALAB_OPEN}" \
-    'training.educates.dev/session.objects=true' \
-    --overwrite
 
   for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}"; do
     render_template "${MANIFEST_DIR}/network/server.yaml" \
       NAMESPACE "${namespace}" \
       SERVER_IMAGE "${NETWORK_SERVER_IMAGE}" | kube apply -f -
-  done
-
-  render_template "${MANIFEST_DIR}/network/vcluster-server.yaml" \
-    NAMESPACE "${NS_VCLUSTER}" \
-    VCLUSTER_IMAGE "${NETWORK_VCLUSTER_IMAGE}" | kube apply -f -
-
-  for namespace in "${NS_OPEN}" "${NS_CLOSED}"; do
-    kube delete pod/client --namespace "${namespace}" \
-      --ignore-not-found --wait=true
-    render_template "${MANIFEST_DIR}/network/client.yaml" \
-      NAMESPACE "${namespace}" \
-      CLIENT_IMAGE "${NETWORK_CLIENT_IMAGE}" | kube apply -f -
   done
 }
 
@@ -130,9 +60,15 @@ wait_for_verification_resources() {
   for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}"; do
     kube rollout status deployment/echo --namespace "${namespace}" --timeout=3m
   done
-  kube rollout status deployment/vcluster \
-    --namespace "${NS_VCLUSTER}" --timeout=3m
-  for namespace in "${NS_OPEN}" "${NS_CLOSED}"; do
+  for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}"; do
+    kube delete pod/client --namespace "${namespace}" \
+      --ignore-not-found --wait=true
+    render_template "${MANIFEST_DIR}/network/client.yaml" \
+      NAMESPACE "${namespace}" \
+      CLIENT_IMAGE "${NETWORK_CLIENT_IMAGE}" | kube apply -f -
+  done
+
+  for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}"; do
     kube wait pod/client --namespace "${namespace}" \
       --for=condition=Ready --timeout=3m
   done
@@ -143,11 +79,6 @@ wait_for_verification_resources() {
 
 service_ip() {
   kube get service/echo --namespace "$1" -o jsonpath='{.spec.clusterIP}'
-}
-
-vcluster_service_ip() {
-  kube get service/my-vcluster --namespace "${NS_VCLUSTER}" \
-    -o jsonpath='{.spec.clusterIP}'
 }
 
 verify_connection() {
@@ -173,7 +104,7 @@ verify_connection() {
 
 run_network_checks() {
   local open_service closed_service peer_service
-  local minio_service vcluster_service
+  local minio_service
   local external_ip external_target
 
   open_service="$(service_ip "${NS_OPEN}")"
@@ -181,7 +112,6 @@ run_network_checks() {
   peer_service="$(service_ip "${NS_PEER}")"
   minio_service="$(kube get service/default-hl --namespace minio \
     -o jsonpath='{.spec.clusterIP}')"
-  vcluster_service="$(vcluster_service_ip)"
 
   # The closed environment can block DNS as well as external traffic.
   external_ip="$(kube exec --namespace "${NS_OPEN}" client -- curl -4 -fsS \
@@ -193,8 +123,6 @@ run_network_checks() {
     "curl -fsS --connect-timeout 2 --max-time 5 http://${open_service}/ >/dev/null"
   verify_connection 'open: cross-namespace Service IP' "${NS_OPEN}" block \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_service}/ >/dev/null"
-  verify_connection 'open: vCluster Service IP' "${NS_OPEN}" allow \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_service}:443/ >/dev/null"
   verify_connection 'open: external URL' "${NS_OPEN}" allow \
     "curl -fsS --connect-timeout 5 --max-time 15 ${NETWORK_EXTERNAL_URL} >/dev/null"
   verify_connection 'open: configured MinIO backend' "${NS_OPEN}" allow \
@@ -204,29 +132,26 @@ run_network_checks() {
     "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_service}/ >/dev/null"
   verify_connection 'closed: cross-namespace Service IP' "${NS_CLOSED}" block \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_service}/ >/dev/null"
-  verify_connection 'closed: vCluster Service IP' "${NS_CLOSED}" block \
-    "curl -fsS --connect-timeout 2 --max-time 5 http://${vcluster_service}:443/ >/dev/null"
   verify_connection 'closed: external URL' "${NS_CLOSED}" block \
     "curl -4 -fsS --resolve ${external_target}:${external_ip} --connect-timeout 5 --max-time 15 ${NETWORK_EXTERNAL_URL} >/dev/null"
   verify_connection 'closed: configured MinIO backend' "${NS_CLOSED}" allow \
     "curl -fsS --connect-timeout 2 --max-time 5 http://${minio_service}:9000/minio/health/ready >/dev/null"
 
+  verify_connection 'peer: same-namespace Service IP' "${NS_PEER}" allow \
+    "curl -fsS --connect-timeout 2 --max-time 5 http://${peer_service}/ >/dev/null"
+  verify_connection 'peer: open namespace ingress' "${NS_PEER}" block \
+    "curl -fsS --connect-timeout 2 --max-time 5 http://${open_service}/ >/dev/null"
+  verify_connection 'peer: closed namespace ingress' "${NS_PEER}" block \
+    "curl -fsS --connect-timeout 2 --max-time 5 http://${closed_service}/ >/dev/null"
 }
 
 cleanup_successful_verification() {
   if [[ "${KEEP_NETWORK_RESOURCES}" == 1 ]]; then
     return
   fi
-  kube delete datalabs.pkg.internal "${DATALAB_OPEN}" "${DATALAB_CLOSED}" \
-    --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
-  if kube wait datalabs.pkg.internal "${DATALAB_OPEN}" "${DATALAB_CLOSED}" \
-    --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=5m; then
-    kube delete namespace \
-      "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}" "${NS_VCLUSTER}" \
-      --ignore-not-found --wait=true
-  else
-    printf 'Datalab cleanup is still running; resources were kept for diagnosis.\n' >&2
-  fi
+  kube delete datalabs.versioneer.at "${DATALAB_OPEN}" "${DATALAB_CLOSED}" --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
+  kube wait datalabs.versioneer.at "${DATALAB_OPEN}" "${DATALAB_CLOSED}" --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m
+  kube delete "namespace/${NS_PEER}" --ignore-not-found --wait=true
 }
 
 main() {
@@ -235,6 +160,8 @@ main() {
   require_command python3
   apply_verification_resources
   wait_for_verification_resources
+  python3 "${INTEGRATION_DIR}/verify-resource-limits.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" "${NS_OPEN}" "${NS_CLOSED}"
   run_network_checks
 
   printf '\nNetwork verification totals: PASS=%s FAIL=%s\n' \
