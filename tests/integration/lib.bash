@@ -49,7 +49,7 @@ helm_it() {
 }
 
 apply_operator_crds() {
-  # Helm owns the old CRD fields but does not update them during an upgrade.
+  # Helm does not replace CRDs when it applies a chart again.
   helm_it show crds "$1" --version "$2" \
     | kube apply --server-side --force-conflicts -f -
 }

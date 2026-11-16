@@ -80,10 +80,10 @@ omit generated owner references, framework conditions, and resource references
 that repeat the resource list. Behavior checks cover outcomes that need more
 than a snapshot comparison:
 
-- Virtual clusters: instance isolation and removal, member grants, one
+- Virtual clusters: instance isolation, member grants, one
   workspace OAuth2 client with only the default `ws_api` account grant, exact
   human group grants, optional profile scopes, the exchange policy, public
-  profile Secrets, and removal of old profile resources.
+  profile Secrets, and independent instance removal.
 - Caller credentials and discovery: human token files, device authorization,
   private cache reuse and isolation, refresh rotation and rejection, polling
   delays, denied or expired device codes, delegated token expiry without client

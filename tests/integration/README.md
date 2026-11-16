@@ -196,7 +196,7 @@ It checks that John discovers both custom keys and Jane only `apikey-1`,
 with missing optional keys omitted from status and readiness checks.
 The virtual cluster starts with a native PostgreSQL Secret mapping.
 It builds the catalog image, loads it into Kind, and deploys the STAC workload
-through the public virtual Kubernetes API. The migration Job installs PgSTAC in a
+through the public virtual Kubernetes API. The setup Job installs PgSTAC in a
 Datalab PostgreSQL database. The API uses a separate database login. The test
 adds a collection and item, runs a spatial search, restarts the API, and checks
 the catalog again after a control-plane restart. It then removes one virtual

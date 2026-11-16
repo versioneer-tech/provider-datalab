@@ -17,7 +17,7 @@ Use optional `spec.environmentName` for a named environment override. See
 [environment setup](docs/how-to-guides/installation.md#4-set-the-shared-environment).
 
 > [!NOTE]
-> The `main` branch is preparing v1, planned for the end of 2026 with `apiVersion: datalab.versioneer.at/v1`; follow `legacy` for the latest `0.12.x` releases, the last series with direct Educates support and limited to `pkg.internal/v1beta2`.
+> The `main` branch is preparing v1, planned for the end of 2026 with `apiVersion: versioneer.at/v1`; follow `legacy` for the latest `0.12.x` releases, the last series with direct Educates support and limited to `pkg.internal/v1beta2`.
 
 ```yaml
 apiVersion: pkg.internal/v1beta2

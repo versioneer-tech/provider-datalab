@@ -4,7 +4,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: catalog-migrate
+  name: catalog-initialize
   namespace: demo
 spec:
   backoffLimit: 0
@@ -13,10 +13,10 @@ spec:
       restartPolicy: Never
       automountServiceAccountToken: false
       containers:
-      - name: migrate
+      - name: initialize
         image: __CATALOG_IMAGE__
         imagePullPolicy: IfNotPresent
-        command: [python, /opt/catalog/migrate.py]
+        command: [python, /opt/catalog/initialize.py]
         envFrom:
         - secretRef:
             name: catalog-postgres-admin

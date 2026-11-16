@@ -14,9 +14,9 @@ from psycopg import sql
 def main():
     result = subprocess.run(["pypgstac", "migrate"], capture_output=True)
     if result.returncode:
-        sys.exit("Catalog schema migration failed.")
+        sys.exit("Catalog schema initialization failed.")
     with psycopg.connect("") as connection:
-        # The migration credential is not used by the running API.
+        # The running API uses a separate login without administrator access.
         connection.execute(
             sql.SQL("CREATE ROLE catalog LOGIN PASSWORD {}").format(
                 sql.Literal(os.environ["CATALOG_PASSWORD"])

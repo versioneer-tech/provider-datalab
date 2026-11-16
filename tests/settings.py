@@ -39,16 +39,9 @@ def main():
         "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
         "metadata": {"name": "s-joe"},
         "spec": {
-            "environmentName": "datalab-custom", "users": ["joe"], "sessions": [{"name": "default"}], "vcluster": False,
-            "data": {"enabled": False, "readOnlyMount": False},
-            "security": {"policy": "privileged", "externalEgress": True, "kubernetesAccess": True,
-                         "kubernetesRole": "admin"},
-            "quota": {"memory": "1Gi", "storage": "1Gi", "budget": "small"},
-            "overallQuota": {"storage": "1Gi"}, "registry": {"enabled": False},
-            "persistence": {"storageClassName": "sbs-default"}, "files": [],
+            "environmentName": "datalab-custom", "users": ["joe"], "sessions": [{"name": "default"}],
         },
     }
-    # Old XR fields must not override the operator's environment settings.
     resources = render(args, env, source, observed)
     workshop = manifest(resources, "workshop-s-joe")["spec"]
     session = workshop["session"]
@@ -86,8 +79,6 @@ def main():
 
     env["data"]["defaults"]["vcluster"] = {"enabled": False}
     env["data"]["defaults"]["data"]["readOnlyMount"] = False
-    source["spec"]["vcluster"] = {"enabled": True}
-    source["spec"]["data"]["readOnlyMount"] = True
     resources = render(args, env, source, observed)
     workshop = manifest(resources, "workshop-s-joe")["spec"]
     assert workshop["session"]["applications"]["vcluster"]["enabled"] is False
@@ -100,8 +91,6 @@ def main():
 
     env["data"]["defaults"]["data"]["enabled"] = False
     env["data"]["defaults"]["registry"]["enabled"] = False
-    source["spec"]["registry"]["enabled"] = True
-    source["spec"]["data"]["enabled"] = True
     resources = render(args, env, source, observed)
     for name in ("data-deployment-s-joe", "observe-runtime-storage-secret-s-joe"):
         assert name not in resources

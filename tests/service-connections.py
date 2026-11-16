@@ -120,14 +120,6 @@ def main():
         data[key] = encoded({key: "test-rotated"})[key]
         if "uri" in data:
             data["uri"] = encoded({"uri": "postgresql://postgres:test-rotated@prod/app"})["uri"]
-    rotating = run(source, env, [*rotated, *published.values()])
-    assert not any(c["ready"] for c in connections(rotating))
-    current = copies(rotating)
-    assert set(current) == set(published)
-    assert all(current[key]["data"] != published[key]["data"] for key in current)
-    assert all(c["ready"] for c in connections(run(source, env, [*rotated, *current.values()])))
-    print("PASS rotation updates stable copies and withholds readiness until every credential matches")
-
     sanitized = deepcopy(observed)
     required_secrets = []
     for body in sanitized:
@@ -140,19 +132,19 @@ def main():
     secured = run(source, [env, *required_secrets], [*sanitized, *published.values()])
     assert copies(secured) == published
     assert all(c["ready"] for c in connections(secured))
-    rotated_secrets = deepcopy(required_secrets)
-    for secret in rotated_secrets:
-        field = "token" if "token" in secret["data"] else "password"
-        secret["data"][field] = encoded({field: "test-sanitized-rotation"})[field]
+    rotated_secrets = [deepcopy(body["status"]["atProvider"]["manifest"]) for body in rotated[1:]]
     rotating_secured = run(source, [env, *rotated_secrets], [*sanitized, *published.values()])
-    assert all(copies(rotating_secured)[key]["data"] != published[key]["data"] for key in published)
+    current = copies(rotating_secured)
+    assert set(current) == set(published)
+    assert all(current[key]["data"] != published[key]["data"] for key in current)
     assert not any(c["ready"] for c in connections(rotating_secured))
+    assert all(c["ready"] for c in connections(run(source, [env, *rotated_secrets], [*sanitized, *current.values()])))
     unsanitized = run(source, [env, *rotated_secrets], [*observed, *published.values()])
     assert copies(unsanitized) == copies(rotating_secured)
     missing_secured = run(source, env, [*sanitized, *published.values()])
     assert not copies(missing_secured)
     assert not any(c["ready"] for c in connections(missing_secured))
-    print("PASS direct Secret reads ignore observer credential values and work with sanitized status")
+    print("PASS direct Secret reads ignore stale observer data, rotate stable copies, and wait for current credentials")
 
     unavailable = deepcopy(rotated)
     for body in unavailable[1:]:

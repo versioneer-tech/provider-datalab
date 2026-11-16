@@ -6,7 +6,7 @@ Use that client for browser login, CLI device login, machine access, and
 restricted user-token exchange. The same client credentials and Secret
 references serve these flows.
 
-Use Keycloak 26.2 or later with Standard Token Exchange V2 and client policies
+Use Keycloak 26.8.1 or later with Standard Token Exchange V2 and client policies
 enabled. Default scopes must not add the unrestricted client-role mapper.
 Enable the `grant-type`, `client-scopes`, and `reject-request` client-policy
 providers and the built-in Role Name and Realm Roles protocol mappers.

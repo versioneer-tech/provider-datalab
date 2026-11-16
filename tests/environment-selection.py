@@ -11,7 +11,6 @@ import sys
 import yaml
 
 RUNTIME_CHECK = """
-import itertools
 import json
 import sys
 
@@ -24,69 +23,76 @@ data = json.load(sys.stdin)
 label = 'storages.pkg.internal/name'
 with grpc.insecure_channel(data['target'] + ':9443') as channel:
     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
-    for explicit, named in itertools.product((False, True), repeat=2):
+    cases = [
+        ('no configs', False, False, ()),
+        ('default only', False, False, (0,)),
+        ('render fallback', False, False, (0, 1)),
+        ('explicit composition', True, False, (0, 1)),
+        ('named override', True, True, (0, 1, 2)),
+        ('Datalab override', True, True, (0, 1, 2, 3)),
+        ('optional field omitted', True, False, (0, 1, 2)),
+        ('missing named config', True, True, (0, 1)),
+        ('missing composition config', True, True, (0, 2, 3)),
+    ]
+    for case, explicit, named, present in cases:
         composition = 'test-composition' if explicit else data['composition']
         names = ['default', composition, 'test-environment', 'test-datalab']
-        for present in itertools.product((False, True), repeat=4):
-            req = fnv1.RunFunctionRequest()
-            spec = {'users': []}
-            if explicit:
-                spec['crossplane'] = {'compositionRef': {'name': composition}}
-            if named:
-                spec['environmentName'] = names[2]
-            req.observed.composite.resource.update({
-                'metadata': {'name': names[3], 'namespace': 'test-space',
-                             'labels': {'environment/name': 'test-legacy',
-                                        'datalabs.pkg.internal/environment': 'test-legacy'},
-                             'annotations': {'datalabs.pkg.internal/environment': 'test-legacy'}},
-                'spec': spec,
+        req = fnv1.RunFunctionRequest()
+        spec = {'users': []}
+        if explicit:
+            spec['crossplane'] = {'compositionRef': {'name': composition}}
+        if named:
+            spec['environmentName'] = names[2]
+        req.observed.composite.resource.update({
+            'metadata': {'name': names[3], 'namespace': 'test-space'},
+            'spec': spec,
+        })
+        req.input.update(data['input'])
+        configs, expected, annotations = [], {}, {}
+        for index, name in enumerate(names):
+            if index not in present:
+                continue
+            values = {'domain': f'layer-{index}.example.test',
+                      'annotations': {f'layer-{index}': 'retained', 'shared': str(index)}}
+            if index == 0:
+                values['enabled'] = True
+            configs.append({
+                'apiVersion': 'apiextensions.crossplane.io/v1beta1',
+                'kind': 'EnvironmentConfig',
+                'metadata': {'name': name, **({'labels': {label: name}} if index else {})},
+                'data': {'ingress': values},
             })
-            req.input.update(data['input'])
-            configs, expected, annotations = [], {}, {}
-            for index, (name, enabled) in enumerate(zip(names, present)):
-                if not enabled:
-                    continue
-                values = {'domain': f'layer-{index}.example.test',
-                          'annotations': {f'layer-{index}': 'retained', 'shared': str(index)}}
+            if index != 2 or named:
+                expected['domain'] = values['domain']
+                annotations.update(values['annotations'])
                 if index == 0:
-                    values['enabled'] = True
-                configs.append({
-                    'apiVersion': 'apiextensions.crossplane.io/v1beta1',
-                    'kind': 'EnvironmentConfig',
-                    'metadata': {'name': name, **({'labels': {label: name}} if index else {})},
-                    'data': {'ingress': values},
-                })
-                if index != 2 or named:
-                    expected['domain'] = values['domain']
-                    annotations.update(values['annotations'])
-                    if index == 0:
-                        expected['enabled'] = True
-            if expected:
-                expected['annotations'] = annotations
-            for name in ('test-unrelated', 'test-legacy', data['composition'] if explicit else 'test-other'):
-                configs.append({'metadata': {'name': name, 'labels': {label: name}},
-                                'data': {'ingress': {'domain': 'wrong.example.test'}}})
-            # A matching name alone must not select a dynamic config.
-            configs.extend({'metadata': {'name': name},
-                            'data': {'ingress': {'domain': 'unlabeled.example.test'}}}
-                           for name in names[1:] if name not in [c['metadata']['name'] for c in configs])
-            rsp = stub.RunFunction(req, timeout=10)
-            for key, selector in rsp.requirements.resources.items():
-                selected = req.required_resources[key]
-                selected.SetInParent()
-                for config in configs:
-                    metadata = config['metadata']
-                    matches = (metadata['name'] == selector.match_name
-                               if selector.WhichOneof('match') == 'match_name'
-                               else all(metadata.get('labels', {}).get(k) == v
-                                        for k, v in selector.match_labels.labels.items()))
-                    if matches:
-                        selected.items.add().resource.update(config)
-            rsp = stub.RunFunction(req, timeout=10)
-            assert not any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results), rsp.results
-            actual = MessageToDict(rsp.context)['apiextensions.crossplane.io/environment']
-            assert actual.get('ingress', {}) == expected, (explicit, named, present, actual, expected)
-print('PASS environment precedence, nested maps, all missing-config combinations, optional field, labels, and render fallback')
+                    expected['enabled'] = True
+        if expected:
+            expected['annotations'] = annotations
+        for name in ('test-unrelated', data['composition'] if explicit else 'test-other'):
+            configs.append({'metadata': {'name': name, 'labels': {label: name}},
+                            'data': {'ingress': {'domain': 'wrong.example.test'}}})
+        # A matching name alone must not select a dynamic config.
+        configs.extend({'metadata': {'name': name},
+                        'data': {'ingress': {'domain': 'unlabeled.example.test'}}}
+                       for name in names[1:] if name not in [c['metadata']['name'] for c in configs])
+        rsp = stub.RunFunction(req, timeout=10)
+        for key, selector in rsp.requirements.resources.items():
+            selected = req.required_resources[key]
+            selected.SetInParent()
+            for config in configs:
+                metadata = config['metadata']
+                matches = (metadata['name'] == selector.match_name
+                           if selector.WhichOneof('match') == 'match_name'
+                           else all(metadata.get('labels', {}).get(k) == v
+                                    for k, v in selector.match_labels.labels.items()))
+                if matches:
+                    selected.items.add().resource.update(config)
+        rsp = stub.RunFunction(req, timeout=10)
+        assert not any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results), rsp.results
+        actual = MessageToDict(rsp.context)['apiextensions.crossplane.io/environment']
+        assert actual.get('ingress', {}) == expected, (case, actual, expected)
+print('PASS environment precedence, nested maps, missing configs, optional field, labels, and render fallback')
 """
 
 

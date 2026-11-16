@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check independent virtual clusters and legacy session coexistence."""
+"""Check independent virtual clusters and session coexistence."""
 
 from copy import deepcopy
 import base64
@@ -324,38 +324,6 @@ def main():
     assert all(c["ready"] for c in connection_secrets(ready_resources))
     assert not any("observe-client" in key for key in ready_resources)
     print("PASS profiles contain no credentials and become ready without credential observers or vcluster account grants")
-
-    legacy = []
-    profile = profile_name("s-joe", "vc0", "demo")
-    for suffix, api, kind, params in (
-        ("client", "openidclient", "Client", {"clientId": profile}),
-        ("assignment", "openidclient", "ClientServiceAccountRole", {"serviceAccountUserClientIdRef": {"name": profile}}),
-        ("audience", "client", "ProtocolMapper", {"clientIdRef": {"name": profile}}),
-    ):
-        key = f"keycloak-vcluster-{suffix}-{profile}"
-        legacy.append({
-            "apiVersion": f"{api}.keycloak.m.crossplane.io/v1alpha1", "kind": kind,
-            "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": key}},
-            "spec": {"forProvider": params},
-        })
-    old_connection_key = resource_name("connection", profile)
-    legacy.append({
-        "apiVersion": "v1", "kind": "Secret",
-        "metadata": {"name": profile, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": old_connection_key}},
-        "data": {"client-secret": base64.b64encode(b"retired-profile-credential").decode()},
-    })
-    observer_key = resource_name("vcluster", "s-joe", "vc0", "observe-client-demo")
-    legacy.append({
-        "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-        "metadata": {"name": observer_key, "namespace": "workspace", "annotations": {"crossplane.io/composition-resource-name": observer_key}},
-        "status": {"atProvider": {"manifest": {"data": {"clientSecret": base64.b64encode(b"retired-profile-credential").decode()}}}},
-    })
-    upgraded = render(args, env, source, [*ready_observed, *legacy], include_composite=True)
-    assert all(c["ready"] for c in connection_secrets(upgraded))
-    for body in legacy:
-        assert body["metadata"]["annotations"]["crossplane.io/composition-resource-name"] not in upgraded
-    assert all(c["secretRef"]["name"] != profile for c in connection_secrets(upgraded))
-    print("PASS upgrade omits old clients, assignments, mappers, observers, and credential-bearing profile Secrets")
 
     reduced = deepcopy(source)
     del reduced["spec"]["vclusters"]["vc0"]

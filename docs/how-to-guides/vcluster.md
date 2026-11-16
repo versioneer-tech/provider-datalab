@@ -262,14 +262,8 @@ an offline session. Check **Realm settings > Sessions** and
 **Clients > s-joe > Advanced** for the deployed offline limits. The device
 code has a separate approval timeout.
 
-An existing cache from a login without `offline_access` is not reused for the
-new scope set. Download a current kubeconfig and approve device login once.
-The new cache then supports automatic refresh for the CLI login period.
 See [Keycloak offline access](https://www.keycloak.org/docs/latest/server_admin/index.html#_offline-access)
 and [login lifetime](authentication.md#login-lifetime).
-
-> [!NOTE]
-> On Keycloak versions older than 26.8.1, device login token refresh is unreliable; use `--force-login` to start a new device login when refresh fails.
 
 ### Delegated access
 
@@ -591,8 +585,8 @@ databases:
     storage: 5Gi
 ```
 
-[PgSTAC](https://stac-utils.github.io/pgstac/pgstac/) requires PostGIS and a schema
-migration. The example migration Job uses the generated PostgreSQL credentials
+[PgSTAC](https://stac-utils.github.io/pgstac/pgstac/) requires PostGIS and schema
+initialization. The example setup Job uses the generated PostgreSQL credentials
 from the Datalab Secret. It creates a separate `catalog` login with the
 `pgstac_ingest` role. The API uses that login and the standard
 [PostgreSQL settings](https://stac-utils.github.io/stac-fastapi-pgstac/settings/):
@@ -604,12 +598,12 @@ Pods. Namespace selectors do not match host-network API endpoints on all CNIs.
 The integration has a PostgreSQL-specific policy for this case.
 
 The example expects `catalog-postgres-admin` and `catalog-postgres` Secrets in
-virtual namespace `demo`. The first contains migration credentials. The second
+virtual namespace `demo`. The first contains database administrator credentials. The second
 contains the API login. Supply these through your Secret process. Build the
 image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
 replace `__CATALOG_IMAGE__` with that image reference before applying the example.
-Wait for `catalog-migrate` to complete before starting the API Deployment.
-Remove the migration Secret after it completes.
+Wait for `catalog-initialize` to complete before starting the API Deployment.
+Remove the administrator Secret after it completes.
 
 Connect to the catalog through the generated profile:
 

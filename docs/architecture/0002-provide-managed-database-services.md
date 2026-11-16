@@ -71,7 +71,7 @@ and can replace manual changes during reconciliation.
 
 Users own their application data, schemas, queries, and requested capacity.
 The platform operator owns service deployment, supported configurations,
-upgrades, storage classes, access controls, and operational support. Operator
+maintenance, storage classes, access controls, and operational support. Operator
 settings come from the platform's
 [EnvironmentConfig](../how-to-guides/installation.md#runtime-and-service-defaults).
 

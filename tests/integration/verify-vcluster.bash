@@ -31,10 +31,10 @@ trap report_failure ERR
 
 build_catalog_image() {
   local digest
-  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,migrate.py} | sha256sum | cut -c1-16)"
+  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,initialize.py} | sha256sum | cut -c1-16)"
   catalog_image="datalab-stac:${digest}"
   mkdir -p "${work_directory}/docker" "${work_directory}/build/tests/vcluster"
-  cp "${REPO_ROOT}/tests/vcluster/migrate.py" "${work_directory}/build/tests/vcluster/"
+  cp "${REPO_ROOT}/tests/vcluster/initialize.py" "${work_directory}/build/tests/vcluster/"
   if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${catalog_image}" >/dev/null 2>&1; then
     DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${catalog_image}" \
       --file "${REPO_ROOT}/tests/vcluster/catalog.Dockerfile" "${work_directory}/build"

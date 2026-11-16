@@ -97,7 +97,7 @@ operator to install it. With the `dask` Helm repository configured, run:
 
 ```bash
 helm repo update
-helm upgrade --install dask-gateway dask/dask-gateway \
+helm install dask-gateway dask/dask-gateway \
   -n "${DEFAULT_NAMESPACE:-default}" \
   --create-namespace \
   --set gateway.auth.type=simple \
@@ -183,7 +183,6 @@ spec:
           command: ["/bin/sh","-lc"]
           args:
             - |
-              python -m pip install --no-cache-dir --upgrade pip &&
               pip install --no-cache-dir boto3 &&
               exec mlflow server \
                 --backend-store-uri sqlite:////mlflow/mlflow.db \
@@ -293,5 +292,5 @@ SELECT value FROM datalab_check;
 ## Keep or remove a service
 
 Remove test services when the experiment ends. Before keeping one, agree with
-the platform team on its storage, backups, monitoring, upgrades, and deletion.
+the platform team on its storage, backups, monitoring, maintenance, and deletion.
 Back up the service data separately from the session volume.

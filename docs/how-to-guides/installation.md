@@ -62,7 +62,7 @@ Install Crossplane with the supplied Helm values from this checkout:
 ```bash
 helm repo add crossplane-stable https://charts.crossplane.io/stable
 helm repo update
-helm upgrade --install crossplane crossplane-stable/crossplane \
+helm install crossplane crossplane-stable/crossplane \
   --version 2.4.3 \
   --namespace crossplane \
   --create-namespace \
@@ -132,7 +132,7 @@ your platform's Secret tools. The Keycloak account needs permission to manage
 clients, client scopes, service-account roles, groups, memberships, role
 mappings, and client policies in the target realm.
 
-Use Keycloak 26.2 or later. Configure identity scopes, client policies, and
+Use Keycloak 26.8.1 or later. Configure identity scopes, client policies, and
 browser sign-in as described in [Authentication](authentication.md).
 The realm must permit the built-in `offline_access` scope and user role for
 [CLI device login](vcluster.md#human-access).
