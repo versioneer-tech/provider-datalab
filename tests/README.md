@@ -10,7 +10,7 @@ Use the same classifier locally, against the target branch or pull request
 base commit:
 
 ```bash
-python3 scripts/ci-checks.py --base origin/main
+python3 scripts/ci-checks.py --base origin/legacy
 ```
 
 Without `--head`, this includes committed, staged, unstaged, and untracked
@@ -40,6 +40,16 @@ Kind integration. Use the classifier above when the scope is unclear.
 ## Run the suite
 
 Docker must be running for render and function checks.
+CI retains Crossplane CLI 2.4.1. The unit suite uses the functions in
+`dependencies/functions.yaml`; Kind installs Crossplane core 2.4.3 with the
+[shared runtime settings](../docs/how-to-guides/installation.md#dependency-baseline).
+Schema validation covers `pkg.internal/v1beta2`.
+The service connection checks cover direct Secret reads, sanitized Object
+status, source Secret rotation, and source loss. Environment checks cover
+schema validation, selection order, nested maps, and absent configs or fields.
+The disposable Keycloak server uses an in-memory database. It has five minutes
+to build and import its test realm before the refresh and exchange checks start.
+
 Install the [build dependencies and generate the composition](../templates/README.md)
 before running the suite. It rejects a generated composition that differs
 from its Python and YAML sources.
@@ -109,7 +119,7 @@ Kubernetes admission and rejects API access without a vcluster role.
 ## Fixtures
 
 The Datalab manifests are in [`examples/base/`](../examples/base).
-[`environmentconfig.yaml`](environmentconfig.yaml) contains only `datalab`
+[`environmentconfig.yaml`](environmentconfig.yaml) contains `datalab-educates`
 and `datalab-custom`. The custom profile demonstrates the settings listed in
 the [usage examples](../docs/how-to-guides/usage_concepts.md#examples).
 Examples and integration routes use `lab.acme.com`. Storage Secret fixtures
@@ -118,8 +128,8 @@ the environment settings.
 
 | Example | Environment | Main checks |
 | --- | --- | --- |
-| `001` | `datalab` | Data without sessions, default environment, credential rotation |
-| `002` | `datalab` | Default environment selection, writable Data, managed stores |
+| `001` | `datalab-educates` | Data without sessions, Composition environment, credential rotation |
+| `002` | `datalab-educates` | Composition environment selection, writable Data, managed stores |
 | `003` | `datalab-custom` | Named virtual cluster, vCluster session, read-only Data, PostgreSQL |
 | `004` | `datalab-custom` | Started and stopped sessions, file bundles, workspace PVCs |
 

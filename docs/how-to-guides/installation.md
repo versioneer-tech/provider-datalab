@@ -10,7 +10,7 @@ The cluster needs Crossplane, the Educates session runtime, an ingress
 controller, Keycloak, and an S3-compatible object store. The CNI must enforce
 Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
-[metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
+[metadata](https://github.com/versioneer-tech/provider-datalab/blob/legacy/crossplane.yaml).
 
 Install the session runtime with its CRDs and controller RBAC before creating
 Datalabs. Follow the [runtime installation guide](https://docs.educates.dev/en/stable/installation-guides/installation-instructions.html).
@@ -29,7 +29,7 @@ Datalab integration tests use these versions:
 These are fixed test pins. Other versions need validation before use.
 
 Install each operator's CRDs before its controller. The
-[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/integration/README.md) shows the tested
+[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/legacy/tests/integration/README.md) shows the tested
 installation settings. Backup volumes need a StorageClass that supports
 `ReadWriteOnce`; see [backup settings](usage_concepts.md#backups).
 
@@ -41,6 +41,61 @@ For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
 issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
+
+### Dependency baseline
+
+The package requires Crossplane 2.4.3 or later in the v2 series.
+The supplied manifests use the shared
+[EOEPCA Crossplane baseline](https://github.com/EOEPCA/eoepca-plus/tree/deploy-develop/argocd/infra/crossplane/parts):
+
+| Component | Version |
+| --- | --- |
+| Crossplane core | 2.4.3 |
+| provider-kubernetes | 1.4.1 |
+| provider-keycloak | 2.24.1 |
+| function-python | 0.6.0 |
+| function-auto-ready | 0.7.3 |
+| function-environment-configs | 0.9.2 |
+
+Install Crossplane with the supplied Helm values from this checkout:
+
+```bash
+helm repo add crossplane-stable https://charts.crossplane.io/stable
+helm repo update
+helm upgrade --install crossplane crossplane-stable/crossplane \
+  --version 2.4.3 \
+  --namespace crossplane \
+  --create-namespace \
+  --values deploy/crossplane-values.yaml
+```
+
+These values disable default managed resource activation. The core and RBAC
+manager run as non-root users with read-only root filesystems. Their Pods use
+the default seccomp profile, drop Linux capabilities, and prevent privilege
+escalation. Provider and function runtimes have the supplied seccomp and
+container security settings.
+
+The Kubernetes provider enables watches, polls every five minutes, limits
+reconciliation to 10 per second, sanitizes Secret data in Object status, and
+has a 1 GiB memory limit. The composition reads each source Secret directly
+by its exact namespace and name through required resources. The supplied
+Crossplane aggregate role grants Secret read access for these requests.
+Object observers retain watches and readiness checks; their data is not used.
+Keycloak uses a reconciliation rate of 3 and one concurrent reconciliation.
+Keep the Provider and Function `runtimeConfigRef` settings.
+
+Apply the selective activation policies for the kinds Datalab uses. Keep the
+supplied resource permissions and Keycloak CRD discovery role. If Crossplane
+runs outside the `crossplane` namespace, update the ServiceAccounts and
+binding subjects in `dependencies/rbac.yaml` to match.
+
+Use one platform owner for shared packages, runtimes, activation policies,
+and RBAC when Provider Storage uses the same cluster. Both packages use the
+same environment function and selector label. Datalab does not need the
+baseline's storage providers.
+
+Build and test workflows retain Crossplane CLI 2.4.1. The CLI has a separate
+release cycle from core; its pin does not select the cluster's core version.
 
 ## 1. Choose the claim namespace
 
@@ -59,14 +114,14 @@ its runtime and shared services.
 ## 2. Install provider dependencies
 
 Apply the files in
-[`dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/main/dependencies)
+[`dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/legacy/dependencies)
 in this order:
 
 | File | Purpose |
 | --- | --- |
 | `00-mrap.yaml` | Activate the managed resource kinds used by the composition. |
 | `01-deploymentRuntimeConfigs.yaml` | Set provider and function Pod security. |
-| `02-providers.yaml` | Install the Kubernetes, Helm, and Keycloak providers. |
+| `02-providers.yaml` | Install the Kubernetes and Keycloak providers. |
 | `03-providerConfigs.yaml` | Configure those providers in the claim namespace. |
 | `functions.yaml` | Install the composition functions. |
 | `rbac.yaml` | Grant provider-kubernetes access to the resources it manages. |
@@ -117,19 +172,40 @@ For a source installation, apply `xrd.yaml` before `composition.yaml` so
 Kubernetes retains the [OAuth2 discovery](authentication.md#oauth2-discovery)
 fields.
 
-The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md) explains how to change
+The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/legacy/templates/README.md) explains how to change
 the pipeline response TTL before building a package.
 
 ## 4. Set the shared environment
 
-Create an `EnvironmentConfig` named `datalab` with values for your cluster.
-This example uses NGINX Ingress for Data and the registry:
+The `environmentConfigs` pipeline step uses `function-environment-configs`.
+It merges the data from these EnvironmentConfigs in this order:
+
+1. `default`, fetched directly by name. It needs no label.
+2. The name in `spec.crossplane.compositionRef.name`.
+3. `spec.environmentName`, when set.
+4. The Datalab's `metadata.name`.
+
+Later values override earlier values. Nested maps retain fields that later
+configs do not set. Missing configs and an omitted `spec.environmentName`
+are skipped. For a local render without `compositionRef`, the second lookup
+uses the current Composition's name, `datalab-educates`.
+
+Each config selected by the last three lookups must have the label
+`storages.pkg.internal/name` equal to its own `metadata.name`. Keep this label
+key for configs shared with Provider Storage. Keep names and labels unique;
+each lookup allows at most one match.
+
+Use `default` for shared cluster values and `datalab-educates` for settings
+specific to this Composition. This example uses NGINX Ingress for Data and
+the registry:
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab
+  name: datalab-educates
+  labels:
+    storages.pkg.internal/name: datalab-educates
 data:
   iam:
     realm: acme
@@ -257,11 +333,35 @@ All paths below are relative to `EnvironmentConfig.data`. Defaults apply
 when a setting is omitted; example values such as cluster CIDRs, endpoints,
 and StorageClass names are not built-in defaults.
 
-Select a specific EnvironmentConfig with the
-`datalabs.pkg.internal/environment` annotation or label to use its settings
-without per-Datalab overrides, as shown in the
-[`datalab-custom` example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml).
-The annotation takes priority over the label; the default selection is `datalab`.
+For a named override, set the optional `spec.environmentName`. It has no
+default and accepts lowercase DNS names of 1–63 characters: letters, digits,
+hyphens, and dot-separated labels, with a letter or digit at each label end.
+Apply the updated XRD before using the field. For example:
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: team-datalab
+  labels:
+    storages.pkg.internal/name: team-datalab
+data:
+  defaults:
+    quota:
+      memory: 4Gi
+---
+apiVersion: pkg.internal/v1beta2
+kind: Datalab
+metadata:
+  name: team-workspace
+  namespace: workspace
+spec:
+  environmentName: team-datalab
+  users: []
+```
+
+This override retains the other shared quota settings. A labeled config named
+`team-workspace` takes precedence.
 
 Runtime settings come from the EnvironmentConfig. The XRD retains unknown
 fields, but extra fields in `spec` do not override these settings.
@@ -480,7 +580,7 @@ credentials out of Git.
 ## 6. Create a Datalab
 
 Save this resource as `datalab.yaml`. The user `joe` must already exist in
-Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml)
+Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/001-lab.yaml)
 with an explicit claim namespace.
 
 ```yaml
@@ -525,7 +625,6 @@ the required APIs are served. The provider APIs used here are namespaced:
 
 ```bash
 kubectl api-resources --api-group=kubernetes.m.crossplane.io
-kubectl api-resources --api-group=helm.m.crossplane.io
 kubectl api-resources --api-group=keycloak.m.crossplane.io
 kubectl api-resources --api-group=gateway.networking.k8s.io
 ```

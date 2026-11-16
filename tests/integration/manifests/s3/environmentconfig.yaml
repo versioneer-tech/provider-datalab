@@ -5,6 +5,8 @@ apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: datalab-custom
+  labels:
+    storages.pkg.internal/name: datalab-custom
 data:
   iam:
     realm: integration

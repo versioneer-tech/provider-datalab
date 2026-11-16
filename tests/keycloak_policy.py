@@ -116,13 +116,15 @@ def verify_keycloak_policy(resources, image=None):
         source = work / 'realm.json'
         source.write_text(json.dumps(realm)); source.chmod(0o644)
         try:
+            # This disposable realm needs no disk database or persistent state.
             docker('run', '--detach', '--name', name, '-p', '127.0.0.1::8080',
                    '-e', 'KC_BOOTSTRAP_ADMIN_USERNAME=test-admin', '-e', 'KC_BOOTSTRAP_ADMIN_PASSWORD=test-admin-password',
-                   '-v', str(work) + ':/opt/keycloak/data/import:ro', image, 'start-dev', '--import-realm')
+                   '-v', str(work) + ':/opt/keycloak/data/import:ro', image, 'start-dev', '--db=dev-mem', '--import-realm')
             port = docker('port', name, '8080/tcp').rsplit(':', 1)[1]
             origin = 'http://127.0.0.1:' + port
             endpoint = '/realms/test-refresh/protocol/openid-connect/token'
-            deadline = time.monotonic() + 120
+            # A cold dev image builds the server before it imports the test realm.
+            deadline = time.monotonic() + 300
             while True:
                 try:
                     status, _ = call('/realms/test-refresh/.well-known/openid-configuration')

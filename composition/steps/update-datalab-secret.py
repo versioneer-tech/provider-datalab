@@ -70,8 +70,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
     workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
 
-    obs = observed.get(f"observe-storage-secret-{xr_name}")
-    data_b64 = _extract_data(obs)
+    data_b64 = _extract_data(req, rsp, f"observe-storage-secret-{xr_name}")
 
     access_key = _b64get_any(
         data_b64,
@@ -142,7 +141,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         aws_credentials += f"aws_session_token = {session_token}\n"
     manifest["stringData"]["aws-credentials"] = aws_credentials
 
-    oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
+    oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
     client_secret = _b64get_any(
         oauth_data, ["clientSecret", "client_secret"]
     )
@@ -166,9 +165,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             manifest["stringData"][_store_key("MONGO", store, "DATABASE")] = store
             manifest["stringData"][_store_key("MONGO", store, "AUTH_SOURCE")] = "admin"
             manifest["stringData"][_store_key("MONGO", store, "USER")] = user
-            auth_data = _extract_data(
-                observed.get(f"observe-mongodb-auth-secret-{xr_name}-{store}")
-            )
+            auth_data = _extract_data(req, rsp, f"observe-mongodb-auth-secret-{xr_name}-{store}")
             pwd = _b64get_any(auth_data, ["password"])
             if pwd:
                 manifest["stringData"][_store_key("MONGO", store, "PASSWORD")] = pwd
@@ -187,9 +184,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             manifest["stringData"][_store_key("REDIS", store, "PORT")] = "6379"
             manifest["stringData"][_store_key("REDIS", store, "USER")] = "default"
             manifest["stringData"][_store_key("REDIS", store, "DATABASE")] = "0"
-            auth_data = _extract_data(
-                observed.get(f"observe-redis-auth-secret-{xr_name}-{store}")
-            )
+            auth_data = _extract_data(req, rsp, f"observe-redis-auth-secret-{xr_name}-{store}")
             pwd = _b64get_any(auth_data, ["password"])
             if pwd:
                 manifest["stringData"][_store_key("REDIS", store, "PASSWORD")] = pwd
@@ -228,8 +223,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             if not dbnames:
                 continue
 
-            host_obs = observed.get(f"observe-database-secret-{xr_name}-{cluster_name}")
-            host_data_b64 = _extract_data(host_obs)
+            host_data_b64 = _extract_data(req, rsp, f"observe-database-secret-{xr_name}-{cluster_name}")
 
             host = (
                 _b64get_any(host_data_b64, ["host"])

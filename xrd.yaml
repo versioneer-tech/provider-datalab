@@ -12,13 +12,6 @@ spec:
     plural: datalabs
   scope: Namespaced
   versions:
-    - name: v1beta1
-      served: true
-      referenceable: false
-      schema:
-        openAPIV3Schema:
-          type: object
-          x-kubernetes-preserve-unknown-fields: true
     - name: v1beta2
       served: true
       referenceable: true
@@ -37,6 +30,12 @@ spec:
               required:
                 - users
               properties:
+                environmentName:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  description: Optional EnvironmentConfig name. See the installation guide for selection rules.
                 users:
                   type: array
                   description: Users associated with this datalab.

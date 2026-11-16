@@ -579,7 +579,7 @@ data:
 
 ## Datalab STAC catalog
 
-The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/stac-fastapi.yaml)
+The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/vcluster/stac-fastapi.yaml)
 runs `stac-fastapi-pgstac` in virtual namespace `demo`. Its PostgreSQL database
 is a Datalab-managed service on the host. Add this request alongside `vclusters`:
 

@@ -7,9 +7,8 @@ apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
   name: s-john
-  annotations:
-    datalabs.pkg.internal/environment: datalab-custom
 spec:
+  environmentName: datalab-custom
   users:
   - john
   sessions:

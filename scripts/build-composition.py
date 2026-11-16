@@ -151,6 +151,9 @@ def build(root=ROOT, response_ttl=None):
                 apiVersion="autoready.fn.crossplane.io/v1beta1", kind="Input", ttl=ttl
             )
             continue
+        if function_name == "function-environment-configs":
+            data["ttl"] = ttl
+            continue
         if function_name != "crossplane-contrib-function-python":
             raise ValueError(
                 f"No response TTL configuration for function: {function_name}"

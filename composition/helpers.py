@@ -7,6 +7,7 @@ import json
 import re
 from decimal import Decimal
 
+from crossplane.function import request, response
 from google.protobuf import json_format
 
 
@@ -86,15 +87,29 @@ def _extract_manifest(observed_resource):
     return manifest or raw_manifest
 
 
-def _extract_data(observed_resource):
-    manifest, raw_manifest = _observed_manifests(observed_resource)
-    return (
-        manifest.get("data")
-        or manifest.get("stringData")
-        or raw_manifest.get("data")
-        or raw_manifest.get("stringData")
-        or {}
+def require_secret(req, rsp, key, name, namespace):
+    response.require_resources(
+        rsp, name=key, api_version="v1", kind="Secret",
+        namespace=namespace, match_name=name,
     )
+    secret = request.get_required_resource(req, key) or {}
+    return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
+
+
+def _secret_manifest(req, rsp, key):
+    # The Object supplies the target reference and watches, not credential data.
+    desired = rsp.desired.resources.get(key)
+    body = _to_dict(desired.resource) if desired else {}
+    metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+    name, namespace = metadata.get("name"), metadata.get("namespace")
+    if not name or not namespace:
+        return {}
+    return require_secret(req, rsp, "source-" + key, name, namespace)
+
+
+def _extract_data(req, rsp, key):
+    manifest = _secret_manifest(req, rsp, key)
+    return manifest.get("data") or manifest.get("stringData") or {}
 
 
 def _b64get_any(data, keys):

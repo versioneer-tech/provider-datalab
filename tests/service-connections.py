@@ -128,6 +128,32 @@ def main():
     assert all(c["ready"] for c in connections(run(source, env, [*rotated, *current.values()])))
     print("PASS rotation updates stable copies and withholds readiness until every credential matches")
 
+    sanitized = deepcopy(observed)
+    required_secrets = []
+    for body in sanitized:
+        manifest = body.get("status", {}).get("atProvider", {}).get("manifest", {})
+        if manifest.get("kind") != "Secret":
+            continue
+        required_secrets.append(deepcopy(manifest))
+        manifest["data"] = {"redacted": None}
+        body["status"]["atProvider"]["raw"] = {"manifest": deepcopy(required_secrets[-1])}
+    secured = run(source, [env, *required_secrets], [*sanitized, *published.values()])
+    assert copies(secured) == published
+    assert all(c["ready"] for c in connections(secured))
+    rotated_secrets = deepcopy(required_secrets)
+    for secret in rotated_secrets:
+        field = "token" if "token" in secret["data"] else "password"
+        secret["data"][field] = encoded({field: "test-sanitized-rotation"})[field]
+    rotating_secured = run(source, [env, *rotated_secrets], [*sanitized, *published.values()])
+    assert all(copies(rotating_secured)[key]["data"] != published[key]["data"] for key in published)
+    assert not any(c["ready"] for c in connections(rotating_secured))
+    unsanitized = run(source, [env, *rotated_secrets], [*observed, *published.values()])
+    assert copies(unsanitized) == copies(rotating_secured)
+    missing_secured = run(source, env, [*sanitized, *published.values()])
+    assert not copies(missing_secured)
+    assert not any(c["ready"] for c in connections(missing_secured))
+    print("PASS direct Secret reads ignore observer credential values and work with sanitized status")
+
     unavailable = deepcopy(rotated)
     for body in unavailable[1:]:
         body["status"]["conditions"][1].update(status="False", message="observe failed: external resource does not exist")

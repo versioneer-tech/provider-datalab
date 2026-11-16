@@ -6,9 +6,8 @@ kind: Datalab
 metadata:
   name: verify-registry
   namespace: workspace
-  annotations:
-    datalabs.pkg.internal/environment: datalab-custom
 spec:
+  environmentName: datalab-custom
   users: []
   sessions:
     - name: default

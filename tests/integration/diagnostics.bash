@@ -25,7 +25,9 @@ kube get objects.kubernetes.m.crossplane.io --all-namespaces || true
 kube get postgresclusters.postgres-operator.crunchydata.com --all-namespaces || true
 kube get mongodbcommunity.mongodbcommunity.mongodb.com --all-namespaces || true
 kube get redis.redis.redis.opstreelabs.in --all-namespaces || true
-kube get workshops,workshopenvironments,workshopsessions --all-namespaces || true
+# WorkshopSession default columns include browser credentials.
+kube get workshops,workshopenvironments,workshopsessions --all-namespaces \
+  -o custom-columns='KIND:.kind,NAMESPACE:.metadata.namespace,NAME:.metadata.name,PHASE:.status.phase' || true
 kube get deployments,services --all-namespaces --selector app.kubernetes.io/name=package-r || true
 kube get networkpolicies.networking.k8s.io --all-namespaces || true
 kube get validatingpolicies.policies.kyverno.io || true

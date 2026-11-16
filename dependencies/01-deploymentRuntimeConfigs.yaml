@@ -26,6 +26,9 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            args:
+            - --max-reconcile-rate=3
+            - --max-concurrent-reconciles=1
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
@@ -66,6 +69,9 @@ spec:
           - name: package-runtime
             args:
             - --enable-watches
+            - --poll=5m
+            - --max-reconcile-rate=10
+            - --sanitize-secrets
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
@@ -77,44 +83,7 @@ spec:
                 memory: 128Mi
               limits:
                 cpu: 500m
-                memory: 512Mi
----
-apiVersion: pkg.crossplane.io/v1beta1
-kind: DeploymentRuntimeConfig
-metadata:
-  name: provider-helm
-spec:
-  deploymentTemplate:
-    metadata:
-      labels:
-        runtime: provider-helm
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          runtime: provider-helm
-      template:
-        metadata:
-          labels:
-            runtime: provider-helm
-        spec:
-          securityContext:
-            seccompProfile:
-              type: RuntimeDefault
-          containers:
-          - name: package-runtime
-            securityContext:
-              allowPrivilegeEscalation: false
-              capabilities:
-                drop:
-                - ALL
-            resources:
-              requests:
-                cpu: 100m
-                memory: 128Mi
-              limits:
-                cpu: 500m
-                memory: 512Mi
+                memory: 1Gi
 ---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
@@ -164,6 +133,36 @@ spec:
         metadata:
           labels:
             runtime: function-auto-ready
+        spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: package-runtime
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: function-environment-configs
+spec:
+  deploymentTemplate:
+    metadata:
+      labels:
+        runtime: function-environment-configs
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          runtime: function-environment-configs
+      template:
+        metadata:
+          labels:
+            runtime: function-environment-configs
         spec:
           securityContext:
             seccompProfile:

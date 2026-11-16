@@ -20,7 +20,7 @@ def main():
                 b"[default]\naws_access_key_id = test-access-key\naws_secret_access_key = test-secret-key\n"
             ).decode()
     env = environment()
-    env["metadata"]["name"] = "datalab-custom"
+    env["metadata"].update(name="datalab-custom", labels={"storages.pkg.internal/name": "datalab-custom"})
     env["data"]["defaults"] = {
         "data": {"enabled": True, "readOnlyMount": True},
         "quota": {"memory": "7Gi", "storage": "9Gi", "budget": "large"},
@@ -37,9 +37,9 @@ def main():
                              "rclone": "test-images/rclone:custom", "oauth2Proxy": "test-images/oauth2-proxy:custom"}
     source = {
         "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
-        "metadata": {"name": "s-joe", "annotations": {"datalabs.pkg.internal/environment": "datalab-custom"}},
+        "metadata": {"name": "s-joe"},
         "spec": {
-            "users": ["joe"], "sessions": [{"name": "default"}], "vcluster": False,
+            "environmentName": "datalab-custom", "users": ["joe"], "sessions": [{"name": "default"}], "vcluster": False,
             "data": {"enabled": False, "readOnlyMount": False},
             "security": {"policy": "privileged", "externalEgress": True, "kubernetesAccess": True,
                          "kubernetesRole": "admin"},

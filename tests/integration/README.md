@@ -10,8 +10,14 @@ Provider Storage. It creates fixed profile-named Secrets for the disposable
 in-cluster MinIO service because the Datalab composition needs object-storage
 credentials.
 
-Crossplane `2.4.1` is the reproducible test pin. See
+Crossplane core `2.4.3` is the reproducible test pin. See
 [`crossplane.yaml`](../../crossplane.yaml) for the supported Crossplane range.
+
+The harness applies [`deploy/crossplane-values.yaml`](../../deploy/crossplane-values.yaml)
+on each platform setup, including when the chart version already matches.
+Provider and function pins, runtime security, watches, Secret sanitization,
+and reconciliation settings come from `dependencies/`. The CLI remains on
+2.4.1 in CI. See the [dependency baseline](../../docs/how-to-guides/installation.md#dependency-baseline).
 
 Run the render tests before cluster integration:
 
@@ -76,11 +82,10 @@ It allows ten minutes for deployment creation. Startup watch throttling can
 delay resource generation after the runtime Secret observer is ready.
 Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
 
-Integration fixtures also use only `datalab` and `datalab-custom`; profiles
-explicitly disable services that are outside their checks.
+Integration fixtures select `datalab-educates` or `datalab-custom`.
 The network, registry, and Data profiles restore the common environment
 settings before creating their Datalabs. The network profile disables
-external egress in `datalab` and enables external egress and vCluster access
+external egress in `datalab-educates` and enables external egress and vCluster access
 in `datalab-custom`. The S3 profile replaces
 `datalab-custom` with its Gateway and identity settings.
 
@@ -90,7 +95,9 @@ The boto3 client uses `s3-credentials.py` as its AWS `credential_process`.
 The test Pod receives `CLIENT_SECRET` from the generated Datalab OAuth Secret.
 The S3 profile also pauses its disposable Keycloak client, changes the source
 OAuth connection Secret, and checks credential propagation and workload
-restart. It restores the credentials, resumes the client, and requires 30
+restart. It checks that Object status contains only the Secret redaction marker
+and observes the current source resource version. It restores the credentials,
+resumes the client, and requires 30
 seconds without updates to the source, observer, and projected Secrets.
 It then repeats the S3 checks. This tests Secret propagation; it does not
 rotate credentials in Keycloak itself.
@@ -113,11 +120,11 @@ Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB or Redis
 resources. Each operator remains installed after its profile finishes. Successful
 cleanup scales it to zero after the Datalab, namespace, workloads, and finalizers
 are removed. Retained resources or a cleanup failure keep the operator running.
-Before an operator install or upgrade, the harness applies the CRDs from
-the selected chart. Helm does not update existing CRDs during an upgrade.
+The harness applies each operator's CRDs from the selected chart before
+it starts the controller.
 
 Dependencies with matching pins are reused after readiness checks. Set
-`REUSE_DEPENDENCIES=0` to force Helm installation or upgrade, for example after
+`REUSE_DEPENDENCIES=0` to apply the chart again, for example after
 changing chart values. The current Composition and XRD are applied on each run.
 The S3 client image is rebuilt when its source changes and loaded only when
 absent from Kind. Full runs start Keycloak before the network, registry, and

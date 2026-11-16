@@ -121,9 +121,8 @@ kind: Datalab
 metadata:
   name: ${team}
   namespace: workspace
-  annotations:
-    datalabs.pkg.internal/environment: datalab-custom
 spec:
+  environmentName: datalab-custom
   users: [verify-s3]
   sessions: []
 DATALAB

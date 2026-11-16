@@ -37,7 +37,9 @@ for case in data['cases']:
                 exec(compile(step['input']['script'], step['step'], 'exec'), namespace)
                 namespace['compose'](req, rsp)
             else:
-                with grpc.insecure_channel(data['auto_ready'] + ':9443') as channel:
+                target = (data['environment_function'] if step['functionRef']['name'] == 'function-environment-configs'
+                          else data['auto_ready'])
+                with grpc.insecure_channel(target + ':9443') as channel:
                     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
                     rsp = stub.RunFunction(req, timeout=10)
             assert rsp.meta.ttl.seconds == case['seconds'], (step['step'], rsp.meta.ttl)
@@ -165,6 +167,7 @@ class FunctionResponseTests(unittest.TestCase):
                     "xrs": [empty, example],
                     "environment": environments[0]["data"],
                     "auto_ready": RUNTIME.removesuffix("-python") + "-auto-ready",
+                    "environment_function": RUNTIME.removesuffix("-python") + "-function-environment-configs",
                 }
             ),
             text=True,

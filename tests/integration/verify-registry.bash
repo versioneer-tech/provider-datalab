@@ -157,7 +157,9 @@ show_registry_diagnostics() {
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${DATALAB_NAME}" || true
-  kube get workshop,workshopenvironment,workshopsession --all-namespaces || true
+  # WorkshopSession default columns include browser credentials.
+  kube get workshop,workshopenvironment,workshopsession --all-namespaces \
+    -o custom-columns='KIND:.kind,NAMESPACE:.metadata.namespace,NAME:.metadata.name,PHASE:.status.phase' || true
   kube get pod,pvc,service,secret --namespace "${runtime_namespace}" || true
   kube logs "pod/${PROBE_NAME}" --namespace "${WORKSPACE_NAMESPACE}" || true
   kube get events --namespace "${runtime_namespace}" \

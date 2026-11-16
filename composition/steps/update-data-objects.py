@@ -12,17 +12,12 @@ from composition.helpers import (
     _b64get_any,
     _boolish,
     _extract_manifest,
+    _extract_data,
     _http_route_timeouts,
     _safe_str,
     _to_dict,
 )
 from composition.render import _render_template
-
-
-def _extract_secret_data(objres):
-    manifest = _extract_manifest(objres)
-    data = manifest.get("data") or {}
-    return data if isinstance(data, dict) else {}
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -69,7 +64,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
 
     storage_secret_name = f"{xr_name}-datalab"
     runtime_secret_key = f"observe-runtime-storage-secret-{xr_name}"
-    runtime_secret_data = _extract_secret_data(observed.get(runtime_secret_key))
+    runtime_secret_data = _extract_data(req, rsp, runtime_secret_key)
     if not runtime_secret_data:
         return
 

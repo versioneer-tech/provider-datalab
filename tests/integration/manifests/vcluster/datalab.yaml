@@ -6,9 +6,8 @@ kind: Datalab
 metadata:
   name: verify-vcluster
   namespace: workspace
-  annotations:
-    datalabs.pkg.internal/environment: datalab-vcluster-it
 spec:
+  environmentName: datalab-vcluster-it
   users:
   - verify-s3
   - verify-vcluster-member

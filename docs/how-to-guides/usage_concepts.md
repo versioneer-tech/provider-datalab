@@ -203,16 +203,18 @@ before you apply these manifests in your claim namespace.
 
 | Manifest | Environment | Use |
 | --- | --- | --- |
-| [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data without a session. |
-| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
-| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and a started session. |
-| [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Started and stopped sessions with workshop files. |
+| [Joe](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/001-lab.yaml) | `datalab-educates` | Data without a session. |
+| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/002-lab.yaml) | `datalab-educates` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
+| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and a started session. |
+| [John](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/004-lab.yaml) | `datalab-custom` | Started and stopped sessions with workshop files. |
 
-The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/environmentconfig.yaml)
+The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/legacy/tests/environmentconfig.yaml)
 show the two configurations. `datalab-custom` demonstrates read-only Data,
 custom quotas and StorageClasses, privileged security with the Kubernetes
 admin role, vCluster, registry, file bundles, Gateway and S3 access, and
 internal network rules. Adapt these settings to your platform's access policy.
+Use `spec.environmentName` for a named override. See
+[environment setup](installation.md#4-set-the-shared-environment).
 
 ## Check provisioning
 

@@ -15,7 +15,7 @@ readonly WORKSPACE_NAMESPACE=workspace
 : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
 : "${REUSE_DEPENDENCIES:=1}"
-: "${CROSSPLANE_VERSION:=2.4.1}"
+: "${CROSSPLANE_VERSION:=2.4.3}"
 : "${KYVERNO_VERSION:=1.19.1}"
 : "${KYVERNO_CHART_VERSION:=3.9.1}"
 

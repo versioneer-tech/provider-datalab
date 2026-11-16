@@ -5,8 +5,6 @@
 apiVersion: pkg.internal/v1beta2
 kind: Datalab
 metadata:
-  annotations:
-    datalabs.pkg.internal/environment: datalab-custom
   name: s-jane
 spec:
   databases:
@@ -15,6 +13,7 @@ spec:
       names:
       - analytics
       storage: 1Gi
+  environmentName: datalab-custom
   sessions:
   - name: default
     state: started

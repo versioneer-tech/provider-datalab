@@ -45,7 +45,7 @@ def compose(req, rsp):
         "metadata": {"name": "registry-auth", "namespace": runtime_namespace},
         "type": "Opaque", "stringData": auth,
     })
-    storage_data = _extract_data(observed.get(f"observe-runtime-storage-secret-{name}"))
+    storage_data = _extract_data(req, rsp, f"observe-runtime-storage-secret-{name}")
     if not _b64get_any(storage_data, ["aws-credentials"]):
         return
     storage = env.get("storage") or {}

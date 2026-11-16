@@ -13,13 +13,52 @@ spec:
     kind: Datalab
   mode: Pipeline
   pipeline:
-  - step: load-datalab-environment
+  - step: environmentConfigs
     functionRef:
-      name: crossplane-contrib-function-python
+      name: function-environment-configs
     input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      scriptFile: steps/load-datalab-environment.py
+      apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+      kind: Input
+      spec:
+        policy:
+          resolution: Optional
+        environmentConfigs:
+        - type: Reference
+          ref:
+            name: default
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: Value
+              key: storages.pkg.internal/name
+              value: datalab-educates
+            - type: FromCompositeFieldPath
+              key: storages.pkg.internal/name
+              valueFromFieldPath: spec.crossplane.compositionRef.name
+              fromFieldPathPolicy: Optional
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: FromCompositeFieldPath
+              key: storages.pkg.internal/name
+              valueFromFieldPath: spec.environmentName
+              fromFieldPathPolicy: Optional
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: FromCompositeFieldPath
+              key: storages.pkg.internal/name
+              valueFromFieldPath: metadata.name
+              fromFieldPathPolicy: Optional
   - step: validate-data-exposure
     functionRef:
       name: crossplane-contrib-function-python

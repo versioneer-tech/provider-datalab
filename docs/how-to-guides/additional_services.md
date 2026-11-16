@@ -247,7 +247,7 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 
 ## PostgreSQL with psql
 
-The [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml)
+The [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/002-lab.yaml)
 provides `POSTGRES_PG0_DEV_URL` for database `dev` on `pg0`. Run this command
 from a session with that variable to start a psql Pod in the current namespace:
 

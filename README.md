@@ -1,6 +1,6 @@
 <h1><img src="docs/imgs/logo.png" height="48" alt="Versioneer logo" /> Provider Datalab</h1>
 
-[![Tests](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml/badge.svg?branch=main&event=push)](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml)
+[![Tests](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml/badge.svg?branch=legacy&event=push)](https://github.com/versioneer-tech/provider-datalab/actions/workflows/pr.yaml)
 [![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab)
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
@@ -8,6 +8,13 @@ Provider Datalab provisions virtual Kubernetes clusters, shared data,
 container registries, databases, and browser workspaces for a team.
 Declare users and services in a `Datalab`; Crossplane creates them from the
 platform's access, network, and storage settings.
+
+Use Crossplane 2.4.3 or later in the v2 series with the Kubernetes and
+Keycloak providers. The
+[dependency baseline](docs/how-to-guides/installation.md#dependency-baseline)
+lists the provider and function pins and the required runtime settings.
+Use optional `spec.environmentName` for a named environment override. See
+[environment setup](docs/how-to-guides/installation.md#4-set-the-shared-environment).
 
 > [!NOTE]
 > The `main` branch is preparing v1, planned for the end of 2026 with `apiVersion: datalab.versioneer.at/v1`; follow `legacy` for the latest `0.12.x` releases, the last series with direct Educates support and limited to `pkg.internal/v1beta2`.

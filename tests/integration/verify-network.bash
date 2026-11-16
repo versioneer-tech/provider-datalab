@@ -83,7 +83,7 @@ apply_generated_policies() {
 apply_verification_resources() {
   log 'Applying network verification resources'
   kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
-  kube patch environmentconfig datalab --type=merge \
+  kube patch environmentconfig datalab-educates --type=merge \
     --patch '{"data":{"defaults":{"security":{"externalEgress":false}}}}'
   kube patch environmentconfig datalab-custom --type=merge \
     --patch '{"data":{"defaults":{"security":{"externalEgress":true},"vcluster":{"enabled":true}}}}'

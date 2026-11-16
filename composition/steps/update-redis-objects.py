@@ -107,7 +107,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         )
         rsp.desired.resources[acl_key].resource.update(acl_body)
         # The operator mounts the ACL file with subPath, so changes need a restart.
-        observed_acl = _extract_data(observed.get(acl_key)).get("user.acl") or encoded_acl
+        observed_acl = _extract_data(req, rsp, acl_key).get("user.acl") or encoded_acl
         acl_checksum = hashlib.sha256(observed_acl.encode()).hexdigest()
 
         pvc_spec = {

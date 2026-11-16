@@ -12,7 +12,9 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab
+  name: datalab-educates
+  labels:
+    storages.pkg.internal/name: datalab-educates
 data:
   iam:
     realm: acme

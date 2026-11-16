@@ -27,6 +27,7 @@ done
 docker info >/dev/null
 python3 scripts/build-composition.py --check
 python3 tests/helpers.py
+python3 tests/environment-schema.py
 
 render_dir="$(mktemp -d /tmp/datalab-render.XXXXXX)"
 cleanup() {
@@ -61,9 +62,14 @@ PY
 docker network create "${render_dir##*/}" >/dev/null
 
 render() {
+  local observed=""
+  if [[ "${2:-}" == --observed-resources ]]; then
+    observed="$3"
+  fi
+  python3 tests/render.py requirements tests/environmentconfig.yaml "${observed}" >"${render_dir}/required.yaml"
   crossplane render "$1" composition.yaml "${render_dir}/functions.yaml" \
     --crossplane-docker-network "${render_dir##*/}" \
-    --required-resources tests/environmentconfig.yaml -x "${@:2}"
+    --required-resources "${render_dir}/required.yaml" -x "${@:2}"
 }
 
 started=${SECONDS}
@@ -92,6 +98,7 @@ python3 tests/token-exchange.py --functions "${render_dir}/functions.yaml" --net
 
 python3 tests/session-storage.py "${render_dir##*/}-python"
 
+python3 tests/environment-selection.py "${render_dir##*/}-python"
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
   python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"

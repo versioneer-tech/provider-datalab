@@ -325,14 +325,14 @@ Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
 URI such as `https://auth.lab.acme.com/oauth2/callback`. Its authorization
 policy must check access to the Datalab named in the requested host.
 
-Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
+Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
 to add external-auth annotations to matching session Ingress objects.
 Set the proxy cookie domain to cover the session hosts, for example
 `.lab.acme.com`, and allow redirects only to that domain.
 
 #### APISIX Ingress configured by Kyverno
 
-The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/ingress-protection/apisix-workshop-session-protection.yaml)
+The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/ingress-protection/apisix-workshop-session-protection.yaml)
 gives Kyverno permission to create `ApisixPluginConfig` resources, generates
 one in each session namespace, and attaches it to matching Ingress objects.
 APISIX checks incoming requests; Kyverno configures the resources.
