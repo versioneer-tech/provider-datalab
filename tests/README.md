@@ -104,8 +104,9 @@ than a snapshot comparison:
   and omission of unknown or invalid sizes.
 - Backups: enabled and disabled storage settings, usable PostgreSQL without
   backups, retained backups after export failure, and invalid Redis snapshots.
-- Function TTL: configured responses on normal and early-return paths, a
-  separate integration build, and rejection of invalid build settings.
+- Function TTL: the one-minute Python default, environment overrides and their
+  merge order, normal and early-return paths, separate function inputs and test
+  builds, and rejection of invalid runtime and build settings.
 
 Render tests cannot prove live authorization, routing, persistence, or timing.
 `token-exchange.py` checks rendered authorization boundaries and exchange

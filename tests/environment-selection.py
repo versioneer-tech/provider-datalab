@@ -49,6 +49,7 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
         })
         req.input.update(data['input'])
         configs, expected, annotations = [], {}, {}
+        expected_ttl = None
         for index, name in enumerate(names):
             if index not in present:
                 continue
@@ -60,9 +61,10 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
                 'apiVersion': 'apiextensions.crossplane.io/v1beta1',
                 'kind': 'EnvironmentConfig',
                 'metadata': {'name': name, **({'labels': {label: name}} if index else {})},
-                'data': {'ingress': values},
+                'data': {'ingress': values, 'datalab': {'responseTTL': f'{index + 2}m'}},
             })
             if index != 2 or named:
+                expected_ttl = f'{index + 2}m'
                 expected['domain'] = values['domain']
                 annotations.update(values['annotations'])
                 if index == 0:
@@ -92,7 +94,8 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
         assert not any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results), rsp.results
         actual = MessageToDict(rsp.context)['apiextensions.crossplane.io/environment']
         assert actual.get('ingress', {}) == expected, (case, actual, expected)
-print('PASS environment precedence, nested maps, missing configs, optional field, labels, and render fallback')
+        assert actual.get('datalab', {}).get('responseTTL') == expected_ttl, (case, actual, expected_ttl)
+print('PASS environment and TTL precedence, nested maps, missing configs, optional field, labels, and render fallback')
 """
 
 

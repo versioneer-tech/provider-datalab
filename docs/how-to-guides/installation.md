@@ -172,8 +172,9 @@ For a source installation, apply `xrd.yaml` before `composition.yaml` so
 Kubernetes retains the [OAuth2 discovery](authentication.md#oauth2-discovery)
 fields.
 
-The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/legacy/templates/README.md) explains how to change
-the pipeline response TTL before building a package.
+The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/legacy/templates/README.md)
+explains how to set build defaults. Use `datalab.responseTTL` in the environment
+to change the Python response TTL without rebuilding a package.
 
 ## 4. Set the shared environment
 
@@ -346,6 +347,8 @@ metadata:
   labels:
     storages.pkg.internal/name: team-datalab
 data:
+  datalab:
+    responseTTL: 5m
   defaults:
     quota:
       memory: 4Gi
@@ -370,6 +373,7 @@ fields, but extra fields in `spec` do not override these settings.
 
 | Setting | Default | Use |
 | --- | --- | --- |
+| `datalab.responseTTL` | `1m` | Response TTL for all Python steps. |
 | `defaults.vcluster.enabled` | `true` | Virtual Kubernetes API for each started session. |
 | `defaults.registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
 | `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |

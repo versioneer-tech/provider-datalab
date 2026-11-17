@@ -18,11 +18,15 @@ publishing step tells the build to embed this file. Edit the Python file,
 then rebuild. Downloaded kubeconfigs contain the helper and need no separate
 script installation.
 
-`composition/settings.yaml` sets `responseTTL` for all steps. Use a positive
-whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`). The build
-sets each Python response TTL before the step body and gives auto-ready and
-the environment function the same TTL. New function types must have build
-support for their TTL.
+`composition/settings.yaml` sets the Python `responseTTL` default to `1m`.
+Operators can override it with `EnvironmentConfig.data.datalab.responseTTL`.
+Use a positive whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`).
+The build sets each Python response TTL before the step body. Invalid values
+stop the step with an error.
+
+The separate `environmentConfigsTTL` and `autoReadyTTL` build settings default
+to `10m`. These functions use their own inputs and do not read the Python
+override. New function types must have build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
 Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step
@@ -49,7 +53,7 @@ file. Unit tests, CI, and pre-commit reject a stale build.
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
 
-Integration can build a separate artifact with a shorter TTL:
+Integration can build a separate artifact with a different Python default:
 
 ```bash
 python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml

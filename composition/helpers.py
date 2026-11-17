@@ -19,6 +19,31 @@ def _to_dict(value):
     return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
 
+def set_response_ttl(req, rsp, default_seconds):
+    rsp.meta.ttl.FromSeconds(default_seconds)
+    environment = (
+        _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+    )
+    datalab = environment.get("datalab") or {}
+    if not isinstance(datalab, dict):
+        response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+        return False
+    if "responseTTL" not in datalab:
+        return True
+    match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+    if match:
+        seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+        if seconds <= (2**63 - 1) // 1_000_000_000:
+            rsp.meta.ttl.FromSeconds(seconds)
+            return True
+    response.fatal(
+        rsp,
+        "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+        "or 1h, within the signed 64-bit nanosecond limit.",
+    )
+    return False
+
+
 def _boolish(value):
     if isinstance(value, bool):
         return value
