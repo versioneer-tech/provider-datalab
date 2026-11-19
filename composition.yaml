@@ -35,10 +35,10 @@ spec:
             maxMatch: 1
             matchLabels:
             - type: Value
-              key: storages.pkg.internal/name
+              key: datalabs.pkg.internal/name
               value: datalab-educates
             - type: FromCompositeFieldPath
-              key: storages.pkg.internal/name
+              key: datalabs.pkg.internal/name
               valueFromFieldPath: spec.crossplane.compositionRef.name
               fromFieldPathPolicy: Optional
         - type: Selector
@@ -48,7 +48,7 @@ spec:
             maxMatch: 1
             matchLabels:
             - type: FromCompositeFieldPath
-              key: storages.pkg.internal/name
+              key: datalabs.pkg.internal/name
               valueFromFieldPath: spec.environmentName
               fromFieldPathPolicy: Optional
         - type: Selector
@@ -58,7 +58,7 @@ spec:
             maxMatch: 1
             matchLabels:
             - type: FromCompositeFieldPath
-              key: storages.pkg.internal/name
+              key: datalabs.pkg.internal/name
               valueFromFieldPath: metadata.name
               fromFieldPathPolicy: Optional
       ttl: 10m

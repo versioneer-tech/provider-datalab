@@ -192,9 +192,8 @@ are skipped. For a local render without `compositionRef`, the second lookup
 uses the current Composition's name, `datalab-educates`.
 
 Each config selected by the last three lookups must have the label
-`storages.pkg.internal/name` equal to its own `metadata.name`. Keep this label
-key for configs shared with Provider Storage. Keep names and labels unique;
-each lookup allows at most one match.
+`datalabs.pkg.internal/name` equal to its own `metadata.name`. Keep names and
+labels unique; each lookup allows at most one match.
 
 Use `default` for shared cluster values and `datalab-educates` for settings
 specific to this Composition. This example uses NGINX Ingress for Data and
@@ -206,7 +205,7 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-educates
   labels:
-    storages.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab-educates
 data:
   iam:
     realm: acme
@@ -345,7 +344,7 @@ kind: EnvironmentConfig
 metadata:
   name: team-datalab
   labels:
-    storages.pkg.internal/name: team-datalab
+    datalabs.pkg.internal/name: team-datalab
 data:
   datalab:
     responseTTL: 5m

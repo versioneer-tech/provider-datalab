@@ -14,7 +14,7 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-educates
   labels:
-    storages.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab-educates
 data:
   iam:
     realm: acme

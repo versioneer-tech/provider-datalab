@@ -20,7 +20,7 @@ def main():
                 b"[default]\naws_access_key_id = test-access-key\naws_secret_access_key = test-secret-key\n"
             ).decode()
     env = environment()
-    env["metadata"].update(name="datalab-custom", labels={"storages.pkg.internal/name": "datalab-custom"})
+    env["metadata"].update(name="datalab-custom", labels={"datalabs.pkg.internal/name": "datalab-custom"})
     env["data"]["defaults"] = {
         "data": {"enabled": True, "readOnlyMount": True},
         "quota": {"memory": "7Gi", "storage": "9Gi", "budget": "large"},

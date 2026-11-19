@@ -6,7 +6,7 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-educates
   labels:
-    storages.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab-educates
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
@@ -106,7 +106,7 @@ kind: EnvironmentConfig
 metadata:
   name: datalab-custom
   labels:
-    storages.pkg.internal/name: datalab-custom
+    datalabs.pkg.internal/name: datalab-custom
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0

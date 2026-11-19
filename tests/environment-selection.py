@@ -20,7 +20,7 @@ from crossplane.function.proto.v1 import run_function_pb2_grpc as fnv1_grpc
 from google.protobuf.json_format import MessageToDict
 
 data = json.load(sys.stdin)
-label = 'storages.pkg.internal/name'
+label = 'datalabs.pkg.internal/name'
 with grpc.insecure_channel(data['target'] + ':9443') as channel:
     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
     cases = [
