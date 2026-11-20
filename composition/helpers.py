@@ -96,20 +96,12 @@ def _backup_enabled(value):
     return Decimal(match[1]) > 0
 
 
-def _observed_manifests(observed_resource):
+def _extract_manifest(observed_resource):
     if not observed_resource or not getattr(observed_resource, "resource", None):
-        return {}, {}
+        return {}
     resource = _to_dict(observed_resource.resource)
     at_provider = (resource.get("status") or {}).get("atProvider") or {}
-    return (
-        at_provider.get("manifest") or {},
-        (at_provider.get("raw") or {}).get("manifest") or {},
-    )
-
-
-def _extract_manifest(observed_resource):
-    manifest, raw_manifest = _observed_manifests(observed_resource)
-    return manifest or raw_manifest
+    return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
 
 def require_secret(req, rsp, key, name, namespace):
@@ -190,20 +182,3 @@ def _vcluster_exchange_groups(config):
         if group["name"] != "cluster-admin"
     }
     return [groups[name] for name in sorted(groups)]
-
-
-def _secret_data(value):
-    """Read native or observed Secret data without changing binary values."""
-    if value is None:
-        return {}
-    body = _to_dict(value.resource) if hasattr(value, "resource") else _to_dict(value)
-    if body.get("kind") == "Object":
-        state = body.get("status", {}).get("atProvider", {})
-        body = state.get("manifest") or (state.get("raw") or {}).get("manifest") or {}
-    return {
-        **(body.get("data") or {}),
-        **{
-            key: base64.b64encode(value.encode()).decode()
-            for key, value in (body.get("stringData") or {}).items()
-        },
-    }

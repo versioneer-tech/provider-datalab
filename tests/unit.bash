@@ -91,6 +91,7 @@ done
 for suite in vclusters registry s3-connections service-connections oauth2 token-exchange; do
   python3 "tests/${suite}.py" --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 done
+python3 tests/environment-selection.py "${render_dir##*/}-python"
 python3 tests/response-ttl.py "${render_dir##*/}-python"
 if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
   python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"

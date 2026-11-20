@@ -75,6 +75,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     return
             if kind == "s3":
                 data = _extract_data(req, rsp, key)
+                connection["ready"] = connection["ready"] and bool(data)
                 for field, secret_key in (
                     ("endpoint", "AWS_ENDPOINT_URL"),
                     ("region", "AWS_REGION"),

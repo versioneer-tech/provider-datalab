@@ -96,24 +96,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-6f9cb380ad34-s-joe-namespace-s-joe-obs-89aba04afd
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-runtime-storage-secret-s-joe
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-joe
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-b429a8b8c8ec-s-joe-namespace-s-joe-net-c8da8170ae
   namespace: default
 spec:
@@ -140,24 +122,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-joe-allow-namespace-ingress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-joe
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-d7ee09379424-s-joe-namespace-s-joe-obs-fc0fec1ccd
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-registry-auth-secret-s-joe
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

@@ -17,17 +17,17 @@ def main():
     invalid = ["", "a" * 64, "Uppercase", "under_score", "-leading", "trailing-",
                ".leading", "trailing.", "two..dots", "a.-b", "a-.b", "space name", 1, None]
     resources, expected = [], {}
-    version = next(version for version in xrd["spec"]["versions"] if version["name"] == "v1beta2")
+    version = next(version for version in xrd["spec"]["versions"] if version["name"] == "v1")
     spec = version["schema"]["openAPIV3Schema"]["properties"]["spec"]
     assert "default" not in spec["properties"]["environmentName"]
     assert "environmentName" not in spec.get("required", [])
     cases = [(True, {})] + [(True, {"environmentName": value}) for value in valid]
     cases += [(False, {"environmentName": value}) for value in invalid]
     for index, (accepted, fields) in enumerate(cases):
-        name = f"test-v1beta2-{index}"
+        name = f"test-v1-{index}"
         expected[name] = accepted
         resources.append({
-            "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+            "apiVersion": "versioneer.at/v1", "kind": "Datalab",
             "metadata": {"name": name, "namespace": "workspace"},
             "spec": {"users": [], **fields},
         })
@@ -51,7 +51,7 @@ def main():
         assert item["status"] == ("valid" if accepted else "invalid"), item
         if not accepted:
             assert any(error["field"] == "spec.environmentName" for error in item["errors"]), item
-    print("PASS v1beta2 accepts optional DNS names, rejects invalid values, and validates all examples", flush=True)
+    print("PASS v1 accepts optional DNS names, rejects invalid values, and validates all examples", flush=True)
 
 
 if __name__ == "__main__":

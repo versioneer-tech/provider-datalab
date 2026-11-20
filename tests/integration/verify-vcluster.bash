@@ -133,8 +133,6 @@ kind: Datalab
 metadata:
   name: ${team}
   namespace: workspace
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
 spec:
   environmentName: datalab-custom
   users: [verify-s3]
@@ -299,15 +297,13 @@ value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "name
 result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
 assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
 print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
-for version in ('v1',):
-    source['apiVersion'] = 'versioneer.at/' + version
-    for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
-        for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
-            value = deepcopy(source)
-            config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
-            value['spec'][field] = {key: config}
-            result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
-            assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
+for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+    for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
+        value = deepcopy(source)
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        value['spec'][field] = {key: config}
+        result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
+        assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
 print('PASS Kubernetes admission rejects invalid instance names for all maps')
 ADMISSION
 }

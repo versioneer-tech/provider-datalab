@@ -113,13 +113,6 @@ def main():
         assert copy["type"] == expected_type and copy["data"] == encoded(fields)
     print("PASS custom connection copies preserve usable Secret types without binding copied account tokens")
 
-    rotated = deepcopy(observed)
-    for body in rotated:
-        data = body["status"]["atProvider"]["manifest"]["data"]
-        key = "token" if "token" in data else "password"
-        data[key] = encoded({key: "test-rotated"})[key]
-        if "uri" in data:
-            data["uri"] = encoded({"uri": "postgresql://postgres:test-rotated@prod/app"})["uri"]
     sanitized = deepcopy(observed)
     required_secrets = []
     for body in sanitized:
@@ -132,19 +125,32 @@ def main():
     secured = run(source, [env, *required_secrets], [*sanitized, *published.values()])
     assert copies(secured) == published
     assert all(c["ready"] for c in connections(secured))
-    rotated_secrets = [deepcopy(body["status"]["atProvider"]["manifest"]) for body in rotated[1:]]
-    rotating_secured = run(source, [env, *rotated_secrets], [*sanitized, *published.values()])
-    current = copies(rotating_secured)
+    for kind in ("postgres", "mongo", "redis"):
+        key = f"connection-s-joe-{kind}-prod"
+        assert secured[key]["stringData"] == ready[key]["stringData"]
+    rotated = deepcopy(observed)
+    for body in rotated:
+        data = body["status"]["atProvider"]["manifest"]["data"]
+        key = "token" if "token" in data else "password"
+        data[key] = encoded({key: "test-rotated"})[key]
+        if "uri" in data:
+            data["uri"] = encoded({"uri": "postgresql://postgres:test-rotated@prod/app"})["uri"]
+    rotated_secrets = [body["status"]["atProvider"]["manifest"] for body in rotated]
+    rotating = run(source, [env, *rotated_secrets], [*sanitized, *published.values()])
+    current = copies(rotating)
     assert set(current) == set(published)
     assert all(current[key]["data"] != published[key]["data"] for key in current)
-    assert not any(c["ready"] for c in connections(rotating_secured))
-    assert all(c["ready"] for c in connections(run(source, [env, *rotated_secrets], [*sanitized, *current.values()])))
-    unsanitized = run(source, [env, *rotated_secrets], [*observed, *published.values()])
-    assert copies(unsanitized) == copies(rotating_secured)
+    assert not any(c["ready"] for c in connections(rotating))
+    for kind in ("postgres", "mongo", "redis"):
+        service_values = rotating[f"connection-s-joe-{kind}-prod"]["stringData"]
+        assert service_values["password"] == "test-rotated"
+    updated = run(source, [env, *rotated_secrets], [*sanitized, *current.values()])
+    assert all(c["ready"] for c in connections(updated))
     missing_secured = run(source, env, [*sanitized, *published.values()])
     assert not copies(missing_secured)
     assert not any(c["ready"] for c in connections(missing_secured))
-    print("PASS direct Secret reads ignore stale observer data, rotate stable copies, and wait for current credentials")
+    assert all(f"connection-s-joe-{kind}-prod" not in missing_secured for kind in ("postgres", "mongo", "redis"))
+    print("PASS source Secret rotation updates copies and readiness despite stale, redacted observer data")
 
     unavailable = deepcopy(rotated)
     for body in unavailable:

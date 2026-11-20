@@ -33,7 +33,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         return
     runtime_namespace = xr_name
 
-    observed = getattr(req.observed, "resources", {}) or {}
     oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
     client_secret = _b64get_any(
         oauth_data, ["clientSecret", "client_secret"]

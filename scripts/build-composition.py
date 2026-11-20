@@ -148,6 +148,8 @@ def build(root=ROOT, response_ttl=None):
     steps = [step["step"] for step in composition["spec"]["pipeline"]]
     if len(steps) != len(set(steps)):
         raise ValueError("Composition pipeline step names must be unique.")
+    for key in ("environmentConfigsTTL", "autoReadyTTL"):
+        response_ttl_seconds(settings[key])
     helper_source = (root / "composition/helpers.py").read_text()
     renderer = (root / "composition/render.py").read_text()
     for step in composition["spec"]["pipeline"]:

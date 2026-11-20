@@ -43,8 +43,7 @@ file access, and session storage after the virtual cluster is ready.
 ### Dependency baseline
 
 The package requires Crossplane 2.4.3 or later in the v2 series.
-The supplied manifests use the shared
-[EOEPCA Crossplane baseline](https://github.com/EOEPCA/eoepca-plus/tree/deploy-develop/argocd/infra/crossplane/parts):
+The supplied dependency manifests use these versions:
 
 | Component | Version |
 | --- | --- |
@@ -67,33 +66,20 @@ helm install crossplane crossplane-stable/crossplane \
   --values deploy/crossplane-values.yaml
 ```
 
-These values disable default managed resource activation. The core and RBAC
-manager run as non-root users with read-only root filesystems. Their Pods use
-the default seccomp profile, drop Linux capabilities, and prevent privilege
-escalation. Provider and function runtimes have the supplied seccomp and
-container security settings.
+The Helm values disable default managed resource activation and run Crossplane
+and its RBAC manager as non-root users with read-only root filesystems.
+The dependency manifests supply selective activation, runtime security, and
+provider reconciliation settings. Keep their `runtimeConfigRef` settings.
 
-The Kubernetes provider enables watches, polls every five minutes, limits
-reconciliation to 10 per second, sanitizes Secret data in Object status, and
-has a 1 GiB memory limit. The composition reads each source Secret directly
-by its exact namespace and name through required resources. The supplied
-Crossplane aggregate role grants Secret read access for these requests.
-Object observers retain watches and readiness checks; their data is not used.
-Keycloak uses a reconciliation rate of 3 and one concurrent reconciliation.
-Keep the Provider and Function `runtimeConfigRef` settings.
+The Kubernetes provider watches resources and redacts Secret data in Object
+status. The composition reads source Secrets directly by namespace and name;
+the supplied Crossplane role grants the required read access. If Crossplane
+runs outside `crossplane`, update the ServiceAccounts and binding subjects in
+`dependencies/rbac.yaml`.
 
-Apply the selective activation policies for the kinds Datalab uses. Keep the
-supplied resource permissions and Keycloak CRD discovery role. If Crossplane
-runs outside the `crossplane` namespace, update the ServiceAccounts and
-binding subjects in `dependencies/rbac.yaml` to match.
-
-Use one platform owner for shared packages, runtimes, activation policies,
-and RBAC when Provider Storage uses the same cluster. Both packages use the
-same environment function and selector label. Datalab does not need the
-baseline's storage providers.
-
-Build and test workflows retain Crossplane CLI 2.4.1. The CLI has a separate
-release cycle from core; its pin does not select the cluster's core version.
+When Provider Storage shares the cluster, manage shared packages, runtimes,
+and RBAC in one place. Both providers use the same environment function.
+Add both providers' selector labels to shared EnvironmentConfigs.
 
 ## 1. Choose the claim namespace
 
@@ -129,7 +115,7 @@ in this order:
 | `02-providers.yaml` | Install the Kubernetes and Keycloak providers. |
 | `03-providerConfigs.yaml` | Configure those providers in the claim namespace. |
 | `functions.yaml` | Install the composition functions. |
-| `rbac.yaml` | Grant provider-kubernetes access to the resources it manages. |
+| `rbac.yaml` | Grant provider access and let Crossplane read source Secrets. |
 
 Apply `03-providerConfigs.yaml` with `kubectl apply -n workspace -f ...`.
 Create its referenced Keycloak credential Secret in that namespace through
@@ -177,11 +163,10 @@ kubectl get configurationrevisions.pkg.crossplane.io
 The package installs the Datalab resource definition and composition. Its
 providers and functions are managed separately by the platform.
 
-For a source installation, apply `xrd.yaml` before `composition.yaml` so
-Kubernetes retains the [OAuth2 discovery](authentication.md#oauth2-discovery)
-fields.
+For a source installation, apply `xrd.yaml`, then `composition.yaml`, before
+creating Datalabs.
 
-The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/legacy/templates/README.md)
+The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md)
 explains how to set build defaults. Use `datalab.responseTTL` in the environment
 to change the Python response TTL without rebuilding a package.
 
@@ -198,13 +183,15 @@ It merges the data from these EnvironmentConfigs in this order:
 Later values override earlier values. Nested maps retain fields that later
 configs do not set. Missing configs and an omitted `spec.environmentName`
 are skipped. For a local render without `compositionRef`, the second lookup
-uses the current Composition's name, `datalab-educates`.
+uses the current Composition's name, `datalab`.
 
 Each config selected by the last three lookups must have the label
-`datalabs.pkg.internal/name` equal to its own `metadata.name`. Keep names and
-labels unique; each lookup allows at most one match.
+`datalabs.pkg.internal/name` equal to its own `metadata.name`. Add the
+Provider Storage label separately when a config serves both providers.
+Keep names and labels unique. Each lookup uses at most one match. If several
+configs match, the function sorts by `metadata.name` and uses the first.
 
-Use `default` for shared cluster values and `datalab-educates` for settings
+Use `default` for shared cluster values and `datalab` for settings
 specific to this Composition. This example uses NGINX Ingress for Data and
 the registry:
 
@@ -212,9 +199,9 @@ the registry:
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-educates
+  name: datalab
   labels:
-    datalabs.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab
 data:
   iam:
     realm: acme
@@ -239,7 +226,6 @@ data:
     region: us-east-1
     forcePathStyle: "true"
     secretNamespace: datalab
-    type: s3
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0
@@ -253,35 +239,44 @@ data:
     - 169.254.42.42/32
     - fd00:42::42/128
     excludePolicies: []
-  defaults:
-    registry:
-      enabled: true
-    data:
-      enabled: true
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-      hard:
-        requests.cpu: '4'
-        requests.memory: 8Gi
-        limits.cpu: '16'
-        limits.memory: 32Gi
-    limitRange:
-      default:
-        cpu: '1'
-        memory: 512Mi
-        ephemeral-storage: 8Gi
-      defaultRequest:
-        cpu: 100m
-        memory: 128Mi
-        ephemeral-storage: 3Gi
-    security:
-      externalEgress: true
 ```
 
-Replace the example storage classes, network ranges, and DNS names before
-applying it. Configure [authentication](authentication.md) before users access
+Replace the network ranges, endpoints, and DNS names before applying it. Configure [authentication](authentication.md) before users access
 the services.
+
+### Named environment override
+
+For a named override, set the optional `spec.environmentName`. It has no
+default and accepts lowercase DNS names of 1–63 characters: letters, digits,
+hyphens, and dot-separated labels, with a letter or digit at each label end.
+For example:
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: team-datalab
+  labels:
+    datalabs.pkg.internal/name: team-datalab
+data:
+  datalab:
+    responseTTL: 5m
+  defaults:
+    overallQuota:
+      storage: 50Gi
+---
+apiVersion: versioneer.at/v1
+kind: Datalab
+metadata:
+  name: team-workspace
+  namespace: workspace
+spec:
+  environmentName: team-datalab
+  users: []
+```
+
+This override retains the other shared quota settings. A labeled config named
+`team-workspace` takes precedence.
 
 ### Service addresses
 
@@ -353,14 +348,8 @@ All paths below are relative to `EnvironmentConfig.data`. Defaults apply
 when a setting is omitted; example values such as cluster CIDRs, endpoints,
 and StorageClass names are not built-in defaults.
 
-Select a specific EnvironmentConfig with the
-`datalabs.versioneer.at/environment` annotation or label to use its settings
-without per-Datalab overrides, as shown in the
-[`datalab-custom` example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml).
-The annotation takes priority over the label; the default selection is `datalab`.
-
-Runtime settings come from the EnvironmentConfig. The XRD retains unknown
-fields, but extra fields in `spec` do not override these settings.
+Set runtime options in EnvironmentConfig. Extra fields in the Datalab spec do
+not override these settings.
 
 #### Runtime and service defaults
 
@@ -380,14 +369,14 @@ fields, but extra fields in `spec` do not override these settings.
 #### Service images
 
 Set these image references under `data.images` in the EnvironmentConfig.
-Use a full image reference with a tag. Omitted settings use the
+Use a full image reference with a tag or digest. Omitted settings use the
 defaults below.
 
 | Setting | Default image tag | Use |
 | --- | --- | --- |
 | `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.0` | Data server and its database init container. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
-| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service.  |
+| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service. |
 | `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.12-ubi8` | MongoDB server. The default database version is `8.0.12`. |
 | `images.mongoBackup` | `mongo:8.0.12` | MongoDB backup tools. If omitted, its tag follows the database version. |
 | `images.redis` | `quay.io/opstree/redis:v7.0.15` | Redis server and its init container. |
@@ -396,6 +385,7 @@ defaults below.
 | `images.sandbox` | `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10` | Agent Sandbox controller inside each virtual cluster. |
 | `images.sandboxd` | `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f` | Runtime for the virtual sandboxd templates. Use a compatible image that starts sandboxd and contains the required tools. |
 
+The default OAuth2 Proxy image is also pinned by digest in the composition.
 A MongoDB image tag that starts with `major.minor.patch` sets the database
 version. For a digest without a version tag, set
 `documentStore.version` to the image's MongoDB version. Use compatible server
@@ -453,8 +443,7 @@ to containers without the corresponding resource settings.
 | --- | --- | --- |
 | `storage.endpoint` | Empty | Endpoint reachable by runtime Pods; the input Secret's `AWS_ENDPOINT_URL` takes priority. |
 | `storage.region` | Empty | Object-store region; the input Secret's `AWS_REGION` takes priority. |
-| `storage.type` | Empty | rclone backend type, usually `s3`. |
-| `storage.provider` | Empty for rclone; `Other` for the S3 proxy | Object-store provider. |
+| `storage.provider` | `Other` | Object-store provider for the S3 proxy. |
 | `storage.forcePathStyle` | `true` | Path-style S3 requests. |
 | `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
 | `vcluster.resources.requests` | CPU `200m`, memory `1Gi`, ephemeral storage `1Gi` | Control-plane requests; supplied fields override these defaults. |

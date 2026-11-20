@@ -31,7 +31,6 @@ data:
     provider: Minio
     region: us-east-1
     secretNamespace: workspace
-    type: s3
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0

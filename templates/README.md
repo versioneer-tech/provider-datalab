@@ -53,14 +53,15 @@ file. Unit tests, CI, and pre-commit reject a stale build.
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
 
-Integration can build a separate artifact with a different Python default:
+Integration can build a separate artifact with a Python TTL default:
 
 ```bash
 python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
 ```
 
-A TTL override requires a separate output file. The build does not change
-`composition/settings.yaml` or the normal deployment artifact.
+A TTL override requires a separate output file. It does not change the
+environment or auto-ready TTLs, `composition/settings.yaml`, or the normal
+deployment artifact. An environment value takes precedence over this default.
 
 `vcluster/sandbox-install.yaml` contains the Agent Sandbox CRDs and supporting
 resources. `vcluster/sandbox-controller.yaml` contains its Deployment, with

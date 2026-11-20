@@ -40,10 +40,13 @@ spec:
 ```
 
 Use a downloaded kubeconfig and a user login or access token to connect to a
-virtual cluster. Services run in a namespace with the same name as the
-Datalab.
+virtual cluster.
 
 ## Get started
+
+Requires Crossplane 2.4.3 or later in the v2 series. See the
+[installation guide](docs/how-to-guides/installation.md) for dependencies and setup.
+Operators can set shared defaults and Python response TTLs in EnvironmentConfigs.
 
 [Read the documentation online](https://provider-datalab.versioneer.at/), or use
 the guides in this checkout:

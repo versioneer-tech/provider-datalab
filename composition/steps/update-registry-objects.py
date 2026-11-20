@@ -24,7 +24,6 @@ def compose(req, rsp):
     registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
     if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
         return
-    observed = req.observed.resources
     runtime_namespace = name
 
     def emit(suffix, manifest, readiness=None):

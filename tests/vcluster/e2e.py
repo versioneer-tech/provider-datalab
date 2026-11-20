@@ -598,7 +598,7 @@ def main():
         ), f"{method} {path}: expected {expected}, got {result.status}"
         return data.decode() if raw else (json.loads(data) if data else None)
 
-    def profile_token(profile, instance="vc0", scope=""):
+    def profile_token(profile, instance="vc0", bearer=None):
         config = json.loads(Path(f"/profiles/{profile}/kubeconfig").read_text())
         assert (
             config["clusters"][0]["cluster"]["server"] == f"https://{HOST}/.{instance}"
@@ -618,7 +618,7 @@ def main():
         secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file())
         with TemporaryDirectory(prefix="test-vcluster-") as directory:
             # Automated probes supply a token and do not start user login.
-            value = token(LAB, secret_file.read_text().strip(), scope=scope)
+            value = bearer if bearer is not None else token(LAB, secret_file.read_text().strip())
             token_file = Path(directory) / "access-token"
             token_file.write_text(value)
             token_file.chmod(0o600)
@@ -630,7 +630,9 @@ def main():
                 text=True,
                 env={**os.environ, **sources},
             )
-        return json.loads(credential.stdout)["status"]["token"]
+        actual = json.loads(credential.stdout)["status"]["token"]
+        assert actual == value, "The profile helper changed the caller token"
+        return actual
 
     def granted_token(profile, role, instance="vc0"):
         # Only this test assigns a vcluster role to the workspace account.
@@ -641,7 +643,8 @@ def main():
             value = profile_token(profile, instance, scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
-            return value
+            assert LAB in ([claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"])
+            return profile_token(profile, instance, value)
         finally:
             set_workspace_roles([])
 
@@ -727,15 +730,6 @@ def main():
     api("/api/v1/namespaces/demo/configmaps", admin_profile)
     print("PASS cluster-admin download keeps the caller's namespace role", flush=True)
     marker.write_text(editor)
-    for value, expected_role in (
-        (bearer, "vcluster_vc0_cluster-admin"),
-        (editor, "vcluster_vc0_namespace-demo"),
-    ):
-        claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
-        assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", expected_role}
-        assert LAB in (
-            [claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"]
-        )
     deadline = time.monotonic() + 90
     while True:
         try:

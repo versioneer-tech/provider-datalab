@@ -4,9 +4,9 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-educates
+  name: datalab
   labels:
-    datalabs.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
@@ -16,7 +16,7 @@ data:
     mongoBackup: mongo:8.0.12
     redis: quay.io/opstree/redis:v7.0.15
     redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   iam:
     realm: integration
   ingress:
@@ -37,7 +37,6 @@ data:
     provider: Minio
     region: us-east-1
     secretNamespace: workspace
-    type: s3
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -89,7 +88,7 @@ data:
     mongoBackup: mongo:8.0.12
     redis: quay.io/opstree/redis:v7.0.15
     redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -113,7 +112,6 @@ data:
     provider: Minio
     region: us-east-1
     secretNamespace: workspace
-    type: s3
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0

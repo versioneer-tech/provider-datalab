@@ -11,7 +11,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _b64get_any,
     _boolish,
-    _extract_manifest,
     _extract_data,
     _http_route_timeouts,
     _safe_str,
@@ -33,7 +32,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     images = environment.get("images") or {}
     package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
     rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
-    oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4"
+    oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
     data_config = (environment.get("defaults") or {}).get("data") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
@@ -53,7 +52,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "--perm.rename=true",
         ]
 
-    observed = getattr(req.observed, "resources", {}) or {}
     runtime_namespace = xr_name
 
     storage_secret_name = f"{xr_name}-storage"

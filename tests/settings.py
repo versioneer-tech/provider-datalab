@@ -36,8 +36,8 @@ def main():
     }
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
-        "metadata": {"name": "s-joe", "annotations": {"datalabs.versioneer.at/environment": "datalab-custom"}},
-        "spec": {"users": ["joe"]},
+        "metadata": {"name": "s-joe"},
+        "spec": {"environmentName": "datalab-custom", "users": ["joe"]},
     }
     resources = render(args, env, source)
     namespace = manifest(resources, "namespace-s-joe")

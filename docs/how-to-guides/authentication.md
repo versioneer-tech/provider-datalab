@@ -67,8 +67,8 @@ Add `http://localhost:8080/callback` to `EnvironmentConfig.data.iam.redirectURIs
 for this example. Set `iam.webOrigins` only for additional browser origins.
 The Data callback is included by default.
 
-Use the normal state and PKCE checks, then authenticate the confidential client
-when redeeming the code. Request only the scopes needed by the application.
+Check OAuth state, use PKCE, and authenticate the confidential client when
+redeeming the code. Request only the scopes needed by the application.
 For a namespace-only direct login, omit `s-joe:interactive`.
 
 You can also use a separate login client in the same realm. Its scope mappings
@@ -105,15 +105,11 @@ Keycloak sets these lifetimes; the helper uses the issued expiry values.
 | Access token validity | Inherited realm Access Token Lifespan |
 | CLI offline session validity | Offline Session Idle/Max and Client Offline Session Idle/Max |
 
-For the CLI cache duration, offline session limits, and revocation, see
-[human login lifetime](vcluster.md#human-login-lifetime).
-
-Device and standard flows inherit the realm's access-token lifespan. The
-device helper requests offline access and can refresh tokens for up to 30 days,
-subject to realm limits. Exchanged access tokens inherit the same lifespan
-and have no refresh token in the current setup. See
-[ADR-004](../architecture/0004-token-lifetime-for-delegated-access.md) for options
-for longer delegated access.
+The device helper can refresh tokens for up to 30 days, subject to realm
+limits. See [human login lifetime](vcluster.md#human-login-lifetime) for cache
+and revocation details. Exchanged tokens have no refresh token; longer
+delegated access is discussed in
+[ADR-004](../architecture/0004-token-lifetime-for-delegated-access.md).
 
 ## User-token exchange
 
@@ -127,9 +123,8 @@ permissions. A managed client policy combines the `grant-type` and
 `<datalab>:interactive` during token exchange, including requests that combine
 it with allowed profile scopes. Direct interactive login can still use it.
 
-Send this form to the configured realm's token endpoint. Authenticate with the
-existing confidential `s-joe` client through the approved credential path.
-The placeholder below represents the original caller access token.
+Post this form to the configured realm's token endpoint and authenticate as
+the confidential `s-joe` client:
 
 ```text
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
@@ -179,8 +174,7 @@ client, configure the Datalab audience on that client.
 Keycloak checks the user's role grants before applying an optional profile
 scope. A user without the role can receive a successful response with that
 scope and role omitted. Consumers must reject a result missing a requested
-role. This is the documented server behavior; actual issuance must be checked
-against the deployed server. Render checks do not prove token contents. See
+role. See
 [Keycloak scope permissions](https://www.keycloak.org/docs/latest/server_admin/index.html#_client_scopes_permissions).
 
 Reconciliation removes a deleted or renamed profile's optional association,
@@ -192,8 +186,8 @@ token first, then give the recipient the profile and returned access token.
 The additional profile helper reads that token from a file and needs no client
 secret. The virtual API still checks the realm issuer, Datalab audience,
 signature, validity, and configured Datalab roles.
-Its username is `sub`; groups are `datalab:<datalab>:<role>`. Existing virtual
-RoleBinding and ClusterRoleBinding rules apply without an authentication change.
+Its username is `sub`; groups are `datalab:<datalab>:<role>`. Virtual
+RoleBinding and ClusterRoleBinding rules apply.
 
 ## Credential Secrets and machine access
 

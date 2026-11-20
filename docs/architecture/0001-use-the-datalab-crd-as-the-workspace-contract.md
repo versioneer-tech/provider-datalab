@@ -6,10 +6,6 @@
 
 Accepted.
 
-## Implementation
-
-Implemented.
-
 Users create a `Datalab` to declare team members, services, virtual clusters,
 and session storage. Workloads use the virtual Kubernetes API. Each virtual
 cluster includes Agent Sandbox CRDs, its controller, and a sandboxd template.
@@ -60,8 +56,7 @@ The Datalab spec contains choices that a user is allowed to make. The
 operator-owned EnvironmentConfig contains platform settings such as ingress,
 Keycloak realm, storage classes, security defaults, and runtime images.
 
-Crossplane combines both sets of input. Users get a small API, while operators
-keep control of security and infrastructure policy.
+Crossplane combines both sets of input to create the team resources.
 
 ### Keep session storage independent of workloads
 

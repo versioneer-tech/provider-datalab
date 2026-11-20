@@ -38,7 +38,6 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
     backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
-    observed = getattr(req.observed, "resources", None) or {}
     runtime_namespace = xr_name
 
     for store_key in sorted(list(cache_stores.keys())):

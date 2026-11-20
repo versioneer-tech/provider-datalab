@@ -16,7 +16,7 @@ spec:
       - name: initialize
         image: __CATALOG_IMAGE__
         imagePullPolicy: IfNotPresent
-        command: [python, /opt/catalog/migrate.py]
+        command: [python, /opt/catalog/initialize.py]
         env:
         - name: PGHOST
           valueFrom:

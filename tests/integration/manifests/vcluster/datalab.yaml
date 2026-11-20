@@ -6,9 +6,8 @@ kind: Datalab
 metadata:
   name: verify-vcluster
   namespace: workspace
-  annotations:
-    datalabs.versioneer.at/environment: datalab-vcluster-it
 spec:
+  environmentName: datalab-vcluster-it
   sessions:
   - name: analysis
     vcluster: vc0

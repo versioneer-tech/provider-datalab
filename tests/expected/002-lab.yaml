@@ -552,24 +552,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-b679e00d2bbb-s-jeff-namespace-s-jeff-o-69cf3e88b2
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-redis-auth-secret-s-jeff-prod
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-b8700d5d5703-s-jeff-namespace-s-jeff-n-d0c66100e6
   namespace: default
 spec:
@@ -578,24 +560,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-jeff-allow-namespace-egress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-b9eee395a5c5-s-jeff-namespace-s-jeff-o-f1b91268cb
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-runtime-storage-secret-s-jeff
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -624,24 +588,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-e99cd7e342b8-s-jeff-namespace-s-jeff-o-44ff342efc
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-mongodb-auth-secret-s-jeff-prod
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-eb1d813672f7-s-jeff-namespace-s-jeff-d-c4979653bb
   namespace: default
 spec:
@@ -650,42 +596,6 @@ spec:
     kind: Object
     resourceRef:
       name: db-configmap-s-jeff-pg0
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-eb28512c4df7-s-jeff-namespace-s-jeff-o-156eac14f6
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-database-secret-s-jeff-pg0
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-f04c7ec9a53a-s-jeff-namespace-s-jeff-o-25a94a34c0
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-registry-auth-secret-s-jeff
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

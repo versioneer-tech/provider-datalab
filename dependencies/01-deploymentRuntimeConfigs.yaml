@@ -83,7 +83,7 @@ spec:
                 memory: 128Mi
               limits:
                 cpu: 500m
-                memory: 512Mi
+                memory: 1Gi
 ---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
@@ -175,6 +175,8 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            args:
+            - --max-recv-message-size=64
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:

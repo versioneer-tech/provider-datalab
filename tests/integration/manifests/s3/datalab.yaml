@@ -6,8 +6,6 @@ kind: Datalab
 metadata:
   name: verify-s3
   namespace: workspace
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
 spec:
   environmentName: datalab-custom
   users: [verify-s3]

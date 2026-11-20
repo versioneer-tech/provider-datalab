@@ -41,15 +41,9 @@ Kind integration. Use the classifier above when the scope is unclear.
 
 Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, and `pre-commit`.
 Docker must be running for render and function checks.
-CI retains Crossplane CLI 2.4.1. The unit suite uses the functions in
-`dependencies/functions.yaml`; Kind installs Crossplane core 2.4.3 with the
-[shared runtime settings](../docs/how-to-guides/installation.md#dependency-baseline).
-Schema validation covers `pkg.internal/v1beta2`.
-The service connection checks cover direct Secret reads, sanitized Object
-status, source Secret rotation, and source loss. Environment checks cover
-schema validation, selection order, nested maps, and absent configs or fields.
-The disposable Keycloak server uses an in-memory database. It has five minutes
-to build and import its test realm before the refresh and exchange checks start.
+The CI CLI pin is 2.4.1; the Kind core pin is 2.4.3. See the
+[installation guide](../docs/how-to-guides/installation.md#dependency-baseline)
+for provider and function requirements.
 
 Install the [build dependencies and generate the composition](../templates/README.md)
 before running the suite. The suite rejects a generated composition that differs
@@ -60,8 +54,8 @@ bash tests/unit.bash
 pre-commit run --all-files
 ```
 
-Use `bash tests/unit.bash fast` for local helper, schema, duration, and harness
-checks without Docker. Install `scripts/requirements.txt` first.
+Use `bash tests/unit.bash fast` for helper and harness checks without Docker.
+Install `scripts/requirements.txt` first.
 
 To check one example, use `bash tests/unit.bash 001`. This example also runs
 `exposure.py` for Data and S3 settings. Example `002` runs `backups.py` and
@@ -70,9 +64,7 @@ These checks share the render function in `render.py`.
 Actual renders are written to `/tmp`. Expected snapshots are tracked in
 `tests/expected/`.
 Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml`
-before updating its expected snapshot. Review each output change. Run the full
-unit suite after code or runtime changes. Use the documentation checks above
-when only documentation changes.
+and review each output change before replacing its expected snapshot.
 
 ## What the checks cover
 
@@ -83,26 +75,23 @@ than a snapshot comparison:
 
 | Tests | Purpose |
 | --- | --- |
-| `vclusters.py` | Instance isolation, Sandbox setup, session storage, membership, Secret bindings, public profiles, settings, and removal. Each `check_*` function covers one scenario. |
+| `vclusters.py` | Instance isolation, Sandbox setup, session storage, membership, Secret bindings, public profiles, settings, and removal. |
 | `helpers.py` | Stable passwords, backup quantities, caller tokens, device login, private caches, refresh, secret prompts, and local build and harness errors. |
 | `token-exchange.py` and `keycloak_policy.py` | Exact group grants, scope restrictions, policy readiness, and issued tokens from a disposable Keycloak server. |
 | `oauth2.py`, `s3-connections.py`, and `service-connections.py` | Discovery metadata, credential publication, rotation, source loss and recovery, removal, and distinct connection names. |
 | `exposure.py`, `settings.py`, `stores.py`, and `registry.py` | Service access, routes, storage, network rules, quotas, resource defaults, and environment overrides. |
 | `backups.py` | Backup enablement, retained archives after export failure, and rejection of invalid Redis snapshots. |
-| `response-ttl.py` | Response TTL on normal and early returns, separate integration builds, and invalid build settings. |
+| `response-ttl.py` | Python TTL overrides on normal and early returns, separate function TTLs and test builds, and invalid settings. |
+| `environment-schema.py` and `environment-selection.py` | Optional environment names, schema rejection, settings and TTL merge order, nested maps, missing configs, Datalab labels, and duplicate matches. |
 
-Render tests cannot prove live authorization, routing, persistence, or timing.
-`token-exchange.py` checks rendered authorization boundaries and exchange
-enablement after scope reconciliation. It also uses `keycloak_policy.py` to
-check real refresh and token exchange with the rendered identity settings.
-The [Kind integration suite](integration/README.md) checks those outcomes.
-Its `verify-vcluster` profile also checks OAuth2 name uniqueness through
-Kubernetes admission and rejects API access without a vcluster role.
+`keycloak_policy.py` starts a disposable Keycloak server to check issued
+refresh and exchange tokens. The [Kind suite](integration/README.md) checks
+live routing, authorization, persistence, and Secret propagation.
 
 ## Fixtures
 
 The Datalab manifests are in [`examples/base/`](../examples/base).
-[`environmentconfig.yaml`](environmentconfig.yaml) contains `datalab-educates`
+[`environmentconfig.yaml`](environmentconfig.yaml) contains `datalab`
 and `datalab-custom`. The custom profile demonstrates the settings listed in
 the [usage examples](../docs/how-to-guides/usage_concepts.md#examples).
 Examples and integration routes use `lab.acme.com`. Storage Secret fixtures

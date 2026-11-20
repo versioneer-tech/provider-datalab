@@ -6,8 +6,6 @@ apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-jane
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
 spec:
   environmentName: datalab-custom
   users:

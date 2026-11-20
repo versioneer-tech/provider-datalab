@@ -40,7 +40,7 @@ spec:
                   minLength: 1
                   maxLength: 63
                   pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
-                  description: Optional EnvironmentConfig name. See the installation guide for selection rules.
+                  description: Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.
                 users:
                   type: array
                   description: Users associated with this datalab.

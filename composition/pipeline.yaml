@@ -32,7 +32,7 @@ spec:
             matchLabels:
             - type: Value
               key: datalabs.pkg.internal/name
-              value: datalab-educates
+              value: datalab
             - type: FromCompositeFieldPath
               key: datalabs.pkg.internal/name
               valueFromFieldPath: spec.crossplane.compositionRef.name
