@@ -8,10 +8,9 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-require_command kind
 require_command kubectl
 
-if ! kind_cluster_exists; then
+if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]] && ! kind_cluster_exists; then
   printf 'The dedicated Kind cluster was not created; no cluster diagnostics are available.\n'
   exit 0
 fi

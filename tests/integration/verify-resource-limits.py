@@ -10,9 +10,9 @@ import subprocess
 import time
 
 
-def verify(kubeconfig, namespace):
+def verify(kubeconfig, namespace, context="kind-provider-datalab-it"):
     command = [
-        "kubectl", "--kubeconfig", kubeconfig, "--context", "kind-provider-datalab-it",
+        "kubectl", "--kubeconfig", kubeconfig, "--context", context,
         "--namespace", namespace,
     ]
 
@@ -71,7 +71,8 @@ def verify(kubeconfig, namespace):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kubeconfig", required=True)
+    parser.add_argument("--context", default="kind-provider-datalab-it")
     parser.add_argument("namespaces", nargs="+")
     args = parser.parse_args()
     for namespace in args.namespaces:
-        verify(args.kubeconfig, namespace)
+        verify(args.kubeconfig, namespace, args.context)

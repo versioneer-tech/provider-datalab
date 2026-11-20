@@ -547,6 +547,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("gateway_ip")
+    parser.add_argument("--storage-class", default="standard")
     parser.add_argument("--other-only", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--read-only", action="store_true")
@@ -742,6 +743,10 @@ def main():
     print("PASS HTTPS prefix route and downloaded credential helper", flush=True)
 
     def volume_pod(pod_name, command):
+        path = "/api/v1/namespaces/demo/pods/" + pod_name
+        api(path, editor, method="DELETE", expected=(200, 202, 404))
+        wait_until(lambda: api(path, editor, expected=(200, 404)).get("kind") != "Pod",
+                   "The previous volume probe did not terminate")
         api(
             "/api/v1/namespaces/demo/pods",
             editor,
@@ -838,7 +843,7 @@ def main():
     )
     print("PASS same-named objects have separate state in vc0 and vc1", flush=True)
     classes = api("/apis/storage.k8s.io/v1/storageclasses", bearer)["items"]
-    assert {item["metadata"]["name"] for item in classes} == {"standard"}
+    assert {item["metadata"]["name"] for item in classes} == {args.storage_class}
     assert (
         classes[0]["metadata"]["annotations"][
             "storageclass.kubernetes.io/is-default-class"
@@ -1002,7 +1007,7 @@ def main():
             "metadata": {"name": "workload-data"},
             "spec": {
                 "accessModes": ["ReadWriteOnce"],
-                "storageClassName": "standard",
+                "storageClassName": args.storage_class,
                 "resources": {"requests": {"storage": "1Mi"}},
             },
         },

@@ -9,10 +9,17 @@ REPO_ROOT="$(cd "${INTEGRATION_DIR}/../.." && pwd)"
 MANIFEST_DIR="${INTEGRATION_DIR}/manifests"
 
 readonly KIND_CLUSTER_NAME=provider-datalab-it
-readonly KUBECTL_CONTEXT=kind-provider-datalab-it
 readonly CROSSPLANE_NAMESPACE=crossplane
 readonly WORKSPACE_NAMESPACE=workspace
-: "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
+: "${PROVIDER_DATALAB_CLUSTER:=kind}"
+if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+  : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
+  : "${PROVIDER_DATALAB_CONTEXT:=kind-provider-datalab-it}"
+  : "${PROVIDER_DATALAB_STORAGE_CLASS:=standard}"
+  : "${PROVIDER_DATALAB_SERVICE_CIDR:=10.96.0.0/16}"
+  : "${PROVIDER_DATALAB_POD_CIDRS:=10.244.0.0/16}"
+fi
+KUBECTL_CONTEXT="${PROVIDER_DATALAB_CONTEXT:-}"
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
 : "${REUSE_DEPENDENCIES:=1}"
 : "${CROSSPLANE_VERSION:=2.4.3}"
@@ -63,21 +70,136 @@ export_kind_kubeconfig() {
 }
 
 require_cluster() {
-  require_command kind
   require_command kubectl
-
-  if ! kind_cluster_exists; then
-    printf 'The dedicated kind cluster %s is not available.\n' "${KIND_CLUSTER_NAME}" >&2
-    printf 'Create it with tests/integration/create-cluster.bash.\n' >&2
-    exit 2
+  case "${PROVIDER_DATALAB_CLUSTER}" in
+    kind)
+      if [[ "${KUBECTL_CONTEXT}" != kind-provider-datalab-it ]]; then
+        printf 'Kind tests require context kind-provider-datalab-it.\n' >&2
+        return 2
+      fi
+      require_command kind
+      if ! kind_cluster_exists; then
+        printf 'The dedicated Kind cluster %s is not available.\n' "${KIND_CLUSTER_NAME}" >&2
+        return 2
+      fi
+      export_kind_kubeconfig
+      ;;
+    existing)
+      if [[ -z "${PROVIDER_DATALAB_KUBECONFIG:-}" || -z "${KUBECTL_CONTEXT}" ]]; then
+        printf 'An existing cluster requires an explicit kubeconfig and context.\n' >&2
+        return 2
+      fi
+      ;;
+    *) printf 'Unknown cluster mode: %s\n' "${PROVIDER_DATALAB_CLUSTER}" >&2; return 2 ;;
+  esac
+  if ! kube --request-timeout=15s get --raw=/readyz >/dev/null; then
+    printf 'The selected context %s is not ready.\n' "${KUBECTL_CONTEXT}" >&2
+    return 2
   fi
+}
 
-  export_kind_kubeconfig
-  if ! kube cluster-info >/dev/null 2>&1; then
-    printf 'The context %s is not available in %s.\n' \
-      "${KUBECTL_CONTEXT}" "${PROVIDER_DATALAB_KUBECONFIG}" >&2
-    exit 2
+check_cluster_settings() {
+  local resource
+  require_cluster
+  for resource in namespaces customresourcedefinitions.apiextensions.k8s.io \
+    validatingadmissionpolicies.admissionregistration.k8s.io; do
+    if [[ "$(kube auth can-i create "${resource}")" != yes ]]; then
+      printf 'The test identity cannot create %s.\n' "${resource}" >&2
+      return 2
+    fi
+  done
+  if [[ -z "${PROVIDER_DATALAB_STORAGE_CLASS:-}" || \
+    -z "${PROVIDER_DATALAB_SERVICE_CIDR:-}" || -z "${PROVIDER_DATALAB_POD_CIDRS:-}" ]]; then
+    printf 'Set the test StorageClass, Service CIDR, and Pod CIDRs for this cluster.\n' >&2
+    return 2
   fi
+  kube get "storageclass/${PROVIDER_DATALAB_STORAGE_CLASS}" >/dev/null
+  python3 "${INTEGRATION_DIR}/environment.py" "${MANIFEST_DIR}/environment-configs/datalabs.yaml" \
+    --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" \
+    --service-cidr "${PROVIDER_DATALAB_SERVICE_CIDR}" \
+    --pod-cidrs "${PROVIDER_DATALAB_POD_CIDRS}" >/dev/null
+  printf 'Selected %s cluster context %s.\n' "${PROVIDER_DATALAB_CLUSTER}" "${KUBECTL_CONTEXT}"
+}
+
+check_test_namespaces() {
+  local namespace marker
+  [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]] || return 0
+  for namespace in crossplane workspace minio keycloak projectcontour \
+    postgres-operator mongodb-operator redis-operator; do
+    marker="$(kube get namespace "${namespace}" --ignore-not-found \
+      -o 'jsonpath={.metadata.name}{" "}{.metadata.labels.datalabs\.versioneer\.at/integration}')"
+    if [[ -n "${marker}" && "${marker}" != "${namespace} true" ]]; then
+      printf 'Namespace %s already exists outside this test suite.\n' "${namespace}" >&2
+      return 2
+    fi
+  done
+}
+
+create_test_namespaces() {
+  local namespace
+  for namespace in crossplane workspace minio keycloak projectcontour \
+    postgres-operator mongodb-operator redis-operator; do
+    kube create namespace "${namespace}" --dry-run=client -o yaml | kube apply -f -
+    kube label namespace "${namespace}" datalabs.versioneer.at/integration=true --overwrite
+  done
+}
+
+apply_environment_config() {
+  python3 "${INTEGRATION_DIR}/environment.py" "$1" \
+    --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" \
+    --service-cidr "${PROVIDER_DATALAB_SERVICE_CIDR}" \
+    --pod-cidrs "${PROVIDER_DATALAB_POD_CIDRS}" | kube apply -f -
+}
+
+test_image_name() {
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]]; then
+    if [[ -z "${PROVIDER_DATALAB_IMAGE_REGISTRY:-}" ]]; then
+      printf 'Existing clusters need an image registry or prebuilt test image references.\n' >&2
+      return 2
+    fi
+    printf '%s/%s\n' "${PROVIDER_DATALAB_IMAGE_REGISTRY%/}" "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+publish_test_image() {
+  local image="$1" config="${PROVIDER_DATALAB_DOCKER_CONFIG:-$2}"
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]]; then
+    DOCKER_CONFIG="${config}" docker push "${image}"
+  elif ! docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl inspecti "docker.io/library/${image}" >/dev/null 2>&1; then
+    DOCKER_CONFIG="${config}" KUBECONFIG="${PROVIDER_DATALAB_KUBECONFIG}" \
+      kind load docker-image "${image}" --name "${KIND_CLUSTER_NAME}"
+  fi
+}
+
+check_test_images() {
+  [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]] || return 0
+  [[ -z "${PROVIDER_DATALAB_IMAGE_REGISTRY:-}" ]] || return 0
+  case "$1" in
+    all)
+      [[ -n "${S3_CLIENT_IMAGE:-}" && -n "${VCLUSTER_CLIENT_IMAGE:-}" && -n "${VCLUSTER_CATALOG_IMAGE:-}" ]] && return 0 ;;
+    verify-s3) [[ -n "${S3_CLIENT_IMAGE:-}" ]] && return 0 ;;
+    verify-vcluster) [[ -n "${VCLUSTER_CLIENT_IMAGE:-}" && -n "${VCLUSTER_CATALOG_IMAGE:-}" ]] && return 0 ;;
+    *) return 0 ;;
+  esac
+  printf 'Supply an image registry or the prebuilt images required by this profile.\n' >&2
+  return 2
+}
+
+test_image_pull_secrets() {
+  if [[ -n "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" ]]; then
+    jq -cn --arg name "${PROVIDER_DATALAB_IMAGE_PULL_SECRET}" '[{name:$name}]'
+  else
+    printf '[]\n'
+  fi
+}
+
+copy_test_pull_secret() {
+  [[ -n "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" ]] || return 0
+  kube get "secret/${PROVIDER_DATALAB_IMAGE_PULL_SECRET}" --namespace workspace -o json \
+    | jq --arg namespace "$1" '{apiVersion,kind,type,data,metadata:{name:.metadata.name,namespace:$namespace}}' \
+    | kube apply -f -
 }
 
 render_template() {

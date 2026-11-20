@@ -8,6 +8,10 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
+if [[ "${PROVIDER_DATALAB_CLUSTER}" != kind ]]; then
+  printf 'Cluster creation is only available in Kind mode.\n' >&2
+  exit 2
+fi
 require_command docker
 require_command kind
 require_command kubectl

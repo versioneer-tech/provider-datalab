@@ -84,7 +84,7 @@ rebuild `composition.yaml`. See [Manifest templates](templates/README.md) for
 the source layout and embedded scripts.
 
 See [Unit tests](tests/README.md) for fixtures and focused checks, and
-[Integration tests](tests/integration/README.md) for the dedicated Kind cluster.
+[Integration tests](tests/integration/README.md) for existing clusters and Kind.
 
 ## License
 

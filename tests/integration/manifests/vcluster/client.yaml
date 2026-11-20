@@ -8,6 +8,7 @@ metadata:
   namespace: workspace
 spec:
   automountServiceAccountToken: false
+  imagePullSecrets: __IMAGE_PULL_SECRETS__
   containers:
   - name: client
     image: __CLIENT_IMAGE__

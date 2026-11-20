@@ -9,6 +9,7 @@ metadata:
 spec:
   terminationGracePeriodSeconds: 1
   automountServiceAccountToken: false
+  imagePullSecrets: __IMAGE_PULL_SECRETS__
   hostAliases:
   - ip: __GATEWAY_IP__
     hostnames: [verify-s3.lab.acme.com]
@@ -22,7 +23,7 @@ spec:
   containers:
   - name: client
     image: __S3_CLIENT_IMAGE__
-    imagePullPolicy: Never
+    imagePullPolicy: IfNotPresent
     env:
     - name: CLIENT_SECRET
       valueFrom:
