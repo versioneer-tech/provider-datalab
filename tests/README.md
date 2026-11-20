@@ -69,7 +69,7 @@ omit generated metadata that changes between runs. The other tests check:
 | `environment-schema.py`, `environment-selection.py` | Valid environment names, selection labels, merge order, and duplicate matches. |
 
 The [integration suite](integration/README.md) checks deployed services,
-authorization, routing, and persistence in Kind.
+authorization, routing, and persistence in an existing test cluster or Kind.
 
 ## Fixtures
 

@@ -64,13 +64,18 @@ install_s3_prerequisites() {
   kube wait gateway/verify-s3 --namespace projectcontour --for=condition=Programmed --timeout=10m
   kube wait deployment --namespace projectcontour --selector gateway.networking.k8s.io/gateway-name=verify-s3 \
     --for=condition=Available --timeout=10m
-  kube apply -f "${MANIFEST_DIR}/s3/environmentconfig.yaml"
+  apply_environment_config "${MANIFEST_DIR}/s3/environmentconfig.yaml"
 }
 
 build_client() {
   local digest
+  if [[ -n "${S3_CLIENT_IMAGE:-}" ]]; then
+    client_image="${S3_CLIENT_IMAGE}"
+    return
+  fi
+  require_command docker
   digest="$(cat "${REPO_ROOT}/tests/s3/"{Dockerfile,s3-credentials.py,e2e.py} | sha256sum | cut -c1-16)"
-  client_image="verify-s3-client:${digest}"
+  client_image="$(test_image_name "verify-s3-client:${digest}")"
   mkdir -p "${work_directory}/docker"
   if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${client_image}" >/dev/null 2>&1; then
     log 'Building the S3 SDK test client'
@@ -79,10 +84,7 @@ build_client() {
     DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${client_image}" \
       --file "${REPO_ROOT}/tests/s3/Dockerfile" "${work_directory}/build"
   fi
-  if ! docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl inspecti "docker.io/library/${client_image}" >/dev/null 2>&1; then
-    DOCKER_CONFIG="${work_directory}/docker" KUBECONFIG="${PROVIDER_DATALAB_KUBECONFIG}" \
-      kind load docker-image "${client_image}" --name "${KIND_CLUSTER_NAME}"
-  fi
+  publish_test_image "${client_image}" "${work_directory}/docker"
 }
 
 verify_s3() {
@@ -107,9 +109,10 @@ verify_s3() {
   kube create configmap verify-s3-ca --namespace "${runtime_namespace}" --from-file="tls.crt=${certificate}" \
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod verify-s3-client --namespace "${runtime_namespace}" --ignore-not-found --wait=true
+  copy_test_pull_secret "${runtime_namespace}"
   render_template "${MANIFEST_DIR}/s3/client.yaml" \
     RUNTIME_NAMESPACE "${runtime_namespace}" GATEWAY_IP "${gateway_ip}" \
-    S3_CLIENT_IMAGE "${client_image}" \
+    S3_CLIENT_IMAGE "${client_image}" IMAGE_PULL_SECRETS "$(test_image_pull_secrets)" \
     >"${work_directory}/client.yaml"
   # Retain the last concrete manifest in a cluster ConfigMap for diagnosis.
   kube create configmap verify-s3-client-manifest --namespace "${runtime_namespace}" \
@@ -120,7 +123,7 @@ verify_s3() {
 
   log 'Checking watched OAuth Secret updates and recovery'
   python3 "${INTEGRATION_DIR}/verify-oauth-watch.py" \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace "${runtime_namespace}"
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "${runtime_namespace}"
   kube exec verify-s3-client --namespace "${runtime_namespace}" -- python -u /test/e2e.py
 
   log 'Disabling environment S3 and checking browser-only Gateway exposure'
@@ -144,7 +147,6 @@ verify_s3() {
 main() {
   require_cluster
   require_command jq
-  require_command docker
   require_command openssl
   build_client
   install_s3_prerequisites

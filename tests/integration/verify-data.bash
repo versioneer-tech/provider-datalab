@@ -27,7 +27,7 @@ source "${INTEGRATION_DIR}/runtime.bash"
 
 apply_data_datalabs() {
   log 'Applying the Data verification Datalab'
-  kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
+  apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
   kube patch environmentconfig datalab-custom --type=merge \
     --patch '{"data":{"defaults":{"data":{"enabled":true,"readOnlyMount":false}}}}'
   apply_template "${MANIFEST_DIR}/data/storage-secrets.yaml" \

@@ -521,6 +521,114 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
+    def test_existing_cluster_does_not_adopt_other_namespaces(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+source "$1"
+kube() { printf 'crossplane '; }
+check_test_namespaces
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already exists outside this test suite", result.stderr)
+
+    def test_network_traffic_checks_run_only_in_kind(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER="$2"
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+export PROVIDER_DATALAB_CONTEXT=test-virtual
+source "$1"
+require_cluster() { :; }
+require_command() { :; }
+apply_verification_resources() { :; }
+wait_for_verification_resources() { printf 'network probes\\n'; }
+python3() { printf 'resource limit checks\\n'; }
+run_network_checks() { printf 'network traffic checks\\n'; }
+cleanup_successful_verification() { :; }
+main
+'''
+        for mode in ("kind", "existing"):
+            with self.subTest(mode=mode):
+                result = subprocess.run(["bash", "-c", script, "test",
+                                         str(ROOT / "tests/integration/verify-network.bash"), mode],
+                                        capture_output=True, text=True, check=True)
+                self.assertIn("resource limit checks", result.stdout)
+                if mode == "kind":
+                    self.assertIn("network traffic checks", result.stdout)
+                    self.assertNotIn("SKIP", result.stdout)
+                else:
+                    self.assertNotIn("network probes", result.stdout)
+                    self.assertNotIn("network traffic checks", result.stdout)
+                    self.assertIn("SKIP NetworkPolicy traffic checks", result.stdout)
+
+    def test_existing_cluster_requires_an_explicit_context(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+unset PROVIDER_DATALAB_CONTEXT
+source "$1"
+kube() { printf 'unexpected Kubernetes call\\n'; }
+require_cluster
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("explicit kubeconfig and context", result.stderr)
+        self.assertNotIn("unexpected Kubernetes call", result.stdout)
+
+    def test_existing_cluster_uses_only_the_selected_target(self):
+        with TemporaryDirectory(prefix="test-cluster-target-") as directory:
+            kubectl = Path(directory) / "kubectl"
+            kubectl.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            kubectl.chmod(0o755)
+            script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+export PROVIDER_DATALAB_CONTEXT=test-virtual
+source "$1"
+PATH="$2:/usr/bin:/bin"
+kind_cluster_exists() { printf 'unexpected Kind call\\n'; return 1; }
+export_kind_kubeconfig() { printf 'unexpected kubeconfig write\\n'; return 1; }
+require_cluster
+kube get namespaces
+'''
+            result = subprocess.run(["bash", "-c", script, "test",
+                                     str(ROOT / "tests/integration/lib.bash"), directory],
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout.splitlines(), [
+                "--kubeconfig", "/test/selected.kubeconfig", "--context", "test-virtual",
+                "get", "namespaces",
+            ])
+
+    def test_existing_cluster_does_not_load_images_into_kind(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+source "$1"
+docker() { printf '%s\\n' "$*"; }
+kind() { printf 'unexpected Kind call\\n'; return 1; }
+publish_test_image registry.example.org/tests/client:test /test/empty-docker-config
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), "push registry.example.org/tests/client:test")
+
+    def test_cluster_settings_reach_every_environment(self):
+        configure = runpy.run_path(str(ROOT / "tests/integration/environment.py"))["configure"]
+        documents = [{"data": {"network": {"internalEgress": [{"namespace": "minio"}]}}},
+                     {"data": {"vcluster": {"resources": {"limits": {"cpu": "4"}}}}}]
+        result = configure(documents, "test-storage", "10.20.0.0/16", "10.30.0.0/16,10.40.0.0/16")
+        for item in result:
+            self.assertEqual(item["data"]["network"]["serviceCIDR"], "10.20.0.0/16")
+            self.assertEqual(item["data"]["network"]["podCIDRs"], ["10.30.0.0/16", "10.40.0.0/16"])
+            self.assertEqual(item["data"]["vcluster"]["storageClasses"], {
+                "allowed": ["test-storage"], "default": "test-storage",
+            })
+        self.assertEqual(result[0]["data"]["network"]["internalEgress"], [{"namespace": "minio"}])
+        self.assertEqual(result[1]["data"]["vcluster"]["resources"]["limits"]["cpu"], "4")
+        with self.assertRaises(ValueError):
+            configure(documents, "test-storage", "invalid", "10.30.0.0/16")
+
     def test_registry_bucket_has_storage_credentials(self):
         manifests = ROOT / "tests/integration/manifests"
         datalab = yaml.safe_load((manifests / "registry/datalab.yaml").read_text())

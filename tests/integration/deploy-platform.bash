@@ -83,7 +83,7 @@ DEFINITION
   kube apply --server-side --field-manager=provider-datalab-integration \
     -f "${composition_directory}/composition.yaml"
   rm -rf "${composition_directory}"
-  kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
+  apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
 }
 
 wait_for_packages() {
@@ -98,9 +98,10 @@ wait_for_packages() {
 }
 
 main() {
-  require_cluster
+  check_cluster_settings
+  check_test_namespaces
 
-  kube apply -f "${MANIFEST_DIR}/namespaces.yaml"
+  create_test_namespaces
   create_ingress_certificate
   install_crossplane
   install_datalab

@@ -13,11 +13,12 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kubeconfig", required=True)
+    parser.add_argument("--context", default="kind-provider-datalab-it")
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--datalab", required=True)
     parser.add_argument("--deleted", action="store_true")
     args = parser.parse_args()
-    command = ["kubectl", "--kubeconfig", args.kubeconfig, "--context", "kind-provider-datalab-it"]
+    command = ["kubectl", "--kubeconfig", args.kubeconfig, "--context", args.context]
     reader = "verify-connection-reader"
     identity = f"system:serviceaccount:{args.namespace}:{reader}"
 

@@ -37,10 +37,12 @@ wait_for_generated_policies() {
 
 apply_verification_resources() {
   log 'Applying network verification resources'
-  kube apply -f "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
+  apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
   kube patch environmentconfig datalab --type=merge --patch '{"data":{"defaults":{"security":{"externalEgress":false}}}}'
   kube patch environmentconfig datalab-custom --type=merge --patch '{"data":{"defaults":{"security":{"externalEgress":true}}}}'
-  kube create namespace "${NS_PEER}" --dry-run=client -o yaml | kube apply -f -
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    kube create namespace "${NS_PEER}" --dry-run=client -o yaml | kube apply -f -
+  fi
 
   apply_template "${MANIFEST_DIR}/network/datalabs.yaml" \
     OPEN_DATALAB "${DATALAB_OPEN}" \
@@ -48,6 +50,7 @@ apply_verification_resources() {
     WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}"
   wait_for_generated_policies
 
+  [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]] || return 0
   for namespace in "${NS_OPEN}" "${NS_CLOSED}" "${NS_PEER}"; do
     render_template "${MANIFEST_DIR}/network/server.yaml" \
       NAMESPACE "${namespace}" \
@@ -151,7 +154,9 @@ cleanup_successful_verification() {
   fi
   kube delete datalabs.versioneer.at "${DATALAB_OPEN}" "${DATALAB_CLOSED}" --namespace "${WORKSPACE_NAMESPACE}" --ignore-not-found --wait=false
   kube wait datalabs.versioneer.at "${DATALAB_OPEN}" "${DATALAB_CLOSED}" --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=10m
-  kube delete "namespace/${NS_PEER}" --ignore-not-found --wait=true
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    kube delete "namespace/${NS_PEER}" --ignore-not-found --wait=true
+  fi
 }
 
 main() {
@@ -159,10 +164,16 @@ main() {
   require_command jq
   require_command python3
   apply_verification_resources
-  wait_for_verification_resources
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    wait_for_verification_resources
+  fi
   python3 "${INTEGRATION_DIR}/verify-resource-limits.py" \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" "${NS_OPEN}" "${NS_CLOSED}"
-  run_network_checks
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" "${NS_OPEN}" "${NS_CLOSED}"
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    run_network_checks
+  else
+    printf 'SKIP NetworkPolicy traffic checks: these run only in Kind.\n'
+  fi
 
   printf '\nNetwork verification totals: PASS=%s FAIL=%s\n' \
     "${pass_count}" "${fail_count}"

@@ -1,8 +1,9 @@
 # Integration tests
 
-The suite uses the `provider-datalab-it` Kind cluster, the
-`kind-provider-datalab-it` context, and `/tmp/provider-datalab-it.kubeconfig`.
-Scripts reject other clusters and do not use the default kubeconfig.
+The suite can use an existing test cluster or the `provider-datalab-it` Kind
+cluster. Every Kubernetes and Helm call uses an explicit kubeconfig and context.
+Kind is the default; its context is `kind-provider-datalab-it` and its kubeconfig
+is `/tmp/provider-datalab-it.kubeconfig`.
 
 Setup installs Crossplane with [the supplied Helm values](../../deploy/crossplane-values.yaml)
 and dependencies from `dependencies/`. Versions are listed in the
@@ -11,7 +12,46 @@ It applies the current XRD and Composition and waits for the generated Datalab
 CRD schema to match. A disposable MinIO supplies storage; Provider Storage is
 not installed or tested.
 
-## Run profiles locally
+## Select a cluster
+
+For an existing cluster, supply its kubeconfig, context, StorageClass, Service
+CIDR, and comma-separated Pod CIDRs. Use values from the selected cluster:
+
+```bash
+tests/integration/run.bash all \
+  --kubeconfig /tmp/datalab-test.kubeconfig --context datalab-test \
+  --storage-class standard-rwo \
+  --service-cidr 10.20.0.0/16 --pod-cidrs 10.30.0.0/16 \
+  --image-registry registry.acme.com/team/integration
+```
+
+Add `--check` to check access and settings without installing resources. An
+existing cluster needs permission for CRDs, admission policies, and service
+account impersonation. The suite installs Crossplane and database operators.
+Existing prerequisite namespaces must have the label
+`datalabs.versioneer.at/integration=true`; otherwise setup stops before it
+changes them. Use namespaces and cluster-wide resources reserved for tests.
+
+NetworkPolicy traffic checks run only in Kind. Existing clusters still run
+resource-default and quota checks. Virtual network policies do not prove
+isolation when all workloads share one physical host namespace.
+
+The registry must accept pushes and be reachable from cluster nodes. The
+runner uses an empty Docker config unless you supply `--docker-config <directory>`
+with a config prepared for the test. To use published images,
+omit `--image-registry` and set `S3_CLIENT_IMAGE`, `VCLUSTER_CLIENT_IMAGE`, and
+`VCLUSTER_CATALOG_IMAGE`. Build them from the matching Dockerfiles in this
+checkout. For private images, create a pull Secret in `workspace` and pass its
+name with `--image-pull-secret`. The suite copies it to the S3 client namespace
+and binds it into the nested catalog namespace.
+
+Standalone profile scripts use `PROVIDER_DATALAB_CLUSTER=existing`,
+`PROVIDER_DATALAB_KUBECONFIG`, and `PROVIDER_DATALAB_CONTEXT` for the target.
+Set `PROVIDER_DATALAB_STORAGE_CLASS`, `PROVIDER_DATALAB_SERVICE_CIDR`, and
+`PROVIDER_DATALAB_POD_CIDRS` to the same values used by the runner. Set
+`PROVIDER_DATALAB_IMAGE_REGISTRY` when the profile builds remote images.
+
+## Run profiles
 
 Run the [unit suite](../README.md#run-the-suite) first. Then run all profiles
 with one platform setup, or select a profile from the table below:
@@ -21,7 +61,8 @@ tests/integration/run.bash all
 tests/integration/run.bash verify-s3
 ```
 
-The runner creates or reuses the dedicated cluster. It reuses matching
+Without an existing target, the runner creates or reuses the dedicated Kind
+cluster. `--kind` selects this mode explicitly. It reuses matching
 dependency releases after readiness checks. To apply charts again after changing
 values, set `REUSE_DEPENDENCIES=0`:
 
@@ -46,7 +87,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 
 | Profile | Fixture | Checks |
 | --- | --- | --- |
-| `verify-network` | [Two Datalabs](manifests/network/datalabs.yaml) | Namespace isolation, external egress, MinIO access, resource defaults, and quota rejection. |
+| `verify-network` | [Two Datalabs](manifests/network/datalabs.yaml) | Resource defaults and quota rejection. Kind also checks namespace isolation, external egress, and MinIO access. |
 | `verify-registry` | [Registry](manifests/registry/datalab.yaml) | Authenticate with the published Secret, then write and read a blob in S3-backed storage. |
 | `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
 | `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
@@ -105,12 +146,14 @@ host CPU and memory quota rejection.
 
 Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
 and different custom Secrets for John and Jane. STAC item search must still work
-after API and control-plane restarts. Removing one virtual cluster must leave the
+after both instances hibernate and resume and after a control-plane restart.
+Hibernation must remove their synced Pods, keep the same PVCs, and leave PostgreSQL
+ready. Removing one virtual cluster must leave the
 other cluster and PostgreSQL available.
 
 ## Test resource budget
 
-A full run shares one Kind cluster. Unused database operators are scaled to zero.
+A full run shares one selected cluster. Unused database operators are scaled to zero.
 Each store profile starts its operator and waits for readiness. Cleanup waits for
 resource deletion before stopping the operator; failures leave it running.
 Crossplane, providers, storage, and identity services stay available.

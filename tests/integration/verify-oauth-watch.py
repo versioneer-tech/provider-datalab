@@ -2,7 +2,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check OAuth Secret updates, workload restart, and idle state in Kind."""
+"""Check OAuth Secret updates, workload restart, and idle state."""
 
 import argparse
 import base64
@@ -24,6 +24,7 @@ CHECKSUM = "datalabs.versioneer.at/oauth2-cookie-checksum"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kubeconfig", required=True)
+    parser.add_argument("--context", default="kind-provider-datalab-it")
     parser.add_argument("--namespace", required=True)
     args = parser.parse_args()
 
@@ -34,7 +35,7 @@ def main():
                 "--kubeconfig",
                 args.kubeconfig,
                 "--context",
-                "kind-provider-datalab-it",
+                args.context,
                 *arguments,
             ],
             input=json.dumps(data) if data is not None else None,
