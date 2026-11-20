@@ -1,175 +1,138 @@
 # Dedicated Kind integration environment
 
-The integration tests use only the `provider-datalab-it` Kind cluster and the
-`kind-provider-datalab-it` context. The default kubeconfig is
-`/tmp/provider-datalab-it.kubeconfig`. The scripts do not use another local
-cluster or the default kubeconfig.
+The suite uses the `provider-datalab-it` Kind cluster, the
+`kind-provider-datalab-it` context, and `/tmp/provider-datalab-it.kubeconfig`.
+Scripts reject other clusters and do not use the default kubeconfig.
 
-The harness tests Provider Datalab behavior. It does not install or test
-Provider Storage. It creates fixed profile-named Secrets for the disposable
-in-cluster MinIO service because the Datalab composition needs object-storage
-credentials.
-
-Platform setup waits for the generated Datalab CRD schema to match the XRD.
-
-The harness installs Crossplane core `2.4.3` and applies
-[`deploy/crossplane-values.yaml`](../../deploy/crossplane-values.yaml) on every
-setup. Provider and function settings come from `dependencies/`. See the
-[dependency baseline](../../docs/how-to-guides/installation.md#dependency-baseline).
-
-Run the render tests before cluster integration:
-
-```bash
-tests/unit.bash
-```
-
-## Datalab manifests by profile
-
-| Profile | Datalabs | What the test verifies |
-| --- | --- | --- |
-| `verify-network` | `verify-network-open` and `verify-network-closed` from [manifests/network/datalabs.yaml](manifests/network/datalabs.yaml) | Same-namespace access, cross-namespace ingress and egress isolation, explicit MinIO access, external egress settings, host LimitRange defaults, and CPU/memory quota rejection. |
-| `verify-registry` | `verify-registry` from [manifests/registry/datalab.yaml](manifests/registry/datalab.yaml) | The registry runs in the Datalab service namespace and uses S3 storage. The test uses the published connection Secret to authenticate and write and read a blob. |
-| `verify-data` | `verify-data-enabled` from [manifests/data/datalabs.yaml](manifests/data/datalabs.yaml) | File write/read, one credential update with workload restart, and read-only write rejection through the generated Secret. Render tests cover disabled Data and resource structure. |
-| `verify-s3` | `verify-s3` from [manifests/s3/datalab.yaml](manifests/s3/datalab.yaml) | Experimental S3 access with the generated Datalab client: TLS routing, list/HEAD/GET/range reads, write/delete rejection, shared browser hostname, and browser access after S3 is disabled. |
-| `verify-postgres` | `verify-postgres` from [manifests/postgres/datalab.yaml](manifests/postgres/datalab.yaml) | SQL write and read through the generated connection Secret for `pg0` with backups and `pg1` with zero backup storage. Checks that `pg1` has no backup configuration and its composed Object becomes ready. |
-| `verify-mongo` | `verify-mongo` from [manifests/mongo/datalab.yaml](manifests/mongo/datalab.yaml) | Document write and read through the generated connection Secret. Runs the backup CronJob and restores its archive with oplog replay into an isolated local MongoDB process. Checks the restored probe document. |
-| `verify-redis` | `verify-redis` from [manifests/redis/datalab.yaml](manifests/redis/datalab.yaml) | Key write and read through the generated connection Secret. Enables backups on the running store, runs the CronJob, and checks the restored value in an isolated Redis process. Disables backups and checks that the backup PVC remains and Redis still accepts writes. |
-| `verify-vcluster` | `verify-vcluster` | Two virtual clusters, per-instance HTTPS routing, profile and member authorization, streaming, role revocation, independent removal, and a PostgreSQL-backed STAC catalog. Checks Sandbox CRDs and controllers, sandboxd command and file APIs, and session PVC data after workload replacement. |
-
-All Datalabs use a matching profile-named prerequisite Secret. The Data
-fixture and the S3 fixture enable Data. Each profile removes its successful
-test resources. A failed profile keeps its resources for diagnosis.
+Setup installs Crossplane with [the supplied Helm values](../../deploy/crossplane-values.yaml)
+and dependencies from `dependencies/`. Versions are listed in the
+[installation guide](../../docs/how-to-guides/installation.md#dependency-baseline).
+It applies the current XRD and Composition and waits for the generated Datalab
+CRD schema to match. A disposable MinIO supplies storage; Provider Storage is
+not installed or tested.
 
 ## Run profiles locally
 
-Each command creates or reuses the dedicated cluster, applies the current
-source manifests, and runs one profile. Matching dependency releases are reused:
+Run the [unit suite](../README.md#run-the-suite) first. Then run all profiles
+with one platform setup, or select a profile from the table below:
 
 ```bash
-tests/integration/run.bash all              # Full suite; one shared platform setup.
-tests/integration/run.bash verify-network
-tests/integration/run.bash verify-data
+tests/integration/run.bash all
 tests/integration/run.bash verify-s3
-tests/integration/run.bash verify-postgres
-tests/integration/run.bash verify-mongo
-tests/integration/run.bash verify-redis
-tests/integration/run.bash verify-registry
-tests/integration/run.bash verify-vcluster
 ```
 
-The network profile uses controlled HTTP targets to test generated policies.
-Connection checks run after the policies have converged. A denied connection
-must fail with a connection error or timeout; an HTTP, DNS, or command error fails
-the check. The external connectivity target is `https://www.iana.org/`.
-An unrestricted peer also checks denied ingress into both team namespaces.
-Server-side dry runs check that the host LimitRange supplies missing container
-resources and that all four CPU and memory quotas reject oversized Pods.
-Set `KEEP_NETWORK_RESOURCES=1` to retain successful resources.
-
-The Data profile checks file access through the runtime Service. It allows
-ten minutes for deployment creation because watch throttling can delay
-resource generation. Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
-The registry profile uses `KEEP_REGISTRY_RESOURCES=1`.
-
-The network, Data, and store fixtures use `datalab` and `datalab-custom`.
-The virtual cluster profile uses `datalab-vcluster-it` for its issuer,
-Gateway, and Secret binding settings. Profiles disable services outside their checks.
-The network and Data profiles restore the common environment
-settings before creating their Datalabs. The network profile disables
-external egress in `datalab` and enables external egress
-in `datalab-custom`. The S3 profile replaces
-`datalab-custom` with its Gateway and identity settings.
-
-The S3 profile installs Contour and Keycloak. Its boto3 client uses
-`s3-credentials.py` as `credential_process`. It pauses the test Keycloak
-client, changes its source Secret, and checks redacted observer status,
-credential propagation, and workload restart. After restoring the Secret and
-resuming the client, it requires 30 seconds without Secret updates and repeats
-the S3 checks. This changes the Kubernetes Secret, not the Keycloak credential.
-Set `KEEP_S3_RESOURCES=1` to retain successful resources.
-
-The store profiles use the operator versions listed in the
-[installation guide](../../docs/how-to-guides/installation.md#prerequisites).
-Set `KEEP_POSTGRES_RESOURCES=1` for PostgreSQL, or `KEEP_STORE_RESOURCES=1` for
-MongoDB and Redis, to retain successful resources. The harness applies CRDs
-before installing an operator. Operators remain installed and are scaled down
-after successful cleanup.
-
-Service probes run in `workspace`, where the published connection Secrets live.
-The test environment permits ingress only from Pods with the service-probe label
-on PostgreSQL, MongoDB, and Redis ports. Other outside clients remain blocked.
-
-Dependencies with matching pins are reused after readiness checks. Set
-`REUSE_DEPENDENCIES=0` to apply the chart again, for example after
-changing chart values. The current Composition and XRD are applied on each run.
-The S3 client image is rebuilt when its source changes and loaded only when
-absent from Kind. Full runs start Keycloak before the network and
-Data profiles so that its startup can run at the same time. The S3 profile
-waits for it before making requests. The runner prints setup and profile durations.
+The runner creates or reuses the dedicated cluster. It reuses matching
+dependency releases after readiness checks. To apply charts again after changing
+values, set `REUSE_DEPENDENCIES=0`:
 
 ```bash
 REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
 ```
 
-## GitHub Actions
+Successful profiles remove their test resources. Failed profiles keep them for
+diagnosis. To keep successful resources, set the matching variable to `1`:
 
-The [test workflow](../../.github/workflows/pr.yaml) uses the
-[shared classifier](../README.md#select-checks). Documentation-only changes run
-the documentation and static checks. Other changes and manual runs execute
-the unit suite and all eight integration profiles. The profiles share one
-Kind cluster in the job. The final required check waits for every selected
-job. Tag publication requires a successful push test run for the tagged commit
-and does not repeat the tests. Use release tags such as `1.0.0`, without a
-`v` prefix.
+| Profile | Variable |
+| --- | --- |
+| Network | `KEEP_NETWORK_RESOURCES` |
+| Data | `KEEP_DATA_RESOURCES` |
+| S3 | `KEEP_S3_RESOURCES` |
+| Registry | `KEEP_REGISTRY_RESOURCES` |
+| PostgreSQL | `KEEP_POSTGRES_RESOURCES` |
+| MongoDB or Redis | `KEEP_STORE_RESOURCES` |
+| Virtual clusters | `KEEP_VCLUSTER_RESOURCES` |
+
+## Datalab manifests by profile
+
+| Profile | Fixture | Checks |
+| --- | --- | --- |
+| `verify-network` | [Two Datalabs](manifests/network/datalabs.yaml) | Namespace isolation, external egress, MinIO access, resource defaults, and quota rejection. |
+| `verify-registry` | [Registry](manifests/registry/datalab.yaml) | Authenticate with the published Secret, then write and read a blob in S3-backed storage. |
+| `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
+| `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
+| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL write/read through connection Secrets; backup configuration enabled on `pg0` and absent on `pg1`. |
+| `verify-mongo` | [MongoDB](manifests/mongo/datalab.yaml) | Document write/read; back up and restore the probe document with oplog replay in a separate MongoDB process. |
+| `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Key write/read; restore a backup in a separate Redis process, then disable backups and retain the backup PVC. |
+| `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, Sandbox and STAC behavior, and storage persistence. See below. |
+
+The fixtures use profile-named prerequisite Secrets and disable services outside
+their checks. Most use `datalab` or `datalab-custom`; the virtual cluster profile
+uses `datalab-vcluster-it`. Network and Data restore the common environment
+settings. Network sets different external-egress policies on the two environments;
+S3 replaces `datalab-custom` with its Gateway and identity settings.
+
+## Network and service checks
+
+Network probes use controlled HTTP targets and wait for policy convergence.
+A blocked connection must fail with a connection error or timeout; HTTP, DNS,
+and command errors fail the test. The external target is `https://www.iana.org/`.
+A peer outside the team namespaces checks denied ingress. Server-side dry runs
+check host LimitRange defaults and all four CPU and memory quota fields.
+
+Data probes use the runtime Service. The test allows ten minutes for deployment
+creation because watch throttling can delay generated resources.
+
+S3 installs Contour and Keycloak. Its boto3 client uses `s3-credentials.py` as
+`credential_process`. The test pauses the Keycloak client, changes its source
+Secret, and checks credential propagation, sanitized observer status, and
+workload restart. It restores the Secret, resumes the client, waits for 30 seconds
+without Secret updates, and repeats the S3 checks. The Keycloak credential itself
+is unchanged.
+
+Database probes run in `workspace`, where connection Secrets are published.
+The test policies allow labeled service probes on PostgreSQL, MongoDB, and Redis
+ports and block other outside clients. Operators and CRDs use the versions in
+the [installation guide](../../docs/how-to-guides/installation.md#prerequisites).
 
 ## Virtual cluster checks
 
-Platform setup creates a fresh disposable TLS certificate for `*.lab.acme.com`.
-The profile sets `defaults.overallQuota.hard.limits.cpu` to `20`. Its two
-control planes, controllers, DNS, database, and catalog need room for rolling
-updates. Other quota entries keep their defaults.
+The profile installs PGO, Keycloak, and Contour and uses a disposable certificate
+for `*.lab.acme.com`. Its CPU limit quota is `20` so two control planes, their
+controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
 
-The profile installs PGO, Keycloak, and Contour. Its `test-login` client uses
-a password grant to obtain human subject tokens with generated test passwords.
-Exchange checks cover members, administrators, unauthorized profiles, exact
-roles and audiences, and rejection of interactive scopes.
+The `test-login` client uses generated passwords to obtain user tokens.
+Checks cover members, administrators, unauthorized profiles, exact roles and
+audiences, and rejection of interactive scopes during token exchange.
 
-The workspace service account starts with only `ws_api`. The test temporarily
-assigns individual vcluster roles and requests their optional scopes. It checks
-namespace access, denied escalation, independent instances, role downgrade,
-and revocation with tokens that have not expired. Downloaded profile helpers
-must return the caller token unchanged.
+The workspace service account starts with `ws_api` only. The test assigns
+individual vcluster roles and requests their optional scopes. It checks
+namespace access, denied escalation, role downgrade, and revocation of tokens
+that have not expired. Downloaded helpers must return the caller token unchanged.
 
-Sandbox checks use REST, gRPC, and Kubernetes port-forwarding. They replace a
-Sandbox and verify the file content and session PVC UID. Oversized virtual
-Pods must report host CPU and memory quota rejection.
+Sandbox checks use REST, gRPC, and port-forwarding. Replacing a Sandbox must
+preserve its file content and session PVC UID. Oversized virtual Pods must report
+host CPU and memory quota rejection.
 
-The profile also checks OAuth2 discovery name uniqueness and recovery after
-source Secret deletion. Custom connection checks use different optional
-Secrets for John and Jane. The PostgreSQL-backed STAC test creates and searches
-an item, then repeats the search after API and control-plane restarts. Removing
-one virtual cluster must leave the other cluster and PostgreSQL available.
+Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
+and different custom Secrets for John and Jane. STAC item search must still work
+after API and control-plane restarts. Removing one virtual cluster must leave the
+other cluster and PostgreSQL available.
 
 ## Test resource budget
 
-All profiles in a full run use one Kind cluster. CI creates a fresh cluster;
-local runs reuse the dedicated cluster. The platform setup scales unused
-PostgreSQL, MongoDB, and Redis operators to zero. Each database profile scales
-its operator to one and waits for readiness, including when it reuses a Helm
-release. Successful cleanup waits for resource deletion before scaling it down.
-An operator stays running if resources remain or cleanup fails. Crossplane,
-providers, storage, and identity services remain available.
+A full run shares one Kind cluster. Unused database operators are scaled to zero.
+Each store profile starts its operator and waits for readiness. Cleanup waits for
+resource deletion before stopping the operator; failures leave it running.
+Crossplane, providers, storage, and identity services stay available.
 
-Integration builds a temporary composition with a `1m` Python response TTL
-default. Environment settings can override it. The environment and auto-ready
-functions keep their separate `10m` TTLs. The deployment artifact stays unchanged.
+The runner reports setup and profile durations and CPU requests. Run
+`tests/integration/resource-budget.bash` to inspect active Pod and init-container
+requests, unscheduled requests, and node allocation. These are scheduler
+reservations, not measured CPU use. Probe and backup Pods have 90 seconds to
+schedule; execution timeouts start after scheduling. Failures report events and
+the resource budget.
 
-The runner and CI report CPU requests at profile boundaries. Backup and probe
-checks also report requests before they run. The report includes active Pod
-requests, init-container requirements, unscheduled requests, and node allocation.
-Use `tests/integration/resource-budget.bash` to read the current budget.
-This reports scheduler reservations, not measured CPU use.
+Integration builds a separate Composition artifact with a `1m` Python TTL default.
+Environment overrides and the separate environment and auto-ready TTLs still
+apply. See [build settings](../../templates/README.md).
 
-A probe or backup Pod has 90 seconds to schedule before its execution wait.
-An unscheduled Pod reports its events, CPU request budget, and node allocation.
-The longer backup completion wait starts only after scheduling succeeds.
+## GitHub Actions
+
+The [workflow](../../.github/workflows/pr.yaml) uses the
+[shared check selection](../README.md#select-checks). Runtime changes and manual
+runs execute the full unit suite and all eight profiles in one Kind cluster.
+Documentation-only changes run documentation and static checks. The final
+required check waits for every selected job.
+
+Tag publication requires a successful push test run for the tagged commit and
+does not repeat tests. Use tags such as `1.0.0`, without a `v` prefix.

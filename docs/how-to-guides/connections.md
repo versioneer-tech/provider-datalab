@@ -3,33 +3,33 @@
 The provider publishes connection metadata in `status.connections`. Credentials
 remain in the referenced Secrets.
 
-| Type | Name | Credentials |
+| Type | Name | Secret contents |
 | --- | --- | --- |
 | `s3` | `primary` | Storage source Secret; AWS keys and optional session token |
-| `postgres` | Store name | Published operator fields: `host`, `port`, `user`, `password`, `dbname`, and `uri` |
-| `mongo` | Store name | Published `user` and `password` |
-| `redis` | Store name | Published `user` and `password` |
-| `registry` | `primary` | Published `user` and `password` |
-| `custom` | Configured Secret name | Published source keys and usable Secret type |
+| `postgres` | Store name | `host`, `port`, `user`, `password`, `dbname`, and `uri` |
+| `mongo` | Store name | `user` and `password` |
+| `redis` | Store name | `user` and `password` |
+| `registry` | `primary` | `user` and `password` |
+| `custom` | Configured Secret name | Source data and usable Secret type |
 | `vcluster` | Instance and profile | Public `kubeconfig`, `client-id`, and `issuer-url` |
 
-Read each exact Secret name and namespace from `status.connections[].secretRef`.
+Read the Secret name and namespace from `status.connections[].secretRef`.
 Managed service and custom connections wait until their published copy matches
-the source. S3 readiness requires a current source Secret and a ready observer. Virtual profiles also
-require ready runtime, routing, RBAC, and identity resources. These checks do
-not report Secret delivery into a virtual cluster.
+the source. S3 requires a current source Secret and a ready observer. Virtual
+profiles require ready runtime, routing, RBAC, and identity resources.
+Connection readiness does not confirm Secret delivery into a virtual cluster.
 
-Separate normalized outputs remain available in the claim namespace as
+The service examples use additional Secrets in the Datalab namespace:
 `<datalab>-s3`, `<datalab>-postgres-<store>`, `<datalab>-mongo-<store>`, and
-`<datalab>-redis-<store>`. They supply the host, URI, and storage fields used by
-the service examples. Use the status reference for native Secret bindings.
+`<datalab>-redis-<store>`. They supply host, URI, and storage fields.
+For bindings, use the Secret reference in status.
 
 When Data or the registry is enabled, `<datalab>-storage` supplies only storage
 credentials in the service namespace. Public Data and S3 proxies use a separate
 `<datalab>-oauth2-client` Secret. Neither runtime Secret contains database
 credentials. Database outputs are generated independently of storage access.
-The PostgreSQL output uses the `postgres` account. Application setup owns
-accounts and grants when a workload needs less access.
+PostgreSQL credentials use the `postgres` account. Create application accounts
+and grants when a workload needs less access.
 
 ## Bind a connection
 
@@ -38,9 +38,9 @@ and `target` entries. Available service types are `s3`, `postgres`, `mongo`,
 `redis`, and `registry`. The operator can list predefined host Secrets in
 `EnvironmentConfig.data.customSecrets` for `custom` connections.
 
-Bindings use ready source references from `status.connections`. The native
-vCluster sync creates the target namespace and copies the whole Secret with
-its original data keys. Source updates and deletion pass through the sync.
+Bindings use ready source references from `status.connections`. vCluster creates
+the target namespace and copies the whole Secret with its original data keys.
+It applies source updates and deletion to the copy.
 Missing optional custom Secrets are omitted from status and do not block
 readiness. Ambiguous source or target mappings are omitted.
 
@@ -57,8 +57,7 @@ specs or Secret annotations.
 
 The supplied provider-kubernetes runtime enables `--sanitize-secrets`. The
 composition reads source Secrets through Crossplane's required-resource API,
-so it does not depend on credential values in Object status. Source updates
-refresh the published Secrets; consumers must reload them.
+so it does not depend on credential values in Object status.
 
 A virtual administrator can read all Secrets in that virtual cluster. A user
 who can create Pods in a namespace can usually mount that namespace's Secrets.

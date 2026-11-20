@@ -11,22 +11,24 @@ Put shared Python functions in `composition/helpers.py` and import them from
 the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
 
-The vcluster exec helper is `scripts/vcluster-credentials.py`. Its
-`--token-only` mode reads a caller token; the administrator mode also supports
-device login. `_embedded_script("scripts/vcluster-credentials.py")` in the
-publishing step tells the build to embed this file. Edit the Python file,
-then rebuild. Downloaded kubeconfigs contain the helper and need no separate
-script installation.
+`scripts/vcluster-credentials.py` supplies credentials for downloaded kubeconfigs.
+Additional profiles read a caller token; the administrator profile also supports
+device login. The publishing step embeds this file with `_embedded_script()`.
+Rebuild after changing it; users need no separate helper installation.
 
-`composition/settings.yaml` sets the Python `responseTTL` default to `1m`.
-Operators can override it with `EnvironmentConfig.data.datalab.responseTTL`.
-Use a positive whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`).
-The build sets each Python response TTL before the step body. Invalid values
-stop the step with an error.
+Crossplane can cache a function response for its TTL. Set the build defaults in
+`composition/settings.yaml`:
 
-The separate `environmentConfigsTTL` and `autoReadyTTL` build settings default
-to `10m`. These functions use their own inputs and do not read the Python
-override. New function types must have build support for their TTL.
+| Setting | Default | Applies to |
+| --- | --- | --- |
+| `responseTTL` | `1m` | Python steps |
+| `environmentConfigsTTL` | `10m` | Environment selection |
+| `autoReadyTTL` | `10m` | Auto-ready |
+
+Operators can override the Python TTL with
+`EnvironmentConfig.data.datalab.responseTTL`. Use a positive whole number of
+seconds (`30s`), minutes (`5m`), or hours (`1h`). Invalid values stop the step
+before it creates resources. New function types need build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
 Secrets before publishing service and OAuth2 proxy Secrets. The Data step
