@@ -1,30 +1,29 @@
 # Unit tests
 
-The suite checks composition output and local helpers. It uses Docker for
-`crossplane render` and function calls, and needs no Kubernetes cluster.
+The suite checks generated resources and helper behavior without a Kubernetes
+cluster. Docker runs the composition functions and a disposable Keycloak server.
 
 ## Select checks
 
 [GitHub Actions](../.github/workflows/pr.yaml) defines the required checks.
-Use the same classifier locally, against the target branch or pull request
-base commit:
+Use the same selection locally, against the target branch or pull request base:
 
 ```bash
 python3 scripts/ci-checks.py --base origin/legacy
 ```
 
-Without `--head`, this includes committed, staged, unstaged, and untracked
-changes. CI passes `--head` to compare two commits. Markdown files, files under
-`docs/`, and `mkdocs.yml` select `docs_only=true`. Other or mixed changes,
-empty comparisons, and unavailable base commits select `docs_only=false`.
-Manual CI runs select the full checks.
+Without `--head`, the comparison includes committed, staged, unstaged, and
+untracked changes. CI uses `--head` to compare two commits.
 
-Run the documentation checks below in both cases. When `docs_only=false`,
-also run the full unit suite and the applicable integration checks.
+- `docs_only=true`: run the documentation checks below. Only Markdown, `docs/`,
+  and `mkdocs.yml` changes qualify.
+- `docs_only=false`: also run the full unit suite and integration profiles.
+  Mixed changes, empty or unavailable comparisons, and manual CI runs use this
+  selection.
 
 ## Documentation changes
 
-Install `docs/requirements.txt` and run:
+Install `docs/requirements.txt` and `pre-commit`, then run:
 
 ```bash
 python3 tests/ci-checks.py
@@ -33,77 +32,59 @@ pre-commit run --all-files
 git diff --check
 ```
 
-Check changed commands and links in the affected guides. Documentation-only
-changes do not need Docker, the full unit suite, a local Keycloak server, or
-Kind integration. Use the classifier above when the scope is unclear.
+Check changed commands and links. Documentation-only changes do not need Docker
+or cluster tests.
 
 ## Run the suite
 
 Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, and `pre-commit`.
-Docker must be running for render and function checks.
-The CI CLI pin is 2.4.1; the Kind core pin is 2.4.3. See the
-[installation guide](../docs/how-to-guides/installation.md#dependency-baseline)
-for provider and function requirements.
-
-Install the [build dependencies and generate the composition](../templates/README.md)
-before running the suite. The suite rejects a generated composition that differs
-from its Python and YAML sources.
+Start Docker and follow the [build instructions](../templates/README.md) to
+install Python dependencies and generate `composition.yaml`.
 
 ```bash
 bash tests/unit.bash
 pre-commit run --all-files
 ```
 
-Use `bash tests/unit.bash fast` for helper and harness checks without Docker.
-Install `scripts/requirements.txt` first.
-
-To check one example, use `bash tests/unit.bash 001`. This example also runs
-`exposure.py` for Data and S3 settings. Example `002` runs `backups.py` and
-`stores.py`. Example `003` runs `settings.py` for environment settings.
-These checks share the render function in `render.py`.
-Actual renders are written to `/tmp`. Expected snapshots are tracked in
-`tests/expected/`.
-Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml`
-and review each output change before replacing its expected snapshot.
+`bash tests/unit.bash fast` runs helper and harness checks without Docker.
+`bash tests/unit.bash 001` selects one example; the shared behavior checks still
+run. Examples `001`, `002`, and `003` also select Data exposure, backup/store,
+and environment-setting checks, respectively.
 
 ## What the checks cover
 
-Snapshots retain resource specs, readiness rules, and connection status. They
-omit generated owner references, framework conditions, and resource references
-that repeat the resource list. Behavior checks cover outcomes that need more
-than a snapshot comparison:
+Snapshots check resource specs, readiness rules, and connection status. They
+omit generated metadata that changes between runs. The other tests check:
 
-| Tests | Purpose |
+| Tests | Behavior |
 | --- | --- |
-| `vclusters.py` | Instance isolation, Sandbox setup, session storage, membership, Secret bindings, public profiles, settings, and removal. |
-| `helpers.py` | Stable passwords, backup quantities, caller tokens, device login, private caches, refresh, secret prompts, and local build and harness errors. |
-| `token-exchange.py` and `keycloak_policy.py` | Exact group grants, scope restrictions, policy readiness, and issued tokens from a disposable Keycloak server. |
-| `oauth2.py`, `s3-connections.py`, and `service-connections.py` | Discovery metadata, credential publication, rotation, source loss and recovery, removal, and distinct connection names. |
-| `exposure.py`, `settings.py`, `stores.py`, and `registry.py` | Service access, routes, storage, network rules, quotas, resource defaults, and environment overrides. |
-| `backups.py` | Backup enablement, retained archives after export failure, and rejection of invalid Redis snapshots. |
-| `response-ttl.py` | Python TTL overrides on normal and early returns, separate function TTLs and test builds, and invalid settings. |
-| `environment-schema.py` and `environment-selection.py` | Optional environment names, schema rejection, settings and TTL merge order, nested maps, missing configs, Datalab labels, and duplicate matches. |
+| `vclusters.py` | Instance isolation, permissions, Secret bindings, Sandbox setup, and session storage. |
+| `helpers.py` | Credentials, login, token caches, and build and harness errors. |
+| `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
+| `oauth2.py`, `s3-connections.py`, `service-connections.py` | Discovery, credential publication, rotation, source loss, and recovery. |
+| `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, storage, network rules, quotas, and environment settings. |
+| `backups.py` | Backup enablement, export failures, and invalid Redis snapshots. |
+| `response-ttl.py` | TTL defaults, overrides, invalid values, and readiness checks. |
+| `environment-schema.py`, `environment-selection.py` | Valid environment names, selection labels, merge order, and duplicate matches. |
 
-`keycloak_policy.py` starts a disposable Keycloak server to check issued
-refresh and exchange tokens. The [Kind suite](integration/README.md) checks
-live routing, authorization, persistence, and Secret propagation.
+The [integration suite](integration/README.md) checks deployed services,
+authorization, routing, and persistence in Kind.
 
 ## Fixtures
 
-The Datalab manifests are in [`examples/base/`](../examples/base).
-[`environmentconfig.yaml`](environmentconfig.yaml) contains `datalab`
-and `datalab-custom`. The custom profile demonstrates the settings listed in
-the [usage examples](../docs/how-to-guides/usage_concepts.md#examples).
-Examples and integration routes use `lab.acme.com`. Storage Secret fixtures
-use different endpoint names to check that Secret values take precedence over
-the environment settings.
+Datalab inputs are in [`examples/base/`](../examples/base).
+[`environmentconfig.yaml`](environmentconfig.yaml) supplies `datalab` and
+`datalab-custom`. Storage fixtures use different endpoints from the environment
+to check that Secret values take precedence.
 
 | Example | Environment | Main checks |
 | --- | --- | --- |
-| `001` | `datalab` | Independent Data, default environment, credential rotation |
-| `002` | `datalab` | Default environment selection, writable Data, managed stores |
-| `003` | `datalab-custom` | Virtual cluster, durable session PVC, sandboxd template, read-only Data, PostgreSQL |
-| `004` | `datalab-custom` | Direct services with custom environment settings |
+| `001` | `datalab` | Data, default environment, credential rotation |
+| `002` | `datalab` | Writable Data and managed stores |
+| `003` | `datalab-custom` | Virtual clusters, session PVCs, Sandbox setup, read-only Data, PostgreSQL |
+| `004` | `datalab-custom` | Services with custom settings |
 
-For API or composition changes, use an existing scenario when it covers the
-required behavior. Add a scenario only for a missing observable outcome.
+Renders are written to `/tmp`; expected snapshots are in `tests/expected/`.
+Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml` and
+review the differences before replacing a snapshot. Use an existing example
+when it covers the behavior under test. Add one only for a missing case.

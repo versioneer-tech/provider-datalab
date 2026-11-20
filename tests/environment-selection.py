@@ -23,24 +23,25 @@ data = json.load(sys.stdin)
 label = 'datalabs.pkg.internal/name'
 with grpc.insecure_channel(data['target'] + ':9443') as channel:
     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
-    for case, explicit, named, present in (
-        ('all layers', True, True, (True, True, True, True)),
-        ('composition fallback', False, True, (True, True, True, True)),
-        ('named override', True, True, (True, True, True, False)),
-        ('missing named config', True, True, (True, True, False, False)),
-        ('omitted environmentName', False, False, (True, True, True, False)),
-        ('named config only', False, True, (False, False, True, False)),
-        ('Datalab config only', False, False, (False, False, False, True)),
-        ('default only', False, False, (True, False, False, False)),
-        ('no matching configs', False, True, (False, False, False, False)),
+    layers = ('default', 'composition', 'named', 'datalab')
+    for case, explicit_composition, named_environment, available in (
+        ('all layers', True, True, layers),
+        ('composition fallback', False, True, layers),
+        ('named override', True, True, ('default', 'composition', 'named')),
+        ('missing named config', True, True, ('default', 'composition')),
+        ('omitted environmentName', False, False, ('default', 'composition', 'named')),
+        ('named config only', False, True, ('named',)),
+        ('Datalab config only', False, False, ('datalab',)),
+        ('default only', False, False, ('default',)),
+        ('no matching configs', False, True, ()),
     ):
-        composition = 'test-composition' if explicit else data['composition']
+        composition = 'test-composition' if explicit_composition else data['composition']
         names = ['default', composition, 'test-environment', 'test-datalab']
         req = fnv1.RunFunctionRequest()
         spec = {'users': []}
-        if explicit:
+        if explicit_composition:
             spec['crossplane'] = {'compositionRef': {'name': composition}}
-        if named:
+        if named_environment:
             spec['environmentName'] = names[2]
         req.observed.composite.resource.update({
             'metadata': {'name': names[3], 'namespace': 'test-space'},
@@ -49,8 +50,8 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
         req.input.update(data['input'])
         configs, expected, annotations = [], {}, {}
         expected_ttl = None
-        for index, (name, enabled) in enumerate(zip(names, present)):
-            if not enabled:
+        for index, (layer, name) in enumerate(zip(layers, names)):
+            if layer not in available:
                 continue
             values = {'domain': f'layer-{index}.example.test',
                       'annotations': {f'layer-{index}': 'retained', 'shared': str(index)}}
@@ -62,7 +63,7 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
                 'metadata': {'name': name, **({'labels': {label: name}} if index else {})},
                 'data': {'ingress': values, 'datalab': {'responseTTL': f'{index + 2}m'}},
             })
-            if index != 2 or named:
+            if layer != 'named' or named_environment:
                 expected_ttl = f'{index + 2}m'
                 expected['domain'] = values['domain']
                 annotations.update(values['annotations'])
@@ -70,7 +71,7 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
                     expected['enabled'] = True
         if expected:
             expected['annotations'] = annotations
-        for name in ('test-unrelated', data['composition'] if explicit else 'test-other'):
+        for name in ('test-unrelated', data['composition'] if explicit_composition else 'test-other'):
             configs.append({'metadata': {'name': name, 'labels': {label: name}},
                             'data': {'ingress': {'domain': 'wrong.example.test'}}})
         # Named configs need the selector label even when their names match.
