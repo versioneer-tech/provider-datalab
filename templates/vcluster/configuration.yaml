@@ -176,7 +176,7 @@ controlPlane:
       image:
         registry: ghcr.io
         repository: loft-sh/kubernetes
-        tag: v1.36.0
+        tag: v1.36.6
       imagePullPolicy: ''
       resources:
         limits:

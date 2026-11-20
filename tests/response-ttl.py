@@ -82,15 +82,23 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 data = json.load(sys.stdin)
 namespace = {}
 exec(compile(data['check']['input']['script'], 'check-connection-readiness', 'exec'), namespace)
-for resource_ready, connections, expected in (
-    (fnv1.READY_TRUE, [{'ready': False}], fnv1.READY_FALSE),
-    (fnv1.READY_TRUE, [{'ready': True}], fnv1.READY_TRUE),
-    (fnv1.READY_FALSE, [{'ready': True}], fnv1.READY_FALSE),
-    (fnv1.READY_TRUE, [], fnv1.READY_TRUE),
+for resource_ready, connections, states, expected in (
+    (fnv1.READY_TRUE, [{'ready': False}], [], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [{'ready': True}], [], fnv1.READY_TRUE),
+    (fnv1.READY_FALSE, [{'ready': True}], [], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [], [], fnv1.READY_TRUE),
+    (fnv1.READY_TRUE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_TRUE),
+    (fnv1.READY_TRUE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernating'}], fnv1.READY_FALSE),
+    (fnv1.READY_FALSE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [{'type': 'postgres', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_FALSE),
 ):
     req = fnv1.RunFunctionRequest()
     req.desired.composite.ready = resource_ready
-    req.desired.composite.resource.update({'status': {'connections': connections}})
+    req.desired.composite.resource.update({'status': {'connections': connections, 'vclusters': states}})
     rsp = response.to(req)
     namespace['compose'](req, rsp)
     assert rsp.desired.composite.ready == expected
@@ -153,11 +161,7 @@ class FunctionResponseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="datalab-ttl-") as directory:
             root = Path(directory)
             shutil.copytree(ROOT / "composition", root / "composition")
-            (root / "scripts").mkdir()
-            shutil.copyfile(
-                ROOT / "scripts/vcluster-credentials.py",
-                root / "scripts/vcluster-credentials.py",
-            )
+            shutil.copytree(ROOT / "scripts", root / "scripts")
             (root / "templates").symlink_to(
                 ROOT / "templates", target_is_directory=True
             )

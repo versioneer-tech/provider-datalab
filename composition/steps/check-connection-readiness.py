@@ -9,5 +9,8 @@ from composition.helpers import _to_dict
 def compose(req, rsp):
     status = _to_dict(req.desired.composite.resource).get("status") or {}
     rsp.desired.composite.ready = req.desired.composite.ready
-    if any(connection.get("ready") is not True for connection in status.get("connections", [])):
+    hibernated = {state["name"] for state in status.get("vclusters", []) if state["phase"] == "Hibernated"}
+    if any(connection.get("ready") is not True
+           and not (connection.get("type") == "vcluster" and connection.get("instance") in hibernated)
+           for connection in status.get("connections", [])):
         rsp.desired.composite.ready = fnv1.READY_FALSE

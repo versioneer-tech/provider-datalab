@@ -1521,7 +1521,7 @@ spec:
                     value: mongodb-prod/mongodb-prod-0.mongodb-prod-svc:27017
                   - name: BACKUP_USER
                     value: prod-backup
-                  image: mongo:8.0.12
+                  image: mongo:8.0.38
                   name: backup
                   resources:
                     limits:
@@ -1627,7 +1627,7 @@ spec:
             template:
               spec:
                 containers:
-                - image: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
+                - image: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
                   name: mongod
             volumeClaimTemplates:
             - metadata:
@@ -1660,7 +1660,7 @@ spec:
           - db: admin
             name: backup
           scramCredentialsSecretName: prod-backup-scram
-        version: 8.0.12
+        version: 8.0.38
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -2288,7 +2288,7 @@ spec:
                       secretKeyRef:
                         key: password
                         name: prod-redis-backup-auth
-                  image: redis:7.0.15
+                  image: redis:7.2.17
                   name: backup
                   resources:
                     limits:
@@ -2385,12 +2385,12 @@ spec:
           - sh
           - -c
           enabled: true
-          image: quay.io/opstree/redis:v7.0.15
+          image: quay.io/opstree/redis:v7.2.17
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
         kubernetesConfig:
-          image: quay.io/opstree/redis:v7.0.15
+          image: quay.io/opstree/redis:v7.2.17
           imagePullPolicy: IfNotPresent
           redisSecret:
             key: password

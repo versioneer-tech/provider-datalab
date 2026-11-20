@@ -33,7 +33,8 @@ with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
 `TLSRoute` in `gateway.networking.k8s.io/v1` and direct TLS with SNI.
 
 For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
-issuer, allowed StorageClasses, and an HTTPS Gateway listener. The host needs
+issuer, allowed StorageClasses, and an HTTPS Gateway listener. The package runs
+vCluster OSS `0.38.0` with Kubernetes `1.36.6`. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 Each virtual cluster installs Agent Sandbox CRDs, its controller, and a
@@ -369,27 +370,25 @@ not override these settings.
 #### Service images
 
 Set these image references under `data.images` in the EnvironmentConfig.
-Use a full image reference with a tag or digest. Omitted settings use the
+Use a full image reference with a version tag. Omitted settings use the
 defaults below.
 
 | Setting | Default image tag | Use |
 | --- | --- | --- |
-| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.0` | Data server and its database init container. |
+| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.1` | Data server and its database init container. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
-| `images.rclone` | `rclone/rclone:1.71.0` | Data S3 service. |
-| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.12-ubi8` | MongoDB server. The default database version is `8.0.12`. |
-| `images.mongoBackup` | `mongo:8.0.12` | MongoDB backup tools. If omitted, its tag follows the database version. |
-| `images.redis` | `quay.io/opstree/redis:v7.0.15` | Redis server and its init container. |
-| `images.redisBackup` | `redis:7.0.15` | Redis backup tools. |
-| `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.4` | OAuth2 Proxy for Data and S3. |
+| `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
+| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. The default database version is `8.0.38`. |
+| `images.mongoBackup` | `mongo:8.0.38` | MongoDB backup tools. If omitted, its tag follows the database version. |
+| `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
+| `images.redisBackup` | `redis:7.2.17` | Redis backup tools. |
+| `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
 | `images.sandbox` | `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10` | Agent Sandbox controller inside each virtual cluster. |
 | `images.sandboxd` | `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f` | Runtime for the virtual sandboxd templates. Use a compatible image that starts sandboxd and contains the required tools. |
+| `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
 
-The default OAuth2 Proxy image is also pinned by digest in the composition.
 A MongoDB image tag that starts with `major.minor.patch` sets the database
-version. For a digest without a version tag, set
-`documentStore.version` to the image's MongoDB version. Use compatible server
-and backup images.
+version. Use compatible server and backup images.
 
 #### Resource quotas and container defaults
 
@@ -448,6 +447,7 @@ to containers without the corresponding resource settings.
 | `storage.secretNamespace` | Datalab namespace, or `default` | Input storage Secret namespace. |
 | `vcluster.resources.requests` | CPU `200m`, memory `1Gi`, ephemeral storage `1Gi` | Control-plane requests; supplied fields override these defaults. |
 | `vcluster.resources.limits` | CPU `4`, memory `4Gi`, ephemeral storage `10Gi` | Control-plane limits; supplied fields override these defaults. |
+| `vcluster.scheduling` | `{}` | Control-plane and workload selectors and tolerations; see [placement and hibernation](vcluster.md#placement-and-hibernation). |
 | `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
 | `defaults.session.pvcSize` | `1Gi` | Default size of durable session PVCs. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
@@ -463,7 +463,7 @@ to containers without the corresponding resource settings.
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
-| `documentStore.version` | `8.0.12`, or version from `images.mongo` | Database version; set it for an image without a version tag. |
+| `documentStore.version` | `8.0.38`, or version from `images.mongo` | Database version; set it for an image without a version tag. |
 | `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
 | `documentStore.backupStorageClassName` | Cluster default | MongoDB backup StorageClass. |
 | `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |

@@ -115,12 +115,20 @@ def compose(req, rsp):
             "workload-networkpolicy",
             "dns-networkpolicy",
             "snapshot-networkpolicy",
+            "placement-policy",
+            "placement-policy-binding",
         ):
             protect(
                 f"{instance}-{suffix}",
                 _resource_name("vcluster", name, instance, suffix),
                 control_plane,
             )
+        for key, body in objects.items():
+            if (body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                    and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"):
+                protect(f"{instance}-cleanup-control", control_plane, key)
+                for suffix in ("account", "script", "role", "binding", "network", "policy", "policy-binding"):
+                    protect(f"{instance}-cleanup-{suffix}", _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), key)
         for key, body in objects.items():
             if body.get("metadata", {}).get("labels", {}).get(
                 "datalabs.versioneer.at/vcluster"

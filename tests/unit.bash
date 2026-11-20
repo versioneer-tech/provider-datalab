@@ -21,7 +21,7 @@ if (($#)); then
   examples=("examples/base/$1-lab.yaml")
 fi
 
-for command_name in crossplane dyff docker python3; do
+for command_name in crossplane dyff docker python3 go; do
   command -v "${command_name}" >/dev/null || { printf 'Missing required command: %s\n' "${command_name}" >&2; exit 1; }
 done
 docker info >/dev/null

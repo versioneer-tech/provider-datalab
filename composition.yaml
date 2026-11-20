@@ -2674,6 +2674,31 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _vcluster_cleanup_generation(req, instance, hibernated):
+            xr = _to_dict(req.observed.composite.resource)
+            generation = int(xr["metadata"].get("generation", 1))
+            if not hibernated:
+                return generation
+            # Composed Objects can be applied before XR status is saved.
+            # Use the latest request so stale status cannot reuse a completed cleanup.
+            requests = [(0, False)]
+            for state in (xr.get("status") or {}).get("vclusters") or []:
+                if state.get("name") == instance:
+                    sleeping = state.get("phase") in ("Hibernating", "Hibernated", "Failed")
+                    saved = int(state.get("cleanupGeneration" if sleeping else "observedGeneration", 0))
+                    if saved:
+                        requests.append((saved, sleeping))
+            key = _resource_name("vcluster", xr["metadata"]["name"], instance, "statefulset")
+            control = req.observed.resources.get(key)
+            if control:
+                manifest = (_to_dict(control.resource).get("spec") or {}).get("forProvider", {}).get("manifest") or {}
+                marker = json.loads((manifest.get("metadata") or {}).get("annotations", {}).get(
+                    "datalabs.versioneer.at/lifecycle-request", "{}"))
+                if marker.get("generation"):
+                    requests.append((int(marker["generation"]), marker.get("hibernated") is True))
+            saved, sleeping = max(requests, key=lambda item: item[0])
+            return saved if sleeping else generation
+
         def set_response_ttl(req, rsp, default_seconds):
             rsp.meta.ttl.FromSeconds(default_seconds)
             environment = (
@@ -2817,6 +2842,38 @@ spec:
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
             images = env.get("images") or {}
             config = env.get("vcluster") or {}
+            scheduling = config.get("scheduling") or {}
+            if not isinstance(scheduling, dict):
+                response.fatal(rsp, "vCluster scheduling must be an object.")
+                return
+            control_scheduling = scheduling.get("controlPlane") or {}
+            workload_scheduling = scheduling.get("workloads") or {}
+            if not isinstance(control_scheduling, dict) or not isinstance(workload_scheduling, dict):
+                response.fatal(rsp, "vCluster controlPlane and workloads scheduling must be objects.")
+                return
+            if (set(control_scheduling) - {"nodeSelector", "tolerations"}
+                    or set(workload_scheduling) - {"nodeSelector", "enforceTolerations"}):
+                response.fatal(rsp, "Unknown vCluster scheduling field.")
+                return
+            for section in (control_scheduling, workload_scheduling):
+                selector = section.get("nodeSelector") or {}
+                if not isinstance(selector, dict) or any(
+                    not isinstance(k, str) or not isinstance(v, str) for k, v in selector.items()
+                ):
+                    response.fatal(rsp, "vCluster scheduling nodeSelector must map strings to strings.")
+                    return
+            enforced = workload_scheduling.get("enforceTolerations") or []
+            if not isinstance(enforced, list) or any(
+                not isinstance(t, str) or not re.fullmatch(
+                    r"[^\s=:]+(?:=[^\s=:]+)?:(?:NoSchedule|PreferNoSchedule|NoExecute)", t
+                ) for t in enforced
+            ):
+                response.fatal(rsp, "vCluster enforceTolerations must use key[=value]:effect strings.")
+                return
+            tolerations = control_scheduling.get("tolerations") or []
+            if not isinstance(tolerations, list) or any(not isinstance(t, dict) for t in tolerations):
+                response.fatal(rsp, "vCluster controlPlane tolerations must be Kubernetes toleration objects.")
+                return
             secret_mappings = _secret_mappings(
                 (_to_dict(rsp.desired.composite.resource).get("status") or {}).get("connections") or [],
                 instance_config.get("secretBindings") or [],
@@ -3003,6 +3060,40 @@ spec:
                 "enabled": bool(secret_mappings),
                 "mappings": {"byName": secret_mappings},
             }
+            configuration["controlPlane"]["statefulSet"]["scheduling"].update(control_scheduling)
+            configuration["sync"]["fromHost"]["nodes"]["selector"]["labels"].update(
+                workload_scheduling.get("nodeSelector") or {}
+            )
+            configuration["sync"]["toHost"]["pods"]["enforceTolerations"] = enforced
+            if workload_scheduling.get("nodeSelector") or enforced:
+                policy = _render_template(
+                    req, "vcluster/placement-policy", namespace=namespace,
+                    policy_name=_resource_name(namespace, instance, "pod-placement"),
+                    identity_expression=f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{namespace}:{service_account}')}",
+                )
+                validations = policy["spec"]["validations"]
+                for key, value in sorted((workload_scheduling.get("nodeSelector") or {}).items()):
+                    validations.append({
+                        "expression": f"has(object.spec.nodeSelector) && {json.dumps(key)} in object.spec.nodeSelector && object.spec.nodeSelector[{json.dumps(key)}] == {json.dumps(value)}",
+                        "message": f"Synced Pods must select {key}={value}.",
+                    })
+                for tolerance in enforced:
+                    pair, effect = tolerance.split(":")
+                    key, separator, value = pair.partition("=")
+                    match = f"t.key == {json.dumps(key)} && t.effect == {json.dumps(effect)}"
+                    match += (f" && (!has(t.operator) || t.operator == 'Equal') && t.value == {json.dumps(value)}"
+                              if separator else " && t.operator == 'Exists'")
+                    if effect == "NoExecute":
+                        match += " && !has(t.tolerationSeconds)"
+                    validations.append({
+                        "expression": f"has(object.spec.tolerations) && object.spec.tolerations.exists(t, {match})",
+                        "message": f"Synced Pods require toleration {tolerance}.",
+                    })
+                emit("placement-policy", policy)
+                emit("placement-policy-binding", _render_template(
+                    req, "vcluster/storage-policy-binding", namespace=namespace,
+                    policy_name=policy["metadata"]["name"],
+                ))
             sandbox_manifests = _render_template(
                 req, "vcluster/sandbox-install"
             )["manifests"]
@@ -3119,21 +3210,46 @@ spec:
             )
             workload_policy["spec"]["egress"].extend(workload_egress)
             emit("workload-networkpolicy", workload_policy)
+            statefulset = _render_template(
+                req, "vcluster/statefulset", namespace=namespace,
+                configuration_checksum=checksum, resources=resources,
+                replicas=0 if instance_config.get("hibernated", False) else 1,
+                **template_values,
+            )
+            statefulset["metadata"]["annotations"] = {
+                "datalabs.versioneer.at/lifecycle-request": json.dumps({
+                    "generation": _vcluster_cleanup_generation(
+                        req, instance,
+                        instance_config.get("hibernated", False),
+                    ),
+                    "hibernated": bool(instance_config.get("hibernated", False)),
+                }, sort_keys=True),
+            }
+            if control_scheduling:
+                statefulset["spec"]["template"]["spec"].update(control_scheduling)
             emit(
                 "statefulset",
-                _render_template(
-                    req,
-                    "vcluster/statefulset",
-                    namespace=namespace,
-                    configuration_checksum=checksum,
-                    resources=resources,
-                    **template_values,
-                ),
+                statefulset,
                 {
                     "policy": "DeriveFromCelQuery",
                     "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration == object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == object.spec.replicas && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision == object.status.updateRevision",
                 },
             )
+            if workload_scheduling.get("nodeSelector") or enforced:
+                key = _resource_name("vcluster", name, instance, "statefulset")
+                dependencies = [_resource_name("vcluster", name, instance, suffix)
+                                for suffix in ("placement-policy", "placement-policy-binding")]
+                rsp.desired.resources[key].resource["spec"]["references"] = [
+                    {"dependsOn": {"name": dependency, "namespace": claim_namespace}}
+                    for dependency in dependencies
+                ]
+                for dependency in dependencies:
+                    observed = req.observed.resources.get(dependency)
+                    body = _to_dict(observed.resource) if observed else {}
+                    if not any(c.get("type") == "Ready" and c.get("status") == "True"
+                               for c in body.get("status", {}).get("conditions", [])):
+                        rsp.desired.resources[key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+                        break
             virtual_provider = _resource_name(name, "vcluster", instance)
             emit(
                 "virtual-providerconfig",
@@ -3608,7 +3724,7 @@ spec:
                 image:
                   registry: ghcr.io
                   repository: loft-sh/kubernetes
-                  tag: v1.36.0
+                  tag: v1.36.6
                 imagePullPolicy: ''
                 resources:
                   limits:
@@ -4267,6 +4383,38 @@ spec:
           kind: Namespace
           metadata:
             name: ${target}
+        vcluster/placement-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            matchConstraints:
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                resources:
+                - pods
+            matchConditions:
+            - name: syncer-identity
+              expression: ${identity_expression}
+            validations:
+            - expression: request.operation != 'CREATE' || !has(object.spec.nodeName) || object.spec.nodeName ==
+                ''
+              message: Synced Pods must use the host scheduler; direct nodeName is not allowed.
+            - expression: 'request.operation != ''UPDATE'' || ((!has(object.spec.nodeName) || object.spec.nodeName
+                == '''') ? (!has(oldObject.spec.nodeName) || oldObject.spec.nodeName == '''') : (has(oldObject.spec.nodeName)
+                && object.spec.nodeName == oldObject.spec.nodeName))'
+              message: The syncer cannot change a host Pod nodeName.
+            - expression: '!has(object.spec.schedulerName) || object.spec.schedulerName == '''' || object.spec.schedulerName
+                == ''default-scheduler'''
+              message: Synced Pods must use the default host scheduler.
         vcluster/role:
           kind: Role
           apiVersion: rbac.authorization.k8s.io/v1
@@ -13697,7 +13845,7 @@ spec:
                 release: ${runtime}
             serviceName: ${headless_service}
             podManagementPolicy: Parallel
-            replicas: 1
+            replicas: ${replicas}
             template:
               metadata:
                 annotations:
@@ -13728,7 +13876,7 @@ spec:
                     claimName: ${data_pvc}
                 initContainers:
                 - name: kubernetes
-                  image: ghcr.io/loft-sh/kubernetes:v1.36.0
+                  image: ghcr.io/loft-sh/kubernetes:v1.36.6
                   volumeMounts:
                   - mountPath: /binaries
                     name: binaries
@@ -13749,7 +13897,7 @@ spec:
                 enableServiceLinks: true
                 containers:
                 - name: syncer
-                  image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+                  image: ghcr.io/loft-sh/vcluster-oss:0.38.0
                   imagePullPolicy: IfNotPresent
                   livenessProbe:
                     httpGet:
@@ -13930,6 +14078,508 @@ spec:
             labels:
               app: ${runtime}
               release: ${runtime}
+  - step: reconcile-vcluster-lifecycle
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import hashlib
+
+        import json
+
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _vcluster_cleanup_generation(req, instance, hibernated):
+            xr = _to_dict(req.observed.composite.resource)
+            generation = int(xr["metadata"].get("generation", 1))
+            if not hibernated:
+                return generation
+            # Composed Objects can be applied before XR status is saved.
+            # Use the latest request so stale status cannot reuse a completed cleanup.
+            requests = [(0, False)]
+            for state in (xr.get("status") or {}).get("vclusters") or []:
+                if state.get("name") == instance:
+                    sleeping = state.get("phase") in ("Hibernating", "Hibernated", "Failed")
+                    saved = int(state.get("cleanupGeneration" if sleeping else "observedGeneration", 0))
+                    if saved:
+                        requests.append((saved, sleeping))
+            key = _resource_name("vcluster", xr["metadata"]["name"], instance, "statefulset")
+            control = req.observed.resources.get(key)
+            if control:
+                manifest = (_to_dict(control.resource).get("spec") or {}).get("forProvider", {}).get("manifest") or {}
+                marker = json.loads((manifest.get("metadata") or {}).get("annotations", {}).get(
+                    "datalabs.versioneer.at/lifecycle-request", "{}"))
+                if marker.get("generation"):
+                    requests.append((int(marker["generation"]), marker.get("hibernated") is True))
+            saved, sleeping = max(requests, key=lambda item: item[0])
+            return saved if sleeping else generation
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        from copy import deepcopy
+        import json
+        from crossplane.function import request, response
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
+        CLEANUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Remove an offline instance\'s host Pods without changing its storage."""\n\nimport json\nfrom pathlib import Path\nimport ssl\nimport sys\nimport time\nfrom urllib.error import HTTPError\nfrom urllib.parse import quote\nfrom urllib.request import Request, build_opener, HTTPSHandler, ProxyHandler\n\n\nclass API:\n    def __init__(self):\n        self.account = Path(\'/var/run/secrets/kubernetes.io/serviceaccount\')\n        self.http = build_opener(\n            ProxyHandler({}),\n            HTTPSHandler(context=ssl.create_default_context(cafile=str(self.account / \'ca.crt\'))),\n        )\n\n    def call(self, method, path, body=None):\n        # Read the projected token for each request so rotation takes effect.\n        headers = {\'Authorization\': \'Bearer \' + (self.account / \'token\').read_text().strip()}\n        data = None if body is None else json.dumps(body).encode()\n        if data is not None:\n            headers[\'Content-Type\'] = \'application/json\'\n        request = Request(\'https://kubernetes.default.svc\' + path, data=data,\n                          headers=headers, method=method)\n        try:\n            with self.http.open(request, timeout=10) as result:\n                return json.load(result)\n        except HTTPError as error:\n            if error.code == 404:\n                return None\n            if error.code == 409 and method == \'DELETE\':\n                return None\n            raise RuntimeError(f\'Kubernetes {method} {path} failed: HTTP {error.code}\') from None\n\n\ndef owned_by(pod, kind, uid):\n    return any(owner.get(\'kind\') == kind and owner.get(\'uid\') == uid\n               for owner in pod[\'metadata\'].get(\'ownerReferences\', []))\n\n\ndef cleanup_once(api, namespace, runtime, generation):\n    core = \'/api/v1/namespaces/\' + quote(namespace, safe=\'\')\n    statefulset = api.call(\'GET\', \'/apis/apps/v1/namespaces/\' + quote(namespace, safe=\'\')\n                          + \'/statefulsets/\' + quote(runtime, safe=\'\'))\n    if not statefulset:\n        return False\n    target = json.loads(statefulset[\'metadata\'].get(\'annotations\', {}).get(\n        \'datalabs.versioneer.at/lifecycle-request\', \'{}\'))\n    if target.get(\'generation\', 0) > generation or (\n            target.get(\'generation\') == generation and not target.get(\'hibernated\')):\n        raise RuntimeError(\'This cleanup request was superseded; no further Pods will be deleted.\')\n    if target.get(\'generation\') != generation or statefulset[\'spec\'].get(\'replicas\', 1) != 0:\n        print(\'Waiting for control-plane replicas to reach zero.\', flush=True)\n        return False\n    pods = api.call(\'GET\', core + \'/pods\')[\'items\']\n    if any(owned_by(pod, \'StatefulSet\', statefulset[\'metadata\'][\'uid\']) for pod in pods):\n        print(\'Waiting for the control-plane Pod to terminate.\', flush=True)\n        return False\n    service = api.call(\'GET\', core + \'/services/\' + quote(runtime, safe=\'\'))\n    if not service:\n        raise RuntimeError(\'The instance Service is missing; Pod ownership cannot be checked.\')\n    workloads = [pod for pod in pods if owned_by(pod, \'Service\', service[\'metadata\'][\'uid\'])]\n    # Reject a Pod list that crossed a scale or request change. UID preconditions\n    # then protect replacement Pods if resume starts after this second read.\n    current = api.call(\'GET\', \'/apis/apps/v1/namespaces/\' + quote(namespace, safe=\'\')\n                       + \'/statefulsets/\' + quote(runtime, safe=\'\'))\n    if (not current or current[\'metadata\'][\'uid\'] != statefulset[\'metadata\'][\'uid\']\n            or current[\'metadata\'][\'generation\'] != statefulset[\'metadata\'][\'generation\']\n            or current[\'metadata\'].get(\'annotations\', {}).get(\'datalabs.versioneer.at/lifecycle-request\')\n            != statefulset[\'metadata\'].get(\'annotations\', {}).get(\'datalabs.versioneer.at/lifecycle-request\')):\n        return False\n    for pod in workloads:\n        if not pod[\'metadata\'].get(\'deletionTimestamp\'):\n            name = pod[\'metadata\'][\'name\']\n            api.call(\'DELETE\', core + \'/pods/\' + quote(name, safe=\'\'), {\n                \'apiVersion\': \'v1\', \'kind\': \'DeleteOptions\',\n                \'preconditions\': {\'uid\': pod[\'metadata\'][\'uid\']},\n            })\n            print(\'Deleting synced Pod \' + name, flush=True)\n    return not workloads\n\n\ndef main():\n    namespace, runtime, generation = sys.argv[1:]\n    api = API()\n    while not cleanup_once(api, namespace, runtime, int(generation)):\n        time.sleep(2)\n    print(\'Hibernation complete: control plane and synced host Pods are gone.\', flush=True)\n\n\nif __name__ == \'__main__\':\n    main()\n'
+
+
+        def _manifest(resource):
+            state = resource.get("status", {}).get("atProvider", {})
+            return state.get("manifest") or state.get("raw", {}).get("manifest") or {}
+
+
+        def _condition(resource, kind):
+            return any(c.get("type") == kind and c.get("status") == "True"
+                       for c in resource.get("status", {}).get("conditions", []))
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
+                return
+            xr = _to_dict(req.observed.composite.resource)
+            status = _to_dict(rsp.desired.composite.resource).get("status") or {}
+            previous = {item["name"]: item for item in (xr.get("status") or {}).get("vclusters", [])}
+            observed = {key: _to_dict(value.resource) for key, value in req.observed.resources.items()}
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            meta = xr["metadata"]
+            name, claim_namespace = meta["name"], meta.get("namespace", "default")
+            states = []
+            for instance, config in sorted((xr.get("spec", {}).get("vclusters") or {}).items()):
+                runtime = _resource_name("vcluster", instance, limit=45)
+                virtual_provider = _resource_name(name, "vcluster", instance)
+                control_key = _resource_name("vcluster", name, instance, "statefulset")
+                if control_key not in rsp.desired.resources:
+                    continue
+                control_ready = (_condition(observed.get(control_key, {}), "Ready") and
+                                 rsp.desired.resources[control_key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] == 1)
+                hibernated = config.get("hibernated", False)
+                cleanup_generation = _vcluster_cleanup_generation(req, instance, hibernated)
+                lifecycle_name = _resource_name("vc-cleanup", instance, limit=45)
+                job_name = _resource_name(lifecycle_name, str(cleanup_generation))
+                jobs = {
+                    body["spec"]["forProvider"]["manifest"]["metadata"]["name"]: (key, body)
+                    for key, body in observed.items()
+                    if body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                    and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"
+                }
+                retained = previous.get(instance, {}).get("cleanupJob")
+                if retained and retained not in jobs:
+                    jobs[retained] = (_resource_name("vcluster", name, instance, retained), {})
+                if hibernated and job_name not in jobs:
+                    jobs[job_name] = (_resource_name("vcluster", name, instance, job_name), {})
+                blocked, complete, failure = False, False, ""
+
+                def emit(suffix, manifest):
+                    key = _resource_name("vcluster", name, instance, suffix)
+                    rsp.desired.resources[key].resource.update(_render_template(
+                        req, "common/object", key=key, xr_namespace=claim_namespace,
+                        manifest=manifest, readiness={"policy": "SuccessfulCreate"},
+                    ))
+                    rsp.desired.resources[key].resource["metadata"]["labels"] = {
+                        "datalabs.versioneer.at/vcluster": instance,
+                    }
+                    return key
+
+                if jobs:
+                    values = {
+                        "namespace": name, "runtime": runtime, "lifecycle_name": lifecycle_name,
+                        "cleanup_script": CLEANUP_SCRIPT,
+                        "cleanup_policy": _resource_name(name, instance, "cleanup-pods"),
+                        "cleanup_identity_expression": f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{name}:{lifecycle_name}')}",
+                    }
+                    support = _render_template(req, "vcluster/cleanup-support", **values)["resources"]
+                    support_keys = []
+                    for suffix, manifest in support.items():
+                        support_keys.append(emit(f"cleanup-{suffix}", manifest))
+                    support_ready = all(_condition(observed.get(key, {}), "Ready") for key in support_keys)
+                    for current_name, (key, body) in sorted(jobs.items()):
+                        running = hibernated and current_name == job_name
+                        host_job = _manifest(body)
+                        if not host_job.get("metadata", {}).get("uid"):
+                            requirement = _resource_name(key, "job")
+                            response.require_resources(
+                                rsp, name=requirement, api_version="batch/v1", kind="Job",
+                                namespace=name, match_name=current_name,
+                            )
+                            host_job = request.get_required_resource(req, requirement) or {}
+                        uid = host_job.get("metadata", {}).get("uid")
+                        pods_known, stopped = False, False
+                        if uid:
+                            requirement = _resource_name(key, "pods")
+                            response.require_resources(
+                                rsp, name=requirement, api_version="v1", kind="Pod",
+                                namespace=name, match_labels={"batch.kubernetes.io/controller-uid": uid},
+                            )
+                            pods_known = requirement in req.required_resources
+                            pods = request.get_required_resources(req, requirement)
+                            # A suspended Job may still have a Pod in its termination grace period.
+                            stopped = pods_known and all(
+                                pod.get("status", {}).get("phase") in ("Succeeded", "Failed")
+                                for pod in pods
+                                if any(o.get("uid") == uid and o.get("kind") == "Job"
+                                       for o in pod.get("metadata", {}).get("ownerReferences", []))
+                            )
+                        terminal = _condition(host_job, "Complete") or _condition(host_job, "Failed")
+                        suspended = host_job.get("spec", {}).get("suspend") is True and _condition(host_job, "Suspended")
+                        safe = stopped and (terminal or suspended)
+                        if running:
+                            complete = stopped and _condition(host_job, "Complete")
+                            if _condition(host_job, "Failed"):
+                                failure = f"Cleanup Job {current_name} failed; inspect its status and Pod logs."
+                        elif not safe:
+                            blocked = True
+                        if not running and safe:
+                            continue
+                        manifest = deepcopy(body.get("spec", {}).get("forProvider", {}).get("manifest"))
+                        if not manifest and host_job:
+                            # Recover the immutable template if the Object observation was lost.
+                            manifest = {"apiVersion": "batch/v1", "kind": "Job",
+                                        "metadata": {"name": current_name, "namespace": name},
+                                        "spec": deepcopy(host_job["spec"])}
+                        if not manifest:
+                            manifest = _render_template(
+                                req, "vcluster/cleanup-job", **values, job_name=current_name,
+                                suspended=not running,
+                                cleanup_generation=str(int(cleanup_generation if running
+                                                           else previous.get(instance, {}).get("cleanupGeneration", 0))),
+                                cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine",
+                            )
+                            placement = ((env.get("vcluster") or {}).get("scheduling") or {}).get("controlPlane") or {}
+                            manifest["spec"]["template"]["spec"].update(placement)
+                        manifest["spec"]["suspend"] = not (running and support_ready)
+                        emit(current_name, manifest)
+                        rsp.desired.resources[key].resource["spec"]["references"] = [
+                            {"dependsOn": {"name": _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), "namespace": claim_namespace}}
+                            for suffix in ("account", "script", "binding", "policy", "policy-binding")
+                        ]
+                        rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/lifecycle"] = "cleanup"
+                        rsp.desired.resources[key].ready = fnv1.READY_TRUE if complete else fnv1.READY_FALSE
+
+                state = {"name": instance, "phase": "Running" if control_ready else "Starting",
+                         "message": "Control plane is ready." if control_ready else "Waiting for the control plane.",
+                         "observedGeneration": int(meta.get("generation", 1))}
+                if hibernated:
+                    state.update(phase="Failed" if failure else ("Hibernated" if complete and not blocked else "Hibernating"),
+                                 message=failure or ("Control plane and synced host Pods are gone." if complete and not blocked
+                                                     else "Waiting for control-plane shutdown and host Pod cleanup."),
+                                 cleanupJob=job_name, cleanupGeneration=cleanup_generation)
+                    rsp.desired.resources[control_key].ready = (
+                        fnv1.READY_TRUE if state["phase"] == "Hibernated" else fnv1.READY_FALSE
+                    )
+                elif blocked:
+                    state.update(phase="Resuming", message="Waiting for old cleanup Jobs and their Pods to stop.")
+                    if retained:
+                        state["cleanupJob"] = retained
+                        state["cleanupGeneration"] = int(previous[instance].get("cleanupGeneration", 0))
+                    rsp.desired.resources[control_key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+                    rsp.desired.resources[control_key].ready = fnv1.READY_FALSE
+
+                offline = hibernated or blocked or not control_ready
+                if offline:
+                    # Keep removals queued while the virtual API cannot process finalizers.
+                    for key, body in observed.items():
+                        if (body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider
+                                and key not in rsp.desired.resources):
+                            kept = {field: deepcopy(body[field]) for field in ("apiVersion", "kind", "spec")}
+                            kept["metadata"] = {field: deepcopy(body["metadata"][field])
+                                                for field in ("name", "namespace", "annotations", "labels")
+                                                if field in body["metadata"]}
+                            rsp.desired.resources[key].resource.update(kept)
+                    for desired in rsp.desired.resources.values():
+                        body = _to_dict(desired.resource)
+                        if body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider:
+                            body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "true"
+                            desired.resource.update({"metadata": body["metadata"]})
+                            desired.ready = fnv1.READY_TRUE
+                states.append(state)
+            if states or previous:
+                status["vclusters"] = states
+                rsp.desired.composite.resource.update({"status": status})
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
+        vcluster/cleanup-job:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${job_name}
+            namespace: ${namespace}
+            annotations:
+              datalabs.versioneer.at/cleanup-generation: ${cleanup_generation}
+          spec:
+            suspend: ${suspended}
+            backoffLimit: 3
+            activeDeadlineSeconds: 1800
+            template:
+              metadata:
+                labels:
+                  datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+              spec:
+                restartPolicy: Never
+                serviceAccountName: ${lifecycle_name}
+                terminationGracePeriodSeconds: 20
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  runAsGroup: 65532
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                - name: cleanup
+                  image: ${cleanup_image}
+                  command:
+                  - python
+                  - -B
+                  - /opt/cleanup/cleanup.py
+                  args:
+                  - ${namespace}
+                  - ${runtime}
+                  - ${cleanup_generation}
+                  resources:
+                    requests:
+                      cpu: 20m
+                      memory: 32Mi
+                    limits:
+                      cpu: 100m
+                      memory: 128Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  volumeMounts:
+                  - name: script
+                    mountPath: /opt/cleanup
+                    readOnly: true
+                volumes:
+                - name: script
+                  configMap:
+                    name: ${lifecycle_name}
+        vcluster/cleanup-support:
+          resources:
+            account:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+            script:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              data:
+                cleanup.py: ${cleanup_script}
+            role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              rules:
+              - apiGroups:
+                - ''
+                resources:
+                - pods
+                verbs:
+                - get
+                - list
+                - delete
+              - apiGroups:
+                - ''
+                resources:
+                - services
+                resourceNames:
+                - ${runtime}
+                verbs:
+                - get
+              - apiGroups:
+                - apps
+                resources:
+                - statefulsets
+                resourceNames:
+                - ${runtime}
+                verbs:
+                - get
+            binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: Role
+                name: ${lifecycle_name}
+              subjects:
+              - kind: ServiceAccount
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+            network:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              spec:
+                podSelector:
+                  matchLabels:
+                    datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+                policyTypes:
+                - Ingress
+                - Egress
+                ingress: []
+                egress:
+                - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 6443
+                    protocol: TCP
+                - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                    podSelector:
+                      matchLabels:
+                        k8s-app: kube-dns
+                  ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+            policy:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicy
+              metadata:
+                name: ${cleanup_policy}
+              spec:
+                failurePolicy: Fail
+                paramKind:
+                  apiVersion: v1
+                  kind: Service
+                matchConstraints:
+                  resourceRules:
+                  - apiGroups:
+                    - ''
+                    apiVersions:
+                    - v1
+                    operations:
+                    - DELETE
+                    resources:
+                    - pods
+                matchConditions:
+                - name: cleanup-identity
+                  expression: ${cleanup_identity_expression}
+                validations:
+                - expression: has(oldObject.metadata.ownerReferences) && oldObject.metadata.ownerReferences.exists(o,
+                    o.apiVersion == 'v1' && o.kind == 'Service' && o.name == params.metadata.name && o.uid == params.metadata.uid)
+                  message: Cleanup can delete only Pods owned by this instance Service.
+            policy-binding:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicyBinding
+              metadata:
+                name: ${cleanup_policy}
+              spec:
+                policyName: ${cleanup_policy}
+                validationActions:
+                - Deny
+                paramRef:
+                  name: ${runtime}
+                  namespace: ${namespace}
+                  parameterNotFoundAction: Deny
+                matchResources:
+                  namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: ${namespace}
   - step: update-data-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -14092,9 +14742,9 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
-            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
-            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
+            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.1"
+            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
+            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
             data_config = (environment.get("defaults") or {}).get("data") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
@@ -15512,7 +16162,7 @@ spec:
                     type: RuntimeDefault
                 initContainers:
                 - name: prepare-auth
-                  image: httpd:2.4.69-alpine
+                  image: httpd:2.4.71-alpine
                   command:
                   - /bin/sh
                   - -ec
@@ -16111,7 +16761,7 @@ spec:
             images = environment.get("images") or {}
             mongo_image = _safe_str(images.get("mongo"))
             version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
-            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.12")
+            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.38")
             mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
             backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
             mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
@@ -16699,8 +17349,8 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.0.15"
-            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.0.15"
+            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
+            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.2.17"
             redis_env = environment.get("cacheStore") or {}
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
             backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
@@ -17251,7 +17901,10 @@ spec:
                         _resource_name(name, "interactive") if group["name"] == "cluster-admin"
                         else _resource_name(profile, "scope")
                     )
-                    complete = all(
+                    complete = not config.get("hibernated", False) and not any(
+                        state["name"] == instance and state["phase"] == "Resuming"
+                        for state in status.get("vclusters", [])
+                    ) and all(
                         ready(key)
                         for key in [
                             *(
@@ -17621,12 +18274,20 @@ spec:
                     "workload-networkpolicy",
                     "dns-networkpolicy",
                     "snapshot-networkpolicy",
+                    "placement-policy",
+                    "placement-policy-binding",
                 ):
                     protect(
                         f"{instance}-{suffix}",
                         _resource_name("vcluster", name, instance, suffix),
                         control_plane,
                     )
+                for key, body in objects.items():
+                    if (body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                            and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"):
+                        protect(f"{instance}-cleanup-control", control_plane, key)
+                        for suffix in ("account", "script", "role", "binding", "network", "policy", "policy-binding"):
+                            protect(f"{instance}-cleanup-{suffix}", _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), key)
                 for key, body in objects.items():
                     if body.get("metadata", {}).get("labels", {}).get(
                         "datalabs.versioneer.at/vcluster"
@@ -17785,5 +18446,8 @@ spec:
                 return
             status = _to_dict(req.desired.composite.resource).get("status") or {}
             rsp.desired.composite.ready = req.desired.composite.ready
-            if any(connection.get("ready") is not True for connection in status.get("connections", [])):
+            hibernated = {state["name"] for state in status.get("vclusters", []) if state["phase"] == "Hibernated"}
+            if any(connection.get("ready") is not True
+                   and not (connection.get("type") == "vcluster" and connection.get("instance") in hibernated)
+                   for connection in status.get("connections", [])):
                 rsp.desired.composite.ready = fnv1.READY_FALSE

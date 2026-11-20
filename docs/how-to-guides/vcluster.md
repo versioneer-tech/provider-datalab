@@ -505,10 +505,12 @@ issuer. For a private Gateway CA, set `ingress.certificateAuthority`.
 
 ### Host requirements
 
-Apply `dependencies/rbac.yaml`. The host must serve
-`ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding`. The Gateway
-must support HTTPRoute prefix rewriting, BackendTLSPolicy, and Kubernetes
-streaming requests. `vcluster.backendTLS.apiVersion` defaults to
+Apply `dependencies/rbac.yaml`. It grants Job permissions to the Kubernetes
+provider and Pod and Job read access to Crossplane. The host must serve
+`ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding` in
+`admissionregistration.k8s.io/v1`. The Gateway must support HTTPRoute prefix
+rewriting, BackendTLSPolicy, and Kubernetes streaming requests.
+`vcluster.backendTLS.apiVersion` defaults to
 `gateway.networking.k8s.io/v1`; set it to the version served by your platform.
 
 Set `network.serviceCIDR` and `network.podCIDRs` to the host ranges. Virtual
@@ -553,6 +555,95 @@ data:
           - --datastore-max-open-connections=2
           - --datastore-max-idle-connections=1
 ```
+
+### Placement and hibernation
+
+Set Pod placement in the Datalab's EnvironmentConfig. Selectors and tolerations
+are empty by default. This example keeps control planes and cleanup Jobs on
+general nodes and sends all synced workloads to a separate worker pool:
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-custom
+  labels:
+    datalabs.pkg.internal/name: datalab-custom
+data:
+  vcluster:
+    scheduling:
+      controlPlane:
+        nodeSelector:
+          pool: general
+        tolerations: []
+      workloads:
+        nodeSelector:
+          pool: vcluster
+        enforceTolerations:
+        - dedicated=vcluster:NoSchedule
+```
+
+Use labels that match your node pools. For this example, set the worker pool's
+label to `pool=vcluster` and its taint to `dedicated=vcluster:NoSchedule`.
+`controlPlane.tolerations` accepts Kubernetes toleration objects.
+`workloads.enforceTolerations` accepts `key[=value]:effect` strings. vCluster adds
+the configured selectors and tolerations and keeps compatible workload settings.
+Workload placement includes CoreDNS and the Sandbox controller.
+
+A host admission policy enforces placement for each instance's syncer account.
+It rejects direct `nodeName` assignment, another scheduler, and missing required
+selectors or tolerations. New placement applies when Pods are created. Hibernate
+and resume an instance to replace its existing workload Pods.
+
+Configure worker-pool autoscaling separately, with a minimum of zero nodes.
+Pending synced Pods can trigger scale-up from zero. Keep the general pool
+available for control planes and cleanup Jobs. All instances that use the
+worker pool must hibernate before it can reach zero.
+
+#### Hibernate and resume
+
+Set `spec.vclusters.<name>.hibernated` to `true` in the host Datalab manifest:
+
+```yaml
+spec:
+  vclusters:
+    vc0:
+      hibernated: true
+```
+
+The provider scales the control plane to zero, waits for its Pod to terminate,
+then removes that instance's synced host Pods, including Pending and system
+Pods. Other instances and shared services continue to run.
+
+The virtual API is unavailable and its connections report `ready: false`.
+The provider pauses changes that need the virtual API, including removals.
+Controller definitions, PVCs, storage retention policies, and connection names
+remain. Resume an instance before removing it or its Datalab so that virtual
+resource finalizers can run.
+
+Set `hibernated` to `false`, its default, to resume. The provider stops previous
+cleanup Jobs before it starts the control plane with the same PVC. It resumes
+virtual resource reconciliation after the API is ready. Deployments,
+StatefulSets, and Sandboxes recreate their Pods. Standalone Pod recovery is not
+supported. Resume must be requested through the host Datalab; there is no
+inactivity timer or wake on traffic.
+
+Check `status.vclusters` for each instance. Its `observedGeneration` must match
+the Datalab's `metadata.generation`:
+
+| Phase | Meaning |
+| --- | --- |
+| `Starting` | Waiting for the control plane. |
+| `Running` | Control plane ready. Connection readiness also checks routes and access. |
+| `Hibernating` | Control-plane shutdown or host Pod cleanup is in progress. |
+| `Hibernated` | Cleanup confirmed that the control plane and synced host Pods are gone. |
+| `Resuming` | Old cleanup Jobs must stop before the control plane can restart. |
+| `Failed` | Cleanup failed. Inspect the Job named in `cleanupJob` and its Pod logs. |
+
+Reserve quota for cleanup Jobs: each requests 20m CPU and 32Mi memory, with
+limits of 100m CPU and 128Mi memory. A Job can retry three times within a
+30-minute deadline. After a failure, correct the cause, resume the instance,
+then request hibernation again.
 
 ## Datalab STAC catalog
 

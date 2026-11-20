@@ -11,10 +11,13 @@ Put shared Python functions in `composition/helpers.py` and import them from
 the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
 
-`scripts/vcluster-credentials.py` supplies credentials for downloaded kubeconfigs.
-Additional profiles read a caller token; the administrator profile also supports
-device login. The publishing step embeds this file with `_embedded_script()`.
-Rebuild after changing it; users need no separate helper installation.
+The build embeds these scripts with `_embedded_script()`. Rebuild after
+changing either file.
+
+| Script | Use |
+| --- | --- |
+| `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
+| `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
 Crossplane can cache a function response for its TTL. Set the build defaults in
 `composition/settings.yaml`:

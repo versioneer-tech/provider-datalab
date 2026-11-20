@@ -33,7 +33,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     images = environment.get("images") or {}
     mongo_image = _safe_str(images.get("mongo"))
     version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
-    mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.12")
+    mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.38")
     mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
     backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
     mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")

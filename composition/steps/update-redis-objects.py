@@ -32,8 +32,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     images = environment.get("images") or {}
-    redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.0.15"
-    backup_image = _safe_str(images.get("redisBackup")) or "redis:7.0.15"
+    redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
+    backup_image = _safe_str(images.get("redisBackup")) or "redis:7.2.17"
     redis_env = environment.get("cacheStore") or {}
     redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
     backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")

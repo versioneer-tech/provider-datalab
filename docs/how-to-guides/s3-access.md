@@ -1,7 +1,6 @@
 # S3 client access
 
-The read-only S3 endpoint is experimental. Range reads currently return HTTP
-`200` with `Content-Range`, rather than HTTP `206`.
+The read-only S3 endpoint is experimental.
 
 ## Enable the endpoint
 

@@ -425,6 +425,15 @@ Virtual Kubernetes clusters keyed by instance name.
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>hibernated</b></td>
+        <td>boolean</td>
+        <td>
+          Stop this instance and its synced Pods. Keep its storage. Set false to resume from the host Datalab.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#datalabspecvclusterskeysecretbindingsindex">secretBindings</a></b></td>
         <td>[]object</td>
         <td>
@@ -601,6 +610,13 @@ Current observed state of the datalab.
         <td>[]object</td>
         <td>
           Session PVC references inside virtual clusters.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusvclustersindex">vclusters</a></b></td>
+        <td>[]object</td>
+        <td>
+          Instance lifecycle state. Hibernated means the control plane and synced host Pods are gone.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -868,5 +884,73 @@ Current observed state of the datalab.
           <br/>
         </td>
         <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.status.vclusters[index]
+<sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>message</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>phase</b></td>
+        <td>enum</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Enum</i>: Starting, Running, Hibernating, Hibernated, Resuming, Failed<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>cleanupGeneration</b></td>
+        <td>integer</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>cleanupJob</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>observedGeneration</b></td>
+        <td>integer</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
