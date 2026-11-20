@@ -125,6 +125,7 @@ def main():
     assert full['Body'].read() == content
     show('GET', object_path, full, {'Body': content.decode()})
     ranged = client.get_object(Bucket=bucket, Key=key, Range='bytes=4-10')
+    assert ranged['ResponseMetadata']['HTTPStatusCode'] == 206
     assert ranged['Body'].read() == content[4:11]
     assert ranged['ContentRange'] == f'bytes 4-10/{len(content)}'
     show('GET Range: bytes=4-10', object_path, ranged,

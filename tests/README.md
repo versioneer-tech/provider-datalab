@@ -37,9 +37,10 @@ or cluster tests.
 
 ## Run the suite
 
-Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, and `pre-commit`.
-Start Docker and follow the [build instructions](../templates/README.md) to
-install Python dependencies and generate `composition.yaml`.
+Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, Go, and `pre-commit`.
+Go runs the admission policy checks. Start Docker and follow the
+[build instructions](../templates/README.md) to install Python dependencies and
+generate `composition.yaml`.
 
 ```bash
 bash tests/unit.bash
@@ -58,10 +59,10 @@ omit generated metadata that changes between runs. The other tests check:
 
 | Tests | Behavior |
 | --- | --- |
-| `vclusters.py` | Instance isolation, permissions, Secret bindings, Sandbox setup, and session storage. |
-| `helpers.py` | Credentials, login, token caches, and build and harness errors. |
+| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, Secret bindings, and session PVCs. |
+| `helpers.py` | Credentials, token caches, host Pod cleanup, build failures, and integration runner errors. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
-| `oauth2.py`, `s3-connections.py`, `service-connections.py` | Discovery, credential publication, rotation, source loss, and recovery. |
+| `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
 | `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, storage, network rules, quotas, and environment settings. |
 | `backups.py` | Backup enablement, export failures, and invalid Redis snapshots. |
 | `response-ttl.py` | TTL defaults, overrides, invalid values, and readiness checks. |

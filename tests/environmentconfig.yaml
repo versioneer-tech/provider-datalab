@@ -9,14 +9,14 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   iam:
     realm: acme
     redirectURIs:
@@ -89,14 +89,14 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   customSecrets:
   - name: apikey-1
   - name: apikey-2

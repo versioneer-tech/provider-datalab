@@ -1,4 +1,4 @@
-# Dedicated Kind integration environment
+# Integration tests
 
 The suite uses the `provider-datalab-it` Kind cluster, the
 `kind-provider-datalab-it` context, and `/tmp/provider-datalab-it.kubeconfig`.
@@ -117,8 +117,8 @@ Crossplane, providers, storage, and identity services stay available.
 
 The runner reports setup and profile durations and CPU requests. Run
 `tests/integration/resource-budget.bash` to inspect active Pod and init-container
-requests, unscheduled requests, and node allocation. These are scheduler
-reservations, not measured CPU use. Probe and backup Pods have 90 seconds to
+requests, unscheduled requests, and node allocation. The report shows CPU
+reserved for scheduling. Probe and backup Pods have 90 seconds to
 schedule; execution timeouts start after scheduling. Failures report events and
 the resource budget.
 

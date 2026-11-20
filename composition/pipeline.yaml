@@ -113,6 +113,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-vclusters.py
+  - step: reconcile-vcluster-lifecycle
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      scriptFile: steps/reconcile-vcluster-lifecycle.py
   - step: update-data-objects
     functionRef:
       name: crossplane-contrib-function-python

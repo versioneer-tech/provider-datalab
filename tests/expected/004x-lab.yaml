@@ -124,7 +124,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-john-storage
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -223,7 +223,7 @@ spec:
               - --skip-auth-route=HEAD=^/static(/|$)
               - --skip-auth-route=OPTIONS=^/static(/|$)
               - --silence-ping-logging=true
-              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -282,7 +282,7 @@ spec:
               command:
               - /bin/sh
               - -ec
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
               imagePullPolicy: IfNotPresent
               name: prepare-database
               resources:
@@ -645,7 +645,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-john-storage
-              image: rclone/rclone:1.71.0
+              image: rclone/rclone:1.76.0
               imagePullPolicy: IfNotPresent
               name: s3
               readinessProbe:
@@ -729,7 +729,7 @@ spec:
               - --allowed-role=s-john:ws_api
               - --request-logging=false
               - --auth-logging=false
-              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
               imagePullPolicy: IfNotPresent
               name: oauth2-proxy
               resources:

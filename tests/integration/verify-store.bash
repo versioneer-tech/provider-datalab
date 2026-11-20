@@ -10,8 +10,8 @@ source "${INTEGRATION_DIR}/lib.bash"
 
 : "${MONGODB_OPERATOR_VERSION:=1.14.0}"
 : "${REDIS_OPERATOR_CHART_VERSION:=0.27.0}"
-: "${MONGO_CLIENT_IMAGE:=mongo:8.0.12}"
-: "${REDIS_CLIENT_IMAGE:=redis:7.0.15}"
+: "${MONGO_CLIENT_IMAGE:=mongo:8.0.38}"
+: "${REDIS_CLIENT_IMAGE:=redis:7.2.17}"
 : "${KEEP_STORE_RESOURCES:=0}"
 
 readonly store_type="${1:-}"

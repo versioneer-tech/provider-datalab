@@ -70,7 +70,10 @@ def compose(req, rsp):
                 _resource_name(name, "interactive") if group["name"] == "cluster-admin"
                 else _resource_name(profile, "scope")
             )
-            complete = all(
+            complete = not config.get("hibernated", False) and not any(
+                state["name"] == instance and state["phase"] == "Resuming"
+                for state in status.get("vclusters", [])
+            ) and all(
                 ready(key)
                 for key in [
                     *(

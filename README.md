@@ -54,7 +54,7 @@ the guides in this checkout:
 | Task | Guide |
 | --- | --- |
 | Install the package and set platform defaults | [Installation](docs/how-to-guides/installation.md) |
-| Run Kubernetes workloads and bind service Secrets | [Virtual clusters](docs/how-to-guides/vcluster.md) |
+| Run workloads and manage virtual clusters | [Virtual clusters](docs/how-to-guides/vcluster.md) |
 | Run sandboxd and keep workspace PVCs | [Sandboxes](docs/how-to-guides/sandboxes.md) |
 | Find service credentials and bind Secrets | [Connections](docs/how-to-guides/connections.md) |
 | Configure sign-in, machine access, and OAuth2 discovery | [Authentication](docs/how-to-guides/authentication.md) |
@@ -64,7 +64,7 @@ the guides in this checkout:
 
 See [examples/base](examples/base) for complete Datalab manifests and
 [Additional services](docs/how-to-guides/additional_services.md) for Dask,
-MLflow, and psql examples. Operator requirements are in the installation guide.
+MLflow, and psql examples.
 
 ## Local checks
 
@@ -79,10 +79,9 @@ bash tests/unit.bash
 pre-commit run --all-files
 ```
 
-Edit the Python steps in `composition/` and the manifests in `templates/`.
-Edit `scripts/vcluster-credentials.py` for both exec helper modes. The build
-embeds this file in the composition; do not maintain a second script copy.
-See [Manifest templates](templates/README.md) for the source layout and build.
+Edit the Python steps in `composition/` and the manifests in `templates/`, then
+rebuild `composition.yaml`. See [Manifest templates](templates/README.md) for
+the source layout and embedded scripts.
 
 See [Unit tests](tests/README.md) for fixtures and focused checks, and
 [Integration tests](tests/integration/README.md) for the dedicated Kind cluster.

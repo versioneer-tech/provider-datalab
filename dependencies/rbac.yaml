@@ -225,6 +225,9 @@ rules:
   - update
   - patch
   - delete
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [get, list, watch, create, update, patch, delete]
 - apiGroups:
   - kubernetes.m.crossplane.io
   resources:
@@ -289,7 +292,11 @@ rules:
   - ""
   resources:
   - secrets
+  - pods
   verbs:
   - get
   - list
   - watch
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [get, list, watch]

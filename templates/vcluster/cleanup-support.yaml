@@ -1,0 +1,118 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+resources:
+  account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+  script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+    data:
+      cleanup.py: ${cleanup_script}
+  role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+    rules:
+    - apiGroups: ['']
+      resources: [pods]
+      verbs: [get, list, delete]
+    - apiGroups: ['']
+      resources: [services]
+      resourceNames: [ '${runtime}']
+      verbs: [get]
+    - apiGroups: [apps]
+      resources: [statefulsets]
+      resourceNames: [ '${runtime}']
+      verbs: [get]
+  binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ${lifecycle_name}
+    subjects:
+    - kind: ServiceAccount
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+  network:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${lifecycle_name}
+      namespace: ${namespace}
+    spec:
+      podSelector:
+        matchLabels:
+          datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+      policyTypes: [Ingress, Egress]
+      ingress: []
+      egress:
+      - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+  policy:
+    apiVersion: admissionregistration.k8s.io/v1
+    kind: ValidatingAdmissionPolicy
+    metadata:
+      name: ${cleanup_policy}
+    spec:
+      failurePolicy: Fail
+      paramKind:
+        apiVersion: v1
+        kind: Service
+      matchConstraints:
+        resourceRules:
+        - apiGroups: ['']
+          apiVersions: [v1]
+          operations: [DELETE]
+          resources: [pods]
+      matchConditions:
+      - name: cleanup-identity
+        expression: ${cleanup_identity_expression}
+      validations:
+      - expression: "has(oldObject.metadata.ownerReferences) && oldObject.metadata.ownerReferences.exists(o, o.apiVersion == 'v1' && o.kind == 'Service' && o.name == params.metadata.name && o.uid == params.metadata.uid)"
+        message: Cleanup can delete only Pods owned by this instance Service.
+  policy-binding:
+    apiVersion: admissionregistration.k8s.io/v1
+    kind: ValidatingAdmissionPolicyBinding
+    metadata:
+      name: ${cleanup_policy}
+    spec:
+      policyName: ${cleanup_policy}
+      validationActions: [Deny]
+      paramRef:
+        name: ${runtime}
+        namespace: ${namespace}
+        parameterNotFoundAction: Deny
+      matchResources:
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ${namespace}

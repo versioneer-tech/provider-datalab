@@ -1,0 +1,25 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ['']
+      apiVersions: [v1]
+      operations: [CREATE, UPDATE]
+      resources: [pods]
+  matchConditions:
+  - name: syncer-identity
+    expression: ${identity_expression}
+  validations:
+  - expression: "request.operation != 'CREATE' || !has(object.spec.nodeName) || object.spec.nodeName == ''"
+    message: Synced Pods must use the host scheduler; direct nodeName is not allowed.
+  - expression: "request.operation != 'UPDATE' || ((!has(object.spec.nodeName) || object.spec.nodeName == '') ? (!has(oldObject.spec.nodeName) || oldObject.spec.nodeName == '') : (has(oldObject.spec.nodeName) && object.spec.nodeName == oldObject.spec.nodeName))"
+    message: The syncer cannot change a host Pod nodeName.
+  - expression: "!has(object.spec.schedulerName) || object.spec.schedulerName == '' || object.spec.schedulerName == 'default-scheduler'"
+    message: Synced Pods must use the default host scheduler.

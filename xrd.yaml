@@ -113,6 +113,10 @@ spec:
                     type: object
                     description: Virtual Kubernetes clusters keyed by instance name.
                     properties:
+                      hibernated:
+                        type: boolean
+                        default: false
+                        description: Stop this instance and its synced Pods. Keep its storage. Set false to resume from the host Datalab.
                       groups:
                         type: array
                         description: Additional profiles granted to Datalab users and administrators. Only Datalab administrators receive the built-in cluster-admin profile.
@@ -303,6 +307,30 @@ spec:
               type: object
               description: Current observed state of the datalab.
               properties:
+                vclusters:
+                  type: array
+                  description: Instance lifecycle state. Hibernated means the control plane and synced host Pods are gone.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name, phase, message]
+                    properties:
+                      name:
+                        type: string
+                      phase:
+                        type: string
+                        enum: [Starting, Running, Hibernating, Hibernated, Resuming, Failed]
+                      message:
+                        type: string
+                      cleanupJob:
+                        type: string
+                      cleanupGeneration:
+                        type: integer
+                        format: int64
+                      observedGeneration:
+                        type: integer
+                        format: int64
                 sessions:
                   type: array
                   description: Session PVC references inside virtual clusters.
