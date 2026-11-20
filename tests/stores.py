@@ -25,9 +25,10 @@ def main():
     assert route["kind"] == "TLSRoute"
     assert route["spec"]["parentRefs"] == [dict(name=refs["parentName"], namespace=refs["parentNamespace"],
                                                 sectionName=refs["sectionName"])]
-    for setting, name in stores.items():
-        store = manifest(resources, name)
-        assert f"test-{setting}" in yaml.safe_dump(store["spec"])
+    mongo_pvc = manifest(resources, stores["documentStore"])["spec"]["statefulSet"]["spec"]["volumeClaimTemplates"][0]
+    assert mongo_pvc["spec"]["storageClassName"] == "test-documentStore"
+    redis_pvc = manifest(resources, stores["cacheStore"])["spec"]["storage"]["volumeClaimTemplate"]
+    assert redis_pvc["spec"]["storageClassName"] == "test-cacheStore"
     for name in ("observe-database-secret-s-jeff-pg0", "db-postgrescluster-s-jeff-pg0"):
         assert manifest(resources, name)["metadata"]["namespace"] == "s-jeff"
     mongo = manifest(resources, "mongodb-auth-secret-s-jeff-prod")

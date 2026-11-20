@@ -11,7 +11,7 @@ from render import arguments, environment, manifest, render
 def main():
     args = arguments()
     env = environment()
-    env["metadata"]["name"] = "datalab-custom"
+    env["metadata"].update(name="datalab-custom", labels={"datalabs.pkg.internal/name": "datalab-custom"})
     env["data"]["defaults"] = {
         "data": {"enabled": True, "readOnlyMount": True},
         "registry": {"enabled": False},
@@ -36,8 +36,8 @@ def main():
     }
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
-        "metadata": {"name": "s-joe", "annotations": {"datalabs.versioneer.at/environment": "datalab-custom"}},
-        "spec": {"users": ["joe"]},
+        "metadata": {"name": "s-joe"},
+        "spec": {"environmentName": "datalab-custom", "users": ["joe"]},
     }
     resources = render(args, env, source)
     namespace = manifest(resources, "namespace-s-joe")

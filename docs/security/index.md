@@ -11,6 +11,11 @@ and decides who can use these resources. The host cluster must enforce network
 policies, admission rules, Pod security, and RBAC. Virtual clusters share its
 nodes and kernel.
 
+Restrict read access to [Secrets and provider Objects](../how-to-guides/connections.md#access-control).
+Status redaction does not remove credentials from Object specs or annotations.
+Registry, MongoDB, and Redis passwords are derived from resource names and are
+predictable. Keep their endpoints within the approved team network boundary.
+
 | Control | Details |
 | --- | --- |
 | Caller roles, public profiles, and virtual RBAC | [Virtual API access](../how-to-guides/vcluster.md#api-access) |

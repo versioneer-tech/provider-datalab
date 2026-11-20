@@ -130,7 +130,7 @@ Each Datalab client enables exchange automatically after its scopes, mappers,
 and policy are ready. There is no platform opt-in setting. Crossplane Usage
 resources keep a policy's scope and profile until the policy has been deleted.
 
-Keycloak 26.2 or later is required. Default identity scopes must contain no
+Keycloak 26.8.1 or later is required. Default identity scopes must contain no
 role grants or role mappers.
 
 ## Consequences

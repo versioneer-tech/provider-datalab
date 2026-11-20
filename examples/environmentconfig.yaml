@@ -5,6 +5,8 @@ apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: datalab
+  labels:
+    datalabs.pkg.internal/name: datalab
 data:
   images:
     sandbox: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10
@@ -23,7 +25,6 @@ data:
     provider: Other
     region: acme
     secretNamespace: datalab
-    type: s3
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0

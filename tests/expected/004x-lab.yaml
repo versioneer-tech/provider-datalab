@@ -5,10 +5,9 @@
 apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
   name: s-john
 spec:
+  environmentName: datalab-custom
   users:
   - john
 status:
@@ -962,24 +961,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-4831c7015239-s-john-namespace-s-john-o-81013f577d
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-runtime-storage-secret-s-john
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-john
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-4871b0c98762-s-john-namespace-s-john-d-b70bc068fc
   namespace: default
 spec:
@@ -1024,24 +1005,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-john-allow-internal-egress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-john
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-584b43dc61d7-s-john-namespace-s-john-o-80a1d03c36
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-custom-secret-s-john-s-john-apikey-1-170a8a525a
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1250,24 +1213,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-abfe6b36d9e2-s-john-namespace-s-john-o-22695a3ad4
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-registry-auth-secret-s-john
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-john
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-b6baa25ad4da-s-john-namespace-s-john-d-de7f63be8e
   namespace: default
 spec:
@@ -1294,24 +1239,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-john-allow-namespace-egress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-john
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-d4e7eef52444-s-john-namespace-s-john-o-7ab6db931e
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-custom-secret-s-john-s-john-apikey-2-81c3920bda
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

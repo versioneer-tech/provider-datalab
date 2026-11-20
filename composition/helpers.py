@@ -7,6 +7,7 @@ import json
 import re
 from decimal import Decimal
 
+from crossplane.function import request, response
 from google.protobuf import json_format
 
 
@@ -16,6 +17,31 @@ def _to_dict(value):
     if isinstance(value, dict):
         return value
     return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+
+def set_response_ttl(req, rsp, default_seconds):
+    rsp.meta.ttl.FromSeconds(default_seconds)
+    environment = (
+        _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+    )
+    datalab = environment.get("datalab") or {}
+    if not isinstance(datalab, dict):
+        response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+        return False
+    if "responseTTL" not in datalab:
+        return True
+    match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+    if match:
+        seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+        if seconds <= (2**63 - 1) // 1_000_000_000:
+            rsp.meta.ttl.FromSeconds(seconds)
+            return True
+    response.fatal(
+        rsp,
+        "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+        "or 1h, within the signed 64-bit nanosecond limit.",
+    )
+    return False
 
 
 def _boolish(value):
@@ -70,31 +96,37 @@ def _backup_enabled(value):
     return Decimal(match[1]) > 0
 
 
-def _observed_manifests(observed_resource):
+def _extract_manifest(observed_resource):
     if not observed_resource or not getattr(observed_resource, "resource", None):
-        return {}, {}
+        return {}
     resource = _to_dict(observed_resource.resource)
     at_provider = (resource.get("status") or {}).get("atProvider") or {}
-    return (
-        at_provider.get("manifest") or {},
-        (at_provider.get("raw") or {}).get("manifest") or {},
+    return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
+
+
+def require_secret(req, rsp, key, name, namespace):
+    response.require_resources(
+        rsp, name=key, api_version="v1", kind="Secret",
+        namespace=namespace, match_name=name,
     )
+    secret = request.get_required_resource(req, key) or {}
+    return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
 
 
-def _extract_manifest(observed_resource):
-    manifest, raw_manifest = _observed_manifests(observed_resource)
-    return manifest or raw_manifest
+def _secret_manifest(req, rsp, key):
+    # The Object supplies the target reference and watches, not credential data.
+    desired = rsp.desired.resources.get(key)
+    body = _to_dict(desired.resource) if desired else {}
+    metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+    name, namespace = metadata.get("name"), metadata.get("namespace")
+    if not name or not namespace:
+        return {}
+    return require_secret(req, rsp, "source-" + key, name, namespace)
 
 
-def _extract_data(observed_resource):
-    manifest, raw_manifest = _observed_manifests(observed_resource)
-    return (
-        manifest.get("data")
-        or manifest.get("stringData")
-        or raw_manifest.get("data")
-        or raw_manifest.get("stringData")
-        or {}
-    )
+def _extract_data(req, rsp, key):
+    manifest = _secret_manifest(req, rsp, key)
+    return manifest.get("data") or manifest.get("stringData") or {}
 
 
 def _b64get_any(data, keys):
@@ -150,20 +182,3 @@ def _vcluster_exchange_groups(config):
         if group["name"] != "cluster-admin"
     }
     return [groups[name] for name in sorted(groups)]
-
-
-def _secret_data(value):
-    """Read native or observed Secret data without changing binary values."""
-    if value is None:
-        return {}
-    body = _to_dict(value.resource) if hasattr(value, "resource") else _to_dict(value)
-    if body.get("kind") == "Object":
-        state = body.get("status", {}).get("atProvider", {})
-        body = state.get("manifest") or (state.get("raw") or {}).get("manifest") or {}
-    return {
-        **(body.get("data") or {}),
-        **{
-            key: base64.b64encode(value.encode()).decode()
-            for key, value in (body.get("stringData") or {}).items()
-        },
-    }

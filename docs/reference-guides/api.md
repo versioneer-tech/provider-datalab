@@ -125,6 +125,13 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>environmentName</b></td>
+        <td>string</td>
+        <td>
+          Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
         <td>[]object</td>
         <td>

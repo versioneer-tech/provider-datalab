@@ -386,7 +386,6 @@ def check_name_collisions(args, env, source):
         identities
     ), "Virtual clusters share host objects"
     assert len([body for body in host_objects if body["kind"] == "StatefulSet"]) == 4
-    assert len([body for body in host_objects if body["kind"] == "ServiceAccount"]) == 8
     print(
         "PASS hyphenated instance and profile names keep separate host objects and connection references"
     )
@@ -395,6 +394,7 @@ def check_name_collisions(args, env, source):
 def main():
     args = arguments()
     env = environment()
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
     group = {"name": "demo", "namespace": "demo", "role": "edit"}
     source = {

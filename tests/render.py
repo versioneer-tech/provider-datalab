@@ -4,6 +4,7 @@
 """Shared composition rendering and snapshot format."""
 
 import argparse
+from copy import deepcopy
 from pathlib import Path
 import runpy
 import subprocess
@@ -31,10 +32,12 @@ def environment():
     return {
         "apiVersion": "apiextensions.crossplane.io/v1beta1",
         "kind": "EnvironmentConfig",
-        "metadata": {"name": "datalab"},
+        "metadata": {"name": "datalab",
+                     "labels": {"datalabs.pkg.internal/name": "datalab"}},
         "data": {
             "iam": {"realm": "acme", "issuerURL": "https://identity.acme.com/realms/acme",
                     "internalURL": "http://keycloak.keycloak:8080/realms/acme"},
+            "storage": {"secretNamespace": "datalab"},
             "ingress": {"enabled": False, "domain": "lab.acme.com"},
             "httpRoute": {"enabled": True, "enableS3": True, "parentName": "default",
                           "parentNamespace": "contour", "sectionName": "workspaces-https",
@@ -43,8 +46,31 @@ def environment():
     }
 
 
+def requirements(environment, observed):
+    def documents(value):
+        if isinstance(value, (str, Path)):
+            return list(yaml.safe_load_all(Path(value).read_text()))
+        return value if isinstance(value, list) else [value]
+
+    required = deepcopy(documents(environment))
+    identities = {(item.get("metadata", {}).get("namespace"), item.get("metadata", {}).get("name"))
+                  for item in required if item.get("kind") == "Secret"}
+    # Supply native Secrets separately from the synthetic Object observer state.
+    for item in documents(observed):
+        manifest = item.get("status", {}).get("atProvider", {}).get("manifest", {})
+        data = manifest.get("data") or manifest.get("stringData")
+        metadata = manifest.get("metadata") or {}
+        identity = (metadata.get("namespace"), metadata.get("name"))
+        if (manifest.get("kind") == "Secret" and data and data != {"redacted": None}
+                and all(identity) and identity not in identities):
+            required.append(deepcopy(manifest))
+            identities.add(identity)
+    return required
+
+
 def render(args, environment, source="examples/base/001-lab.yaml",
            observed="tests/observed/001-lab.yaml", error=None, include_composite=False):
+    environment = requirements(environment, observed)
     with tempfile.TemporaryDirectory(prefix="test-render-") as directory:
         work = Path(directory)
         paths = []
@@ -108,4 +134,8 @@ def snapshot(path):
 
 
 if __name__ == "__main__":
-    sys.stdout.write(snapshot(sys.argv[1]))
+    if sys.argv[1] == "requirements":
+        observed = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else []
+        sys.stdout.write(yaml.safe_dump_all(requirements(sys.argv[2], observed)))
+    else:
+        sys.stdout.write(snapshot(sys.argv[1]))

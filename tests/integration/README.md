@@ -10,11 +10,12 @@ Provider Storage. It creates fixed profile-named Secrets for the disposable
 in-cluster MinIO service because the Datalab composition needs object-storage
 credentials.
 
-Platform setup waits for the generated Datalab CRD to match the current XRD.
-An established CRD alone does not prove that a schema update was accepted.
+Platform setup waits for the generated Datalab CRD schema to match the XRD.
 
-Crossplane `2.4.1` is the reproducible test pin. See
-[`crossplane.yaml`](../../crossplane.yaml) for the supported Crossplane range.
+The harness installs Crossplane core `2.4.3` and applies
+[`deploy/crossplane-values.yaml`](../../deploy/crossplane-values.yaml) on every
+setup. Provider and function settings come from `dependencies/`. See the
+[dependency baseline](../../docs/how-to-guides/installation.md#dependency-baseline).
 
 Run the render tests before cluster integration:
 
@@ -57,24 +58,18 @@ tests/integration/run.bash verify-vcluster
 ```
 
 The network profile uses controlled HTTP targets to test generated policies.
-It does not start a real vCluster or test admission policy. Each connection
-check runs once after the policies have converged. A denied connection must
-fail with a connection error or timeout; an HTTP, DNS, or command error fails
+Connection checks run after the policies have converged. A denied connection
+must fail with a connection error or timeout; an HTTP, DNS, or command error fails
 the check. The external connectivity target is `https://www.iana.org/`.
 An unrestricted peer also checks denied ingress into both team namespaces.
 Server-side dry runs check that the host LimitRange supplies missing container
 resources and that all four CPU and memory quotas reject oversized Pods.
 Set `KEEP_NETWORK_RESOURCES=1` to retain successful resources.
 
-The registry probe allows time for the HTTP service to start. It reports
-the failed operation and HTTP status without printing credentials.
-
-The Data profile seeds one
-disposable MinIO bucket for file operations. It tests access through the
-runtime Service.
-It allows ten minutes for deployment creation. Startup watch throttling can
-delay resource generation after the runtime Secret observer is ready.
-Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
+The Data profile checks file access through the runtime Service. It allows
+ten minutes for deployment creation because watch throttling can delay
+resource generation. Set `KEEP_DATA_RESOURCES=1` to retain successful resources.
+The registry profile uses `KEEP_REGISTRY_RESOURCES=1`.
 
 The network, Data, and store fixtures use `datalab` and `datalab-custom`.
 The virtual cluster profile uses `datalab-vcluster-it` for its issuer,
@@ -85,44 +80,27 @@ external egress in `datalab` and enables external egress
 in `datalab-custom`. The S3 profile replaces
 `datalab-custom` with its Gateway and identity settings.
 
-The S3 profile adds Contour, Keycloak, and an SDK client to test
-[S3 client access](../../docs/how-to-guides/s3-access.md).
-The boto3 client uses `s3-credentials.py` as its AWS `credential_process`.
-The test Pod receives `CLIENT_SECRET` from the generated Datalab OAuth Secret.
-The S3 profile also pauses its disposable Keycloak client, changes the source
-OAuth connection Secret, and checks credential propagation and workload
-restart. It restores the credentials, resumes the client, and requires 30
-seconds without updates to the source, observer, and projected Secrets.
-It then repeats the S3 checks. This tests Secret propagation; it does not
-rotate credentials in Keycloak itself.
+The S3 profile installs Contour and Keycloak. Its boto3 client uses
+`s3-credentials.py` as `credential_process`. It pauses the test Keycloak
+client, changes its source Secret, and checks redacted observer status,
+credential propagation, and workload restart. After restoring the Secret and
+resuming the client, it requires 30 seconds without Secret updates and repeats
+the S3 checks. This changes the Kubernetes Secret, not the Keycloak credential.
 Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
-The PostgreSQL profile installs Crunchy PGO `6.0.2`.
-Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
-resources. PGO remains installed after the profile finishes. Successful cleanup scales
-its Deployment to zero. The next profile scales it to one before use.
-
-The managed-store profiles use these fixed operator releases to check the
-resources emitted by the composition:
-
-- MongoDB Kubernetes Operator `1.14.0` (Helm chart `1.14.0`) serves
-  `mongodbcommunity.mongodb.com/v1`.
-- Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`) serves
-  `redis.redis.opstreelabs.in/v1beta2`.
+The store profiles use the operator versions listed in the
+[installation guide](../../docs/how-to-guides/installation.md#prerequisites).
+Set `KEEP_POSTGRES_RESOURCES=1` for PostgreSQL, or `KEEP_STORE_RESOURCES=1` for
+MongoDB and Redis, to retain successful resources. The harness applies CRDs
+before installing an operator. Operators remain installed and are scaled down
+after successful cleanup.
 
 Service probes run in `workspace`, where the published connection Secrets live.
 The test environment permits ingress only from Pods with the service-probe label
 on PostgreSQL, MongoDB, and Redis ports. Other outside clients remain blocked.
 
-Set `KEEP_STORE_RESOURCES=1` to retain successful MongoDB or Redis
-resources. Each operator remains installed after its profile finishes. Successful
-cleanup scales it to zero after the Datalab, namespace, workloads, and finalizers
-are removed. Retained resources or a cleanup failure keep the operator running.
-Before an operator install or upgrade, the harness applies the CRDs from
-the selected chart. Helm does not update existing CRDs during an upgrade.
-
 Dependencies with matching pins are reused after readiness checks. Set
-`REUSE_DEPENDENCIES=0` to force Helm installation or upgrade, for example after
+`REUSE_DEPENDENCIES=0` to apply the chart again, for example after
 changing chart values. The current Composition and XRD are applied on each run.
 The S3 client image is rebuilt when its source changes and loaded only when
 absent from Kind. Full runs start Keycloak before the network and
@@ -151,45 +129,26 @@ The profile sets `defaults.overallQuota.hard.limits.cpu` to `20`. Its two
 control planes, controllers, DNS, database, and catalog need room for rolling
 updates. Other quota entries keep their defaults.
 
-The vcluster profile installs PGO, Keycloak, and Contour.
-Its identity fixture creates `test-login` to check exchange of tokens from
-another client. The test EnvironmentConfig explicitly adds it through
-`iam.extraAudiences`. The fixture permits a password grant to obtain real human
-subject tokens. User passwords are generated at test time. Exchange probes
-check member and admin subjects, exact roles and
-audiences, omission of an unauthorized profile, rejection of interactive scopes,
-and namespace access with signed exchanged tokens. The test also checks that
-the separate login client's tokens contain the expected group roles and workspace audience.
-These probes run only in the dedicated Kind cluster. Passing render checks
-does not establish a live result.
+The profile installs PGO, Keycloak, and Contour. Its `test-login` client uses
+a password grant to obtain human subject tokens with generated test passwords.
+Exchange checks cover members, administrators, unauthorized profiles, exact
+roles and audiences, and rejection of interactive scopes.
 
-It requires one workspace OAuth2 client and verifies that every downloaded
-profile rejects the service account with only `ws_api`. The test explicitly
-assigns one vcluster role at a time, obtains a token, then removes that grant.
-Test requests explicitly include the required optional OAuth scope. The profile
-checks that an admin profile cannot elevate a namespace caller and that role
-scopes and Kubernetes RBAC permit only the configured access. The probe
-mounts the workspace credential Secret separately from public profile Secrets.
-These test grants are not composition behavior.
-The client runs outside both virtual clusters and uses their HTTPS APIs.
-It checks Agent Sandbox CRDs and controller readiness, then creates a Sandbox
-from the sandboxd template with a declared session PVC. Through Kubernetes
-port-forwarding, it writes and reads a file over REST and runs a command over
-gRPC. It deletes and recreates the Sandbox, then checks the file and PVC UID.
-It also submits oversized virtual Pods and checks that host CPU and memory
-quota rejections appear in their events.
-The profile also rejects duplicate OAuth2 discovery names and checks removal
-and recovery of discovery when the source credential Secret is deleted and
-restored. Its producer is paused for that check; credential values stay private.
-It checks that John discovers both custom keys and Jane only `apikey-1`,
-with missing optional keys omitted from status and readiness checks.
-The virtual cluster starts with a native PostgreSQL Secret mapping.
-It builds the catalog image, loads it into Kind, and deploys the STAC workload
-through the public virtual Kubernetes API. The migration Job installs PgSTAC in a
-Datalab PostgreSQL database. The API uses a separate database login. The test
-adds a collection and item, runs a spatial search, restarts the API, and checks
-the catalog again after a control-plane restart. It then removes one virtual
-cluster and checks that the other cluster and PostgreSQL remain available.
+The workspace service account starts with only `ws_api`. The test temporarily
+assigns individual vcluster roles and requests their optional scopes. It checks
+namespace access, denied escalation, independent instances, role downgrade,
+and revocation with tokens that have not expired. Downloaded profile helpers
+must return the caller token unchanged.
+
+Sandbox checks use REST, gRPC, and Kubernetes port-forwarding. They replace a
+Sandbox and verify the file content and session PVC UID. Oversized virtual
+Pods must report host CPU and memory quota rejection.
+
+The profile also checks OAuth2 discovery name uniqueness and recovery after
+source Secret deletion. Custom connection checks use different optional
+Secrets for John and Jane. The PostgreSQL-backed STAC test creates and searches
+an item, then repeats the search after API and control-plane restarts. Removing
+one virtual cluster must leave the other cluster and PostgreSQL available.
 
 ## Test resource budget
 
@@ -201,9 +160,9 @@ release. Successful cleanup waits for resource deletion before scaling it down.
 An operator stays running if resources remain or cleanup fails. Crossplane,
 providers, storage, and identity services remain available.
 
-Integration uses a temporary composition with a `1m` response TTL. The generated
-deployment artifact and its `5m` default remain unchanged. This reduces periodic
-reconciliation waits; it does not change image pull or workload startup time.
+Integration builds a temporary composition with a `1m` Python response TTL
+default. Environment settings can override it. The environment and auto-ready
+functions keep their separate `10m` TTLs. The deployment artifact stays unchanged.
 
 The runner and CI report CPU requests at profile boundaries. Backup and probe
 checks also report requests before they run. The report includes active Pod
@@ -213,5 +172,4 @@ This reports scheduler reservations, not measured CPU use.
 
 A probe or backup Pod has 90 seconds to schedule before its execution wait.
 An unscheduled Pod reports its events, CPU request budget, and node allocation.
-The longer backup completion wait starts only after scheduling succeeds. The
-full suite retains MongoDB and Redis backup and restore checks.
+The longer backup completion wait starts only after scheduling succeeds.

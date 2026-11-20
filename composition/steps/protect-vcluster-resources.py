@@ -182,6 +182,9 @@ def compose(req, rsp):
         if body.get("kind") != "Object":
             continue
         manifest = body.get("spec", {}).get("forProvider", {}).get("manifest", {})
+        # Read-only Secret observers do not hold resources in the namespace.
+        if body.get("spec", {}).get("managementPolicies") == ["Observe"] and manifest.get("kind") == "Secret":
+            continue
         if manifest.get("metadata", {}).get("namespace") == name:
             suffix = hashlib.sha256(key.encode()).hexdigest()[:12]
             protect(suffix, f"namespace-{name}", key, prefix="datalab")

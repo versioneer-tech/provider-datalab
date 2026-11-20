@@ -35,6 +35,12 @@ spec:
               - rule: '!has(self.sessions) || self.sessions.all(s, has(self.vclusters) && s.vcluster in self.vclusters)'
                 message: Each session must select a declared virtual cluster.
               properties:
+                environmentName:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  description: Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.
                 users:
                   type: array
                   description: Users associated with this datalab.

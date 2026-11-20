@@ -15,6 +15,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = runpy.run_path(str(ROOT / "scripts/build-composition.py"))
 RUNTIME_CHECK = """
+import copy
 import json
 import sys
 
@@ -32,16 +33,42 @@ for case in data['cases']:
             req.context.update({'apiextensions.crossplane.io/environment': data['environment']})
             req.input.update(step['input'])
             if step['input']['kind'] == 'Script':
-                rsp = response.to(req)
                 namespace = {}
                 exec(compile(step['input']['script'], step['step'], 'exec'), namespace)
-                namespace['compose'](req, rsp)
+                for override, seconds in (
+                    ({}, case['seconds']),
+                    ({'storage': {'responseTTL': '8m'}}, case['seconds']),
+                    ({'datalab': {'responseTTL': '30s'}}, 30),
+                    ({'datalab': {'responseTTL': '5m'}}, 300),
+                    ({'datalab': {'responseTTL': '1h'}}, 3600),
+                ):
+                    environment = copy.deepcopy(data['environment'])
+                    environment.update(override)
+                    req.context.update({'apiextensions.crossplane.io/environment': environment})
+                    rsp = response.to(req)
+                    namespace['compose'](req, rsp)
+                    assert rsp.meta.ttl.seconds == seconds, (step['step'], override, rsp.meta.ttl)
+                    assert rsp.meta.ttl.nanos == 0, (step['step'], rsp.meta.ttl)
+                for invalid in (None, True, 300, '', '0s', '-1m', '1.5s', '1m30s', '5d', '9223372037s'):
+                    environment = copy.deepcopy(data['environment'])
+                    environment['datalab'] = {'responseTTL': invalid}
+                    req.context.update({'apiextensions.crossplane.io/environment': environment})
+                    rsp = response.to(req)
+                    namespace['compose'](req, rsp)
+                    assert any(result.severity == fnv1.SEVERITY_FATAL
+                               and 'datalab.responseTTL' in result.message for result in rsp.results), (
+                                   step['step'], invalid, rsp.results)
+                    assert not rsp.desired.resources, (step['step'], invalid)
+                    assert not rsp.requirements.resources, (step['step'], invalid)
             else:
-                with grpc.insecure_channel(data['auto_ready'] + ':9443') as channel:
+                target = (data['environment_function'] if step['functionRef']['name'] == 'function-environment-configs'
+                          else data['auto_ready'])
+                with grpc.insecure_channel(target + ':9443') as channel:
                     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
                     rsp = stub.RunFunction(req, timeout=10)
-            assert rsp.meta.ttl.seconds == case['seconds'], (step['step'], rsp.meta.ttl)
-            assert rsp.meta.ttl.nanos == 0, (step['step'], rsp.meta.ttl)
+                seconds = case['function_seconds'][step['functionRef']['name']]
+                assert rsp.meta.ttl.seconds == seconds, (step['step'], rsp.meta.ttl)
+                assert rsp.meta.ttl.nanos == 0, (step['step'], rsp.meta.ttl)
 """
 
 
@@ -99,18 +126,26 @@ class FunctionResponseTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_all_generated_responses_use_setting(self):
+    def test_responses_use_environment_override_and_separate_function_settings(self):
         example = yaml.safe_load((ROOT / "examples/base/002-lab.yaml").read_text())
         empty = {
             "apiVersion": example["apiVersion"],
             "kind": example["kind"],
             "metadata": {"name": "ttl-check", "namespace": "workspace"},
-            "spec": {"users": ["ttl-user"]},
+            "spec": {"users": ["ttl-user"], "sessions": []},
         }
         environments = list(
             yaml.safe_load_all((ROOT / "tests/environmentconfig.yaml").read_text())
         )
-        cases = []
+        composition = yaml.safe_load((ROOT / "composition.yaml").read_text())
+        cases = [{
+            "seconds": 60,
+            "function_seconds": {
+                "function-environment-configs": 600,
+                "crossplane-contrib-function-auto-ready": 600,
+            },
+            "pipeline": composition["spec"]["pipeline"],
+        }]
         with tempfile.TemporaryDirectory(prefix="datalab-ttl-") as directory:
             root = Path(directory)
             shutil.copytree(ROOT / "composition", root / "composition")
@@ -124,7 +159,11 @@ class FunctionResponseTests(unittest.TestCase):
             )
             for value in ("5m", "90s"):
                 (root / "composition/settings.yaml").write_text(
-                    yaml.safe_dump({"responseTTL": value})
+                    yaml.safe_dump({
+                        "responseTTL": value,
+                        "environmentConfigsTTL": "11m",
+                        "autoReadyTTL": "12m",
+                    })
                 )
 
                 composition = yaml.safe_load(BUILDER["build"](root))
@@ -132,14 +171,31 @@ class FunctionResponseTests(unittest.TestCase):
                 cases.append(
                     {
                         "seconds": BUILDER["response_ttl_seconds"](value),
+                        "function_seconds": {
+                            "function-environment-configs": 660,
+                            "crossplane-contrib-function-auto-ready": 720,
+                        },
                         "pipeline": pipeline,
                     }
                 )
 
             settings = (root / "composition/settings.yaml").read_text()
             composition = yaml.safe_load(BUILDER["build"](root, response_ttl="1m"))
-            cases.append({"seconds": 60, "pipeline": composition["spec"]["pipeline"]})
+            cases.append({
+                "seconds": 60,
+                "function_seconds": cases[-1]["function_seconds"],
+                "pipeline": composition["spec"]["pipeline"],
+            })
             self.assertEqual((root / "composition/settings.yaml").read_text(), settings)
+
+            for key in ("responseTTL", "environmentConfigsTTL", "autoReadyTTL"):
+                for value in ("0s", "9223372037s"):
+                    invalid = yaml.safe_load(settings)
+                    invalid[key] = value
+                    (root / "composition/settings.yaml").write_text(yaml.safe_dump(invalid))
+                    with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                        BUILDER["build"](root)
+            (root / "composition/settings.yaml").write_text(settings)
 
             pipeline = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
             pipeline["spec"]["pipeline"].append(
@@ -165,6 +221,7 @@ class FunctionResponseTests(unittest.TestCase):
                     "xrs": [empty, example],
                     "environment": environments[0]["data"],
                     "auto_ready": RUNTIME.removesuffix("-python") + "-auto-ready",
+                    "environment_function": RUNTIME.removesuffix("-python") + "-function-environment-configs",
                 }
             ),
             text=True,

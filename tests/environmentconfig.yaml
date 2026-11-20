@@ -5,6 +5,8 @@ apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: datalab
+  labels:
+    datalabs.pkg.internal/name: datalab
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
@@ -37,7 +39,6 @@ data:
     provider: Other
     region: acme
     secretNamespace: datalab
-    type: s3
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0
@@ -84,6 +85,8 @@ apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: datalab-custom
+  labels:
+    datalabs.pkg.internal/name: datalab-custom
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
@@ -139,7 +142,6 @@ data:
     provider: Other
     region: acme
     secretNamespace: datalab
-    type: s3
   network:
     internalIngress:
     - namespace: operations

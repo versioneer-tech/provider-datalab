@@ -137,7 +137,7 @@ def main():
     assert not any(key.startswith("registry-") for key in removed)
     assert not any(c["type"] == "registry" for c in removed["composite"]["status"]["connections"])
     print("PASS registry connections publish only user/password and wait for current credentials and workload readiness")
-    print("PASS disabling the registry removes its resources and connection without deleting S3 data")
+    print("PASS disabling the registry removes its resources and connection")
 
 
 if __name__ == "__main__":

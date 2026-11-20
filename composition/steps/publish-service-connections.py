@@ -41,13 +41,6 @@ def _storage_values(data, config):
         "AWS_ENDPOINT_URL": endpoint,
         "AWS_REGION": region,
         "AWS_S3_FORCE_PATH_STYLE": style,
-        "remote": access,
-        "remotePath": "/",
-        "configData": (
-            f"[{access}]\ntype = {config.get('type', '')}\nprovider = {config.get('provider', '')}\n"
-            f"endpoint = {endpoint}\nregion = {region}\naccess_key_id = {access}\n"
-            f"secret_access_key = {secret}\nforce_path_style = {style}\n"
-        ),
         "aws-credentials": f"[default]\naws_access_key_id = {access}\naws_secret_access_key = {secret}\n",
     }
     token = _b64get_any(data, ["AWS_SESSION_TOKEN", "sessionToken"])
@@ -118,7 +111,6 @@ def compose(req, rsp):
     name = meta["name"]
     namespace = meta.get("namespace") or "default"
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-    observed = req.observed.resources
 
     def publish(connection_name, values, complete):
         secret_name = f"{name}-{connection_name}"
@@ -139,13 +131,13 @@ def compose(req, rsp):
             rsp.desired.resources[key].ready = fnv1.READY_TRUE
 
     storage = _storage_values(
-        _extract_data(observed.get(f"observe-storage-secret-{name}")),
+        _extract_data(req, rsp, f"observe-storage-secret-{name}"),
         env.get("storage") or {},
     )
     publish("s3", storage, bool(storage))
     for store, config in sorted((spec.get("databases") or {}).items()):
         values = _postgres_values(
-            _extract_data(observed.get(f"observe-database-secret-{name}-{store}")),
+            _extract_data(req, rsp, f"observe-database-secret-{name}-{store}"),
             name,
             store,
             config,
@@ -164,7 +156,7 @@ def compose(req, rsp):
             password = (
                 _b64get_any(
                     _extract_data(
-                        observed.get(f"observe-{backend}-auth-secret-{name}-{store}")
+                        req, rsp, f"observe-{backend}-auth-secret-{name}-{store}"
                     ),
                     ["password"],
                 )

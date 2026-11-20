@@ -5,6 +5,8 @@ apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: datalab-vcluster-it
+  labels:
+    datalabs.pkg.internal/name: datalab-vcluster-it
 data:
   iam:
     realm: integration

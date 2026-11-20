@@ -189,6 +189,8 @@ show the two configurations. `datalab-custom` demonstrates read-only Data,
 custom quotas and StorageClasses, Pod security, named virtual clusters,
 Gateway and S3 access, and
 internal network rules. Adapt these settings to your platform's access policy.
+Use `spec.environmentName` for a named override. See
+[environment setup](installation.md#4-set-the-shared-environment).
 
 ## Check provisioning
 

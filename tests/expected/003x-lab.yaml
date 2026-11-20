@@ -5,8 +5,6 @@
 apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
   name: s-jane
 spec:
   databases:
@@ -15,6 +13,7 @@ spec:
       names:
       - analytics
       storage: 1Gi
+  environmentName: datalab-custom
   sessions:
   - name: analysis
     namespace: demo
@@ -1163,24 +1162,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-46cbc28e3a94-s-jane-namespace-s-jane-o-5ee3d6bebb
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-runtime-storage-secret-s-jane
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-4e8948967842-s-jane-namespace-s-jane-l-95061c0ccc
   namespace: default
 spec:
@@ -1189,24 +1170,6 @@ spec:
     kind: Object
     resourceRef:
       name: limitrange-s-jane
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-563ad747be9e-s-jane-namespace-s-jane-o-916e405def
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-database-secret-s-jane-pg0
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1261,24 +1224,6 @@ spec:
     kind: Object
     resourceRef:
       name: db-configmap-s-jane-pg0
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-67407a5e0861-s-jane-namespace-s-jane-o-fe82d20788
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-registry-auth-secret-s-jane
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1369,24 +1314,6 @@ spec:
     kind: Object
     resourceRef:
       name: db-postgrescluster-s-jane-pg0
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-8c57ddd9a0c8-s-jane-namespace-s-jane-o-29dd17300e
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-custom-secret-s-jane-s-jane-apikey-2-8b2594af3f
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1801,24 +1728,6 @@ spec:
     kind: Object
     resourceRef:
       name: data-networkpolicy-s-jane
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-f3e739f52ee6-s-jane-namespace-s-jane-o-cf7e5ea538
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-custom-secret-s-jane-s-jane-apikey-1-33400d422f
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

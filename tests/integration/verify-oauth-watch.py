@@ -71,6 +71,9 @@ def main():
     # The startup circuit condition can stay stale until the next watch event.
     observer = get(OBSERVER)
     assert observer["spec"]["watch"] is True, "The OAuth observer is not watched."
+    assert observer["status"]["atProvider"]["manifest"].get("data") == {"redacted": None}, (
+        "The OAuth observer exposes Secret data."
+    )
     original = get(SOURCE)["data"]
     secret_key = next(
         key
@@ -84,12 +87,12 @@ def main():
         raw = base64.b64decode(encoded)
         cookie_secret = hashlib.sha256(raw).hexdigest()[:32]
         checksum = hashlib.sha256(cookie_secret.encode()).hexdigest()
-        observed_data = get(OBSERVER)["status"]["atProvider"]["manifest"].get(
-            "data", {}
-        )
+        observed = get(OBSERVER)["status"]["atProvider"]["manifest"]
+        source_version = get(SOURCE)["metadata"]["resourceVersion"]
         runtime = get(f"secret/{DATALAB}-oauth2-client", args.namespace)["data"]
         if (
-            observed_data.get(secret_key) != encoded
+            observed.get("data") != {"redacted": None}
+            or observed.get("metadata", {}).get("resourceVersion") != source_version
             or runtime.get("client_secret") != encoded
         ):
             return False

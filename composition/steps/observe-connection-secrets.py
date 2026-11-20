@@ -11,6 +11,7 @@ from composition.helpers import (
     _boolish,
     _extract_data,
     _extract_manifest,
+    _secret_manifest,
     _resource_name,
     _safe_str,
     _to_dict,
@@ -69,11 +70,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 ),
             }
             if kind in ("postgres", "mongo", "redis", "registry", "custom"):
-                connection = publish_connection(connection, source, present)
+                connection = publish_connection(connection, key, present)
                 if kind == "custom" and connection is None:
                     return
             if kind == "s3":
-                data = _extract_data(source)
+                data = _extract_data(req, rsp, key)
+                connection["ready"] = connection["ready"] and bool(data)
                 for field, secret_key in (
                     ("endpoint", "AWS_ENDPOINT_URL"),
                     ("region", "AWS_REGION"),
@@ -99,11 +101,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 )
             connections.append(connection)
 
-    def publish_connection(connection, source, present):
+    def publish_connection(connection, source_key, present):
         kind, instance = connection["type"], connection["name"]
         secret_name = _resource_name(xr_name, kind, instance, "connection")
         key = _resource_name("connection", secret_name)
-        source_manifest = _extract_manifest(source)
+        source_manifest = _secret_manifest(req, rsp, source_key)
         data = dict(source_manifest.get("data") or {})
         data.update({name: base64.b64encode(value.encode()).decode()
                      for name, value in (source_manifest.get("stringData") or {}).items()})
@@ -167,7 +169,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     oauth_source = observed.get(f"observe-oauth-client-secret-{xr_name}")
     oauth_body = _to_dict(oauth_source.resource) if oauth_source else {}
     oauth_meta = _extract_manifest(oauth_source).get("metadata") or {}
-    oauth_data = _extract_data(oauth_source)
+    oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
     credential_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
     client_id = _safe_str(
         (client_body.get("status", {}).get("atProvider") or {}).get("clientId")

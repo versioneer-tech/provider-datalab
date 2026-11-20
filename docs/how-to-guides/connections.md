@@ -15,7 +15,7 @@ remain in the referenced Secrets.
 
 Read each exact Secret name and namespace from `status.connections[].secretRef`.
 Managed service and custom connections wait until their published copy matches
-the source. S3 readiness reports source observation. Virtual profiles also
+the source. S3 readiness requires a current source Secret and a ready observer. Virtual profiles also
 require ready runtime, routing, RBAC, and identity resources. These checks do
 not report Secret delivery into a virtual cluster.
 
@@ -51,12 +51,14 @@ identity when access must end.
 
 ## Access control
 
-API clients should list authorized metadata by default and resolve credentials
-only on an explicit request. An `include-secret` parameter grants no permission:
-authorize every connection and use `Cache-Control: no-store` for credential
-responses. Resolve only provider-published references.
+Restrict access to Secrets and provider Object resources. Object specs can
+contain generated credentials; status redaction does not remove values from
+specs or Secret annotations.
 
-Restrict access to claim namespace Secrets and provider Object resources.
-The latter can contain credential values in their specs and observed state.
+The supplied provider-kubernetes runtime enables `--sanitize-secrets`. The
+composition reads source Secrets through Crossplane's required-resource API,
+so it does not depend on credential values in Object status. Source updates
+refresh the published Secrets; consumers must reload them.
+
 A virtual administrator can read all Secrets in that virtual cluster. A user
 who can create Pods in a namespace can usually mount that namespace's Secrets.

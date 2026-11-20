@@ -27,7 +27,6 @@ from urllib.request import Request, urlopen
 ISSUER = "https://keycloak.keycloak:8443/realms/integration"
 LAB = "verify-vcluster"
 HOST = "verify-vcluster.lab.acme.com"
-PREFIX = "/.vc0"
 
 
 CATALOG_PATH = "/api/v1/namespaces/demo/services/catalog:8080/proxy"
@@ -172,15 +171,15 @@ def deploy_catalog(api, bearer):
         expected=201,
     )
 
-    def migration_finished():
-        status = api("/apis/batch/v1/namespaces/demo/jobs/catalog-migrate", bearer).get(
+    def initialization_finished():
+        status = api("/apis/batch/v1/namespaces/demo/jobs/catalog-initialize", bearer).get(
             "status", {}
         )
-        assert not status.get("failed"), "PgSTAC migration Job failed"
+        assert not status.get("failed"), "PgSTAC initialization Job failed"
         return status.get("succeeded") == 1
 
-    wait_until(migration_finished, "PgSTAC migration did not finish")
-    # Remove the privileged migration input before starting the application.
+    wait_until(initialization_finished, "PgSTAC initialization did not finish")
+    # Remove the administrator credential before starting the application.
     api(
         "/api/v1/namespaces/demo/secrets/catalog-postgres-admin",
         bearer,
@@ -550,7 +549,6 @@ def main():
     parser.add_argument("gateway_ip")
     parser.add_argument("--other-only", action="store_true")
     parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--api-only", action="store_true")
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--revoked", action="store_true")
     parser.add_argument("--member-roles", action="store_true")
@@ -600,7 +598,7 @@ def main():
         ), f"{method} {path}: expected {expected}, got {result.status}"
         return data.decode() if raw else (json.loads(data) if data else None)
 
-    def profile_token(profile, instance="vc0"):
+    def profile_token(profile, instance="vc0", bearer=None):
         config = json.loads(Path(f"/profiles/{profile}/kubeconfig").read_text())
         assert (
             config["clusters"][0]["cluster"]["server"] == f"https://{HOST}/.{instance}"
@@ -620,7 +618,7 @@ def main():
         secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file())
         with TemporaryDirectory(prefix="test-vcluster-") as directory:
             # Automated probes supply a token and do not start user login.
-            value = token(LAB, secret_file.read_text().strip())
+            value = bearer if bearer is not None else token(LAB, secret_file.read_text().strip())
             token_file = Path(directory) / "access-token"
             token_file.write_text(value)
             token_file.chmod(0o600)
@@ -632,13 +630,14 @@ def main():
                 text=True,
                 env={**os.environ, **sources},
             )
-        return json.loads(credential.stdout)["status"]["token"]
+        actual = json.loads(credential.stdout)["status"]["token"]
+        assert actual == value, "The profile helper changed the caller token"
+        return actual
 
     def granted_token(profile, role, instance="vc0"):
         # Only this test assigns a vcluster role to the workspace account.
         set_workspace_roles([role])
         try:
-            profile_token(profile, instance)
             scope = (LAB + ":interactive" if role.endswith("_cluster-admin")
                      else LAB + ":vclusters_" + role.removeprefix("vcluster_"))
             value = token(LAB, next((Path("/oauth") / key).read_text().strip()
@@ -646,7 +645,8 @@ def main():
                                    if (Path("/oauth") / key).is_file()), scope=scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
-            return value
+            assert LAB in ([claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"])
+            return profile_token(profile, instance, value)
         finally:
             set_workspace_roles([])
 
@@ -666,19 +666,6 @@ def main():
             == "vc1"
         )
         print("PASS vc1 remains available after vc0 removal", flush=True)
-        return
-
-    if args.api_only:
-        deadline = time.monotonic() + 120
-        while True:
-            try:
-                api("/api/v1/namespaces", granted_token("administrator", "vcluster_vc0_cluster-admin"))
-                break
-            except (AssertionError, OSError, subprocess.CalledProcessError):
-                if time.monotonic() > deadline:
-                    raise
-                time.sleep(2)
-        print("PASS HTTPS API and generated credentials after re-enable", flush=True)
         return
 
     for profile, instance in (("administrator", "vc0"), ("editor", "vc0"), ("other", "vc1")):
@@ -745,15 +732,6 @@ def main():
     api("/api/v1/namespaces/demo/configmaps", admin_profile)
     print("PASS cluster-admin download keeps the caller's namespace role", flush=True)
     marker.write_text(editor)
-    for value, expected_role in (
-        (bearer, "vcluster_vc0_cluster-admin"),
-        (editor, "vcluster_vc0_namespace-demo"),
-    ):
-        claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
-        assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", expected_role}
-        assert LAB in (
-            [claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"]
-        )
     deadline = time.monotonic() + 90
     while True:
         try:

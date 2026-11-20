@@ -4,12 +4,13 @@
 """Check Data endpoints, credential projection, and invalid exposure settings."""
 
 import base64
+from copy import deepcopy
 import hashlib
 from pathlib import Path
 
 import yaml
 
-from render import arguments, environment, manifest, render
+from render import arguments, environment, manifest, render, requirements
 
 
 def main():
@@ -21,7 +22,10 @@ def main():
             "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
             "metadata": {"name": "observe-oauth-client-secret-s-joe", "annotations": {
                 "crossplane.io/composition-resource-name": "observe-oauth-client-secret-s-joe"}},
-            "status": {"atProvider": {"manifest": {"data": {
+            "status": {"atProvider": {"manifest": {
+                "apiVersion": "v1", "kind": "Secret",
+                "metadata": {"name": "s-joe-oauth-client", "namespace": "default"},
+                "data": {
                 "clientSecret": base64.b64encode(secret.encode()).decode()}}}},
         }
 
@@ -99,7 +103,7 @@ def main():
 
     env = environment()
     env["data"]["iam"]["namespace"] = "identity"
-    env["data"]["storage"] = {"forcePathStyle": False}
+    env["data"]["storage"].update(forcePathStyle=False)
     resources = render(args, env)
     policy = manifest(resources, "data-s3-networkpolicy-s-joe")["spec"]
     destinations = [target for rule in policy["egress"] for target in rule.get("to", [])]
@@ -133,6 +137,17 @@ def main():
             "datalabs.versioneer.at/oauth2-cookie-checksum"] for output in outputs]
         assert checksums[0] != checksums[1]
     print("PASS OAuth credential projection and rotation", flush=True)
+
+    sources = observed + [oauth_observer("initial-client-secret")]
+    required = requirements(environment(), sources)
+    sanitized = deepcopy(sources)
+    for body in sanitized:
+        source = body.get("status", {}).get("atProvider", {}).get("manifest", {})
+        if source.get("kind") == "Secret":
+            source["data"] = {"redacted": None}
+    secured = render(args, required, observed=sanitized)
+    assert secured == outputs[0]
+    print("PASS sanitized storage and OAuth observers preserve credentials, deployment checksums, and service output", flush=True)
 
     pending = render(args, environment(), observed=[oauth_observer("initial-client-secret")])
     assert "oauth2-client-secret-s-joe" in pending

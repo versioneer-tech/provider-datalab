@@ -79,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/crossplane/crossplane/v2.4.1/install.sh \
+            https://raw.githubusercontent.com/crossplane/cli/v2.4.1/install.sh \
             --output /tmp/crossplane-install.sh
           XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
           sudo install crossplane /usr/local/bin/crossplane

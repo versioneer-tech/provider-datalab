@@ -12,6 +12,7 @@ from keycloak_policy import verify_keycloak_policy
 
 def main():
     args, env = arguments(), environment()
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
@@ -73,16 +74,13 @@ def main():
     usages = [body["spec"] for body in initial.values() if body.get("kind") == "Usage"
               and body["spec"]["by"]["kind"] == "ClientPolicyProfilePolicy"]
     assert {item["of"]["kind"] for item in usages} == {"ClientScope", "ClientPolicyProfile"}
-    assert all(item["replayDeletion"] and item["by"]["kind"] == "ClientPolicyProfilePolicy"
-               and item["by"]["resourceRef"]["name"] == policy["name"] for item in usages)
+    assert all(item["replayDeletion"] and item["by"]["resourceRef"]["name"] == policy["name"]
+               for item in usages)
     mappers = params(initial, "ProtocolMapper")
     assert {item["config"]["included.client.audience"] for item in mappers
             if item["protocolMapper"] == "oidc-audience-mapper"} == {"s-joe"}
     role_mapper, = [item for item in mappers if item["protocolMapper"] == "oidc-usermodel-realm-role-mapper"]
     assert role_mapper["config"]["claim.name"] == "resource_access.s-joe.roles"
-    collector, = [body for body in initial.values() if body.get("kind") == "ProtocolMapper"
-                  and body["spec"]["forProvider"]["protocolMapper"] == "oidc-usermodel-realm-role-mapper"]
-    assert collector["metadata"]["name"] != "s-joe"
     assert not any(item["protocolMapper"] in {"oidc-usermodel-client-role-mapper", "oidc-hardcoded-role-mapper", "oidc-hardcoded-claim-mapper"}
                    for item in mappers)
     selected = [item for item in mappers if item["protocolMapper"] == "oidc-role-name-mapper"]

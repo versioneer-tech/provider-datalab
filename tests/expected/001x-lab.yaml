@@ -51,17 +51,6 @@ stringData:
     aws_access_key_id = joe-access-key
     aws_secret_access_key = joe-secret-key
     aws_session_token = fallback-session-token
-  configData: |
-    [joe-access-key]
-    type = s3
-    provider = Other
-    endpoint = https://s3.custom.acme.com
-    region = custom-acme
-    access_key_id = joe-access-key
-    secret_access_key = joe-secret-key
-    force_path_style = true
-  remote: joe-access-key
-  remotePath: /
 type: Opaque
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -476,24 +465,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-6f9cb380ad34-s-joe-namespace-s-joe-obs-89aba04afd
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-runtime-storage-secret-s-joe
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-joe
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-868ffa891c39-s-joe-namespace-s-joe-dat-a94eb865f9
   namespace: default
 spec:
@@ -574,24 +545,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-joe-allow-namespace-ingress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-joe
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-d7ee09379424-s-joe-namespace-s-joe-obs-fc0fec1ccd
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: observe-registry-auth-secret-s-joe
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

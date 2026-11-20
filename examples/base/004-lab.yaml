@@ -6,8 +6,7 @@ apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-john
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
 spec:
+  environmentName: datalab-custom
   users:
   - john

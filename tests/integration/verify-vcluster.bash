@@ -29,10 +29,10 @@ trap report_failure ERR
 
 build_catalog_image() {
   local digest
-  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,migrate.py} | sha256sum | cut -c1-16)"
+  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,initialize.py} | sha256sum | cut -c1-16)"
   catalog_image="datalab-stac:${digest}"
   mkdir -p "${work_directory}/docker" "${work_directory}/build/tests/vcluster"
-  cp "${REPO_ROOT}/tests/vcluster/migrate.py" "${work_directory}/build/tests/vcluster/"
+  cp "${REPO_ROOT}/tests/vcluster/initialize.py" "${work_directory}/build/tests/vcluster/"
   if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${catalog_image}" >/dev/null 2>&1; then
     DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${catalog_image}" \
       --file "${REPO_ROOT}/tests/vcluster/catalog.Dockerfile" "${work_directory}/build"
@@ -133,9 +133,8 @@ kind: Datalab
 metadata:
   name: ${team}
   namespace: workspace
-  annotations:
-    datalabs.versioneer.at/environment: datalab-custom
 spec:
+  environmentName: datalab-custom
   users: [verify-s3]
 DATALAB
   done
@@ -298,15 +297,13 @@ value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "name
 result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
 assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
 print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
-for version in ('v1',):
-    source['apiVersion'] = 'versioneer.at/' + version
-    for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
-        for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
-            value = deepcopy(source)
-            config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
-            value['spec'][field] = {key: config}
-            result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
-            assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
+for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+    for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
+        value = deepcopy(source)
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        value['spec'][field] = {key: config}
+        result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
+        assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
 print('PASS Kubernetes admission rejects invalid instance names for all maps')
 ADMISSION
 }

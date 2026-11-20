@@ -8,13 +8,8 @@ Accepted
 
 ## Context
 
-Teams need relational databases, document databases, and key-value stores for
-their applications and data work. They need to request these capabilities
-without deploying database servers or maintaining backup jobs themselves.
-
-The platform operator needs control over storage, access, maintenance, and
-recovery. A common service API lets users work independently within those
-controls and lets the operator provide defined service guarantees.
+Teams need databases and caches without managing their servers and backup
+jobs. The platform operator controls storage, access, maintenance, and recovery.
 
 ## Decision
 

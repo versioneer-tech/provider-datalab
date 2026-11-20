@@ -13,55 +13,53 @@ spec:
     kind: Datalab
   mode: Pipeline
   pipeline:
-  - step: load-datalab-environment
+  - step: environmentConfigs
     functionRef:
-      name: crossplane-contrib-function-python
+      name: function-environment-configs
     input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      script: |
-        from google.protobuf import json_format
-
-        def _to_dict(value):
-            if value is None:
-                return {}
-            if isinstance(value, dict):
-                return value
-            return json_format.MessageToDict(value, preserving_proto_field_name=True)
-
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
-        from crossplane.function import request, resource, response
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-
-
-        ENVIRONMENT_KEY = "apiextensions.crossplane.io/environment"
-
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
-            xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            annotations = metadata.get("annotations", {}) or {}
-            labels = metadata.get("labels", {}) or {}
-            env_name = (
-                annotations.get("datalabs.versioneer.at/environment")
-                or labels.get("datalabs.versioneer.at/environment")
-                or "datalab"
-            ).strip() or "datalab"
-
-            response.require_resources(
-                rsp,
-                name="datalab-environment",
-                api_version="apiextensions.crossplane.io/v1beta1",
-                kind="EnvironmentConfig",
-                match_name=env_name,
-            )
-
-            environment = request.get_required_resource(req, "datalab-environment") or {}
-            environment_data = environment.get("data") or {}
-            rsp.context.MergeFrom(resource.dict_to_struct({ENVIRONMENT_KEY: environment_data}))
+      apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+      kind: Input
+      spec:
+        policy:
+          resolution: Optional
+        environmentConfigs:
+        - type: Reference
+          ref:
+            name: default
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: Value
+              key: datalabs.pkg.internal/name
+              value: datalab
+            - type: FromCompositeFieldPath
+              key: datalabs.pkg.internal/name
+              valueFromFieldPath: spec.crossplane.compositionRef.name
+              fromFieldPathPolicy: Optional
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: FromCompositeFieldPath
+              key: datalabs.pkg.internal/name
+              valueFromFieldPath: spec.environmentName
+              fromFieldPathPolicy: Optional
+        - type: Selector
+          selector:
+            mode: Multiple
+            minMatch: 0
+            maxMatch: 1
+            matchLabels:
+            - type: FromCompositeFieldPath
+              key: datalabs.pkg.internal/name
+              valueFromFieldPath: metadata.name
+              fromFieldPathPolicy: Optional
+      ttl: 10m
   - step: validate-data-exposure
     functionRef:
       name: crossplane-contrib-function-python
@@ -71,6 +69,8 @@ spec:
       script: |
         import re
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -79,6 +79,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _boolish(value):
             if isinstance(value, bool):
@@ -112,6 +136,7 @@ spec:
                 raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
             return timeouts
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -121,7 +146,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             data = (environment.get("defaults") or {}).get("data") or {}
@@ -232,6 +258,10 @@ spec:
 
         import json
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -241,6 +271,30 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
         def _boolish(value):
             if isinstance(value, bool):
                 return value
@@ -249,29 +303,34 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-        def _observed_manifests(observed_resource):
+        def _extract_manifest(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
+                return {}
             resource = _to_dict(observed_resource.resource)
             at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
+            return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
+
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _b64get_any(data, keys):
             if not data:
@@ -296,6 +355,7 @@ spec:
             digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
             return name[: limit - 11].rstrip("-") + "-" + digest
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -307,7 +367,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -358,11 +419,12 @@ spec:
                         ),
                     }
                     if kind in ("postgres", "mongo", "redis", "registry", "custom"):
-                        connection = publish_connection(connection, source, present)
+                        connection = publish_connection(connection, key, present)
                         if kind == "custom" and connection is None:
                             return
                     if kind == "s3":
-                        data = _extract_data(source)
+                        data = _extract_data(req, rsp, key)
+                        connection["ready"] = connection["ready"] and bool(data)
                         for field, secret_key in (
                             ("endpoint", "AWS_ENDPOINT_URL"),
                             ("region", "AWS_REGION"),
@@ -388,11 +450,11 @@ spec:
                         )
                     connections.append(connection)
 
-            def publish_connection(connection, source, present):
+            def publish_connection(connection, source_key, present):
                 kind, instance = connection["type"], connection["name"]
                 secret_name = _resource_name(xr_name, kind, instance, "connection")
                 key = _resource_name("connection", secret_name)
-                source_manifest = _extract_manifest(source)
+                source_manifest = _secret_manifest(req, rsp, source_key)
                 data = dict(source_manifest.get("data") or {})
                 data.update({name: base64.b64encode(value.encode()).decode()
                              for name, value in (source_manifest.get("stringData") or {}).items()})
@@ -456,7 +518,7 @@ spec:
             oauth_source = observed.get(f"observe-oauth-client-secret-{xr_name}")
             oauth_body = _to_dict(oauth_source.resource) if oauth_source else {}
             oauth_meta = _extract_manifest(oauth_source).get("metadata") or {}
-            oauth_data = _extract_data(oauth_source)
+            oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
             credential_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
             client_id = _safe_str(
                 (client_body.get("status", {}).get("atProvider") or {}).get("clientId")
@@ -631,6 +693,10 @@ spec:
 
         import base64
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -640,25 +706,51 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
             )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
+
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _b64get_any(data, keys):
             if not data:
@@ -672,6 +764,7 @@ spec:
                 except Exception:
                     return str(value)
             return None
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -714,13 +807,6 @@ spec:
                 "AWS_ENDPOINT_URL": endpoint,
                 "AWS_REGION": region,
                 "AWS_S3_FORCE_PATH_STYLE": style,
-                "remote": access,
-                "remotePath": "/",
-                "configData": (
-                    f"[{access}]\ntype = {config.get('type', '')}\nprovider = {config.get('provider', '')}\n"
-                    f"endpoint = {endpoint}\nregion = {region}\naccess_key_id = {access}\n"
-                    f"secret_access_key = {secret}\nforce_path_style = {style}\n"
-                ),
                 "aws-credentials": f"[default]\naws_access_key_id = {access}\naws_secret_access_key = {secret}\n",
             }
             token = _b64get_any(data, ["AWS_SESSION_TOKEN", "sessionToken"])
@@ -785,14 +871,14 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             meta = xr["metadata"]
             spec = xr.get("spec") or {}
             name = meta["name"]
             namespace = meta.get("namespace") or "default"
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            observed = req.observed.resources
 
             def publish(connection_name, values, complete):
                 secret_name = f"{name}-{connection_name}"
@@ -813,13 +899,13 @@ spec:
                     rsp.desired.resources[key].ready = fnv1.READY_TRUE
 
             storage = _storage_values(
-                _extract_data(observed.get(f"observe-storage-secret-{name}")),
+                _extract_data(req, rsp, f"observe-storage-secret-{name}"),
                 env.get("storage") or {},
             )
             publish("s3", storage, bool(storage))
             for store, config in sorted((spec.get("databases") or {}).items()):
                 values = _postgres_values(
-                    _extract_data(observed.get(f"observe-database-secret-{name}-{store}")),
+                    _extract_data(req, rsp, f"observe-database-secret-{name}-{store}"),
                     name,
                     store,
                     config,
@@ -838,7 +924,7 @@ spec:
                     password = (
                         _b64get_any(
                             _extract_data(
-                                observed.get(f"observe-{backend}-auth-secret-{name}-{store}")
+                                req, rsp, f"observe-{backend}-auth-secret-{name}-{store}"
                             ),
                             ["password"],
                         )
@@ -916,6 +1002,10 @@ spec:
 
         import json
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -924,6 +1014,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
@@ -957,6 +1071,7 @@ spec:
                 if group["name"] != "cluster-admin"
             }
             return [groups[name] for name in sorted(groups)]
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -1000,7 +1115,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -1794,6 +1910,10 @@ spec:
 
         import base64
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -1803,30 +1923,56 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
         def _boolish(value):
             if isinstance(value, bool):
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
 
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
-            )
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _b64get_any(data, keys):
             if not data:
@@ -1841,6 +1987,7 @@ spec:
                     return str(value)
             return None
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -1852,7 +1999,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
 
@@ -1870,8 +2018,7 @@ spec:
                 return
             runtime_namespace = xr_name
 
-            observed = getattr(req.observed, "resources", {}) or {}
-            oauth_data = _extract_data(observed.get(f"observe-oauth-client-secret-{xr_name}"))
+            oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
             client_secret = _b64get_any(
                 oauth_data, ["clientSecret", "client_secret"]
             )
@@ -1964,6 +2111,10 @@ spec:
 
             return fill(template)
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -1973,6 +2124,30 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
         def _boolish(value):
             if isinstance(value, bool):
                 return value
@@ -1980,6 +2155,7 @@ spec:
 
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -1999,7 +2175,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             meta = xr["metadata"]
             spec = xr.get("spec") or {}
@@ -2347,6 +2524,10 @@ spec:
 
             return fill(template)
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -2356,10 +2537,35 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
         def _boolish(value):
             if isinstance(value, bool):
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -2367,7 +2573,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             environment = (
                 _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
             )
@@ -2454,6 +2661,10 @@ spec:
 
         import json
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -2462,6 +2673,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
@@ -2482,6 +2717,7 @@ spec:
                 "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
             }
             return [groups[name] for name in sorted(groups)]
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -2524,7 +2760,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             instances = (xr.get("spec") or {}).get("vclusters") or {}
             sessions = (xr.get("spec") or {}).get("sessions") or []
@@ -13727,6 +13964,8 @@ spec:
 
         import re
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -13735,6 +13974,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _boolish(value):
             if isinstance(value, bool):
@@ -13768,19 +14031,27 @@ spec:
                 raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
             return timeouts
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
 
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _b64get_any(data, keys):
             if not data:
@@ -13795,6 +14066,7 @@ spec:
                     return str(value)
             return None
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -13807,14 +14079,9 @@ spec:
 
 
 
-        def _extract_secret_data(objres):
-            manifest = _extract_manifest(objres)
-            data = manifest.get("data") or {}
-            return data if isinstance(data, dict) else {}
-
-
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -13827,7 +14094,7 @@ spec:
             images = environment.get("images") or {}
             package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
             rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
-            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4"
+            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
             data_config = (environment.get("defaults") or {}).get("data") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
@@ -13847,12 +14114,11 @@ spec:
                     "--perm.rename=true",
                 ]
 
-            observed = getattr(req.observed, "resources", {}) or {}
             runtime_namespace = xr_name
 
             storage_secret_name = f"{xr_name}-storage"
             runtime_secret_key = f"observe-runtime-storage-secret-{xr_name}"
-            runtime_secret_data = _extract_secret_data(observed.get(runtime_secret_key))
+            runtime_secret_data = _extract_data(req, rsp, runtime_secret_key)
             if not runtime_secret_data:
                 return
 
@@ -14989,6 +15255,8 @@ spec:
 
         import re
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -14997,6 +15265,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _boolish(value):
             if isinstance(value, bool):
@@ -15030,25 +15322,27 @@ spec:
                 raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
             return timeouts
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
 
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
-            )
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _b64get_any(data, keys):
             if not data:
@@ -15068,6 +15362,7 @@ spec:
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -15077,7 +15372,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             meta = xr["metadata"]
             name, namespace = meta["name"], meta.get("namespace") or "default"
@@ -15085,7 +15381,6 @@ spec:
             registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
             if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
                 return
-            observed = req.observed.resources
             runtime_namespace = name
 
             def emit(suffix, manifest, readiness=None):
@@ -15102,7 +15397,7 @@ spec:
                 "metadata": {"name": "registry-auth", "namespace": runtime_namespace},
                 "type": "Opaque", "stringData": auth,
             })
-            storage_data = _extract_data(observed.get(f"observe-runtime-storage-secret-{name}"))
+            storage_data = _extract_data(req, rsp, f"observe-runtime-storage-secret-{name}")
             if not _b64get_any(storage_data, ["aws-credentials"]):
                 return
             storage = env.get("storage") or {}
@@ -15394,6 +15689,8 @@ spec:
 
         from decimal import Decimal
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -15402,6 +15699,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _string_value(value):
             """Keep the literal string for null values in existing resource settings."""
@@ -15417,6 +15738,7 @@ spec:
                 raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
             return Decimal(match[1]) > 0
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -15425,7 +15747,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -15701,6 +16024,8 @@ spec:
 
         from decimal import Decimal
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -15709,6 +16034,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
@@ -15732,6 +16081,7 @@ spec:
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -15742,7 +16092,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -16241,6 +16592,8 @@ spec:
 
         from decimal import Decimal
 
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -16249,6 +16602,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
@@ -16267,30 +16644,33 @@ spec:
                 raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
             return Decimal(match[1]) > 0
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
 
-        def _extract_data(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return (
-                manifest.get("data")
-                or manifest.get("stringData")
-                or raw_manifest.get("data")
-                or raw_manifest.get("stringData")
-                or {}
-            )
+        def _secret_manifest(req, rsp, key):
+            # The Object supplies the target reference and watches, not credential data.
+            desired = rsp.desired.resources.get(key)
+            body = _to_dict(desired.resource) if desired else {}
+            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
+            name, namespace = metadata.get("name"), metadata.get("namespace")
+            if not name or not namespace:
+                return {}
+            return require_secret(req, rsp, "source-" + key, name, namespace)
+
+        def _extract_data(req, rsp, key):
+            manifest = _secret_manifest(req, rsp, key)
+            return manifest.get("data") or manifest.get("stringData") or {}
 
         def _strong_token(seed, *, suffix=":provider-datalab", length=32):
             # Keep each service's existing seed and length to prevent credential changes.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -16303,7 +16683,8 @@ spec:
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             metadata = xr.get("metadata", {}) or {}
             spec = xr.get("spec", {}) or {}
@@ -16324,7 +16705,6 @@ spec:
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
             backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
-            observed = getattr(req.observed, "resources", None) or {}
             runtime_namespace = xr_name
 
             for store_key in sorted(list(cache_stores.keys())):
@@ -16385,7 +16765,7 @@ spec:
                 )
                 rsp.desired.resources[acl_key].resource.update(acl_body)
                 # The operator mounts the ACL file with subPath, so changes need a restart.
-                observed_acl = _extract_data(observed.get(acl_key)).get("user.acl") or encoded_acl
+                observed_acl = _extract_data(req, rsp, acl_key).get("user.acl") or encoded_acl
                 acl_checksum = hashlib.sha256(observed_acl.encode()).hexdigest()
 
                 pvc_spec = {
@@ -16746,6 +17126,10 @@ spec:
 
         import json
 
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -16754,6 +17138,30 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
 
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
@@ -16775,6 +17183,7 @@ spec:
             }
             return [groups[name] for name in sorted(groups)]
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -16786,7 +17195,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             xr = _to_dict(req.observed.composite.resource)
             spec = xr.get("spec") or {}
             status = (
@@ -16948,6 +17358,44 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -16956,7 +17404,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             for desired in rsp.desired.resources.values():
                 body = json_format.MessageToDict(desired.resource)
                 if body.get("kind") != "Object":
@@ -17007,6 +17456,43 @@ spec:
 
         import json
 
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -17017,6 +17503,7 @@ spec:
             digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
             return name[: limit - 11].rstrip("-") + "-" + digest
 
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -17026,7 +17513,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             meta = json_format.MessageToDict(req.observed.composite.resource)["metadata"]
             name = meta["name"]
             namespace = meta.get("namespace", "default")
@@ -17200,6 +17688,9 @@ spec:
                 if body.get("kind") != "Object":
                     continue
                 manifest = body.get("spec", {}).get("forProvider", {}).get("manifest", {})
+                # Read-only Secret observers do not hold resources in the namespace.
+                if body.get("spec", {}).get("managementPolicies") == ["Observe"] and manifest.get("kind") == "Secret":
+                    continue
                 if manifest.get("metadata", {}).get("namespace") == name:
                     suffix = hashlib.sha256(key.encode()).hexdigest()[:12]
                     protect(suffix, f"namespace-{name}", key, prefix="datalab")
@@ -17236,7 +17727,7 @@ spec:
     input:
       apiVersion: autoready.fn.crossplane.io/v1beta1
       kind: Input
-      ttl: 5m
+      ttl: 10m
   - step: check-connection-readiness
     functionRef:
       name: crossplane-contrib-function-python
@@ -17244,6 +17735,10 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       script: |
+        import re
+
+        from crossplane.function import request, response
+
         from google.protobuf import json_format
 
         def _to_dict(value):
@@ -17253,6 +17748,31 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
@@ -17261,7 +17781,8 @@ spec:
 
 
         def compose(req, rsp):
-            rsp.meta.ttl.FromSeconds(300)
+            if not set_response_ttl(req, rsp, 60):
+                return
             status = _to_dict(req.desired.composite.resource).get("status") or {}
             rsp.desired.composite.ready = req.desired.composite.ready
             if any(connection.get("ready") is not True for connection in status.get("connections", [])):
