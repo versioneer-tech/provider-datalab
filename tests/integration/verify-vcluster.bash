@@ -160,6 +160,7 @@ verify_volume_bindings() {
     grep -F 'Datalab owns this host PVC' "${work_directory}/volume-admission.log" >/dev/null
   done
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding write
+  check_volume_backup_access "${VCLUSTER_NAMESPACE}" volume-demo volume-snapshot-demo
   kube create job test-bound-volume-backup --from=cronjob/volume-snapshot-demo --namespace "${VCLUSTER_NAMESPACE}"
   deadline=$((SECONDS + 900))
   while true; do

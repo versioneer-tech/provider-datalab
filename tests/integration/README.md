@@ -22,6 +22,12 @@ The selected StorageClass and VolumeSnapshotClass must use the same CSI driver;
 the snapshot class must use deletion policy `Delete`. These profiles check
 these prerequisites without installing or changing them.
 
+Snapshot preflight also checks the test identity's snapshot permissions. Both
+volume profiles check the generated backup ServiceAccount's access: the source
+PVC and snapshot class can be read, and snapshots can be managed in the volume's
+namespace. Other PVCs, Secrets, snapshot contents, class changes, and snapshots
+in another namespace must be denied. The same checks run in Kind and vClusters.
+
 For an existing cluster, supply its kubeconfig, context, StorageClass, Service
 CIDR, and comma-separated Pod CIDRs. Use values from the selected cluster:
 
@@ -65,6 +71,9 @@ For `all`, `verify-volumes`, or `verify-vcluster` on an existing target, also se
 A virtual target must already expose the snapshot APIs and matching classes
 through its platform storage configuration. The runner uses only the selected
 virtual API; it does not change the physical host or virtual cluster sync settings.
+The host syncer also needs snapshot permissions in its namespace, read access to
+snapshot classes and persistent volumes, and access to snapshot contents. The
+platform must supply these grants with snapshot forwarding.
 The virtual cluster profile also needs stable mutating admission policies
 on its selected target (Kubernetes 1.36 or later).
 

@@ -25,24 +25,29 @@ def main():
     assert route["kind"] == "TLSRoute"
     assert route["spec"]["parentRefs"] == [dict(name=refs["parentName"], namespace=refs["parentNamespace"],
                                                 sectionName=refs["sectionName"])]
-    mongo_pvc = manifest(resources, stores["documentStore"])["spec"]["statefulSet"]["spec"]["volumeClaimTemplates"][0]
+    mongo_store = manifest(resources, stores["documentStore"])["spec"]
+    mongo_pvc = mongo_store["statefulSet"]["spec"]["volumeClaimTemplates"][0]
     assert mongo_pvc["spec"]["storageClassName"] == "test-documentStore"
     redis_pvc = manifest(resources, stores["cacheStore"])["spec"]["storage"]["volumeClaimTemplate"]
     assert redis_pvc["spec"]["storageClassName"] == "test-cacheStore"
     for name in ("observe-database-secret-s-jeff-pg0", "db-postgrescluster-s-jeff-pg0"):
         assert manifest(resources, name)["metadata"]["namespace"] == "s-jeff"
     mongo = manifest(resources, "mongodb-auth-secret-s-jeff-prod")
-    mongo_store = manifest(resources, stores["documentStore"])
-    assert base64.b64decode(mongo["data"]["user"]).decode() == mongo_store["spec"]["users"][0]["name"] == "prod-app"
+    assert base64.b64decode(mongo["data"]["user"]).decode() == mongo_store["users"][0]["name"] == "prod-app"
     redis = manifest(resources, "redis-auth-secret-s-jeff-prod")
     assert base64.b64decode(redis["data"]["user"]).decode() == "default"
 
     def backup_image(resources, store):
         return manifest(resources, f"{store}-backup-cronjob-s-jeff-prod")["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"]
 
+    assert mongo_store["version"] == "8.0.38"
+    assert mongo_store["statefulSet"]["spec"]["template"]["spec"]["containers"] == [
+        {"name": "mongod", "image": "quay.io/mongodb/mongodb-community-server:8.0.38-ubi8"}]
+    assert backup_image(resources, "mongodb") == "mongo:8.0.38"
+    print("PASS default MongoDB server, operator version, and backup tools agree", flush=True)
     print("PASS MongoDB and Redis credentials match their configured users", flush=True)
     print("PASS store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
-    env["data"]["images"] = {"mongo": "test-images/mongo:8.0.13-ubi8", "mongoBackup": "test-images/mongo-tools:8.0.13",
+    env["data"]["images"] = {"mongo": "registry.example.test:5000/mongo:8.0.13-ubi8", "mongoBackup": "test-images/mongo-tools:8.0.13",
                              "redis": "test-images/redis:custom", "redisBackup": "test-images/redis-tools:custom"}
     resources = render(args, env, "examples/base/002-lab.yaml", observed)
     mongo_store = manifest(resources, stores["documentStore"])["spec"]
@@ -54,6 +59,18 @@ def main():
     assert backup_image(resources, "mongodb") == env["data"]["images"]["mongoBackup"]
     assert backup_image(resources, "redis") == env["data"]["images"]["redisBackup"]
     print("PASS store image overrides select server, init, and backup images and match the MongoDB version", flush=True)
+    env["data"]["images"].pop("mongoBackup")
+    env["data"]["images"]["mongo"] = "test-images/mongo:8.0.13"
+    resources = render(args, env, "examples/base/002-lab.yaml", observed)
+    assert manifest(resources, stores["documentStore"])["spec"]["version"] == "8.0.13"
+    assert backup_image(resources, "mongodb") == "mongo:8.0.13"
+    print("PASS MongoDB backup tools follow the selected server image version", flush=True)
+
+    for image in ("test-images/mongo", "test-images/mongo:latest", "test-images/mongo:8.0"):
+        env["data"]["images"]["mongo"] = image
+        render(args, env, "examples/base/002-lab.yaml", observed,
+               error="data.images.mongo must use a major.minor.patch tag")
+    print("PASS MongoDB rejects image tags without a full database version", flush=True)
 
 
 if __name__ == "__main__":

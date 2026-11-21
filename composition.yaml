@@ -8160,6 +8160,7 @@ spec:
 
         import re
 
+        from crossplane.function import response
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 
@@ -8182,10 +8183,12 @@ spec:
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             mongo_env = environment.get("documentStore") or {}
             images = environment.get("images") or {}
-            mongo_image = _safe_str(images.get("mongo"))
-            version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
-            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.38")
-            mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
+            mongo_image = _safe_str(images.get("mongo")) or "quay.io/mongodb/mongodb-community-server:8.0.38-ubi8"
+            version_tag = re.search(r":([0-9]+\.[0-9]+\.[0-9]+)(?:-[A-Za-z0-9_.-]+)?$", mongo_image)
+            if not version_tag:
+                response.fatal(rsp, "data.images.mongo must use a major.minor.patch tag, with an optional suffix such as -ubi8.")
+                return
+            mongo_version = version_tag[1]
             backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
             mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
             backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")

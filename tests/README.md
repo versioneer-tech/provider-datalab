@@ -64,7 +64,7 @@ omit generated metadata that changes between runs. The other tests check:
 | `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot setup permissions, build failures, and integration runner errors. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
-| `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, storage, network rules, quotas, and environment settings. |
+| `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, service images and database versions, storage, network rules, quotas, and environment settings. |
 | `backups.py` | Backup enablement, export failures, and invalid Redis snapshots. |
 | `response-ttl.py` | TTL defaults, overrides, invalid values, and readiness checks. |
 | `environment-schema.py`, `environment-selection.py` | Valid environment names, selection labels, merge order, and duplicate matches. |

@@ -141,19 +141,6 @@ def main():
                 and item["spec"]["source"].get("persistentVolumeClaimName") == "volume-analysis"]
 
     cronjob = present("cronjob/volume-snapshot-analysis")
-    identity = "system:serviceaccount:verify-volumes:volume-snapshot-analysis"
-
-    def allowed(verb, resource, namespace=NAMESPACE):
-        result = subprocess.run([*command, "--namespace", namespace, "auth", "can-i", verb, resource,
-                                 "--as", identity], capture_output=True, text=True, timeout=30)
-        assert result.returncode in (0, 1), result.stderr
-        return result.stdout.strip() == "yes"
-
-    wait_for(lambda: allowed("get", "persistentvolumeclaims/volume-analysis")
-             and allowed("get", "volumesnapshotclasses/" + args.snapshot_class), "Backup permissions did not become ready")
-    assert not allowed("delete", "persistentvolumeclaims/volume-analysis")
-    assert not allowed("list", "secrets")
-    assert not allowed("list", "volumesnapshots", "default")
 
     def backup(fail=False):
         job = deepcopy(cronjob["spec"]["jobTemplate"])

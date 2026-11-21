@@ -47,6 +47,8 @@ data:
     schedule: '0 0 1 1 *'
 ENVIRONMENT
 kube apply -f "${MANIFEST_DIR}/volumes/datalab.yaml"
+kube wait cronjob/volume-snapshot-analysis --namespace verify-volumes --for=create --timeout=10m
+check_volume_backup_access verify-volumes volume-analysis volume-snapshot-analysis
 python3 "${INTEGRATION_DIR}/verify-volumes.py" \
   --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" \
   --snapshot-class "${PROVIDER_DATALAB_SNAPSHOT_CLASS}"

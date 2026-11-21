@@ -207,8 +207,13 @@ export PROVIDER_DATALAB_SNAPSHOT_CLASS=test-snapshots
 snapshot_driver="$3"
 snapshot_policy="$4"
 snapshot_apis="$5"
+snapshot_access="$6"
 source "$1"
 kube() {
+  if [[ "$1" == auth ]]; then
+    if [[ "$snapshot_access" == allowed ]]; then printf yes; else printf no; return 1; fi
+    return
+  fi
   [[ "$1" == get ]] || { printf 'unexpected mutation'; return 1; }
   if [[ "$2" == --raw=* ]]; then
     if [[ "$snapshot_apis" == ready ]]; then
@@ -222,15 +227,46 @@ curl() { printf 'unexpected installation'; return 1; }
 check_volume_snapshot_settings
 '''
         for mode in ("kind", "existing"):
-            for driver, policy, apis, accepted in (
-                ("test.csi", "Delete", "ready", True), ("other.csi", "Delete", "ready", False),
-                ("test.csi", "Retain", "ready", False), ("test.csi", "Delete", "missing", False),
+            for driver, policy, apis, access, accepted in (
+                ("test.csi", "Delete", "ready", "allowed", True), ("other.csi", "Delete", "ready", "allowed", False),
+                ("test.csi", "Retain", "ready", "allowed", False), ("test.csi", "Delete", "missing", "allowed", False),
+                ("test.csi", "Delete", "ready", "denied", False),
             ):
-                with self.subTest(mode=mode, driver=driver, policy=policy, apis=apis):
+                with self.subTest(mode=mode, driver=driver, policy=policy, apis=apis, access=access):
                     result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"),
-                                             mode, driver, policy, apis], capture_output=True, text=True)
+                                             mode, driver, policy, apis, access], capture_output=True, text=True)
                     self.assertEqual(result.returncode == 0, accepted, result.stderr)
                     self.assertNotIn("unexpected", result.stdout)
+                    if access == "denied":
+                        self.assertIn("test identity cannot create VolumeSnapshots", result.stderr)
+
+    def test_backup_access_rejects_missing_permissions_and_excess_access(self):
+        script = '''
+set -euo pipefail
+source "$1"
+export PROVIDER_DATALAB_SNAPSHOT_CLASS=test-snapshots
+fault="$2"
+sleep() { SECONDS=$((SECONDS + 120)); }
+kube() {
+  local request="$*"
+  if [[ "$fault" == missing && "$request" == *' create volumesnapshots.'* ]]; then printf no; return 1; fi
+  if [[ "$fault" == excess && "$request" == *' list secrets '* ]]; then printf yes; return; fi
+  case "$request" in
+    *' get persistentvolumeclaims/volume-analysis '*|*' get volumesnapshotclasses.snapshot.storage.k8s.io/test-snapshots '*) printf yes ;;
+    *' volumesnapshots.snapshot.storage.k8s.io --namespace verify-volumes '*) printf yes ;;
+    *) printf no; return 1 ;;
+  esac
+}
+check_volume_backup_access verify-volumes volume-analysis volume-snapshot-analysis
+'''
+        for fault, message in (("none", "PASS snapshot backup permissions"),
+                               ("missing", "cannot create volumesnapshots"),
+                               ("excess", "must not list secrets")):
+            with self.subTest(fault=fault):
+                result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"), fault],
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode == 0, fault == "none", result.stderr)
+                self.assertIn(message, result.stdout + result.stderr)
 
     def test_existing_volume_runner_requires_a_snapshot_class_before_cluster_access(self):
         script = '''

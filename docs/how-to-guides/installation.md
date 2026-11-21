@@ -380,16 +380,13 @@ defaults below.
 | `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its database init container. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
 | `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
-| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. The default database version is `8.0.38`. |
-| `images.mongoBackup` | `mongo:8.0.38` | MongoDB backup tools. If omitted, its tag follows the database version. |
+| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. Its tag sets the operator's database version. |
+| `images.mongoBackup` | `mongo:<server version>` | MongoDB backup tools. |
 | `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
 | `images.redisBackup` | `redis:7.2.17` | Redis backup tools. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
 | `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job on the host. |
 | `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
-
-A MongoDB image tag that starts with `major.minor.patch` sets the database
-version. Use compatible server and backup images.
 
 #### Resource quotas and container defaults
 
@@ -467,7 +464,6 @@ to containers without the corresponding resource settings.
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
-| `documentStore.version` | `8.0.38`, or version from `images.mongo` | Database version; set it for an image without a version tag. |
 | `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
 | `documentStore.backupStorageClassName` | Cluster default | MongoDB backup StorageClass. |
 | `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |

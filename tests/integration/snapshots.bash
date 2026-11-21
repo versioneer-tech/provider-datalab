@@ -24,10 +24,59 @@ check_volume_snapshot_settings() {
       printf 'The snapshot class must match the test CSI driver and use deletion policy Delete.\n' >&2
       return 2
     }
+  local namespace=${1:-verify-volumes} verb
+  for verb in create get list delete; do
+    if [[ "$(kube auth can-i "${verb}" volumesnapshots.snapshot.storage.k8s.io --namespace "${namespace}")" != yes ]]; then
+      printf 'The test identity cannot %s VolumeSnapshots in %s.\n' "${verb}" "${namespace}" >&2
+      return 2
+    fi
+  done
+}
+
+check_volume_backup_access() {
+  local namespace=$1 pvc=$2 account=$3 verb resource scope deadline request
+  local identity="system:serviceaccount:${namespace}:${account}"
+  local -a required=(
+    "get persistentvolumeclaims/${pvc} ${namespace}"
+    "get volumesnapshotclasses.snapshot.storage.k8s.io/${PROVIDER_DATALAB_SNAPSHOT_CLASS} ${namespace}"
+    "create volumesnapshots.snapshot.storage.k8s.io ${namespace}"
+    "get volumesnapshots.snapshot.storage.k8s.io ${namespace}"
+    "list volumesnapshots.snapshot.storage.k8s.io ${namespace}"
+    "delete volumesnapshots.snapshot.storage.k8s.io ${namespace}"
+  )
+  deadline=$((SECONDS + 120))
+  for request in "${required[@]}"; do
+    read -r verb resource scope <<<"${request}"
+    until [[ "$(kube --request-timeout=10s auth can-i "${verb}" "${resource}" --namespace "${scope}" --as "${identity}")" == yes ]]; do
+      if ((SECONDS >= deadline)); then
+        printf 'Backup identity %s cannot %s %s in %s.\n' "${identity}" "${verb}" "${resource}" "${scope}" >&2
+        return 1
+      fi
+      sleep 2
+    done
+  done
+  local -a denied=(
+    "get persistentvolumeclaims/test-other-volume ${namespace}"
+    "delete persistentvolumeclaims/${pvc} ${namespace}"
+    "list secrets ${namespace}"
+    "create volumesnapshots.snapshot.storage.k8s.io default"
+    "list volumesnapshots.snapshot.storage.k8s.io default"
+    "delete volumesnapshots.snapshot.storage.k8s.io default"
+    "get volumesnapshotcontents.snapshot.storage.k8s.io ${namespace}"
+    "patch volumesnapshotclasses.snapshot.storage.k8s.io/${PROVIDER_DATALAB_SNAPSHOT_CLASS} ${namespace}"
+  )
+  for request in "${denied[@]}"; do
+    read -r verb resource scope <<<"${request}"
+    if [[ "$(kube --request-timeout=10s auth can-i "${verb}" "${resource}" --namespace "${scope}" --as "${identity}")" != no ]]; then
+      printf 'Backup identity %s must not %s %s in %s.\n' "${identity}" "${verb}" "${resource}" "${scope}" >&2
+      return 1
+    fi
+  done
+  printf 'PASS snapshot backup permissions and access boundaries in %s\n' "${namespace}"
 }
 
 check_volume_binding_settings() {
-  check_volume_snapshot_settings || return
+  check_volume_snapshot_settings verify-vcluster || return
   kube get --raw=/apis/admissionregistration.k8s.io/v1 \
     | jq -e '.resources | map(.name) | contains(["mutatingadmissionpolicies", "mutatingadmissionpolicybindings"])' >/dev/null || {
       printf 'Volume bindings need Kubernetes 1.36 or later with stable mutating admission policies.\n' >&2
