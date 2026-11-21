@@ -1,17 +1,21 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: verify-vcluster
   namespace: workspace
 spec:
   environmentName: datalab-vcluster-it
+  volumes:
+    analysis:
+      vcluster: vc0
+      namespace: demo
+      storage: 1Mi
   users:
   - verify-s3
   - verify-vcluster-member
-  sessions: []
   databases:
     pg0:
       type: postgres

@@ -13,12 +13,12 @@ from render import arguments, environment, render
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}}
+    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
     env["data"]["storage"] = {"endpoint": "https://s3.acme.com", "region": "acme"}
     source = {
-        "apiVersion": "pkg.internal/v1beta2", "kind": "Datalab",
+        "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "test-storage", "namespace": "workspace"},
-        "spec": {"sessions": []},
+        "spec": {},
     }
     observer = {
         "apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
@@ -40,12 +40,22 @@ def main():
     expected = {"name": "primary", "type": "s3", "ready": True,
                 "secretRef": {"name": "test-storage", "namespace": "workspace"}}
 
-    def connection(config, observed):
-        result = render(args, config, source, [observed], include_composite=True)["composite"]["status"]
+    def connection(config, observed, secrets=None):
+        required = config if secrets is None else [config, *secrets]
+        result = render(args, required, source, [observed], include_composite=True)["composite"]["status"]
         assert not any(value in json.dumps(result) for value in ("test-access", "test-private", "test-token"))
         return result["connections"]
 
     assert connection(env, observer) == [{**expected, "endpoint": "https://s3.custom.acme.com", "region": "custom-acme"}]
+    sanitized = deepcopy(observer)
+    secret = deepcopy(sanitized["status"]["atProvider"]["manifest"])
+    sanitized["status"]["atProvider"]["manifest"]["data"] = {"redacted": None}
+    sanitized["status"]["atProvider"]["raw"] = {"manifest": deepcopy(secret)}
+    assert connection(env, sanitized, [secret]) == [
+        {**expected, "endpoint": "https://s3.custom.acme.com", "region": "custom-acme"}
+    ]
+    assert connection(env, sanitized) == [{**expected, **env["data"]["storage"], "ready": False}]
+    print("PASS S3 readiness requires a current source Secret despite stale, redacted observer status")
     fallback = deepcopy(observer)
     data = fallback["status"]["atProvider"]["manifest"]["data"]
     data.pop("AWS_ENDPOINT_URL")

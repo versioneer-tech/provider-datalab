@@ -11,25 +11,31 @@ Put shared Python functions in `composition/helpers.py` and import them from
 the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
 
-The vcluster exec helper is `scripts/vcluster-credentials.py`. Its
-`--token-only` mode reads a caller token; the administrator mode also supports
-device login. `_embedded_script("scripts/vcluster-credentials.py")` in the
-publishing step tells the build to embed this file. Edit the Python file,
-then rebuild. Downloaded kubeconfigs contain the helper and need no separate
-script installation.
+The build embeds these scripts with `_embedded_script()`. Rebuild after
+changing either file.
 
-`composition/settings.yaml` sets the Python `responseTTL` default to `1m`.
-Operators can override it with `EnvironmentConfig.data.datalab.responseTTL`.
-Use a positive whole number of seconds (`30s`), minutes (`5m`), or hours (`1h`).
-The build sets each Python response TTL before the step body. Invalid values
-stop the step with an error.
+| Script | Use |
+| --- | --- |
+| `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
+| `scripts/volume-snapshot.py` | CSI snapshot creation and retention from a virtual Job. |
+| `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
-The separate `environmentConfigsTTL` and `autoReadyTTL` build settings default
-to `10m`. These functions use their own inputs and do not read the Python
-override. New function types must have build support for their TTL.
+Crossplane can cache a function response for its TTL. Set the build defaults in
+`composition/settings.yaml`:
+
+| Setting | Default | Applies to |
+| --- | --- | --- |
+| `responseTTL` | `1m` | Python steps |
+| `environmentConfigsTTL` | `10m` | Environment selection |
+| `autoReadyTTL` | `10m` | Auto-ready |
+
+Operators can override the Python TTL with
+`EnvironmentConfig.data.datalab.responseTTL`. Use a positive whole number of
+seconds (`30s`), minutes (`5m`), or hours (`1h`). Invalid values stop the step
+before it creates resources. New function types need build support for their TTL.
 
 Load and validate the environment before resource steps. Observe connection
-Secrets before building the Datalab and OAuth2 proxy Secrets. The Data step
+Secrets before publishing service and OAuth2 proxy Secrets. The Data step
 uses the desired OAuth2 proxy Secret. Publish status before the final resource
 and connection readiness checks.
 
@@ -53,11 +59,18 @@ file. Unit tests, CI, and pre-commit reject a stale build.
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
 
-Integration can build a separate artifact with a different Python default:
+Integration can build a separate artifact with a Python TTL default:
 
 ```bash
 python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
 ```
 
-A TTL override requires a separate output file. The build does not change
-`composition/settings.yaml` or the normal deployment artifact.
+A TTL override requires a separate output file. It does not change the
+environment or auto-ready TTLs, `composition/settings.yaml`, or the normal
+deployment artifact. An environment value takes precedence over this default.
+
+`volumes/pvc.yaml` defines named application storage. The volume
+step creates optional snapshot schedules from `volumes/backup.yaml`.
+`scripts/volume-snapshot.py` uses only the Python standard library. The
+virtual cluster step enables snapshot synchronization only when the operator
+sets `vcluster.volumeSnapshots`. Applications own their runtime installation.

@@ -4,38 +4,42 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: datalabs.pkg.internal
+  name: datalabs.versioneer.at
 spec:
-  group: pkg.internal
+  group: versioneer.at
   names:
     kind: Datalab
     plural: datalabs
   scope: Namespaced
+  defaultCompositionRef:
+    name: datalab
   versions:
-    - name: v1beta2
+    - name: v1
       served: true
       referenceable: true
       schema:
         openAPIV3Schema:
           type: object
           x-kubernetes-preserve-unknown-fields: true
-          description: A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+          description: A Datalab is a tenant-facing, namespaced composite resource. It defines membership, data services, and virtual clusters.
           required:
             - spec
           properties:
             spec:
               type: object
-              x-kubernetes-preserve-unknown-fields: true
               description: Desired configuration of the datalab.
               required:
                 - users
+              x-kubernetes-validations:
+              - rule: '!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters)'
+                message: Each volume must select a declared virtual cluster.
               properties:
                 environmentName:
                   type: string
                   minLength: 1
                   maxLength: 63
                   pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
-                  description: Optional EnvironmentConfig name. See the installation guide for selection rules.
+                  description: Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.
                 users:
                   type: array
                   description: Users associated with this datalab.
@@ -61,28 +65,50 @@ spec:
                         description: >
                           RFC3339 timestamp indicating when the role became active.
                   default: {}
-                sessions:
-                  type: array
-                  description: Sessions declared for this datalab.
-                  items:
+                volumes:
+                  type: object
+                  default: {}
+                  maxProperties: 50
+                  description: Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.
+                  x-kubernetes-validations:
+                  - rule: 'self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$"))'
+                    message: Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.
+                  additionalProperties:
                     type: object
-                    required:
-                      - name
+                    required: [vcluster]
                     properties:
-                      name:
+                      vcluster:
                         type: string
-                        description: Session name.
-                      state:
+                        maxLength: 63
+                        x-kubernetes-validations:
+                        - rule: self == oldSelf
+                          message: A volume cannot move to another virtual cluster.
+                      namespace:
                         type: string
-                        description: >
-                          Desired runtime lifecycle for this session. Started sessions create an
-                          active runtime session. Stopped sessions keep their Datalab-owned
-                          workspace PVC but do not create a runtime.
-                        enum:
-                          - started
-                          - stopped
-                        default: started
-                  default: []
+                        default: default
+                        maxLength: 63
+                        pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
+                        x-kubernetes-validations:
+                        - rule: self == oldSelf
+                          message: A volume cannot move to another namespace.
+                        - rule: '!self.startsWith("kube-")'
+                          message: Volumes must use a workload namespace.
+                      storage:
+                        type: string
+                        pattern: '^([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[EPTGMK]i|[EPTGMkmun])?$'
+                        description: Volume size. Defaults to the platform volume size, or 1Gi.
+                      backup:
+                        type: boolean
+                        default: false
+                        description: Create scheduled CSI volume snapshots. Requires platform snapshot support.
+                      restoreFrom:
+                        type: string
+                        maxLength: 253
+                        pattern: '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
+                        description: Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.
+                    x-kubernetes-validations:
+                    - rule: 'has(self.restoreFrom) == has(oldSelf.restoreFrom) && (!has(self.restoreFrom) || self.restoreFrom == oldSelf.restoreFrom)'
+                      message: A volume restore source cannot change after creation.
                 vclusters:
                   type: object
                   default: {}
@@ -95,6 +121,10 @@ spec:
                     type: object
                     description: Virtual Kubernetes clusters keyed by instance name.
                     properties:
+                      hibernated:
+                        type: boolean
+                        default: false
+                        description: Stop this instance and its synced Pods. Keep its storage. Set false to resume from the host Datalab.
                       groups:
                         type: array
                         description: Additional profiles granted to Datalab users and administrators. Only Datalab administrators receive the built-in cluster-admin profile.
@@ -176,10 +206,9 @@ spec:
                     message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
                       end with a letter or digit, and have at most 63 characters.
                   description: >-
-                    Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab.
-                    Each host defines a data volume size and an optional pgBackRest repository size, plus a list of
-                    logical PostgreSQL databases to create inside that cluster. Ownership and privileges are
-                    derived from spec.users by the Composition.
+                    PostgreSQL clusters with data storage, optional backup storage, and named databases.
+                    The operator creates the databases for the postgres account and adds logins from spec.users.
+                    Application setup manages additional ownership and grants.
                   additionalProperties:
                     type: object
                     properties:
@@ -286,6 +315,49 @@ spec:
               type: object
               description: Current observed state of the datalab.
               properties:
+                vclusters:
+                  type: array
+                  description: Instance lifecycle state. Hibernated means the control plane and synced host Pods are gone.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name, phase, message]
+                    properties:
+                      name:
+                        type: string
+                      phase:
+                        type: string
+                        enum: [Starting, Running, Hibernating, Hibernated, Resuming, Failed]
+                      message:
+                        type: string
+                      cleanupJob:
+                        type: string
+                      cleanupGeneration:
+                        type: integer
+                        format: int64
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                volumes:
+                  type: array
+                  description: Persistent volume references inside virtual clusters.
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name, vcluster, namespace, pvcName]
+                    properties:
+                      name:
+                        type: string
+                      vcluster:
+                        type: string
+                      namespace:
+                        type: string
+                      pvcName:
+                        type: string
+                      backupCronJobName:
+                        type: string
                 oauth2:
                   type: array
                   description: OAuth2 discovery by client ID. Contains metadata and Secret references only.
@@ -313,46 +385,6 @@ spec:
                             type: string
                       ready:
                         type: boolean
-                sessions:
-                  type: array
-                  description: Session lifecycle state, persistent storage requests, workspace PVC references, and runtime details.
-                  x-kubernetes-list-type: map
-                  x-kubernetes-list-map-keys: [name]
-                  items:
-                    type: object
-                    description: Observed state of a single datalab session.
-                    required: [name, state, pvcRef]
-                    properties:
-                      name:
-                        type: string
-                        description: Session name from spec.sessions.
-                      pvcRef:
-                        type: object
-                        description: Workspace PVC reference. Does not report PVC readiness.
-                        required: [name, namespace]
-                        properties:
-                          name:
-                            type: string
-                          namespace:
-                            type: string
-                      state:
-                        type: string
-                        description: Desired lifecycle state for the declared session.
-                        enum:
-                          - started
-                          - stopped
-                      pvcSize:
-                        type: string
-                        description: Persistent session PVC request as a Kubernetes quantity. Retained while stopped, zero when none, and omitted when unknown. Shared PVCs are counted once.
-                      phase:
-                        type: string
-                        description: Latest observed lifecycle phase for the session runtime.
-                      message:
-                        type: string
-                        description: Latest observed status message for the session runtime.
-                      url:
-                        type: string
-                        description: Public URL of the active session.
                 connections:
                   type: array
                   description: Service and virtual API connection metadata. Managed service and custom connections are ready when their published Secret in the Datalab namespace matches the available source. Readiness does not confirm delivery into a virtual cluster or caller authorization.

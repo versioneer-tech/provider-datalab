@@ -6,12 +6,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: datalab-educates
-  labels:
-    provider: educates
+  name: datalab
 spec:
   compositeTypeRef:
-    apiVersion: pkg.internal/v1beta2
+    apiVersion: versioneer.at/v1
     kind: Datalab
   mode: Pipeline
   pipeline:
@@ -36,7 +34,7 @@ spec:
             matchLabels:
             - type: Value
               key: datalabs.pkg.internal/name
-              value: datalab-educates
+              value: datalab
             - type: FromCompositeFieldPath
               key: datalabs.pkg.internal/name
               valueFromFieldPath: spec.crossplane.compositionRef.name
@@ -305,19 +303,12 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-        def _observed_manifests(observed_resource):
+        def _extract_manifest(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
+                return {}
             resource = _to_dict(observed_resource.resource)
             at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
+            return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
@@ -387,12 +378,7 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             observed = getattr(req.observed, "resources", {}) or {}
-            environment_manifest = _extract_manifest(
-                observed.get(f"workshopenvironment-{xr_name}")
-            )
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            runtime_namespace = _safe_str(educates_status.get("namespace"))
-            workshop_namespace = _safe_str(educates_status.get("namespace") or xr_name)
+            runtime_namespace = xr_name
             status = _to_dict(rsp.desired.composite.resource).get("status") or xr.get("status") or {}
             connections = []
 
@@ -409,7 +395,7 @@ spec:
                 )
                 if kind == "custom":
                     rsp.desired.resources[key].ready = fnv1.READY_TRUE
-                if kind and (kind in ("s3", "custom") or educates_status.get("namespace")):
+                if kind:
                     source = observed.get(key)
                     body = _to_dict(source.resource) if source else {}
                     conditions = (body.get("status") or {}).get("conditions") or []
@@ -438,6 +424,7 @@ spec:
                             return
                     if kind == "s3":
                         data = _extract_data(req, rsp, key)
+                        connection["ready"] = connection["ready"] and bool(data)
                         for field, secret_key in (
                             ("endpoint", "AWS_ENDPOINT_URL"),
                             ("region", "AWS_REGION"),
@@ -450,7 +437,7 @@ spec:
                         public = _boolish(ingress.get("enabled")) or _boolish(gateway.get("enabled"))
                         connection["endpoint"] = (
                             f"https://{xr_name}.{ingress.get('domain', 'default')}/v2/" if public
-                            else f"http://registry.{workshop_namespace}.svc:5000/v2/"
+                            else f"http://registry.{runtime_namespace}.svc:5000/v2/"
                         )
                         keys = [f"registry-deployment-{xr_name}"]
                         if _boolish(gateway.get("enabled")):
@@ -597,7 +584,7 @@ spec:
                         observe(
                             f"observe-database-secret-{xr_name}-{cluster_name}",
                             f"{cluster_name}-pguser-postgres",
-                            workshop_namespace,
+                            runtime_namespace,
                             kind="postgres",
                             instance=cluster_name,
                         )
@@ -614,14 +601,14 @@ spec:
                             observe(
                                 f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                                 f"{store_name}-{backend}-auth",
-                                workshop_namespace,
+                                runtime_namespace,
                                 kind="mongo" if backend == "mongodb" else "redis",
                                 instance=store_name,
                             )
 
             registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
             if registry_enabled:
-                observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", workshop_namespace,
+                observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                         kind="registry", instance="primary")
 
             data_config = (environment.get("defaults") or {}).get("data") or {}
@@ -631,7 +618,7 @@ spec:
             if (_boolish(data_enabled) or registry_enabled) and runtime_namespace:
                 observe(
                     f"observe-runtime-storage-secret-{xr_name}",
-                    f"{xr_name}-datalab",
+                    f"{xr_name}-storage",
                     runtime_namespace,
                 )
             status["connections"] = connections + [
@@ -646,8 +633,8 @@ spec:
             name: ${secret_name}
             namespace: ${namespace}
             labels:
-              datalabs.pkg.internal/name: ${name}
-              datalabs.pkg.internal/connection: ${connection_name}
+              datalabs.versioneer.at/name: ${name}
+              datalabs.versioneer.at/connection: ${connection_name}
             annotations:
               crossplane.io/composition-resource-name: ${key}
           type: Opaque
@@ -674,7 +661,7 @@ spec:
               name: provider-kubernetes
               kind: ProviderConfig
             watch: true
-  - step: update-datalab-secret
+  - step: publish-service-connections
     functionRef:
       name: crossplane-contrib-function-python
     input:
@@ -743,24 +730,6 @@ spec:
             )
             return False
 
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
                 rsp, name=key, api_version="v1", kind="Secret",
@@ -806,67 +775,9 @@ spec:
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 
-
-        def _store_key(prefix, store_name, suffix):
-            clean = re.sub(r"[^A-Za-z0-9]", "_", str(store_name)).upper()
-            return f"{prefix}_{clean}_{suffix}"
-
-
-        def _pg_db_key(host_name, db_name, suffix):
-            return _store_key("POSTGRES", f"{host_name}_{db_name}", suffix)
-
-
-        def _uri_with_database(uri, db_name):
-            if not uri:
-                return ""
-            parts = urlsplit(uri)
-            return urlunsplit(
-                (parts.scheme, parts.netloc, f"/{db_name}", parts.query, parts.fragment)
-            )
-
-
-        def _external_pg_url(internal_url, external_host):
-            if not internal_url or not external_host:
-                return ""
-            external_url = re.sub(r"@[^/]+", f"@{external_host}", internal_url)
-            if "sslmode=" not in external_url:
-                external_url += (
-                    "&sslmode=require" if "?" in external_url else "?sslmode=require"
-                )
-            if "sslnegotiation=" not in external_url:
-                external_url += (
-                    "&sslnegotiation=direct"
-                    if "?" in external_url
-                    else "?sslnegotiation=direct"
-                )
-            return external_url
-
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            if not set_response_ttl(req, rsp, 60):
-                return
-            xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
-
-            xr_name = metadata.get("name")
-            xr_namespace = metadata.get("namespace") or "default"
-
-            context = _to_dict(req.context)
-            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-            storage_env = environment.get("storage") or {}
-            observed = getattr(req.observed, "resources", {}) or {}
-
-            environment_manifest = _extract_manifest(
-                observed.get(f"workshopenvironment-{xr_name}")
-            )
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-            data_b64 = _extract_data(req, rsp, f"observe-storage-secret-{xr_name}")
-
-            access_key = _b64get_any(
-                data_b64,
+        def _storage_values(data, config):
+            access = _b64get_any(
+                data,
                 [
                     "AWS_ACCESS_KEY_ID",
                     "accessKey",
@@ -875,8 +786,8 @@ spec:
                     "attribute.access",
                 ],
             )
-            secret_key = _b64get_any(
-                data_b64,
+            secret = _b64get_any(
+                data,
                 [
                     "AWS_SECRET_ACCESS_KEY",
                     "secretKey",
@@ -885,198 +796,178 @@ spec:
                     "attribute.secret",
                 ],
             )
-            session_token = _b64get_any(data_b64, ["AWS_SESSION_TOKEN", "sessionToken"])
-            endpoint = _b64get_any(data_b64, ["AWS_ENDPOINT_URL"]) or storage_env.get(
-                "endpoint", ""
-            )
-            region = _b64get_any(data_b64, ["AWS_REGION"]) or storage_env.get("region", "")
-            rtype = storage_env.get("type", "")
-            provider = storage_env.get("provider", "")
-            force_path_style = str(storage_env.get("forcePathStyle", "true")).lower()
+            if not access or not secret:
+                return {}
+            endpoint = _b64get_any(data, ["AWS_ENDPOINT_URL"]) or config.get("endpoint", "")
+            region = _b64get_any(data, ["AWS_REGION"]) or config.get("region", "")
+            style = str(config.get("forcePathStyle", "true")).lower()
+            values = {
+                "AWS_ACCESS_KEY_ID": access,
+                "AWS_SECRET_ACCESS_KEY": secret,
+                "AWS_ENDPOINT_URL": endpoint,
+                "AWS_REGION": region,
+                "AWS_S3_FORCE_PATH_STYLE": style,
+                "aws-credentials": f"[default]\naws_access_key_id = {access}\naws_secret_access_key = {secret}\n",
+            }
+            token = _b64get_any(data, ["AWS_SESSION_TOKEN", "sessionToken"])
+            if token:
+                values["AWS_SESSION_TOKEN"] = token
+                values["aws-credentials"] += f"aws_session_token = {token}\n"
+            return values
 
-            if not access_key or not secret_key:
+
+        def _postgres_values(data, name, store, config, env):
+            host = _b64get_any(data, ["host"]) or f"{store}-primary.{name}.svc"
+            values = {
+                "host": host,
+                "port": _b64get_any(data, ["port"]) or "5432",
+                "user": _b64get_any(data, ["user"]) or "postgres",
+                "password": _b64get_any(data, ["password"]) or "",
+                "databases": ",".join(config.get("names") or []),
+            }
+            route = (env.get("database") or {}).get("tlsRoute") or {}
+            external = ""
+            if all(route.get(key) for key in ("parentName", "parentNamespace", "sectionName")):
+                external = (
+                    f"{store}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}"
+                )
+                values["host_external"] = external
+            uri = _b64get_any(data, ["uri"]) or ""
+            for database in config.get("names") or []:
+                if uri:
+                    parts = urlsplit(uri)
+                    url = urlunsplit(
+                        (
+                            parts.scheme,
+                            parts.netloc,
+                            f"/{database}",
+                            parts.query,
+                            parts.fragment,
+                        )
+                    )
+                elif values["password"]:
+                    url = f"postgresql://{values['user']}:{values['password']}@{host}:{values['port']}/{database}"
+                else:
+                    continue
+                # Keep the published keys used by existing per-service consumers.
+                key = re.sub(r"[^A-Za-z0-9]", "_", database).lower() + "_url"
+                values[key] = url
+                if external:
+                    parts = urlsplit(url)
+                    query = parts.query
+                    for option in ("sslmode=require", "sslnegotiation=direct"):
+                        if option.split("=")[0] + "=" not in query:
+                            query += ("&" if query else "") + option
+                    values[key + "_external"] = urlunsplit(
+                        (
+                            parts.scheme,
+                            parts.netloc.rsplit("@", 1)[0] + "@" + external + ":443",
+                            parts.path,
+                            query,
+                            parts.fragment,
+                        )
+                    )
+            return values
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
                 return
+            xr = _to_dict(req.observed.composite.resource)
+            meta = xr["metadata"]
+            spec = xr.get("spec") or {}
+            name = meta["name"]
+            namespace = meta.get("namespace") or "default"
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
 
-            # Build the rclone configuration for the runtime Secret.
-            config_data = (
-                f"[{access_key}]\n"
-                f"type = {rtype}\n"
-                f"provider = {provider}\n"
-                f"endpoint = {endpoint}\n"
-                f"region = {region}\n"
-                f"access_key_id = {access_key}\n"
-                f"secret_access_key = {secret_key}\n"
-                f"force_path_style = {force_path_style}\n"
-            )
-
-            manifest = _render_template(
-                req,
-                "datalab-secret/manifest",
-                metadata_name=f"{xr_name}-datalab",
-                xr_namespace=xr_namespace,
-                access_key=access_key,
-                config_data=config_data,
-                secret_key=secret_key,
-                region=region,
-                endpoint=endpoint,
-                force_path_style=force_path_style,
-            )
-
-            if session_token:
-                manifest["stringData"]["AWS_SESSION_TOKEN"] = session_token
-
-            aws_credentials = (
-                "[default]\n"
-                f"aws_access_key_id = {access_key}\n"
-                f"aws_secret_access_key = {secret_key}\n"
-            )
-            if session_token:
-                aws_credentials += f"aws_session_token = {session_token}\n"
-            manifest["stringData"]["aws-credentials"] = aws_credentials
-
-            oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
-            client_secret = _b64get_any(
-                oauth_data, ["clientSecret", "client_secret"]
-            )
-            if client_secret:
-                manifest["stringData"]["OAUTH2_CLIENT_ID"] = (
-                    _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
-                    or xr_name
-                )
-                manifest["stringData"]["OAUTH2_CLIENT_SECRET"] = client_secret
-
-            doc_stores = spec.get("documentStores") or {}
-            if isinstance(doc_stores, dict):
-                for store_name in sorted(doc_stores.keys()):
-                    if not isinstance(store_name, str) or not store_name.strip():
-                        continue
-                    store = store_name.strip()
-                    host = f"mongodb-{store}-svc.{workshop_namespace}.svc"
-                    user = f"{store}-app"
-                    manifest["stringData"][_store_key("MONGO", store, "HOST")] = host
-                    manifest["stringData"][_store_key("MONGO", store, "PORT")] = "27017"
-                    manifest["stringData"][_store_key("MONGO", store, "DATABASE")] = store
-                    manifest["stringData"][_store_key("MONGO", store, "AUTH_SOURCE")] = "admin"
-                    manifest["stringData"][_store_key("MONGO", store, "USER")] = user
-                    auth_data = _extract_data(req, rsp, f"observe-mongodb-auth-secret-{xr_name}-{store}")
-                    pwd = _b64get_any(auth_data, ["password"])
-                    if pwd:
-                        manifest["stringData"][_store_key("MONGO", store, "PASSWORD")] = pwd
-                        manifest["stringData"][_store_key("MONGO", store, "URI")] = (
-                            f"mongodb://{user}:{pwd}@{host}:27017/{store}?authSource=admin"
+            def publish(connection_name, values, complete):
+                secret_name = f"{name}-{connection_name}"
+                key = f"connection-{secret_name}"
+                if complete and values:
+                    rsp.desired.resources[key].resource.update(
+                        _render_template(
+                            req,
+                            "publish-connections/secret",
+                            secret_name=secret_name,
+                            namespace=namespace,
+                            name=name,
+                            connection_name=connection_name,
+                            key=key,
+                            values=values,
                         )
+                    )
+                    rsp.desired.resources[key].ready = fnv1.READY_TRUE
 
-            cache_stores = spec.get("cacheStores") or {}
-            if isinstance(cache_stores, dict):
-                for store_name in sorted(cache_stores.keys()):
-                    if not isinstance(store_name, str) or not store_name.strip():
-                        continue
-                    store = store_name.strip()
-                    host = f"{store}.{workshop_namespace}.svc"
-                    manifest["stringData"][_store_key("REDIS", store, "HOST")] = host
-                    manifest["stringData"][_store_key("REDIS", store, "PORT")] = "6379"
-                    manifest["stringData"][_store_key("REDIS", store, "USER")] = "default"
-                    manifest["stringData"][_store_key("REDIS", store, "DATABASE")] = "0"
-                    auth_data = _extract_data(req, rsp, f"observe-redis-auth-secret-{xr_name}-{store}")
-                    pwd = _b64get_any(auth_data, ["password"])
-                    if pwd:
-                        manifest["stringData"][_store_key("REDIS", store, "PASSWORD")] = pwd
-                        manifest["stringData"][_store_key("REDIS", store, "URL")] = (
-                            f"redis://default:{pwd}@{host}:6379/0"
-                        )
-
-            db_hosts = spec.get("databases") or {}
-            if isinstance(db_hosts, dict):
-                db_env = environment.get("database") or {}
-                gateway_env = db_env.get("tlsRoute") or {}
-
-                gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
-                gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
-                gateway_section = _string_value(gateway_env.get("sectionName") or "")
-                has_gateway_parent = bool(
-                    gateway_parent_name and gateway_parent_ns and gateway_section
+            storage = _storage_values(
+                _extract_data(req, rsp, f"observe-storage-secret-{name}"),
+                env.get("storage") or {},
+            )
+            publish("s3", storage, bool(storage))
+            for store, config in sorted((spec.get("databases") or {}).items()):
+                values = _postgres_values(
+                    _extract_data(req, rsp, f"observe-database-secret-{name}-{store}"),
+                    name,
+                    store,
+                    config,
+                    env,
                 )
-
-                ingress_env = environment.get("ingress") or {}
-                ingress_domain = ingress_env.get("domain", "default")
-
-                for host_key in sorted(list(db_hosts.keys())):
-                    if not isinstance(host_key, str) or not host_key.strip():
-                        continue
-                    host_cfg = db_hosts.get(host_key) or {}
-                    if not isinstance(host_cfg, dict):
-                        continue
-
-                    cluster_name = host_key.strip()
-                    dbnames = [
-                        _string_value(x)
-                        for x in list(host_cfg.get("names") or [])
-                        if _string_value(x)
-                    ]
-                    if not dbnames:
-                        continue
-
-                    host_data_b64 = _extract_data(req, rsp, f"observe-database-secret-{xr_name}-{cluster_name}")
-
-                    host = (
-                        _b64get_any(host_data_b64, ["host"])
-                        or f"{cluster_name}-primary.{workshop_namespace}.svc"
+                publish(
+                    f"postgres-{store}",
+                    values,
+                    bool(values["password"]),
+                )
+            for field, backend, kind in (
+                ("documentStores", "mongodb", "mongo"),
+                ("cacheStores", "redis", "redis"),
+            ):
+                for store in sorted(spec.get(field) or {}):
+                    password = (
+                        _b64get_any(
+                            _extract_data(
+                                req, rsp, f"observe-{backend}-auth-secret-{name}-{store}"
+                            ),
+                            ["password"],
+                        )
+                        or ""
                     )
-                    port = _b64get_any(host_data_b64, ["port"]) or "5432"
-                    user = _b64get_any(host_data_b64, ["user"]) or "postgres"
-                    password = _b64get_any(host_data_b64, ["password"]) or ""
-                    internal_url = _b64get_any(host_data_b64, ["uri"]) or ""
-
-                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "HOST")] = host
-                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "PORT")] = port
-                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "USER")] = user
-                    manifest["stringData"][_store_key("POSTGRES", cluster_name, "PASSWORD")] = (
-                        password
-                    )
-                    manifest["stringData"][
-                        _store_key("POSTGRES", cluster_name, "DATABASES")
-                    ] = ",".join(dbnames)
-
-                    host_ext = ""
-                    if has_gateway_parent:
-                        host_ext = f"{cluster_name}-{workshop_namespace}.{ingress_domain}:443"
-                        manifest["stringData"][
-                            _store_key("POSTGRES", cluster_name, "HOST_EXTERNAL")
-                        ] = host_ext.split(":")[0]
-
-                    for dbname in dbnames:
-                        db_url = _uri_with_database(internal_url, dbname)
-                        if not db_url and password:
-                            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-                        if db_url:
-                            manifest["stringData"][_pg_db_key(cluster_name, dbname, "URL")] = (
-                                db_url
-                            )
-                        if host_ext and db_url:
-                            manifest["stringData"][
-                                _pg_db_key(cluster_name, dbname, "URL_EXTERNAL")
-                            ] = _external_pg_url(db_url, host_ext)
-
-            key = f"secret-{xr_name}-datalab"
-            rsp.desired.resources[key].resource.update(manifest)
-            rsp.desired.resources[key].ready = fnv1.READY_TRUE
+                    if kind == "mongo":
+                        host = f"mongodb-{store}-svc.{name}.svc"
+                        values = {
+                            "host": host,
+                            "port": "27017",
+                            "database": store,
+                            "auth_source": "admin",
+                            "user": f"{store}-app",
+                            "password": password,
+                        }
+                        values["uri"] = (
+                            f"mongodb://{store}-app:{password}@{host}:27017/{store}?authSource=admin"
+                        )
+                    else:
+                        host = f"{store}.{name}.svc"
+                        values = {
+                            "host": host,
+                            "port": "6379",
+                            "database": "0",
+                            "user": "default",
+                            "password": password,
+                            "url": f"redis://default:{password}@{host}:6379/0",
+                        }
+                    publish(f"{kind}-{store}", values, bool(password))
       templates:
-        datalab-secret/manifest:
+        publish-connections/secret:
           apiVersion: v1
           kind: Secret
           metadata:
-            name: ${metadata_name}
-            namespace: ${xr_namespace}
+            name: ${secret_name}
+            namespace: ${namespace}
+            labels:
+              datalabs.versioneer.at/name: ${name}
+              datalabs.versioneer.at/connection: ${connection_name}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
           type: Opaque
-          stringData:
-            remote: ${access_key}
-            remotePath: /
-            configData: ${config_data}
-            AWS_ACCESS_KEY_ID: ${access_key}
-            AWS_SECRET_ACCESS_KEY: ${secret_key}
-            AWS_REGION: ${region}
-            AWS_ENDPOINT_URL: ${endpoint}
-            AWS_S3_FORCE_PATH_STYLE: ${force_path_style}
+          stringData: ${values}
   - step: update-keycloak-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -1151,15 +1042,6 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _session_name(session, *, stringify_none=False):
-            if isinstance(session, dict):
-                return _safe_str(session.get("name") or "")
-            return _string_value(session) if stringify_none else _safe_str(session)
-
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -1202,23 +1084,6 @@ spec:
 
         def _distinct(seq):
             return list(dict.fromkeys(seq))
-
-
-        def _workspace_redirect_uris(xr_name, domain, session_names):
-            uris = [f"https://{xr_name}.{domain}/*"]
-            for sid in session_names:
-                session_host = f"{xr_name}-{sid}"
-                uris.extend(
-                    [
-                        f"https://{session_host}.{domain}/*",
-                        f"https://editor-{session_host}.{domain}/*",
-                        f"https://{session_host}-editor.{domain}/*",
-                        f"https://data-{session_host}.{domain}/*",
-                        f"https://{session_host}-data.{domain}/*",
-                    ]
-                )
-            uris.append("http://localhost:*")
-            return _distinct(uris)
 
 
         def _security_ready(req, resources):
@@ -1275,12 +1140,10 @@ spec:
             ])
             domain = ingress_env.get("domain", "default")
             url = f"https://{xr_name}.{domain}"
-            session_names = [
-                _session_name(session)
-                for session in (spec.get("sessions") or [])
-                if _session_name(session)
-            ]
-            redirect_uris = _workspace_redirect_uris(xr_name, domain, session_names)
+            redirect_uris = _distinct([
+                f"https://{xr_name}.{domain}/oauth2/callback",
+                *[uri for uri in iam_env.get("redirectURIs", []) if isinstance(uri, str) and uri.strip()],
+            ])
 
             security_resources = {}
             security_kinds = {
@@ -1339,6 +1202,10 @@ spec:
                     xr_name=xr_name,
                     url=url,
                     redirect_uris=redirect_uris,
+                    web_origins=_distinct([
+                        f"https://{xr_name}.{domain}",
+                        *[origin for origin in iam_env.get("webOrigins", []) if isinstance(origin, str) and origin.strip()],
+                    ]),
                     realm=realm,
                     connection_secret_name=f"{xr_name}-oauth-client",
                     exchange_enabled=False,
@@ -1782,7 +1649,7 @@ spec:
               clientOfflineSessionIdleTimeout: '2592000'
               clientOfflineSessionMaxLifespan: '2592000'
               allowRefreshTokenInStandardTokenExchange: 'NO'
-              webOrigins: ${redirect_uris}
+              webOrigins: ${web_origins}
               validRedirectUris: ${redirect_uris}
               realmId: ${realm}
             writeConnectionSecretToRef:
@@ -2085,20 +1952,6 @@ spec:
                 return value
             return str(value).lower() in ("true", "1", "yes", "on")
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
                 rsp, name=key, api_version="v1", kind="Secret",
@@ -2134,14 +1987,6 @@ spec:
                     return str(value)
             return None
 
-        def _runtime_namespace(req, name):
-            environment = _extract_manifest(
-                req.observed.resources.get(f"workshopenvironment-{name}")
-            )
-            return ((environment.get("status") or {}).get("educates") or {}).get(
-                "namespace"
-            ) or ""
-
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -2171,11 +2016,8 @@ spec:
                 or _boolish((environment.get("httpRoute") or {}).get("enabled"))
             ):
                 return
-            workshop_namespace = _runtime_namespace(req, xr_name)
-            if not workshop_namespace:
-                return
+            runtime_namespace = xr_name
 
-            observed = getattr(req.observed, "resources", {}) or {}
             oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
             client_secret = _b64get_any(
                 oauth_data, ["clientSecret", "client_secret"]
@@ -2194,7 +2036,7 @@ spec:
                 req,
                 "oauth2-client-secret/manifest",
                 secret_name=secret_name,
-                workshop_ns=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 data={
                     key: _base64.b64encode(value.encode("utf-8")).decode("ascii")
                     for key, value in {
@@ -2236,10 +2078,10 @@ spec:
           kind: Secret
           metadata:
             name: ${secret_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           type: Opaque
           data: ${data}
-  - step: update-educates-objects
+  - step: update-datalab-resources
     functionRef:
       name: crossplane-contrib-function-python
     input:
@@ -2314,37 +2156,6 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
-        def _session_name(session, *, stringify_none=False):
-            if isinstance(session, dict):
-                return _safe_str(session.get("name") or "")
-            return _string_value(session) if stringify_none else _safe_str(session)
-
-        def _session_state(session):
-            state = (
-                _safe_str(session.get("state") or "started").lower()
-                if isinstance(session, dict)
-                else "started"
-            )
-            return {"running": "started", "paused": "stopped"}.get(state, state)
-
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -2352,130 +2163,51 @@ spec:
         import hashlib as _hashlib
         import ipaddress as _ipaddress
         import json as _json
-
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-
+        from crossplane.function import response
 
 
-        def _string_list(v):
-            if not isinstance(v, list):
-                return []
-            return [_string_value(item) for item in v if _string_value(item)]
+        def _string_list(value):
+            return (
+                [_safe_str(item) for item in value if _safe_str(item)]
+                if isinstance(value, list)
+                else []
+            )
 
 
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+        def compose(req, rsp):
             if not set_response_ttl(req, rsp, 60):
                 return
             xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
-
-            xr_name = metadata.get("name")
-            xr_namespace = metadata.get("namespace") or "default"
-
-            sessions = [
-                _session_name(session, stringify_none=True)
-                for session in (spec.get("sessions") or [])
-                if _session_name(session, stringify_none=True)
-            ]
-            started_sessions = [
-                _session_name(session, stringify_none=True)
-                for session in (spec.get("sessions") or [])
-                if _session_name(session, stringify_none=True)
-                and _session_state(session) == "started"
-            ]
-            db_service_names = []
-            db_hosts = spec.get("databases") or {}
-            if isinstance(db_hosts, dict):
-                for host_key in sorted(list(db_hosts.keys())):
-                    if not isinstance(host_key, str) or not host_key.strip():
-                        continue
-                    host_cfg = db_hosts.get(host_key) or {}
-                    if not isinstance(host_cfg, dict):
-                        continue
-                    dbnames = [
-                        _string_value(x)
-                        for x in list(host_cfg.get("names") or [])
-                        if _string_value(x)
-                    ]
-                    db_storage = _string_value(host_cfg.get("storage") or "")
-                    if dbnames and db_storage:
-                        db_service_names.append(f"{host_key.strip()}-primary")
-
-            context = _to_dict(req.context)
-            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-            defaults = environment.get("defaults") or {}
-            vcluster = _boolish((defaults.get("vcluster") or {}).get("enabled", True))
-            files = defaults.get("files") or []
-            quota = defaults.get("quota") or {}
-            overall_quota = defaults.get("overallQuota") or {}
-
-            memory = quota.get("memory") or "2Gi"
-            storage = quota.get("storage") or "1Gi"
-            budget = quota.get("budget") or "medium"
-            overall_storage = _string_value(overall_quota.get("storage") or "100Gi")
-
-            env_security = defaults.get("security") or {}
-
-            policy = env_security.get("policy") or "baseline"
-
-            ka = env_security.get("kubernetesAccess")
-            if ka is None:
-                ka = True
-            kubernetes_access = _boolish(ka)
-
-            role = env_security.get("kubernetesRole") or "edit"
-
-            data_cfg = defaults.get("data") or {}
-            data_enabled = data_cfg.get("enabled")
-            if data_enabled is None:
-                data_enabled = True
-            data_enabled = _boolish(data_enabled)
-
-            registry_cfg = defaults.get("registry") or {}
-            registry_enabled = registry_cfg.get("enabled")
-            if registry_enabled is None:
-                registry_enabled = True
-            registry_enabled = _boolish(registry_enabled)
-
-            persistence_cfg = defaults.get("persistence") or {}
-            requested_storage_class = _string_value(
-                persistence_cfg.get("storageClassName") or ""
-            )
-
-            ingress_env = environment.get("ingress") or {}
-            storage_classes_env = environment.get("storageClasses") or {}
-            allowed_storage_classes = [
-                _string_value(sc)
-                for sc in (storage_classes_env.get("allowed") or [])
-                if _string_value(sc)
-            ]
-            packages = environment.get("packages") or []
-
-            ingress_class = ingress_env.get("class", "")
-            ingress_domain = ingress_env.get("domain", "default")
-            ingress_secret = ingress_env.get("secret", "wildcard-tls")
-            permanent_access = _boolish(ingress_env.get("enabled")) or _boolish(
-                (environment.get("httpRoute") or {}).get("enabled")
-            )
-
-            storage_secret_name = f"{xr_name}-datalab"
-            persistent_storage_class = ""
-            if allowed_storage_classes:
-                persistent_storage_class = (
-                    requested_storage_class
-                    if requested_storage_class in allowed_storage_classes
-                    else allowed_storage_classes[0]
+            meta = xr["metadata"]
+            spec = xr.get("spec") or {}
+            xr_name = meta["name"]
+            xr_namespace = meta.get("namespace") or "default"
+            if xr_name == xr_namespace or xr_name == "default" or xr_name.startswith("kube-"):
+                response.fatal(
+                    rsp,
+                    "The Datalab service namespace must differ from its claim namespace and Kubernetes system namespaces.",
                 )
-            else:
-                persistent_storage_class = requested_storage_class
-
-            external_egress = env_security.get("externalEgress")
+                return
+            env = _to_dict(req.context).get(
+                "apiextensions.crossplane.io/environment", {}
+            )
+            defaults = env.get("defaults") or {}
+            security = defaults.get("security") or {}
+            vcluster = bool(spec.get("vclusters"))
+            data_enabled = (defaults.get("data") or {}).get("enabled")
+            data_enabled = data_enabled is None or _boolish(data_enabled)
+            registry_enabled = _boolish((defaults.get("registry") or {}).get("enabled", True))
+            policy = security.get("policy") or "baseline"
+            overall_storage = str(
+                (defaults.get("overallQuota") or {}).get("storage")
+                or "100Gi"
+            )
+            external_egress = security.get("externalEgress")
             if external_egress is None:
                 external_egress = True
             external_egress = _boolish(external_egress)
 
-            network_env = environment.get("network") or {}
+            network_env = env.get("network") or {}
             excluded_network_policies = set(
                 _string_list(network_env.get("excludePolicies") or [])
             )
@@ -2484,7 +2216,7 @@ spec:
             internal_egress = network_env.get("internalEgress", [])
             internal_ingress = network_env.get("internalIngress", [])
             internal_cidrs = _string_list(network_env.get("podCIDRs") or [])
-            service_cidr = _string_value(network_env.get("serviceCIDR") or "")
+            service_cidr = _safe_str(network_env.get("serviceCIDR") or "")
             if service_cidr:
                 internal_cidrs.append(service_cidr)
 
@@ -2503,7 +2235,7 @@ spec:
             def _network_policy(name, rules, direction="egress", pod_selector=None):
                 return _render_template(
                     req,
-                    "educates/network-policy",
+                    "datalab-resources/networkpolicy",
                     name=name,
                     spec={
                         "podSelector": pod_selector or {},
@@ -2576,9 +2308,9 @@ spec:
                     rules.append(rule)
                 return rules
 
-            def _add_policy(policies, name, rules):
+            def _add_policy(policies, name, rules, direction="egress"):
                 if _policy_enabled(name):
-                    policies.append(_network_policy(name, rules))
+                    policies.append(_network_policy(name, rules, direction))
 
             ingress_policies = {}
             for item, rule in zip(internal_ingress, _internal_rules(internal_ingress, "from")):
@@ -2596,40 +2328,14 @@ spec:
                     ingress_policy["spec"]["ingress"].append(rule)
 
             network_policies = []
+            _add_policy(network_policies, "deny-ingress", [], "ingress")
+            _add_policy(
+                network_policies, "allow-namespace-ingress", [{"from": [{"podSelector": {}}]}], "ingress"
+            )
             _add_policy(network_policies, "deny-egress", [])
             _add_policy(
                 network_policies, "allow-namespace-egress", [{"to": [{"podSelector": {}}]}]
             )
-
-            if vcluster:
-                _add_policy(
-                    network_policies,
-                    "allow-vcluster-egress",
-                    [
-                        {
-                            "to": [
-                                {
-                                    "namespaceSelector": {
-                                        "matchLabels": {
-                                            "training.educates.dev/environment.name": xr_name,
-                                            "training.educates.dev/session.objects": "true",
-                                        }
-                                    },
-                                    "podSelector": {
-                                        "matchLabels": {
-                                            "app": "vcluster",
-                                            "release": "my-vcluster",
-                                        }
-                                    },
-                                }
-                            ],
-                            "ports": [
-                                {"protocol": "TCP", "port": 443},
-                                {"protocol": "TCP", "port": 8443},
-                            ],
-                        }
-                    ],
-                )
 
             if external_egress or vcluster or data_enabled or registry_enabled:
                 _add_policy(
@@ -2654,210 +2360,88 @@ spec:
                     ],
                 )
 
-            if external_egress:
-                if external_egress_cidrs:
-                    _add_policy(
-                        network_policies,
-                        "allow-external-egress",
-                        [
-                            {"to": [_ip_block(cidr, _exceptions_for(cidr))]}
-                            for cidr in external_egress_cidrs
-                        ],
-                    )
+            if external_egress and external_egress_cidrs:
+                _add_policy(
+                    network_policies,
+                    "allow-external-egress",
+                    [
+                        {"to": [_ip_block(cidr, _exceptions_for(cidr))]}
+                        for cidr in external_egress_cidrs
+                    ],
+                )
 
             internal_egress_rules = _internal_rules(internal_egress, "to")
             if internal_egress_rules:
                 _add_policy(network_policies, "allow-internal-egress", internal_egress_rules)
 
-            vcluster_cfg = {
-                "enabled": vcluster,
-                "version": "1.34",
-                "services": {
-                    "fromHost": [
-                        {
-                            "from": f"$(workshop_namespace)/{host_svc_name}",
-                            "to": f"$(workshop_namespace)/{host_svc_name}",
-                        }
-                        for host_svc_name in db_service_names
-                    ]
-                },
-            }
-
-            workshop = _render_template(
-                req,
-                "educates/workshop",
-                xr_name=xr_name,
-                vcluster_cfg=vcluster_cfg,
-                workshop_enabled=bool(files),
-                memory=memory,
-                storage=storage,
-                budget=budget,
-                role=role,
-                policy=policy,
-                kubernetes_access=kubernetes_access,
-                storage_secret_name=storage_secret_name,
-                files=files,
-                packages=packages,
-                xr_namespace=xr_namespace,
-                network_policies=network_policies,
-            )
-
-            if sessions:
-                workshop["spec"]["session"]["resources"].pop("storage", None)
-                workshop["spec"]["session"]["resources"]["volume"] = {
-                    "name": "$(session_name)-persistent"
-                }
-
-            if data_enabled:
-                if permanent_access:
-                    workshop["spec"]["session"]["dashboards"].append(
-                        {"name": "Data", "url": f"https://{xr_name}.{ingress_domain}/"}
-                    )
-                else:
-                    workshop["spec"]["session"]["dashboards"].append(
-                        {
-                            "name": "Data",
-                            "url": "$(ingress_protocol)://data-$(session_name).$(ingress_domain)/",
-                        }
-                    )
-                    workshop["spec"]["session"]["ingresses"].append(
-                        {
-                            "name": "data",
-                            "authentication": {"type": "session"},
-                            "protocol": "http",
-                            "host": "package-r.$(workshop_namespace).svc.$(cluster_domain)",
-                            "port": 8888,
-                            "headers": [{"name": "X-Package-R-User", "value": "datalab"}],
-                        }
-                    )
-
-            if policy == "privileged":
-                workshop["spec"]["session"]["applications"]["docker"] = {
-                    "enabled": True,
-                    "storage": "20Gi",
-                }
-
-            if vcluster and service_cidr:
-                workshop["spec"]["session"]["objects"].append(
+            def emit(kind, manifest, suffix=""):
+                key = f"{kind.lower()}-{xr_name}{('-' + suffix) if suffix else ''}"
+                rsp.desired.resources[key].resource.update(
                     _render_template(
                         req,
-                        "educates/vcluster-cidr",
-                        service_cidr=service_cidr,
+                        "common/object",
+                        key=key,
+                        xr_namespace=xr_namespace,
+                        manifest=manifest,
+                        readiness={"policy": "SuccessfulCreate"},
                     )
                 )
 
-            environment = _render_template(
-                req,
-                "educates/workshop-environment",
-                xr_name=xr_name,
-                ingress_class=ingress_class,
-                ingress_domain=ingress_domain,
-                ingress_secret=ingress_secret,
-            )
-
-            def emit(kind, manifest, key_suffix="", readiness=None):
-                suffix = f"-{xr_name}{('-' + key_suffix) if key_suffix else ''}"
-                key = f"{kind.lower()}{suffix}"
-                body = _render_template(
-                    req,
-                    "common/object",
-                    key=key,
-                    xr_namespace=xr_namespace,
-                    manifest=manifest,
-                    readiness=readiness or {"policy": "SuccessfulCreate"},
-                )
-                rsp.desired.resources[key].resource.update(body)
-
-            emit("Workshop", workshop)
             emit(
-                "WorkshopEnvironment",
-                environment,
-                readiness={
-                    "policy": "DeriveFromCelQuery",
-                    "celQuery": "has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'",
-                },
-            )
-
-            observed_resources = getattr(req.observed, "resources", {}) or {}
-            environment_manifest = _extract_manifest(
-                observed_resources.get(f"workshopenvironment-{xr_name}")
-            )
-            workshop_namespace = _string_value(
-                ((environment_manifest.get("status") or {}).get("educates") or {}).get(
-                    "namespace"
-                )
-                or xr_name
-            )
-
-            runtime_namespace = (
-                (environment_manifest.get("status") or {}).get("educates") or {}
-            ).get("namespace")
-            if runtime_namespace and _policy_enabled("allow-internal-ingress"):
-                for name, manifest in sorted(ingress_policies.items()):
-                    if _policy_enabled(name):
-                        manifest["metadata"]["namespace"] = runtime_namespace
-                        emit("NetworkPolicy", manifest, key_suffix=name)
-
-            if workshop_namespace:
-                emit(
-                    "ResourceQuota",
-                    _render_template(
-                        req,
-                        "educates/storage-quota",
-                        workshop_ns=workshop_namespace,
-                        overall_storage=overall_storage,
-                    ),
-                    key_suffix="overall-storage",
-                )
-
-                for sid in sessions:
-                    persistent_pvc_name = f"{xr_name}-{sid}-persistent"
-                    persistent_pvc_spec = {
-                        "accessModes": ["ReadWriteOnce"],
-                        "resources": {"requests": {"storage": storage}},
-                    }
-                    if persistent_storage_class:
-                        persistent_pvc_spec["storageClassName"] = persistent_storage_class
-                    emit(
-                        "PersistentVolumeClaim",
-                        _render_template(
-                            req,
-                            "educates/workspace-pvc",
-                            persistent_pvc_name=persistent_pvc_name,
-                            workshop_ns=workshop_namespace,
-                            persistent_pvc_spec=persistent_pvc_spec,
-                        ),
-                        key_suffix=f"{sid}-persistent",
-                    )
-
-            for sid in started_sessions:
-                session_manifest = _render_template(
+                "Namespace",
+                _render_template(
                     req,
-                    "educates/session",
-                    metadata_name=f"{xr_name}-{sid}",
+                    "datalab-resources/namespace",
                     xr_name=xr_name,
-                    session_id=str(sid),
-                    ingress_domain=ingress_domain,
-                    ingress_secret=ingress_secret,
-                    session_environment=[
-                        {"name": "SESSION_NAME", "value": f"{xr_name}-{sid}"},
-                        {"name": "FRAME_ANCESTORS", "value": ""},
-                    ]
-                    + (
-                        [{"name": "KUBECONFIG", "value": "/opt/kubeconfig/config"}]
-                        if vcluster
-                        else []
-                    ),
-                )
-                emit(
-                    "WorkshopSession",
-                    session_manifest,
-                    key_suffix=str(sid),
-                    readiness={
-                        "policy": "DeriveFromCelQuery",
-                        "celQuery": "has(object.status) && has(object.status.educates) && object.status.educates.phase == 'Running'",
+                    xr_namespace=xr_namespace,
+                    policy=policy,
+                ),
+            )
+            emit(
+                "ResourceQuota",
+                _render_template(
+                    req,
+                    "datalab-resources/resourcequota",
+                    xr_name=xr_name,
+                    overall_storage=overall_storage,
+                ),
+                "overall-storage",
+            )
+            quota_key = f"resourcequota-{xr_name}-overall-storage"
+            rsp.desired.resources[quota_key].resource["spec"]["forProvider"]["manifest"]["spec"]["hard"].update(
+                {
+                    "requests.cpu": "4",
+                    "requests.memory": "8Gi",
+                    "limits.cpu": "16",
+                    "limits.memory": "32Gi",
+                    **((defaults.get("overallQuota") or {}).get("hard") or {}),
+                }
+            )
+            limits = defaults.get("limitRange") or {}
+            emit(
+                "LimitRange",
+                _render_template(
+                    req,
+                    "datalab-resources/limitrange",
+                    xr_name=xr_name,
+                    default_limits={
+                        "cpu": "1", "memory": "512Mi", "ephemeral-storage": "8Gi",
+                        **(limits.get("default") or {}),
                     },
-                )
+                    default_requests={
+                        "cpu": "100m", "memory": "128Mi", "ephemeral-storage": "3Gi",
+                        **(limits.get("defaultRequest") or {}),
+                    },
+                ),
+            )
+            policies = network_policies + (
+                [policy for name, policy in ingress_policies.items() if _policy_enabled(name)]
+                if _policy_enabled("allow-internal-ingress")
+                else []
+            )
+            for manifest in policies:
+                manifest["metadata"]["namespace"] = xr_name
+                emit("NetworkPolicy", manifest, manifest["metadata"]["name"])
       templates:
         common/object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
@@ -2875,120 +2459,174 @@ spec:
               manifest: ${manifest}
             readiness: ${readiness}
             watch: true
-        educates/network-policy:
+        datalab-resources/limitrange:
+          apiVersion: v1
+          kind: LimitRange
+          metadata:
+            name: datalab-limits
+            namespace: ${xr_name}
+          spec:
+            limits:
+            - type: Container
+              default: ${default_limits}
+              defaultRequest: ${default_requests}
+        datalab-resources/namespace:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ${xr_name}
+            labels:
+              datalabs.versioneer.at/name: ${xr_name}
+              datalabs.versioneer.at/namespace: ${xr_namespace}
+              pod-security.kubernetes.io/enforce: ${policy}
+        datalab-resources/networkpolicy:
           apiVersion: networking.k8s.io/v1
           kind: NetworkPolicy
           metadata:
             name: ${name}
           spec: ${spec}
-        educates/session:
-          apiVersion: training.educates.dev/v1beta1
-          kind: WorkshopSession
-          metadata:
-            name: ${metadata_name}
-          spec:
-            environment:
-              name: ${xr_name}
-            session:
-              id: ${session_id}
-              ingress:
-                domain: ${ingress_domain}
-                secret: ${ingress_secret}
-              env: ${session_environment}
-        educates/storage-quota:
+        datalab-resources/resourcequota:
           apiVersion: v1
           kind: ResourceQuota
           metadata:
             name: overall-storage
-            namespace: ${workshop_ns}
+            namespace: ${xr_name}
           spec:
             hard:
               requests.storage: ${overall_storage}
-        educates/vcluster-cidr:
-          apiVersion: v1
-          kind: ConfigMap
+  - step: update-runtime-secret
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+        def _boolish(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes", "on")
+
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
+                return
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            data = (environment.get("defaults") or {}).get("data") or {}
+            enabled = data.get("enabled")
+            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            if enabled is not None and not _boolish(enabled) and not registry_enabled:
+                return
+            meta = _to_dict(req.observed.composite.resource)["metadata"]
+            name = meta["name"]
+            storage = rsp.desired.resources.get(f"connection-{name}-s3")
+            if not storage:
+                return
+            values = {
+                key: value
+                for key, value in _to_dict(storage.resource).get("stringData", {}).items()
+                if key.startswith("AWS_") or key == "aws-credentials"
+            }
+            key = f"runtime-storage-secret-{name}"
+            rsp.desired.resources[key].resource.update(
+                _render_template(
+                    req,
+                    "common/object",
+                    key=key,
+                    xr_namespace=meta.get("namespace") or "default",
+                    manifest={
+                        "apiVersion": "v1",
+                        "kind": "Secret",
+                        "metadata": {"name": f"{name}-storage", "namespace": name},
+                        "type": "Opaque",
+                        "stringData": values,
+                    },
+                    readiness={"policy": "SuccessfulCreate"},
+                )
+            )
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
           metadata:
-            name: vc-cidr-my-vcluster
-            namespace: $(session_namespace)-vc
-          data:
-            cidr: ${service_cidr}
-        educates/workshop:
-          apiVersion: training.educates.dev/v1beta1
-          kind: Workshop
-          metadata:
-            name: ${xr_name}
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
           spec:
-            title: Default DataLab
-            description: A default DataLab environment.
-            version: '1.0'
-            session:
-              applications:
-                console:
-                  enabled: false
-                editor:
-                  enabled: true
-                slides:
-                  enabled: false
-                terminal:
-                  enabled: true
-                vcluster: ${vcluster_cfg}
-                workshop:
-                  enabled: ${workshop_enabled}
-              dashboards: []
-              ingresses: []
-              resources:
-                memory: ${memory}
-                storage: ${storage}
-              namespaces:
-                budget: ${budget}
-                role: ${role}
-                security:
-                  policy: ${policy}
-                  token:
-                    enabled: ${kubernetes_access}
-              envFrom:
-              - secretRef:
-                  name: ${storage_secret_name}
-              objects: []
-            workshop:
-              files: ${files}
-              packages: ${packages}
-            environment:
-              secrets:
-              - name: ${storage_secret_name}
-                namespace: ${xr_namespace}
-              objects: ${network_policies}
-        educates/workshop-environment:
-          apiVersion: training.educates.dev/v1beta1
-          kind: WorkshopEnvironment
-          metadata:
-            name: ${xr_name}
-          spec:
-            analytics:
-              amplitude:
-                trackingId: ''
-            cookies: {}
-            environment:
-              objects: []
-              secrets: []
-            request:
-              enabled: false
-            session:
-              ingress:
-                class: ${ingress_class}
-                domain: ${ingress_domain}
-                secret: ${ingress_secret}
-            theme:
-              name: default-website-theme
-            workshop:
-              name: ${xr_name}
-        educates/workspace-pvc:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: ${persistent_pvc_name}
-            namespace: ${workshop_ns}
-          spec: ${persistent_pvc_spec}
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
   - step: update-vclusters
     functionRef:
       name: crossplane-contrib-function-python
@@ -3036,6 +2674,31 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _vcluster_cleanup_generation(req, instance, hibernated):
+            xr = _to_dict(req.observed.composite.resource)
+            generation = int(xr["metadata"].get("generation", 1))
+            if not hibernated:
+                return generation
+            # Composed Objects can be applied before XR status is saved.
+            # Use the latest request so stale status cannot reuse a completed cleanup.
+            requests = [(0, False)]
+            for state in (xr.get("status") or {}).get("vclusters") or []:
+                if state.get("name") == instance:
+                    sleeping = state.get("phase") in ("Hibernating", "Hibernated", "Failed")
+                    saved = int(state.get("cleanupGeneration" if sleeping else "observedGeneration", 0))
+                    if saved:
+                        requests.append((saved, sleeping))
+            key = _resource_name("vcluster", xr["metadata"]["name"], instance, "statefulset")
+            control = req.observed.resources.get(key)
+            if control:
+                manifest = (_to_dict(control.resource).get("spec") or {}).get("forProvider", {}).get("manifest") or {}
+                marker = json.loads((manifest.get("metadata") or {}).get("annotations", {}).get(
+                    "datalabs.versioneer.at/lifecycle-request", "{}"))
+                if marker.get("generation"):
+                    requests.append((int(marker["generation"]), marker.get("hibernated") is True))
+            saved, sleeping = max(requests, key=lambda item: item[0])
+            return saved if sleeping else generation
+
         def set_response_ttl(req, rsp, default_seconds):
             rsp.meta.ttl.FromSeconds(default_seconds)
             environment = (
@@ -3060,20 +2723,6 @@ spec:
             )
             return False
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -3093,14 +2742,6 @@ spec:
                 "name": "cluster-admin", "namespace": "*", "role": "cluster-admin"
             }
             return [groups[name] for name in sorted(groups)]
-
-        def _runtime_namespace(req, name):
-            environment = _extract_manifest(
-                req.observed.resources.get(f"workshopenvironment-{name}")
-            )
-            return ((environment.get("status") or {}).get("educates") or {}).get(
-                "namespace"
-            ) or ""
 
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
@@ -3148,13 +2789,15 @@ spec:
                 return
             xr = _to_dict(req.observed.composite.resource)
             instances = (xr.get("spec") or {}).get("vclusters") or {}
+            volumes = (xr.get("spec") or {}).get("volumes") or {}
+            if any(volume["vcluster"] not in instances for volume in volumes.values()):
+                response.fatal(rsp, "Each volume must select a declared virtual cluster.")
+                return
             if not instances:
                 return
             meta = xr["metadata"]
             name = meta["name"]
-            namespace = _runtime_namespace(req, name)
-            if not namespace:
-                return
+            namespace = name
             for instance, instance_config in sorted(instances.items()):
                 _compose_instance(
                     req,
@@ -3190,6 +2833,38 @@ spec:
             }
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
             config = env.get("vcluster") or {}
+            scheduling = config.get("scheduling") or {}
+            if not isinstance(scheduling, dict):
+                response.fatal(rsp, "vCluster scheduling must be an object.")
+                return
+            control_scheduling = scheduling.get("controlPlane") or {}
+            workload_scheduling = scheduling.get("workloads") or {}
+            if not isinstance(control_scheduling, dict) or not isinstance(workload_scheduling, dict):
+                response.fatal(rsp, "vCluster controlPlane and workloads scheduling must be objects.")
+                return
+            if (set(control_scheduling) - {"nodeSelector", "tolerations"}
+                    or set(workload_scheduling) - {"nodeSelector", "enforceTolerations"}):
+                response.fatal(rsp, "Unknown vCluster scheduling field.")
+                return
+            for section in (control_scheduling, workload_scheduling):
+                selector = section.get("nodeSelector") or {}
+                if not isinstance(selector, dict) or any(
+                    not isinstance(k, str) or not isinstance(v, str) for k, v in selector.items()
+                ):
+                    response.fatal(rsp, "vCluster scheduling nodeSelector must map strings to strings.")
+                    return
+            enforced = workload_scheduling.get("enforceTolerations") or []
+            if not isinstance(enforced, list) or any(
+                not isinstance(t, str) or not re.fullmatch(
+                    r"[^\s=:]+(?:=[^\s=:]+)?:(?:NoSchedule|PreferNoSchedule|NoExecute)", t
+                ) for t in enforced
+            ):
+                response.fatal(rsp, "vCluster enforceTolerations must use key[=value]:effect strings.")
+                return
+            tolerations = control_scheduling.get("tolerations") or []
+            if not isinstance(tolerations, list) or any(not isinstance(t, dict) for t in tolerations):
+                response.fatal(rsp, "vCluster controlPlane tolerations must be Kubernetes toleration objects.")
+                return
             secret_mappings = _secret_mappings(
                 (_to_dict(rsp.desired.composite.resource).get("status") or {}).get("connections") or [],
                 instance_config.get("secretBindings") or [],
@@ -3261,7 +2936,7 @@ spec:
                         **template_values,
                     )
                 )
-                rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.pkg.internal/vcluster": instance}
+                rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.versioneer.at/vcluster": instance}
 
             emit(
                 "authentication",
@@ -3273,18 +2948,15 @@ spec:
                     **template_values,
                 ),
             )
-            environment_manifest = (
-                _to_dict(rsp.desired.resources[f"workshop-{name}"].resource)
-                .get("spec", {})
-                .get("forProvider", {})
-                .get("manifest", {})
-            )
-            environment_objects = (
-                (environment_manifest.get("spec") or {}).get("environment") or {}
-            ).get("objects") or []
             workload_egress = [
                 rule
-                for policy in environment_objects
+                for key in sorted(rsp.desired.resources)
+                for policy in [
+                    _to_dict(rsp.desired.resources[key].resource)
+                    .get("spec", {})
+                    .get("forProvider", {})
+                    .get("manifest", {})
+                ]
                 if policy.get("kind") == "NetworkPolicy"
                 and policy.get("metadata", {}).get("name")
                 in ("allow-external-egress", "allow-internal-egress")
@@ -3369,6 +3041,20 @@ spec:
                 resources=resources,
                 **template_values,
             )
+            snapshots = config.get("volumeSnapshots", False)
+            if type(snapshots) is not bool:
+                response.fatal(rsp, "data.vcluster.volumeSnapshots must be a boolean.")
+                return
+            configuration["sync"]["fromHost"]["volumeSnapshotClasses"] = {"enabled": snapshots}
+            for resource in ("volumeSnapshots", "volumeSnapshotContents"):
+                configuration["sync"]["toHost"][resource] = {"enabled": snapshots}
+            if snapshots:
+                support = _render_template(
+                    req, "vcluster/snapshot-rbac", namespace=namespace, service_account=service_account,
+                    snapshot_role=_resource_name(name, instance, "volume-snapshots"),
+                )["resources"]
+                for suffix, manifest in support.items():
+                    emit(suffix, manifest)
             embedded = ((config.get("backingStore") or {}).get("database") or {}).get(
                 "embedded"
             ) or {}
@@ -3379,6 +3065,40 @@ spec:
                 "enabled": bool(secret_mappings),
                 "mappings": {"byName": secret_mappings},
             }
+            configuration["controlPlane"]["statefulSet"]["scheduling"].update(control_scheduling)
+            configuration["sync"]["fromHost"]["nodes"]["selector"]["labels"].update(
+                workload_scheduling.get("nodeSelector") or {}
+            )
+            configuration["sync"]["toHost"]["pods"]["enforceTolerations"] = enforced
+            if workload_scheduling.get("nodeSelector") or enforced:
+                policy = _render_template(
+                    req, "vcluster/placement-policy", namespace=namespace,
+                    policy_name=_resource_name(namespace, instance, "pod-placement"),
+                    identity_expression=f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{namespace}:{service_account}')}",
+                )
+                validations = policy["spec"]["validations"]
+                for key, value in sorted((workload_scheduling.get("nodeSelector") or {}).items()):
+                    validations.append({
+                        "expression": f"has(object.spec.nodeSelector) && {json.dumps(key)} in object.spec.nodeSelector && object.spec.nodeSelector[{json.dumps(key)}] == {json.dumps(value)}",
+                        "message": f"Synced Pods must select {key}={value}.",
+                    })
+                for tolerance in enforced:
+                    pair, effect = tolerance.split(":")
+                    key, separator, value = pair.partition("=")
+                    match = f"t.key == {json.dumps(key)} && t.effect == {json.dumps(effect)}"
+                    match += (f" && (!has(t.operator) || t.operator == 'Equal') && t.value == {json.dumps(value)}"
+                              if separator else " && t.operator == 'Exists'")
+                    if effect == "NoExecute":
+                        match += " && !has(t.tolerationSeconds)"
+                    validations.append({
+                        "expression": f"has(object.spec.tolerations) && object.spec.tolerations.exists(t, {match})",
+                        "message": f"Synced Pods require toleration {tolerance}.",
+                    })
+                emit("placement-policy", policy)
+                emit("placement-policy-binding", _render_template(
+                    req, "vcluster/storage-policy-binding", namespace=namespace,
+                    policy_name=policy["metadata"]["name"],
+                ))
             configuration_json = json.dumps(configuration, sort_keys=True)
             checksum = hashlib.sha256(
                 (configuration_json + authentication).encode()
@@ -3434,12 +3154,6 @@ spec:
                     ),
                 ),
                 (
-                    "limitrange",
-                    _render_template(
-                        req, "vcluster/limitrange", namespace=namespace, **template_values
-                    ),
-                ),
-                (
                     "control-plane-networkpolicy",
                     _render_template(
                         req,
@@ -3468,6 +3182,11 @@ spec:
                     ),
                 ),
             ):
+                if suffix == "role" and snapshots:
+                    manifest["rules"].append({
+                        "apiGroups": ["snapshot.storage.k8s.io"], "resources": ["volumesnapshots"],
+                        "verbs": ["create", "delete", "patch", "update", "get", "list", "watch"],
+                    })
                 emit(suffix, manifest)
             source_namespaces = {key.split("/")[0] for key in secret_mappings} - {namespace}
             for source_namespace in sorted(source_namespaces):
@@ -3491,21 +3210,46 @@ spec:
             )
             workload_policy["spec"]["egress"].extend(workload_egress)
             emit("workload-networkpolicy", workload_policy)
+            statefulset = _render_template(
+                req, "vcluster/statefulset", namespace=namespace,
+                configuration_checksum=checksum, resources=resources,
+                replicas=0 if instance_config.get("hibernated", False) else 1,
+                **template_values,
+            )
+            statefulset["metadata"]["annotations"] = {
+                "datalabs.versioneer.at/lifecycle-request": json.dumps({
+                    "generation": _vcluster_cleanup_generation(
+                        req, instance,
+                        instance_config.get("hibernated", False),
+                    ),
+                    "hibernated": bool(instance_config.get("hibernated", False)),
+                }, sort_keys=True),
+            }
+            if control_scheduling:
+                statefulset["spec"]["template"]["spec"].update(control_scheduling)
             emit(
                 "statefulset",
-                _render_template(
-                    req,
-                    "vcluster/statefulset",
-                    namespace=namespace,
-                    configuration_checksum=checksum,
-                    resources=resources,
-                    **template_values,
-                ),
+                statefulset,
                 {
                     "policy": "DeriveFromCelQuery",
                     "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration == object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == object.spec.replicas && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision == object.status.updateRevision",
                 },
             )
+            if workload_scheduling.get("nodeSelector") or enforced:
+                key = _resource_name("vcluster", name, instance, "statefulset")
+                dependencies = [_resource_name("vcluster", name, instance, suffix)
+                                for suffix in ("placement-policy", "placement-policy-binding")]
+                rsp.desired.resources[key].resource["spec"]["references"] = [
+                    {"dependsOn": {"name": dependency, "namespace": claim_namespace}}
+                    for dependency in dependencies
+                ]
+                for dependency in dependencies:
+                    observed = req.observed.resources.get(dependency)
+                    body = _to_dict(observed.resource) if observed else {}
+                    if not any(c.get("type") == "Ready" and c.get("status") == "True"
+                               for c in body.get("status", {}).get("conditions", [])):
+                        rsp.desired.resources[key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+                        break
             virtual_provider = _resource_name(name, "vcluster", instance)
             emit(
                 "virtual-providerconfig",
@@ -3519,7 +3263,7 @@ spec:
                 ),
             )
 
-            def virtual(suffix, manifest, preserve=False):
+            def virtual(suffix, manifest, preserve=False, readiness=None):
                 key = _resource_name("vcluster", name, instance, "access", suffix)
                 body = _render_template(
                     req,
@@ -3532,11 +3276,20 @@ spec:
                 )
                 if preserve:
                     body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
+                if readiness:
+                    body["spec"]["readiness"] = readiness
                 body["metadata"].setdefault("labels", {})[
-                    "datalabs.pkg.internal/vcluster"
+                    "datalabs.versioneer.at/vcluster"
                 ] = instance
                 rsp.desired.resources[key].resource.update(body)
 
+            volumes = {
+                key: volume
+                for key, volume in ((_to_dict(req.observed.composite.resource).get("spec") or {}).get("volumes") or {}).items()
+                if volume["vcluster"] == instance
+            }
+            targets = {"default", *(group["namespace"] for group in groups if group["namespace"] != "*"),
+                       *(volume.get("namespace", "default") for volume in volumes.values())}
             for storage_name in storage_classes:
                 suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
                 emit(
@@ -3589,7 +3342,7 @@ spec:
                         **fields,
                     },
                 )
-            for target in sorted({group["namespace"] for group in groups} - {"*"}):
+            for target in sorted(targets - {"default"}):
                 virtual(
                     f"namespace-{target}",
                     _render_template(
@@ -3938,7 +3691,7 @@ spec:
                 image:
                   registry: ghcr.io
                   repository: loft-sh/kubernetes
-                  tag: v1.36.0
+                  tag: v1.36.6
                 imagePullPolicy: ''
                 resources:
                   limits:
@@ -4579,26 +4332,6 @@ spec:
             selector:
               app: ${runtime}
               release: ${runtime}
-        vcluster/limitrange:
-          apiVersion: v1
-          kind: LimitRange
-          metadata:
-            name: ${service_account}
-            namespace: ${namespace}
-            labels:
-              app: ${runtime}
-              release: ${runtime}
-          spec:
-            limits:
-            - default:
-                cpu: '1'
-                ephemeral-storage: 8Gi
-                memory: 512Mi
-              defaultRequest:
-                cpu: 100m
-                ephemeral-storage: 3Gi
-                memory: 128Mi
-              type: Container
         vcluster/manifest:
           apiVersion: rbac.authorization.k8s.io/v1
           kind: ${kind}
@@ -4617,6 +4350,38 @@ spec:
           kind: Namespace
           metadata:
             name: ${target}
+        vcluster/placement-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            matchConstraints:
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                resources:
+                - pods
+            matchConditions:
+            - name: syncer-identity
+              expression: ${identity_expression}
+            validations:
+            - expression: request.operation != 'CREATE' || !has(object.spec.nodeName) || object.spec.nodeName ==
+                ''
+              message: Synced Pods must use the host scheduler; direct nodeName is not allowed.
+            - expression: 'request.operation != ''UPDATE'' || ((!has(object.spec.nodeName) || object.spec.nodeName
+                == '''') ? (!has(oldObject.spec.nodeName) || oldObject.spec.nodeName == '''') : (has(oldObject.spec.nodeName)
+                && object.spec.nodeName == oldObject.spec.nodeName))'
+              message: The syncer cannot change a host Pod nodeName.
+            - expression: '!has(object.spec.schedulerName) || object.spec.schedulerName == '''' || object.spec.schedulerName
+                == ''default-scheduler'''
+              message: Synced Pods must use the default host scheduler.
         vcluster/role:
           kind: Role
           apiVersion: rbac.authorization.k8s.io/v1
@@ -4865,6 +4630,21 @@ spec:
                 protocol: TCP
               - port: 6443
                 protocol: TCP
+        vcluster/snapshot-rbac:
+          resources:
+            snapshot-binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: ${snapshot_role}
+              subjects:
+              - kind: ServiceAccount
+                name: ${service_account}
+                namespace: ${namespace}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: ClusterRole
+                name: datalab-vcluster-volume-snapshots
         vcluster/statefulset:
           apiVersion: apps/v1
           kind: StatefulSet
@@ -4881,11 +4661,11 @@ spec:
                 release: ${runtime}
             serviceName: ${headless_service}
             podManagementPolicy: Parallel
-            replicas: 1
+            replicas: ${replicas}
             template:
               metadata:
                 annotations:
-                  datalabs.pkg.internal/configuration-checksum: ${configuration_checksum}
+                  datalabs.versioneer.at/configuration-checksum: ${configuration_checksum}
                 labels:
                   app: ${runtime}
                   release: ${runtime}
@@ -4912,7 +4692,7 @@ spec:
                     claimName: ${data_pvc}
                 initContainers:
                 - name: kubernetes
-                  image: ghcr.io/loft-sh/kubernetes:v1.36.0
+                  image: ghcr.io/loft-sh/kubernetes:v1.36.6
                   volumeMounts:
                   - mountPath: /binaries
                     name: binaries
@@ -4933,7 +4713,7 @@ spec:
                 enableServiceLinks: true
                 containers:
                 - name: syncer
-                  image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+                  image: ghcr.io/loft-sh/vcluster-oss:0.38.0
                   imagePullPolicy: IfNotPresent
                   livenessProbe:
                     httpGet:
@@ -5114,6 +4894,874 @@ spec:
             labels:
               app: ${runtime}
               release: ${runtime}
+  - step: update-volumes
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import hashlib
+
+        import json
+
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        from crossplane.function import response
+
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{LABEL}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(LABEL) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    incomplete = [item for item in snapshots if item.get("status", {}).get("readyToUse") is not True]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": "volume-" + volume + "-",\n                     "labels": {LABEL: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
+                return
+            xr = _to_dict(req.observed.composite.resource)
+            spec = xr.get("spec") or {}
+            volumes = spec.get("volumes") or {}
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            config = env.get("volumeSnapshots") or {}
+            status = _to_dict(rsp.desired.composite.resource).get("status") or {}
+            references = []
+            for name, volume in sorted(volumes.items()):
+                instance = volume["vcluster"]
+                if instance not in (spec.get("vclusters") or {}):
+                    response.fatal(rsp, "Each volume must select a declared virtual cluster.")
+                    return
+                target = volume.get("namespace", "default")
+                pvc_name = "volume-" + name
+                virtual_provider = _resource_name(xr["metadata"]["name"], "vcluster", instance)
+
+                def virtual(suffix, manifest):
+                    key = _resource_name("vcluster", xr["metadata"]["name"], instance, "access", "volumes", name, suffix)
+                    body = _render_template(
+                        req, "vcluster/body", key=key,
+                        claim_namespace=xr["metadata"].get("namespace") or "default",
+                        virtual_provider=virtual_provider, manifest=manifest,
+                    )
+                    body["metadata"]["labels"] = {"datalabs.versioneer.at/vcluster": instance}
+                    rsp.desired.resources[key].resource.update(body)
+
+                storage_config = (env.get("vcluster") or {}).get("storageClasses") or {}
+                classes = storage_config.get("allowed") or []
+                if not classes:
+                    response.fatal(rsp, "Volumes require allowed virtual cluster StorageClasses.")
+                    return
+                pvc = _render_template(
+                    req, "volumes/pvc", target=target, pvc_name=pvc_name, volume_name=name,
+                    storage=volume.get("storage") or (env.get("defaults") or {}).get("volumes", {}).get("storage") or "1Gi",
+                    storage_class=storage_config.get("default") or classes[0],
+                )
+                if volume.get("restoreFrom"):
+                    pvc["spec"]["dataSource"] = {
+                        "apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": volume["restoreFrom"],
+                    }
+                virtual("pvc", pvc)
+                reference = {"name": name, "vcluster": instance, "namespace": target, "pvcName": pvc_name}
+                if volume.get("backup") or volume.get("restoreFrom"):
+                    if (env.get("vcluster") or {}).get("volumeSnapshots") is not True:
+                        response.fatal(rsp, "Volume backup and restore require data.vcluster.volumeSnapshots=true.")
+                        return
+                if volume.get("backup"):
+                    snapshot_class = config.get("snapshotClassName")
+                    if not isinstance(snapshot_class, str) or not snapshot_class.strip():
+                        response.fatal(rsp, "Volume backup requires data.volumeSnapshots.snapshotClassName.")
+                        return
+                    observer_key = _resource_name("volumes", xr["metadata"]["name"], instance, "snapshot-class")
+                    observer = _render_template(
+                        req, "common/object", key=observer_key,
+                        xr_namespace=xr["metadata"].get("namespace") or "default",
+                        manifest={"apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
+                                  "metadata": {"name": snapshot_class}},
+                        readiness={"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"},
+                    )
+                    observer["spec"]["managementPolicies"] = ["Observe"]
+                    rsp.desired.resources[observer_key].resource.update(observer)
+                    retention = config.get("retention", 4)
+                    if (isinstance(retention, bool) or not isinstance(retention, (int, float))
+                            or not 1 <= retention <= 100 or retention != int(retention)):
+                        response.fatal(rsp, "Snapshot retention must be an integer from 1 to 100.")
+                        return
+                    backup_name = "volume-snapshot-" + name
+                    resources = _render_template(
+                        req, "volumes/backup", target=target, pvc_name=pvc_name, volume_name=name,
+                        backup_name=backup_name, snapshot_class=snapshot_class, retention=str(int(retention)),
+                        backup_role=_resource_name("volume-snapshot", target, name),
+                        schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
+                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                    )["resources"]
+                    for suffix, manifest in resources.items():
+                        virtual("backup-" + suffix, manifest)
+                    reference["backupCronJobName"] = backup_name
+                references.append(reference)
+            status["volumes"] = references
+            rsp.desired.composite.resource.update({"status": status})
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
+        vcluster/body:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${claim_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: ${virtual_provider}
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            watch: true
+            readiness:
+              policy: SuccessfulCreate
+        volumes/backup:
+          resources:
+            account:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              automountServiceAccountToken: false
+            role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              rules:
+              - apiGroups:
+                - ''
+                resources:
+                - persistentvolumeclaims
+                resourceNames:
+                - ${pvc_name}
+                verbs:
+                - get
+              - apiGroups:
+                - snapshot.storage.k8s.io
+                resources:
+                - volumesnapshots
+                verbs:
+                - create
+                - get
+                - list
+                - delete
+            binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: Role
+                name: ${backup_name}
+            script:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              data:
+                backup.py: ${backup_script}
+            class-role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: ${backup_role}
+              rules:
+              - apiGroups:
+                - snapshot.storage.k8s.io
+                resources:
+                - volumesnapshotclasses
+                resourceNames:
+                - ${snapshot_class}
+                verbs:
+                - get
+            class-binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: ${backup_role}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: ClusterRole
+                name: ${backup_role}
+            cronjob:
+              apiVersion: batch/v1
+              kind: CronJob
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              spec:
+                schedule: ${schedule}
+                timeZone: Etc/UTC
+                concurrencyPolicy: Forbid
+                startingDeadlineSeconds: 3600
+                successfulJobsHistoryLimit: 1
+                failedJobsHistoryLimit: 1
+                jobTemplate:
+                  spec:
+                    backoffLimit: 1
+                    activeDeadlineSeconds: 900
+                    template:
+                      spec:
+                        restartPolicy: Never
+                        serviceAccountName: ${backup_name}
+                        automountServiceAccountToken: true
+                        securityContext:
+                          runAsNonRoot: true
+                          runAsUser: 65532
+                          runAsGroup: 65532
+                          seccompProfile:
+                            type: RuntimeDefault
+                        containers:
+                        - name: backup
+                          image: ${backup_image}
+                          command:
+                          - python
+                          - -B
+                          - /opt/backup/backup.py
+                          args:
+                          - ${target}
+                          - ${volume_name}
+                          - ${pvc_name}
+                          - ${snapshot_class}
+                          - ${retention}
+                          resources:
+                            requests:
+                              cpu: 20m
+                              memory: 32Mi
+                            limits:
+                              cpu: 100m
+                              memory: 128Mi
+                          securityContext:
+                            allowPrivilegeEscalation: false
+                            readOnlyRootFilesystem: true
+                            capabilities:
+                              drop:
+                              - ALL
+                          volumeMounts:
+                          - name: script
+                            mountPath: /opt/backup
+                            readOnly: true
+                        volumes:
+                        - name: script
+                          configMap:
+                            name: ${backup_name}
+        volumes/pvc:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: ${pvc_name}
+            namespace: ${target}
+            labels:
+              datalabs.versioneer.at/volume: ${volume_name}
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            storageClassName: ${storage_class}
+            resources:
+              requests:
+                storage: ${storage}
+  - step: reconcile-vcluster-lifecycle
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import copy as _template_copy
+
+        import re as _template_re
+
+        from google.protobuf import json_format as _template_json
+
+        def _render_template(req, template_name, /, **values):
+            """Fill complete scalar placeholders and preserve each value's type."""
+            template = _template_json.MessageToDict(req.input["templates"][template_name])
+
+            def fill(value):
+                if isinstance(value, str):
+                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
+                    if match:
+                        return _template_copy.deepcopy(values[match[1]])
+                if isinstance(value, dict):
+                    return {key: fill(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [fill(item) for item in value]
+                return value
+
+            return fill(template)
+
+        import hashlib
+
+        import json
+
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _vcluster_cleanup_generation(req, instance, hibernated):
+            xr = _to_dict(req.observed.composite.resource)
+            generation = int(xr["metadata"].get("generation", 1))
+            if not hibernated:
+                return generation
+            # Composed Objects can be applied before XR status is saved.
+            # Use the latest request so stale status cannot reuse a completed cleanup.
+            requests = [(0, False)]
+            for state in (xr.get("status") or {}).get("vclusters") or []:
+                if state.get("name") == instance:
+                    sleeping = state.get("phase") in ("Hibernating", "Hibernated", "Failed")
+                    saved = int(state.get("cleanupGeneration" if sleeping else "observedGeneration", 0))
+                    if saved:
+                        requests.append((saved, sleeping))
+            key = _resource_name("vcluster", xr["metadata"]["name"], instance, "statefulset")
+            control = req.observed.resources.get(key)
+            if control:
+                manifest = (_to_dict(control.resource).get("spec") or {}).get("forProvider", {}).get("manifest") or {}
+                marker = json.loads((manifest.get("metadata") or {}).get("annotations", {}).get(
+                    "datalabs.versioneer.at/lifecycle-request", "{}"))
+                if marker.get("generation"):
+                    requests.append((int(marker["generation"]), marker.get("hibernated") is True))
+            saved, sleeping = max(requests, key=lambda item: item[0])
+            return saved if sleeping else generation
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        from copy import deepcopy
+        import json
+        from crossplane.function import request, response
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+
+        CLEANUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Remove an offline instance\'s host Pods without changing its storage."""\n\nimport json\nfrom pathlib import Path\nimport ssl\nimport sys\nimport time\nfrom urllib.error import HTTPError\nfrom urllib.parse import quote\nfrom urllib.request import Request, build_opener, HTTPSHandler, ProxyHandler\n\n\nclass API:\n    def __init__(self):\n        self.account = Path(\'/var/run/secrets/kubernetes.io/serviceaccount\')\n        self.http = build_opener(\n            ProxyHandler({}),\n            HTTPSHandler(context=ssl.create_default_context(cafile=str(self.account / \'ca.crt\'))),\n        )\n\n    def call(self, method, path, body=None):\n        # Read the projected token for each request so rotation takes effect.\n        headers = {\'Authorization\': \'Bearer \' + (self.account / \'token\').read_text().strip()}\n        data = None if body is None else json.dumps(body).encode()\n        if data is not None:\n            headers[\'Content-Type\'] = \'application/json\'\n        request = Request(\'https://kubernetes.default.svc\' + path, data=data,\n                          headers=headers, method=method)\n        try:\n            with self.http.open(request, timeout=10) as result:\n                return json.load(result)\n        except HTTPError as error:\n            if error.code == 404:\n                return None\n            if error.code == 409 and method == \'DELETE\':\n                return None\n            raise RuntimeError(f\'Kubernetes {method} {path} failed: HTTP {error.code}\') from None\n\n\ndef owned_by(pod, kind, uid):\n    return any(owner.get(\'kind\') == kind and owner.get(\'uid\') == uid\n               for owner in pod[\'metadata\'].get(\'ownerReferences\', []))\n\n\ndef cleanup_once(api, namespace, runtime, generation):\n    core = \'/api/v1/namespaces/\' + quote(namespace, safe=\'\')\n    statefulset = api.call(\'GET\', \'/apis/apps/v1/namespaces/\' + quote(namespace, safe=\'\')\n                          + \'/statefulsets/\' + quote(runtime, safe=\'\'))\n    if not statefulset:\n        return False\n    target = json.loads(statefulset[\'metadata\'].get(\'annotations\', {}).get(\n        \'datalabs.versioneer.at/lifecycle-request\', \'{}\'))\n    if target.get(\'generation\', 0) > generation or (\n            target.get(\'generation\') == generation and not target.get(\'hibernated\')):\n        raise RuntimeError(\'This cleanup request was superseded; no further Pods will be deleted.\')\n    if target.get(\'generation\') != generation or statefulset[\'spec\'].get(\'replicas\', 1) != 0:\n        print(\'Waiting for control-plane replicas to reach zero.\', flush=True)\n        return False\n    pods = api.call(\'GET\', core + \'/pods\')[\'items\']\n    if any(owned_by(pod, \'StatefulSet\', statefulset[\'metadata\'][\'uid\']) for pod in pods):\n        print(\'Waiting for the control-plane Pod to terminate.\', flush=True)\n        return False\n    service = api.call(\'GET\', core + \'/services/\' + quote(runtime, safe=\'\'))\n    if not service:\n        raise RuntimeError(\'The instance Service is missing; Pod ownership cannot be checked.\')\n    workloads = [pod for pod in pods if owned_by(pod, \'Service\', service[\'metadata\'][\'uid\'])]\n    # Reject a Pod list that crossed a scale or request change. UID preconditions\n    # then protect replacement Pods if resume starts after this second read.\n    current = api.call(\'GET\', \'/apis/apps/v1/namespaces/\' + quote(namespace, safe=\'\')\n                       + \'/statefulsets/\' + quote(runtime, safe=\'\'))\n    if (not current or current[\'metadata\'][\'uid\'] != statefulset[\'metadata\'][\'uid\']\n            or current[\'metadata\'][\'generation\'] != statefulset[\'metadata\'][\'generation\']\n            or current[\'metadata\'].get(\'annotations\', {}).get(\'datalabs.versioneer.at/lifecycle-request\')\n            != statefulset[\'metadata\'].get(\'annotations\', {}).get(\'datalabs.versioneer.at/lifecycle-request\')):\n        return False\n    for pod in workloads:\n        if not pod[\'metadata\'].get(\'deletionTimestamp\'):\n            name = pod[\'metadata\'][\'name\']\n            api.call(\'DELETE\', core + \'/pods/\' + quote(name, safe=\'\'), {\n                \'apiVersion\': \'v1\', \'kind\': \'DeleteOptions\',\n                \'preconditions\': {\'uid\': pod[\'metadata\'][\'uid\']},\n            })\n            print(\'Deleting synced Pod \' + name, flush=True)\n    return not workloads\n\n\ndef main():\n    namespace, runtime, generation = sys.argv[1:]\n    api = API()\n    while not cleanup_once(api, namespace, runtime, int(generation)):\n        time.sleep(2)\n    print(\'Hibernation complete: control plane and synced host Pods are gone.\', flush=True)\n\n\nif __name__ == \'__main__\':\n    main()\n'
+
+
+        def _manifest(resource):
+            state = resource.get("status", {}).get("atProvider", {})
+            return state.get("manifest") or state.get("raw", {}).get("manifest") or {}
+
+
+        def _condition(resource, kind):
+            return any(c.get("type") == kind and c.get("status") == "True"
+                       for c in resource.get("status", {}).get("conditions", []))
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
+                return
+            xr = _to_dict(req.observed.composite.resource)
+            status = _to_dict(rsp.desired.composite.resource).get("status") or {}
+            previous = {item["name"]: item for item in (xr.get("status") or {}).get("vclusters", [])}
+            observed = {key: _to_dict(value.resource) for key, value in req.observed.resources.items()}
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            meta = xr["metadata"]
+            name, claim_namespace = meta["name"], meta.get("namespace", "default")
+            states = []
+            for instance, config in sorted((xr.get("spec", {}).get("vclusters") or {}).items()):
+                runtime = _resource_name("vcluster", instance, limit=45)
+                virtual_provider = _resource_name(name, "vcluster", instance)
+                control_key = _resource_name("vcluster", name, instance, "statefulset")
+                if control_key not in rsp.desired.resources:
+                    continue
+                control_ready = (_condition(observed.get(control_key, {}), "Ready") and
+                                 rsp.desired.resources[control_key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] == 1)
+                hibernated = config.get("hibernated", False)
+                cleanup_generation = _vcluster_cleanup_generation(req, instance, hibernated)
+                lifecycle_name = _resource_name("vc-cleanup", instance, limit=45)
+                job_name = _resource_name(lifecycle_name, str(cleanup_generation))
+                jobs = {
+                    body["spec"]["forProvider"]["manifest"]["metadata"]["name"]: (key, body)
+                    for key, body in observed.items()
+                    if body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                    and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"
+                }
+                retained = previous.get(instance, {}).get("cleanupJob")
+                if retained and retained not in jobs:
+                    jobs[retained] = (_resource_name("vcluster", name, instance, retained), {})
+                if hibernated and job_name not in jobs:
+                    jobs[job_name] = (_resource_name("vcluster", name, instance, job_name), {})
+                blocked, complete, failure = False, False, ""
+
+                def emit(suffix, manifest):
+                    key = _resource_name("vcluster", name, instance, suffix)
+                    rsp.desired.resources[key].resource.update(_render_template(
+                        req, "common/object", key=key, xr_namespace=claim_namespace,
+                        manifest=manifest, readiness={"policy": "SuccessfulCreate"},
+                    ))
+                    rsp.desired.resources[key].resource["metadata"]["labels"] = {
+                        "datalabs.versioneer.at/vcluster": instance,
+                    }
+                    return key
+
+                if jobs:
+                    values = {
+                        "namespace": name, "runtime": runtime, "lifecycle_name": lifecycle_name,
+                        "cleanup_script": CLEANUP_SCRIPT,
+                        "cleanup_policy": _resource_name(name, instance, "cleanup-pods"),
+                        "cleanup_identity_expression": f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{name}:{lifecycle_name}')}",
+                    }
+                    support = _render_template(req, "vcluster/cleanup-support", **values)["resources"]
+                    support_keys = []
+                    for suffix, manifest in support.items():
+                        support_keys.append(emit(f"cleanup-{suffix}", manifest))
+                    support_ready = all(_condition(observed.get(key, {}), "Ready") for key in support_keys)
+                    for current_name, (key, body) in sorted(jobs.items()):
+                        running = hibernated and current_name == job_name
+                        host_job = _manifest(body)
+                        if not host_job.get("metadata", {}).get("uid"):
+                            requirement = _resource_name(key, "job")
+                            response.require_resources(
+                                rsp, name=requirement, api_version="batch/v1", kind="Job",
+                                namespace=name, match_name=current_name,
+                            )
+                            host_job = request.get_required_resource(req, requirement) or {}
+                        uid = host_job.get("metadata", {}).get("uid")
+                        pods_known, stopped = False, False
+                        if uid:
+                            requirement = _resource_name(key, "pods")
+                            response.require_resources(
+                                rsp, name=requirement, api_version="v1", kind="Pod",
+                                namespace=name, match_labels={"batch.kubernetes.io/controller-uid": uid},
+                            )
+                            pods_known = requirement in req.required_resources
+                            pods = request.get_required_resources(req, requirement)
+                            # A suspended Job may still have a Pod in its termination grace period.
+                            stopped = pods_known and all(
+                                pod.get("status", {}).get("phase") in ("Succeeded", "Failed")
+                                for pod in pods
+                                if any(o.get("uid") == uid and o.get("kind") == "Job"
+                                       for o in pod.get("metadata", {}).get("ownerReferences", []))
+                            )
+                        terminal = _condition(host_job, "Complete") or _condition(host_job, "Failed")
+                        suspended = host_job.get("spec", {}).get("suspend") is True and _condition(host_job, "Suspended")
+                        safe = stopped and (terminal or suspended)
+                        if running:
+                            complete = stopped and _condition(host_job, "Complete")
+                            if _condition(host_job, "Failed"):
+                                failure = f"Cleanup Job {current_name} failed; inspect its status and Pod logs."
+                        elif not safe:
+                            blocked = True
+                        if not running and safe:
+                            continue
+                        manifest = deepcopy(body.get("spec", {}).get("forProvider", {}).get("manifest"))
+                        if not manifest and host_job:
+                            # Recover the immutable template if the Object observation was lost.
+                            manifest = {"apiVersion": "batch/v1", "kind": "Job",
+                                        "metadata": {"name": current_name, "namespace": name},
+                                        "spec": deepcopy(host_job["spec"])}
+                        if not manifest:
+                            manifest = _render_template(
+                                req, "vcluster/cleanup-job", **values, job_name=current_name,
+                                suspended=not running,
+                                cleanup_generation=str(int(cleanup_generation if running
+                                                           else previous.get(instance, {}).get("cleanupGeneration", 0))),
+                                cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine",
+                            )
+                            placement = ((env.get("vcluster") or {}).get("scheduling") or {}).get("controlPlane") or {}
+                            manifest["spec"]["template"]["spec"].update(placement)
+                        manifest["spec"]["suspend"] = not (running and support_ready)
+                        emit(current_name, manifest)
+                        rsp.desired.resources[key].resource["spec"]["references"] = [
+                            {"dependsOn": {"name": _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), "namespace": claim_namespace}}
+                            for suffix in ("account", "script", "binding", "policy", "policy-binding")
+                        ]
+                        rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/lifecycle"] = "cleanup"
+                        rsp.desired.resources[key].ready = fnv1.READY_TRUE if complete else fnv1.READY_FALSE
+
+                state = {"name": instance, "phase": "Running" if control_ready else "Starting",
+                         "message": "Control plane is ready." if control_ready else "Waiting for the control plane.",
+                         "observedGeneration": int(meta.get("generation", 1))}
+                if hibernated:
+                    state.update(phase="Failed" if failure else ("Hibernated" if complete and not blocked else "Hibernating"),
+                                 message=failure or ("Control plane and synced host Pods are gone." if complete and not blocked
+                                                     else "Waiting for control-plane shutdown and host Pod cleanup."),
+                                 cleanupJob=job_name, cleanupGeneration=cleanup_generation)
+                    rsp.desired.resources[control_key].ready = (
+                        fnv1.READY_TRUE if state["phase"] == "Hibernated" else fnv1.READY_FALSE
+                    )
+                elif blocked:
+                    state.update(phase="Resuming", message="Waiting for old cleanup Jobs and their Pods to stop.")
+                    if retained:
+                        state["cleanupJob"] = retained
+                        state["cleanupGeneration"] = int(previous[instance].get("cleanupGeneration", 0))
+                    rsp.desired.resources[control_key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+                    rsp.desired.resources[control_key].ready = fnv1.READY_FALSE
+
+                offline = hibernated or blocked or not control_ready
+                if offline:
+                    # Keep removals queued while the virtual API cannot process finalizers.
+                    for key, body in observed.items():
+                        if (body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider
+                                and key not in rsp.desired.resources):
+                            kept = {field: deepcopy(body[field]) for field in ("apiVersion", "kind", "spec")}
+                            kept["metadata"] = {field: deepcopy(body["metadata"][field])
+                                                for field in ("name", "namespace", "annotations", "labels")
+                                                if field in body["metadata"]}
+                            rsp.desired.resources[key].resource.update(kept)
+                    for desired in rsp.desired.resources.values():
+                        body = _to_dict(desired.resource)
+                        if body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider:
+                            body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "true"
+                            desired.resource.update({"metadata": body["metadata"]})
+                            desired.ready = fnv1.READY_TRUE
+                states.append(state)
+            if states or previous:
+                status["vclusters"] = states
+                rsp.desired.composite.resource.update({"status": status})
+      templates:
+        common/object:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          metadata:
+            name: ${key}
+            namespace: ${xr_namespace}
+            annotations:
+              crossplane.io/composition-resource-name: ${key}
+          spec:
+            providerConfigRef:
+              name: provider-kubernetes
+              kind: ProviderConfig
+            forProvider:
+              manifest: ${manifest}
+            readiness: ${readiness}
+            watch: true
+        vcluster/cleanup-job:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${job_name}
+            namespace: ${namespace}
+            annotations:
+              datalabs.versioneer.at/cleanup-generation: ${cleanup_generation}
+          spec:
+            suspend: ${suspended}
+            backoffLimit: 3
+            activeDeadlineSeconds: 1800
+            template:
+              metadata:
+                labels:
+                  datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+              spec:
+                restartPolicy: Never
+                serviceAccountName: ${lifecycle_name}
+                terminationGracePeriodSeconds: 20
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  runAsGroup: 65532
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                - name: cleanup
+                  image: ${cleanup_image}
+                  command:
+                  - python
+                  - -B
+                  - /opt/cleanup/cleanup.py
+                  args:
+                  - ${namespace}
+                  - ${runtime}
+                  - ${cleanup_generation}
+                  resources:
+                    requests:
+                      cpu: 20m
+                      memory: 32Mi
+                    limits:
+                      cpu: 100m
+                      memory: 128Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  volumeMounts:
+                  - name: script
+                    mountPath: /opt/cleanup
+                    readOnly: true
+                volumes:
+                - name: script
+                  configMap:
+                    name: ${lifecycle_name}
+        vcluster/cleanup-support:
+          resources:
+            account:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+            script:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              data:
+                cleanup.py: ${cleanup_script}
+            role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              rules:
+              - apiGroups:
+                - ''
+                resources:
+                - pods
+                verbs:
+                - get
+                - list
+                - delete
+              - apiGroups:
+                - ''
+                resources:
+                - services
+                resourceNames:
+                - ${runtime}
+                verbs:
+                - get
+              - apiGroups:
+                - apps
+                resources:
+                - statefulsets
+                resourceNames:
+                - ${runtime}
+                verbs:
+                - get
+            binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: Role
+                name: ${lifecycle_name}
+              subjects:
+              - kind: ServiceAccount
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+            network:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: ${lifecycle_name}
+                namespace: ${namespace}
+              spec:
+                podSelector:
+                  matchLabels:
+                    datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+                policyTypes:
+                - Ingress
+                - Egress
+                ingress: []
+                egress:
+                - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 6443
+                    protocol: TCP
+                - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                    podSelector:
+                      matchLabels:
+                        k8s-app: kube-dns
+                  ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+            policy:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicy
+              metadata:
+                name: ${cleanup_policy}
+              spec:
+                failurePolicy: Fail
+                paramKind:
+                  apiVersion: v1
+                  kind: Service
+                matchConstraints:
+                  resourceRules:
+                  - apiGroups:
+                    - ''
+                    apiVersions:
+                    - v1
+                    operations:
+                    - DELETE
+                    resources:
+                    - pods
+                matchConditions:
+                - name: cleanup-identity
+                  expression: ${cleanup_identity_expression}
+                validations:
+                - expression: has(oldObject.metadata.ownerReferences) && oldObject.metadata.ownerReferences.exists(o,
+                    o.apiVersion == 'v1' && o.kind == 'Service' && o.name == params.metadata.name && o.uid == params.metadata.uid)
+                  message: Cleanup can delete only Pods owned by this instance Service.
+            policy-binding:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicyBinding
+              metadata:
+                name: ${cleanup_policy}
+              spec:
+                policyName: ${cleanup_policy}
+                validationActions:
+                - Deny
+                paramRef:
+                  name: ${runtime}
+                  namespace: ${namespace}
+                  parameterNotFoundAction: Deny
+                matchResources:
+                  namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: ${namespace}
   - step: update-data-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -5215,20 +5863,6 @@ spec:
                 raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
             return timeouts
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
                 rsp, name=key, api_version="v1", kind="Secret",
@@ -5290,9 +5924,9 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.0"
-            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.71.0"
-            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded"
+            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.1"
+            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
+            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
             data_config = (environment.get("defaults") or {}).get("data") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
@@ -5312,16 +5946,9 @@ spec:
                     "--perm.rename=true",
                 ]
 
-            observed = getattr(req.observed, "resources", {}) or {}
-            environment_manifest = _extract_manifest(
-                observed.get(f"workshopenvironment-{xr_name}")
-            )
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _safe_str(educates_status.get("namespace"))
-            if not workshop_namespace:
-                return
+            runtime_namespace = xr_name
 
-            storage_secret_name = f"{xr_name}-datalab"
+            storage_secret_name = f"{xr_name}-storage"
             runtime_secret_key = f"observe-runtime-storage-secret-{xr_name}"
             runtime_secret_data = _extract_data(req, rsp, runtime_secret_key)
             if not runtime_secret_data:
@@ -5439,7 +6066,7 @@ spec:
             deployment = _render_template(
                 req,
                 "data/deployment",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 labels=labels,
                 storage_secret_checksum=storage_secret_checksum,
                 package_r_image=package_r_image,
@@ -5555,13 +6182,13 @@ spec:
                         cookie_secret.encode("utf-8")
                     ).hexdigest()
                     deployment["spec"]["template"]["metadata"]["annotations"][
-                        "datalabs.pkg.internal/oauth2-cookie-checksum"
+                        "datalabs.versioneer.at/oauth2-cookie-checksum"
                     ] = oauth_cookie_checksum
 
             service = _render_template(
                 req,
                 "data/service",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 labels=labels,
                 ports=(
                     [
@@ -5592,7 +6219,7 @@ spec:
             network_policy = _render_template(
                 req,
                 "data/network-policy",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 labels=labels,
                 ingress_rules=(
                     [
@@ -5600,9 +6227,7 @@ spec:
                             "from": [
                                 {
                                     "podSelector": {
-                                        "matchLabels": {
-                                            "training.educates.dev/application": "workshop",
-                                        }
+                                        "matchLabels": {}
                                     }
                                 }
                             ],
@@ -5642,7 +6267,7 @@ spec:
             permanent_ingress = _render_template(
                 req,
                 "data/permanent-ingress",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 labels=labels,
                 ingress_annotations=ingress_annotations,
                 ingress_class=ingress_class,
@@ -5658,7 +6283,7 @@ spec:
                 req,
                 "data/s3-deployment",
                 rclone_image=rclone_image,
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 s3_labels=s3_labels,
                 storage_secret_checksum=storage_secret_checksum,
                 auth_key_arg=f"--auth-key={xr_name},{xr_name}",
@@ -5706,13 +6331,13 @@ spec:
             s3_service = _render_template(
                 req,
                 "data/s3-service",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 s3_labels=s3_labels,
             )
             s3_network_policy = _render_template(
                 req,
                 "data/s3-network-policy",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 s3_labels=s3_labels,
                 ingress_rules=[
                     {
@@ -5810,17 +6435,17 @@ spec:
                 s3_config = _render_template(
                     req,
                     "data/s3-config",
-                    workshop_namespace=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     gateway_config=gateway_config,
                 )
                 pod = s3_deployment["spec"]["template"]
                 pod["spec"]["volumes"].append(_copy.deepcopy(oauth_volume))
                 if oauth_cookie_checksum:
                     pod["metadata"]["annotations"][
-                        "datalabs.pkg.internal/oauth2-cookie-checksum"
+                        "datalabs.versioneer.at/oauth2-cookie-checksum"
                     ] = oauth_cookie_checksum
                 pod["metadata"]["annotations"][
-                    "datalabs.pkg.internal/gateway-config-checksum"
+                    "datalabs.versioneer.at/gateway-config-checksum"
                 ] = _hashlib.sha256(gateway_config.encode()).hexdigest()
                 pod["spec"]["volumes"].append(
                     {"name": "gateway-config", "configMap": {"name": "data-s3"}}
@@ -5838,7 +6463,7 @@ spec:
             data_route = _render_template(
                 req,
                 "data/data-route",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 gateway_name=_safe_str(gateway.get("parentName")),
                 gateway_namespace=gateway_namespace,
                 gateway_section=_safe_str(gateway.get("sectionName")),
@@ -5891,7 +6516,7 @@ spec:
             data_redirect = _render_template(
                 req,
                 "data/data-redirect",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 gateway_name=_safe_str(gateway.get("parentName")),
                 gateway_namespace=gateway_namespace,
                 gateway_section=_safe_str(gateway.get("httpSectionName")),
@@ -5913,7 +6538,7 @@ spec:
             dns_network_policy = _render_template(
                 req,
                 "data/dns-network-policy",
-                workshop_namespace=workshop_namespace,
+                runtime_namespace=runtime_namespace,
                 labels=labels,
                 dns_targets=dns_targets,
             )
@@ -5995,7 +6620,7 @@ spec:
           kind: HTTPRoute
           metadata:
             name: data-https-redirect
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
           spec:
             parentRefs:
             - name: ${gateway_name}
@@ -6014,7 +6639,7 @@ spec:
           kind: HTTPRoute
           metadata:
             name: data
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
           spec:
             parentRefs:
             - name: ${gateway_name}
@@ -6028,7 +6653,7 @@ spec:
           kind: Deployment
           metadata:
             name: package-r
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${labels}
           spec:
             replicas: 1
@@ -6041,7 +6666,7 @@ spec:
               metadata:
                 labels: ${labels}
                 annotations:
-                  datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+                  datalabs.versioneer.at/storage-secret-checksum: ${storage_secret_checksum}
               spec:
                 automountServiceAccountToken: false
                 terminationGracePeriodSeconds: 30
@@ -6098,7 +6723,7 @@ spec:
           kind: NetworkPolicy
           metadata:
             name: package-r-dns
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${labels}
           spec:
             podSelector: {}
@@ -6151,7 +6776,7 @@ spec:
           kind: NetworkPolicy
           metadata:
             name: package-r
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${labels}
           spec:
             podSelector:
@@ -6278,7 +6903,7 @@ spec:
           kind: Ingress
           metadata:
             name: package-r
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${labels}
             annotations: ${ingress_annotations}
           spec:
@@ -6303,7 +6928,7 @@ spec:
           kind: ConfigMap
           metadata:
             name: data-s3
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
           data:
             nginx.conf: ${gateway_config}
         data/s3-deployment:
@@ -6311,7 +6936,7 @@ spec:
           kind: Deployment
           metadata:
             name: data-s3
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${s3_labels}
           spec:
             replicas: 1
@@ -6322,7 +6947,7 @@ spec:
               metadata:
                 labels: ${s3_labels}
                 annotations:
-                  datalabs.pkg.internal/storage-secret-checksum: ${storage_secret_checksum}
+                  datalabs.versioneer.at/storage-secret-checksum: ${storage_secret_checksum}
               spec:
                 automountServiceAccountToken: false
                 securityContext:
@@ -6394,7 +7019,7 @@ spec:
           kind: NetworkPolicy
           metadata:
             name: data-s3
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${s3_labels}
           spec:
             podSelector:
@@ -6407,7 +7032,7 @@ spec:
           kind: Service
           metadata:
             name: data-s3
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${s3_labels}
           spec:
             selector: ${s3_labels}
@@ -6420,7 +7045,7 @@ spec:
           kind: Service
           metadata:
             name: package-r
-            namespace: ${workshop_namespace}
+            namespace: ${runtime_namespace}
             labels: ${labels}
           spec:
             type: ClusterIP
@@ -6529,20 +7154,6 @@ spec:
                 raise ValueError("httpRoute.timeouts.backendRequest must not exceed request; use request: 0s for no request timeout.")
             return timeouts
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
                 rsp, name=key, api_version="v1", kind="Secret",
@@ -6602,11 +7213,7 @@ spec:
             registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
             if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
                 return
-            observed = req.observed.resources
-            runtime = (_extract_manifest(observed.get(f"workshopenvironment-{name}")).get("status") or {}).get("educates") or {}
-            runtime_namespace = runtime.get("namespace")
-            if not runtime_namespace:
-                return
+            runtime_namespace = name
 
             def emit(suffix, manifest, readiness=None):
                 key = f"registry-{suffix}-{name}"
@@ -6650,7 +7257,7 @@ spec:
             emit("deployment", _render_template(
                 req, "registry/deployment", runtime_namespace=runtime_namespace, labels=labels,
                 registry_image=registry_image,
-                checksum=checksum, storage_secret_name=f"{name}-datalab",
+                checksum=checksum, storage_secret_name=f"{name}-storage",
             ), {"policy": "DeriveFromCelQuery", "celQuery":
                 "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1"})
             emit("service", _render_template(req, "registry/service", runtime_namespace=runtime_namespace, labels=labels))
@@ -6725,7 +7332,7 @@ spec:
               metadata:
                 labels: ${labels}
                 annotations:
-                  datalabs.pkg.internal/registry-checksum: ${checksum}
+                  datalabs.versioneer.at/registry-checksum: ${checksum}
               spec:
                 automountServiceAccountToken: false
                 securityContext:
@@ -6737,7 +7344,7 @@ spec:
                     type: RuntimeDefault
                 initContainers:
                 - name: prepare-auth
-                  image: httpd:2.4.69-alpine
+                  image: httpd:2.4.71-alpine
                   command:
                   - /bin/sh
                   - -ec
@@ -6963,20 +7570,6 @@ spec:
                 raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
             return Decimal(match[1]) > 0
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -7025,15 +7618,7 @@ spec:
             ]
             users_all = [admin_user] + other_users
 
-            observed = getattr(req.observed, "resources", None) or {}
-            env_key = f"workshopenvironment-{xr_name}"
-            environment_manifest = _extract_manifest(observed.get(env_key))
-
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-            if not workshop_namespace:
-                return
+            runtime_namespace = xr_name
 
             def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
                 body = _render_template(
@@ -7084,7 +7669,7 @@ spec:
                     req,
                     "postgres/init-sql",
                     cm_name=cm_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     init_sql=init_sql,
                 )
 
@@ -7099,7 +7684,7 @@ spec:
                     req,
                     "postgres/postgres-cluster",
                     cluster_name=cluster_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     cm_name=cm_name,
                     data_vcs=data_vcs,
                 )
@@ -7141,12 +7726,12 @@ spec:
                 if not has_gateway_parent:
                     continue
 
-                hostname = f"{cluster_name}-{workshop_namespace}.{ingress_domain}"
+                hostname = f"{cluster_name}-{runtime_namespace}.{ingress_domain}"
                 route = _render_template(
                     req,
                     "postgres/route",
                     cluster_name=cluster_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     gateway_parent_name=gateway_parent_name,
                     gateway_parent_ns=gateway_parent_ns,
                     gateway_section=gateway_section,
@@ -7182,7 +7767,7 @@ spec:
           kind: ConfigMap
           metadata:
             name: ${cm_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           data:
             init.sql: ${init_sql}
         postgres/object:
@@ -7205,7 +7790,7 @@ spec:
           kind: PostgresCluster
           metadata:
             name: ${cluster_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec:
             postgresVersion: 17
             postGISVersion: '3.5'
@@ -7221,7 +7806,7 @@ spec:
           kind: TLSRoute
           metadata:
             name: ${cluster_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec:
             parentRefs:
             - name: ${gateway_parent_name}
@@ -7323,20 +7908,6 @@ spec:
                 raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
             return Decimal(match[1]) > 0
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def _strong_token(seed, *, suffix=":provider-datalab", length=32):
             # Keep each service's existing seed and length to prevent credential changes.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
@@ -7372,21 +7943,13 @@ spec:
             images = environment.get("images") or {}
             mongo_image = _safe_str(images.get("mongo"))
             version_tag = re.search(r":(\d+\.\d+\.\d+)(?:-[^@]+)?(?:@.*)?$", mongo_image)
-            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.12")
+            mongo_version = _safe_str(mongo_env.get("version")) or (version_tag[1] if version_tag else "8.0.38")
             mongo_image = mongo_image or f"quay.io/mongodb/mongodb-community-server:{mongo_version}-ubi8"
             backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
             mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
             backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
 
-            observed = getattr(req.observed, "resources", None) or {}
-            env_key = f"workshopenvironment-{xr_name}"
-            environment_manifest = _extract_manifest(observed.get(env_key))
-
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-            if not workshop_namespace:
-                return
+            runtime_namespace = xr_name
 
             # MongoDB operator expects these namespace-local prerequisites.
             prereqs = [
@@ -7395,7 +7958,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                     ),
                 ),
                 (
@@ -7403,7 +7966,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-database-pods",
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                     ),
                 ),
                 (
@@ -7411,7 +7974,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/serviceaccount-mongodb-kubernetes-ops-manager",
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                     ),
                 ),
                 (
@@ -7419,7 +7982,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/role-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                     ),
                 ),
                 (
@@ -7427,7 +7990,7 @@ spec:
                     _render_template(
                         req,
                         "mongodb/rolebinding-mongodb-kubernetes-appdb",
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                     ),
                 ),
             ]
@@ -7468,7 +8031,7 @@ spec:
                     req,
                     "mongodb/auth-secret",
                     password_secret_name=password_secret_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     app_username=app_username,
                     mongo_password=mongo_password,
                 )
@@ -7488,7 +8051,7 @@ spec:
                     mongo_version=mongo_version,
                     mongo_image=mongo_image,
                     mongo_resource_name=mongo_resource_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     app_username=app_username,
                     password_secret_name=password_secret_name,
                     store_name=store_name,
@@ -7505,7 +8068,7 @@ spec:
                         req,
                         "mongodb/backup-secret",
                         backup_secret_name=backup_secret_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         backup_password=backup_password,
                         backup_config=f"password: {backup_password}\n",
                     )
@@ -7519,14 +8082,14 @@ spec:
                         req,
                         "mongodb/backup-pvc",
                         backup_name=backup_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         backup_vcs=backup_vcs,
                     )
                     backup_job = _render_template(
                         req,
                         "mongodb/backup-cronjob",
                         backup_name=backup_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         backup_secret_name=backup_secret_name,
                         backup_username=backup_username,
                         backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
@@ -7610,7 +8173,7 @@ spec:
           kind: Secret
           metadata:
             name: ${password_secret_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           type: Opaque
           stringData:
             user: ${app_username}
@@ -7620,7 +8183,7 @@ spec:
           kind: CronJob
           metadata:
             name: ${backup_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec:
             schedule: 0 1 * * *
             timeZone: Etc/UTC
@@ -7700,14 +8263,14 @@ spec:
           kind: PersistentVolumeClaim
           metadata:
             name: ${backup_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec: ${backup_vcs}
         mongodb/backup-secret:
           apiVersion: v1
           kind: Secret
           metadata:
             name: ${backup_secret_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           type: Opaque
           stringData:
             password: ${backup_password}
@@ -7717,7 +8280,7 @@ spec:
           kind: Role
           metadata:
             name: mongodb-kubernetes-appdb
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           rules:
           - apiGroups:
             - ''
@@ -7738,7 +8301,7 @@ spec:
           kind: RoleBinding
           metadata:
             name: mongodb-kubernetes-appdb
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
@@ -7746,31 +8309,31 @@ spec:
           subjects:
           - kind: ServiceAccount
             name: mongodb-kubernetes-appdb
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
         mongodb/serviceaccount-mongodb-kubernetes-appdb:
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             name: mongodb-kubernetes-appdb
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
         mongodb/serviceaccount-mongodb-kubernetes-database-pods:
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             name: mongodb-kubernetes-database-pods
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
         mongodb/serviceaccount-mongodb-kubernetes-ops-manager:
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             name: mongodb-kubernetes-ops-manager
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
         mongodb/store:
           apiVersion: mongodbcommunity.mongodb.com/v1
           kind: MongoDBCommunity
           metadata:
             name: ${mongo_resource_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec:
             members: 1
             type: ReplicaSet
@@ -7913,20 +8476,6 @@ spec:
                 raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
             return Decimal(match[1]) > 0
 
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
                 rsp, name=key, api_version="v1", kind="Secret",
@@ -7982,21 +8531,13 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.0.15"
-            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.0.15"
+            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
+            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.2.17"
             redis_env = environment.get("cacheStore") or {}
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
             backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
-            observed = getattr(req.observed, "resources", None) or {}
-            env_key = f"workshopenvironment-{xr_name}"
-            environment_manifest = _extract_manifest(observed.get(env_key))
-
-            educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-            workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-            if not workshop_namespace:
-                return
+            runtime_namespace = xr_name
 
             for store_key in sorted(list(cache_stores.keys())):
                 if not isinstance(store_key, str) or not store_key.strip():
@@ -8019,7 +8560,7 @@ spec:
                     req,
                     "redis/auth-secret",
                     redis_auth_secret_name=redis_auth_secret_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     redis_user="default",
                     redis_password=redis_password,
                 )
@@ -8043,7 +8584,7 @@ spec:
                     req,
                     "redis/acl-secret",
                     redis_acl_secret_name=redis_acl_secret_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     data_user_acl=encoded_acl,
                 )
                 acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
@@ -8078,7 +8619,7 @@ spec:
                     "redis/store",
                     redis_image=redis_image,
                     store_name=store_name,
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                     redis_auth_secret_name=redis_auth_secret_name,
                     redis_acl_secret_name=redis_acl_secret_name,
                     redis_acl_checksum=acl_checksum,
@@ -8102,7 +8643,7 @@ spec:
                         req,
                         "redis/auth-secret",
                         redis_auth_secret_name=backup_secret_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         redis_user="backup",
                         redis_password=backup_password,
                     )
@@ -8116,7 +8657,7 @@ spec:
                         req,
                         "redis/backup-pvc",
                         backup_name=backup_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         backup_vcs=backup_vcs,
                     )
                     backup_job = _render_template(
@@ -8124,7 +8665,7 @@ spec:
                         "redis/backup-cronjob",
                         redis_image=backup_image,
                         backup_name=backup_name,
-                        workshop_ns=workshop_namespace,
+                        runtime_namespace=runtime_namespace,
                         backup_secret_name=backup_secret_name,
                         backup_host=store_name,
                     )
@@ -8156,7 +8697,7 @@ spec:
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
                     pod_name=f"{store_name}-0",
-                    workshop_ns=workshop_namespace,
+                    runtime_namespace=runtime_namespace,
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
       templates:
@@ -8196,7 +8737,7 @@ spec:
                 kind: Pod
                 metadata:
                   name: ${pod_name}
-                  namespace: ${workshop_ns}
+                  namespace: ${runtime_namespace}
             readiness:
               policy: DeriveFromCelQuery
               celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
@@ -8224,7 +8765,7 @@ spec:
           kind: Secret
           metadata:
             name: ${redis_acl_secret_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           type: Opaque
           data:
             user.acl: ${data_user_acl}
@@ -8250,7 +8791,7 @@ spec:
           kind: Secret
           metadata:
             name: ${redis_auth_secret_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           type: Opaque
           stringData:
             user: ${redis_user}
@@ -8260,7 +8801,7 @@ spec:
           kind: CronJob
           metadata:
             name: ${backup_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec:
             schedule: 0 1 * * *
             timeZone: Etc/UTC
@@ -8332,16 +8873,16 @@ spec:
           kind: PersistentVolumeClaim
           metadata:
             name: ${backup_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
           spec: ${backup_vcs}
         redis/store:
           apiVersion: redis.redis.opstreelabs.in/v1beta2
           kind: Redis
           metadata:
             name: ${store_name}
-            namespace: ${workshop_ns}
+            namespace: ${runtime_namespace}
             annotations:
-              datalabs.pkg.internal/redis-acl-checksum: ${redis_acl_checksum}
+              datalabs.versioneer.at/redis-acl-checksum: ${redis_acl_checksum}
           spec:
             initContainer:
               enabled: true
@@ -8383,194 +8924,6 @@ spec:
               policy: DeriveFromCelQuery
               celQuery: '!has(object.metadata.deletionTimestamp)'
             watch: true
-  - step: update-session-status
-    functionRef:
-      name: crossplane-contrib-function-python
-    input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      script: |
-        import re
-
-        from crossplane.function import request, response
-
-        from google.protobuf import json_format
-
-        def _to_dict(value):
-            if value is None:
-                return {}
-            if isinstance(value, dict):
-                return value
-            return json_format.MessageToDict(value, preserving_proto_field_name=True)
-
-        def set_response_ttl(req, rsp, default_seconds):
-            rsp.meta.ttl.FromSeconds(default_seconds)
-            environment = (
-                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            )
-            datalab = environment.get("datalab") or {}
-            if not isinstance(datalab, dict):
-                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
-                return False
-            if "responseTTL" not in datalab:
-                return True
-            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
-            if match:
-                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
-                if seconds <= (2**63 - 1) // 1_000_000_000:
-                    rsp.meta.ttl.FromSeconds(seconds)
-                    return True
-            response.fatal(
-                rsp,
-                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
-                "or 1h, within the signed 64-bit nanosecond limit.",
-            )
-            return False
-
-        def _safe_str(value):
-            return str(value).strip() if value is not None else ""
-
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _observed_manifests(observed_resource):
-            if not observed_resource or not getattr(observed_resource, "resource", None):
-                return {}, {}
-            resource = _to_dict(observed_resource.resource)
-            at_provider = (resource.get("status") or {}).get("atProvider") or {}
-            return (
-                at_provider.get("manifest") or {},
-                (at_provider.get("raw") or {}).get("manifest") or {},
-            )
-
-        def _extract_manifest(observed_resource):
-            manifest, raw_manifest = _observed_manifests(observed_resource)
-            return manifest or raw_manifest
-
-        def _session_name(session, *, stringify_none=False):
-            if isinstance(session, dict):
-                return _safe_str(session.get("name") or "")
-            return _string_value(session) if stringify_none else _safe_str(session)
-
-        def _session_state(session):
-            state = (
-                _safe_str(session.get("state") or "started").lower()
-                if isinstance(session, dict)
-                else "started"
-            )
-            return {"running": "started", "paused": "stopped"}.get(state, state)
-
-        def _runtime_namespace(req, name):
-            environment = _extract_manifest(
-                req.observed.resources.get(f"workshopenvironment-{name}")
-            )
-            return ((environment.get("status") or {}).get("educates") or {}).get(
-                "namespace"
-            ) or ""
-
-
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
-        from decimal import Decimal
-        import re
-
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-        from google.protobuf import json_format, struct_pb2
-
-
-
-        def _storage_size(value):
-            text = str(value).strip() if value is not None else ""
-            match = re.fullmatch(
-                r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[KMGTPE]i|[numkMGTPE]?)",
-                text,
-            )
-            if not match or Decimal(match[1]) < 0:
-                return None
-            return text if Decimal(match[1]) else "0"
-
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            if not set_response_ttl(req, rsp, 60):
-                return
-            observed = getattr(req.observed, "resources", None) or {}
-            xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
-
-            xr_name = metadata.get("name")
-
-            sessions = {}
-            pvc_namespace = _runtime_namespace(req, xr_name) or xr_name
-            counted_volumes = {}
-            workshop = rsp.desired.resources.get(f"workshop-{xr_name}")
-            workshop = _to_dict(workshop.resource) if workshop else {}
-            workshop = workshop.get("spec", {}).get("forProvider", {}).get("manifest") or {}
-            workspace = workshop.get("spec", {}).get("session", {}).get("resources")
-
-            for session in spec.get("sessions") or []:
-                sid = _session_name(session)
-                state = _session_state(session)
-                if not sid:
-                    continue
-
-                entry = {
-                    "name": sid,
-                    "state": state,
-                    "pvcRef": {
-                        "name": f"{xr_name}-{sid}-persistent",
-                        "namespace": pvc_namespace,
-                    },
-                }
-                sessions[sid] = entry
-
-                pvc = rsp.desired.resources.get(f"persistentvolumeclaim-{xr_name}-{sid}-persistent")
-                pvc = _to_dict(pvc.resource) if pvc else {}
-                pvc = pvc.get("spec", {}).get("forProvider", {}).get("manifest") or {}
-                if pvc.get("kind") == "PersistentVolumeClaim":
-                    size = _storage_size(pvc.get("spec", {}).get("resources", {}).get("requests", {}).get("storage"))
-                    volume = pvc.get("metadata") or {}
-                    identity = (volume.get("namespace"), volume.get("name"))
-                    if all(identity):
-                        entry["pvcRef"] = {"namespace": identity[0], "name": identity[1]}
-                        if size is not None:
-                            # Assign a shared volume's request to the first listed session.
-                            first_session = counted_volumes.setdefault(identity, sid)
-                            entry["pvcSize"] = size if first_session == sid else "0"
-                elif isinstance(workspace, dict) and not workspace.get("volume"):
-                    size = _storage_size(workspace["storage"]) if "storage" in workspace else "0"
-                    if size is not None:
-                        entry["pvcSize"] = size
-
-                if state != "started":
-                    continue
-
-                key = f"workshopsession-{xr_name}-{sid}"
-                manifest = _extract_manifest(observed.get(key))
-                if not manifest:
-                    continue
-
-                educates = (manifest.get("status") or {}).get("educates") or {}
-                phase = educates.get("phase")
-                url = educates.get("url")
-                message = educates.get("message")
-
-                if phase:
-                    entry["phase"] = phase
-                if message:
-                    entry["message"] = message
-                if phase == "Running" and url:
-                    entry["url"] = url
-
-            cur_status = (xr.get("status") or {}).copy()
-            cur_status.update(_to_dict(rsp.desired.composite.resource).get("status") or {})
-            cur_status["sessions"] = list(sessions.values())
-
-            status_value = struct_pb2.Value()
-            json_format.ParseDict(cur_status, status_value)
-            rsp.desired.composite.resource.fields["status"].CopyFrom(status_value)
   - step: publish-vcluster-connections
     functionRef:
       name: crossplane-contrib-function-python
@@ -8730,7 +9083,10 @@ spec:
                         _resource_name(name, "interactive") if group["name"] == "cluster-admin"
                         else _resource_name(profile, "scope")
                     )
-                    complete = all(
+                    complete = not config.get("hibernated", False) and not any(
+                        state["name"] == instance and state["phase"] == "Resuming"
+                        for state in status.get("vclusters", [])
+                    ) and all(
                         ready(key)
                         for key in [
                             *(
@@ -8803,8 +9159,8 @@ spec:
             name: ${secret_name}
             namespace: ${namespace}
             labels:
-              datalabs.pkg.internal/name: ${name}
-              datalabs.pkg.internal/connection: ${connection_name}
+              datalabs.versioneer.at/name: ${name}
+              datalabs.versioneer.at/connection: ${connection_name}
             annotations:
               crossplane.io/composition-resource-name: ${key}
           type: Opaque
@@ -8830,6 +9186,77 @@ spec:
                 interactiveMode: ${interactive_mode}
                 command: python3
                 args: ${args}
+  - step: encode-provider-secrets
+    functionRef:
+      name: crossplane-contrib-function-python
+    input:
+      apiVersion: python.fn.crossplane.io/v1beta1
+      kind: Script
+      script: |
+        import re
+
+        from crossplane.function import request, response
+
+        from google.protobuf import json_format
+
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def set_response_ttl(req, rsp, default_seconds):
+            rsp.meta.ttl.FromSeconds(default_seconds)
+            environment = (
+                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            )
+            datalab = environment.get("datalab") or {}
+            if not isinstance(datalab, dict):
+                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
+                return False
+            if "responseTTL" not in datalab:
+                return True
+            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
+            if match:
+                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
+                if seconds <= (2**63 - 1) // 1_000_000_000:
+                    rsp.meta.ttl.FromSeconds(seconds)
+                    return True
+            response.fatal(
+                rsp,
+                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
+                "or 1h, within the signed 64-bit nanosecond limit.",
+            )
+            return False
+
+
+        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+        # SPDX-License-Identifier: Apache-2.0
+
+        import base64
+        from google.protobuf import json_format
+
+
+        def compose(req, rsp):
+            if not set_response_ttl(req, rsp, 60):
+                return
+            for desired in rsp.desired.resources.values():
+                body = json_format.MessageToDict(desired.resource)
+                if body.get("kind") != "Object":
+                    continue
+                manifest = body.get("spec", {}).get("forProvider", {}).get("manifest", {})
+                if manifest.get("kind") != "Secret" or "stringData" not in manifest:
+                    continue
+                # The provider cannot track write-only stringData through server-side apply.
+                manifest.setdefault("data", {}).update(
+                    {
+                        key: base64.b64encode(value.encode()).decode()
+                        for key, value in manifest.pop("stringData").items()
+                    }
+                )
+                desired.resource.Clear()
+                desired.resource.update(body)
   - step: protect-vcluster-resources
     functionRef:
       name: crossplane-contrib-function-python
@@ -8932,12 +9359,6 @@ spec:
                 for key, value in {**req.observed.resources, **rsp.desired.resources}.items()
             }
 
-            if not any(
-                body.get("metadata", {}).get("labels", {}).get("datalabs.pkg.internal/vcluster")
-                for body in objects.values()
-            ):
-                return
-
             def reference(key):
                 body = objects[key]
                 return _render_template(
@@ -9010,7 +9431,7 @@ spec:
                 {
                     body.get("metadata", {})
                     .get("labels", {})
-                    .get("datalabs.pkg.internal/vcluster")
+                    .get("datalabs.versioneer.at/vcluster")
                     for body in objects.values()
                 }
                 - {None}
@@ -9019,7 +9440,6 @@ spec:
                 protect(
                     f"{instance}-quota", f"resourcequota-{name}-overall-storage", control_plane
                 )
-                protect(f"{instance}-environment", f"workshopenvironment-{name}", control_plane)
                 for suffix in (
                     "authentication",
                     "config",
@@ -9030,13 +9450,15 @@ spec:
                     "rolebinding",
                     "service",
                     "headless-service",
-                    "limitrange",
                     "storage-policy",
                     "storage-policy-binding",
                     "control-plane-networkpolicy",
                     "workload-networkpolicy",
                     "dns-networkpolicy",
                     "snapshot-networkpolicy",
+                    "snapshot-binding",
+                    "placement-policy",
+                    "placement-policy-binding",
                 ):
                     protect(
                         f"{instance}-{suffix}",
@@ -9044,8 +9466,14 @@ spec:
                         control_plane,
                     )
                 for key, body in objects.items():
+                    if (body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                            and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"):
+                        protect(f"{instance}-cleanup-control", control_plane, key)
+                        for suffix in ("account", "script", "role", "binding", "network", "policy", "policy-binding"):
+                            protect(f"{instance}-cleanup-{suffix}", _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), key)
+                for key, body in objects.items():
                     if body.get("metadata", {}).get("labels", {}).get(
-                        "datalabs.pkg.internal/vcluster"
+                        "datalabs.versioneer.at/vcluster"
                     ) == instance and body.get("spec", {}).get("providerConfigRef", {}).get(
                         "name"
                     ) == _resource_name(
@@ -9201,5 +9629,8 @@ spec:
                 return
             status = _to_dict(req.desired.composite.resource).get("status") or {}
             rsp.desired.composite.ready = req.desired.composite.ready
-            if any(connection.get("ready") is not True for connection in status.get("connections", [])):
+            hibernated = {state["name"] for state in status.get("vclusters", []) if state["phase"] == "Hibernated"}
+            if any(connection.get("ready") is not True
+                   and not (connection.get("type") == "vcluster" and connection.get("instance") in hibernated)
+                   for connection in status.get("connections", [])):
                 rsp.desired.composite.ready = fnv1.READY_FALSE

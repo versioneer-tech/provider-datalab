@@ -5,7 +5,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: data-s3
-  namespace: ${workshop_namespace}
+  namespace: ${runtime_namespace}
   labels: ${s3_labels}
 spec:
   selector: ${s3_labels}

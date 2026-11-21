@@ -3,7 +3,7 @@
 Declare each virtual Kubernetes cluster under `spec.vclusters`:
 
 ```yaml
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: s-joe
@@ -19,9 +19,16 @@ spec:
         role: edit
 ```
 
-Each entry creates one runtime in `status.runtimeNamespace`. Add
+Each entry creates one control plane in the Datalab-named service namespace. Add
 `vc1` alongside `vc0` to create another cluster. An empty map creates none.
-Sessions and their environment-controlled vclusters remain separate.
+
+Use one Datalab per team and add virtual clusters as needed. Configure
+explicit service Secret bindings for application namespaces. See
+[connection bindings](connections.md#bind-a-connection).
+
+Application owners install controllers and CRDs through the virtual API with
+virtual cluster administration credentials. See [Volumes](volumes.md)
+for persistent volumes that applications can mount independently.
 
 ## API access
 
@@ -59,11 +66,8 @@ grants access nor reduces permissions already present in the caller's token.
 The `cluster-admin` profile cannot elevate a namespace caller, and a namespace
 profile cannot restrict a caller who already has the admin role.
 
-Provider Datalab already assigns workspace administrators `ws_admin` and
-each instance's `vcluster_<instance>_cluster-admin` role through the managed
-administrators group. No additional manual role assignment is needed.
-The API checks the instance role in the token. An unrelated manual assignment
-of `ws_admin` alone does not grant virtual API access.
+The API requires an instance role. Assigning `ws_admin` alone does not grant
+virtual API access.
 
 ### Download a profile
 
@@ -73,15 +77,11 @@ name. Each profile Secret contains `kubeconfig`, the Datalab client's public
 contains no client secret, token, private key, or client certificate. The
 provider keeps the recovery kubeconfig private.
 
-`ready: true` reports runtime, routing, role, scope, and RBAC readiness. It does
-not imply caller authorization or require caller credentials to be present.
-The kubeconfig includes a Python 3 credential helper.
-Additional profiles select `--token-only` and read an access token file
-supplied by the caller. They require no OAuth client ID or client secret and
-make no token requests. The built-in `cluster-admin` profile retains the
-Datalab client ID and issuer. It accepts a caller token or a separate client
-secret for device login as a user. It never requests a service-account token.
-No separate helper file is needed on the caller's machine.
+`ready: true` reports runtime, routing, identity, and RBAC readiness. The
+kubeconfig includes a Python 3 credential helper; no separate installation
+is needed. Additional profiles read a caller token file. The built-in
+`cluster-admin` profile can also log in a user through the device flow.
+Caller roles determine access in both cases.
 
 The following cases use Datalab `s-joe`, instance `vc0`, and the additional
 `namespace-demo` profile from the example above. Use Bash with `kubectl`,
@@ -104,8 +104,7 @@ from the platform operator and continue with the local steps.
 | Human device login | `s-joe-vc0.kubeconfig` | Datalab OAuth client secret; browser login identifies the user |
 | Delegated access | `s-joe-vcluster-vc0_namespace-demo.kubeconfig` | An exchanged user access token for the selected profile |
 
-These are local filenames. Always resolve the host Secret names and namespaces
-from Datalab status. The download commands require a ready profile.
+The download commands require a ready profile and resolve its Secret from status.
 
 ### Human access
 
@@ -248,7 +247,7 @@ deadline.
 
 | Limit | Default or setting | Effect on kubectl |
 | --- | --- | --- |
-| Access token | Realm or client Access Token Lifespan; upstream default is 5 minutes | The helper refreshes it when needed. |
+| Access token | Realm or client Access Token Lifespan | The helper refreshes it when needed. |
 | CLI cached login | 30 days after device approval | The helper starts device login again after this deadline. |
 | Client offline idle timeout | Provider sets 30 days | The session can expire if no refresh occurs within this period. |
 | Client offline maximum | Provider sets 30 days | Keycloak applies this limit when the realm enables Offline Session Max Limited. |
@@ -273,15 +272,10 @@ secret or browser login.
 
 #### 1. Obtain a token for the selected profile
 
-The user or platform service performs
-[token exchange](authentication.md#user-token-exchange) with the user's access
-token as `subject_token`. For the example profile, request:
-
-```text
-scope=s-joe:vclusters_vc0_namespace-demo
-audience=s-joe
-requested_token_type=urn:ietf:params:oauth:token-type:access_token
-```
+The user or platform service follows the
+[token exchange request](authentication.md#user-token-exchange), using the user's
+access token as `subject_token`. Select scope `s-joe:vclusters_vc0_namespace-demo`
+and audience `s-joe` for this example.
 
 The OAuth scope is `s-joe:vclusters_vc0_namespace-demo`; the corresponding
 Keycloak client role is `vcluster_vc0_namespace-demo`. Exchange can select
@@ -367,22 +361,15 @@ PY
 This command reads the expiry claim; the virtual API verifies the signature
 and decides whether to accept the token.
 
-The virtual API validates JWTs locally. It does not ask Keycloak whether each
-token has been revoked. Removing a user's Keycloak role, ending the login
-session, rotating the client secret, or deleting a local token file does not
-reliably invalidate copies of an already issued JWT at this API. Keycloak
-also documents that revoking the original access token does not revoke an
-exchanged access token. See [token exchange revocation](https://www.keycloak.org/securing-apps/token-exchange#_revocation).
+The virtual API validates JWTs locally. Issued tokens can remain usable until
+expiry after role removal, logout, or client-secret rotation. Keycloak also
+[does not revoke an exchanged token when its source token is revoked](https://www.keycloak.org/securing-apps/token-exchange#_revocation).
 
-Without an API authorization change, expect an issued token to remain usable
-until `exp`. To deny access sooner, the platform operator can remove the
-affected configured profile or its Kubernetes RBAC binding. This removes
-access for all callers that depend on that role or binding, not just one
-token. Apply changes through the source configuration and allow for
-reconciliation. This setup has no individual JWT revocation list. The same
-limit applies to access tokens cached after human device login. Revoke its
-offline session in Keycloak to stop further CLI refresh. Ordinary browser
-logout does not revoke offline access. Neither action erases issued JWTs.
+For earlier denial, remove the configured profile or its Kubernetes RBAC
+binding through the source configuration. After reconciliation, this denies
+all callers that use the profile. Revoke the user's offline session in
+Keycloak to stop further CLI refresh; ordinary browser logout does not end
+offline access.
 
 | Action | Human device login | Delegated access token |
 | --- | --- | --- |
@@ -401,8 +388,8 @@ when using a separately assigned role; the default machine token has only
 `ws_api`. Obtain the token before using the downloaded profile.
 
 Obtain the Datalab client secret from the source in `status.oauth2` through
-an authorized Secret-delivery process. This is the `<datalab>-oauth-client`
-Secret. Use it to authenticate a token request with these parameters:
+the platform's credential tools. The source Secret is
+`<datalab>-oauth-client`. Use it to authenticate a token request with these parameters:
 
 ```text
 grant_type=client_credentials
@@ -415,85 +402,13 @@ Save the returned access token in a private file and use
 an access token file for additional profiles. The built-in `cluster-admin`
 helper uses a supplied client secret for user device login, not machine access.
 Client credentials alone produce a token with only `ws_api` and cannot access
-the virtual API. An explicitly granted machine role still requires its
-matching optional scope in a separate token request.
-A profile download supplies no credentials or role grants.
+the virtual API.
 
 ## Secret bindings
 
-Select a Datalab connection by type and instance name:
-
-```yaml
-spec:
-  databases:
-    pg0:
-      names: [analytics]
-      storage: 5Gi
-  vclusters:
-    vc0:
-      secretBindings:
-      - type: postgres
-        name: pg0
-        target:
-          namespace: applications
-          name: database-credentials
-```
-
-The provider publishes each service connection in `status.connections`, with its `type`,
-`name`, `secretRef`, and readiness. A binding selects the same `type`
-and `name` pair. The mapping uses that connection's `secretRef`.
-
-The connection sources are:
-
-| Type | Name | Published host Secret |
-| --- | --- | --- |
-| `s3` | `primary` | The Secret with the same name as the Datalab |
-| `postgres` | A key in `spec.databases` | A connection copy in the Datalab namespace |
-| `mongo` | A key in `spec.documentStores` | A connection copy in the Datalab namespace |
-| `redis` | A key in `spec.cacheStores` | A connection copy in the Datalab namespace |
-| `registry` | `primary` | A connection copy in the Datalab namespace |
-| `custom` | A predefined Secret name | A connection copy in the Datalab namespace |
-
-Only declared service instances can be selected. The storage source namespace
-comes from `EnvironmentConfig.data.storage.secretNamespace`, or the claim
-namespace when unset. Use a custom connection for credentials such as a
-GitHub token.
-
-The operator can list predefined custom Secrets in the EnvironmentConfig:
-
-```yaml
-data:
-  customSecrets:
-  - name: apikey-1
-  - name: apikey-2
-```
-
-The provider checks these names in each Datalab's runtime namespace. Set
-`namespace` on an entry to use a shared source namespace. Names must be unique.
-It observes the source and does not create or change it. A custom connection
-is listed in `status.connections` after its source is confirmed ready. Its
-`ready` value stays false until the published copy is available and current.
-Missing custom sources do not block Datalab readiness.
-
-Bind an available custom connection through the same list:
-
-```yaml
-spec:
-  vclusters:
-    vc0:
-      secretBindings:
-      - type: custom
-        name: apikey-1
-        target:
-          namespace: applications
-          name: application-credentials
-```
-
-vCluster creates the target namespace and syncs the whole Secret, including
-source updates and deletion. Secret keys keep their source names. Only ready,
-unambiguous connections generate mappings. Missing or unready references are
-skipped; reconciliation adds or removes mappings as source readiness changes.
-Source readiness does not confirm delivery inside the virtual cluster.
+Use [connection bindings](connections.md#bind-a-connection) to copy selected
+service or custom credentials into a virtual namespace. That guide contains
+the binding examples, source settings, and update and deletion rules.
 
 ## Platform settings
 
@@ -524,10 +439,12 @@ issuer. For a private Gateway CA, set `ingress.certificateAuthority`.
 
 ### Host requirements
 
-Apply `dependencies/rbac.yaml`. The host must serve
-`ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding`. The Gateway
-must support HTTPRoute prefix rewriting, BackendTLSPolicy, and Kubernetes
-streaming requests. `vcluster.backendTLS.apiVersion` defaults to
+Apply `dependencies/rbac.yaml`. It grants Job permissions to the Kubernetes
+provider and Pod and Job read access to Crossplane. The host must serve
+`ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding` in
+`admissionregistration.k8s.io/v1`. The Gateway must support HTTPRoute prefix
+rewriting, BackendTLSPolicy, and Kubernetes streaming requests.
+`vcluster.backendTLS.apiVersion` defaults to
 `gateway.networking.k8s.io/v1`; set it to the version served by your platform.
 
 Set `network.serviceCIDR` and `network.podCIDRs` to the host ranges. Virtual
@@ -544,15 +461,15 @@ instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
 `vcluster.storageClassName` selects its class; otherwise the default class is
 used. Only classes in `vcluster.storageClasses.allowed` are exposed to virtual
 workloads. A host admission policy enforces this list for each syncer.
-Control-plane, workload, database, and session PVCs share the existing
-`defaults.overallQuota.storage` limit.
+Control-plane, workload, database, and volume PVCs share the
+`defaults.overallQuota.storage` limit. All Pod CPU and memory requests and limits
+count against the same [host namespace quota](installation.md#resource-quotas-and-container-defaults),
+across every virtual namespace and cluster in the Datalab.
 
 Set `vcluster.resources.requests` and `vcluster.resources.limits` in the
 EnvironmentConfig to change control-plane resources. Both the native vCluster
-configuration and the host StatefulSet use these values. The defaults are CPU
-`200m` and memory `1Gi` for requests, and CPU `4` and memory `4Gi` for limits.
-Ephemeral storage defaults to a `1Gi` request and a `10Gi` limit. Each supplied
-field overrides its default.
+configuration and the host StatefulSet use these values. Each supplied field
+overrides its [resource default](installation.md#storage-and-managed-stores).
 
 ### SQLite settings
 
@@ -571,9 +488,100 @@ data:
           - --datastore-max-idle-connections=1
 ```
 
+### Placement and hibernation
+
+Set Pod placement in the Datalab's EnvironmentConfig. Selectors and tolerations
+are empty by default. This example keeps control planes and cleanup Jobs on
+general nodes and sends all synced workloads to a separate worker pool:
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-custom
+  labels:
+    datalabs.pkg.internal/name: datalab-custom
+data:
+  vcluster:
+    scheduling:
+      controlPlane:
+        nodeSelector:
+          pool: general
+        tolerations: []
+      workloads:
+        nodeSelector:
+          pool: vcluster
+        enforceTolerations:
+        - dedicated=vcluster:NoSchedule
+```
+
+Use labels that match your node pools. For this example, set the worker pool's
+label to `pool=vcluster` and its taint to `dedicated=vcluster:NoSchedule`.
+`controlPlane.tolerations` accepts Kubernetes toleration objects.
+`workloads.enforceTolerations` accepts `key[=value]:effect` strings. vCluster adds
+the configured selectors and tolerations and keeps compatible workload settings.
+Workload placement includes CoreDNS and application controllers installed in
+the virtual cluster.
+
+A host admission policy enforces placement for each instance's syncer account.
+It rejects direct `nodeName` assignment, another scheduler, and missing required
+selectors or tolerations. New placement applies when Pods are created. Hibernate
+and resume an instance to replace its existing workload Pods.
+
+Configure worker-pool autoscaling separately, with a minimum of zero nodes.
+Pending synced Pods can trigger scale-up from zero. Keep the general pool
+available for control planes and cleanup Jobs. All instances that use the
+worker pool must hibernate before it can reach zero.
+
+#### Hibernate and resume
+
+Set `spec.vclusters.<name>.hibernated` to `true` in the host Datalab manifest:
+
+```yaml
+spec:
+  vclusters:
+    vc0:
+      hibernated: true
+```
+
+The provider scales the control plane to zero, waits for its Pod to terminate,
+then removes that instance's synced host Pods, including Pending and system
+Pods. Other instances and shared services continue to run.
+
+The virtual API is unavailable and its connections report `ready: false`.
+The provider pauses changes that need the virtual API, including removals.
+Controller definitions, PVCs, storage retention policies, and connection names
+remain. Resume an instance before removing it or its Datalab so that virtual
+resource finalizers can run.
+
+Set `hibernated` to `false`, its default, to resume. The provider stops previous
+cleanup Jobs before it starts the control plane with the same PVC. It resumes
+virtual resource reconciliation after the API is ready. Deployments,
+StatefulSets, and installed application controllers recreate their Pods.
+Standalone Pod recovery is not supported. Resume must be requested through
+the host Datalab; there is no
+inactivity timer or wake on traffic.
+
+Check `status.vclusters` for each instance. Its `observedGeneration` must match
+the Datalab's `metadata.generation`:
+
+| Phase | Meaning |
+| --- | --- |
+| `Starting` | Waiting for the control plane. |
+| `Running` | Control plane ready. Connection readiness also checks routes and access. |
+| `Hibernating` | Control-plane shutdown or host Pod cleanup is in progress. |
+| `Hibernated` | Cleanup confirmed that the control plane and synced host Pods are gone. |
+| `Resuming` | Old cleanup Jobs must stop before the control plane can restart. |
+| `Failed` | Cleanup failed. Inspect the Job named in `cleanupJob` and its Pod logs. |
+
+Reserve quota for cleanup Jobs: each requests 20m CPU and 32Mi memory, with
+limits of 100m CPU and 128Mi memory. A Job can retry three times within a
+30-minute deadline. After a failure, correct the cause, resume the instance,
+then request hibernation again.
+
 ## Datalab STAC catalog
 
-The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/vcluster/stac-fastapi.yaml)
+The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/stac-fastapi.yaml)
 runs `stac-fastapi-pgstac` in virtual namespace `demo`. Its PostgreSQL database
 is a Datalab-managed service on the host. Add this request alongside `vclusters`:
 
@@ -587,7 +595,7 @@ databases:
 
 [PgSTAC](https://stac-utils.github.io/pgstac/pgstac/) requires PostGIS and schema
 initialization. The example setup Job uses the generated PostgreSQL credentials
-from the Datalab Secret. It creates a separate `catalog` login with the
+from the separate PostgreSQL connection. It creates a separate `catalog` login with the
 `pgstac_ingest` role. The API uses that login and the standard
 [PostgreSQL settings](https://stac-utils.github.io/stac-fastapi-pgstac/settings/):
 `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
@@ -598,12 +606,30 @@ Pods. Namespace selectors do not match host-network API endpoints on all CNIs.
 The integration has a PostgreSQL-specific policy for this case.
 
 The example expects `catalog-postgres-admin` and `catalog-postgres` Secrets in
-virtual namespace `demo`. The first contains database administrator credentials. The second
-contains the API login. Supply these through your Secret process. Build the
-image from `tests/vcluster/catalog.Dockerfile`, push it to your registry, and
-replace `__CATALOG_IMAGE__` with that image reference before applying the example.
-Wait for `catalog-initialize` to complete before starting the API Deployment.
-Remove the administrator Secret after it completes.
+virtual namespace `demo`. The administrator Secret uses `host`, `port`, `user`, and
+`password`. The API Secret uses the PostgreSQL environment variable names above.
+Use an operator-approved [Secret binding](connections.md#bind-a-connection)
+with `type: postgres` and `name: pg0` for setup. Supply the API login
+separately with suitable backend permissions.
+Build the image from the repository root and push it to a registry that the
+host nodes can read:
+
+```bash
+docker build -f tests/vcluster/catalog.Dockerfile -t registry.acme.com/team/catalog:demo .
+docker push registry.acme.com/team/catalog:demo
+```
+
+Replace `__CATALOG_IMAGE__` with that image reference. Apply only the Job
+document from the example first and wait for setup:
+
+```bash
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo \
+  wait job/catalog-initialize --for=condition=Complete --timeout=5m
+```
+
+Then apply the Deployment and Service documents.
+Remove the administrator binding after it completes so the provider removes its
+managed copy. A direct Secret deletion would be reconciled.
 
 Connect to the catalog through the generated profile:
 
@@ -616,20 +642,12 @@ The catalog is available at `http://localhost:8080`. The example enables STAC
 transactions so a client can add collections and items. Its catalog records
 remain in PostgreSQL when the API Pod restarts.
 
-Run `tests/integration/run.bash verify-vcluster` to check both virtual clusters,
-caller role boundaries, public profiles, persistent volumes, and the catalog.
-The catalog test creates a collection and item, searches it, restarts the API,
-and repeats the search after a control-plane restart.
-
 ## Removal
 
 Removing a group removes its role and binding after reconciliation while
 retaining its virtual namespace data. Removing an instance removes its runtime
-and control-plane PVC. Other instances, databases, sessions, and the shared
+and control-plane PVC. Other instances, databases, the registry, and the shared
 namespace remain. Deletion follows the host StorageClass retention policy.
 Back up control-plane and database volumes before removing an instance or Datalab.
 
-Removing a Keycloak role assignment or client prevents new tokens with those
-grants. Already-issued JWTs can remain valid until expiry because the API
-validates them locally. To deny access sooner, remove the affected configured
-role or Kubernetes binding. Allow for reconciliation before checking revocation.
+For access revocation, see [token lifetime and revocation](#delegated-token-lifetime-and-revocation).

@@ -8,12 +8,11 @@ import json
 import re
 from crossplane.function import request, response
 from composition.helpers import (
-    _extract_manifest,
     _resource_name,
-    _runtime_namespace,
     _to_dict,
     _vcluster_groups,
     _vcluster_role,
+    _vcluster_cleanup_generation,
 )
 from composition.render import _render_template
 
@@ -50,13 +49,15 @@ def _secret_mappings(connections, bindings):
 def compose(req, rsp):
     xr = _to_dict(req.observed.composite.resource)
     instances = (xr.get("spec") or {}).get("vclusters") or {}
+    volumes = (xr.get("spec") or {}).get("volumes") or {}
+    if any(volume["vcluster"] not in instances for volume in volumes.values()):
+        response.fatal(rsp, "Each volume must select a declared virtual cluster.")
+        return
     if not instances:
         return
     meta = xr["metadata"]
     name = meta["name"]
-    namespace = _runtime_namespace(req, name)
-    if not namespace:
-        return
+    namespace = name
     for instance, instance_config in sorted(instances.items()):
         _compose_instance(
             req,
@@ -92,6 +93,38 @@ def _compose_instance(
     }
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
     config = env.get("vcluster") or {}
+    scheduling = config.get("scheduling") or {}
+    if not isinstance(scheduling, dict):
+        response.fatal(rsp, "vCluster scheduling must be an object.")
+        return
+    control_scheduling = scheduling.get("controlPlane") or {}
+    workload_scheduling = scheduling.get("workloads") or {}
+    if not isinstance(control_scheduling, dict) or not isinstance(workload_scheduling, dict):
+        response.fatal(rsp, "vCluster controlPlane and workloads scheduling must be objects.")
+        return
+    if (set(control_scheduling) - {"nodeSelector", "tolerations"}
+            or set(workload_scheduling) - {"nodeSelector", "enforceTolerations"}):
+        response.fatal(rsp, "Unknown vCluster scheduling field.")
+        return
+    for section in (control_scheduling, workload_scheduling):
+        selector = section.get("nodeSelector") or {}
+        if not isinstance(selector, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in selector.items()
+        ):
+            response.fatal(rsp, "vCluster scheduling nodeSelector must map strings to strings.")
+            return
+    enforced = workload_scheduling.get("enforceTolerations") or []
+    if not isinstance(enforced, list) or any(
+        not isinstance(t, str) or not re.fullmatch(
+            r"[^\s=:]+(?:=[^\s=:]+)?:(?:NoSchedule|PreferNoSchedule|NoExecute)", t
+        ) for t in enforced
+    ):
+        response.fatal(rsp, "vCluster enforceTolerations must use key[=value]:effect strings.")
+        return
+    tolerations = control_scheduling.get("tolerations") or []
+    if not isinstance(tolerations, list) or any(not isinstance(t, dict) for t in tolerations):
+        response.fatal(rsp, "vCluster controlPlane tolerations must be Kubernetes toleration objects.")
+        return
     secret_mappings = _secret_mappings(
         (_to_dict(rsp.desired.composite.resource).get("status") or {}).get("connections") or [],
         instance_config.get("secretBindings") or [],
@@ -163,7 +196,7 @@ def _compose_instance(
                 **template_values,
             )
         )
-        rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.pkg.internal/vcluster": instance}
+        rsp.desired.resources[key].resource["metadata"]["labels"] = {"datalabs.versioneer.at/vcluster": instance}
 
     emit(
         "authentication",
@@ -175,18 +208,15 @@ def _compose_instance(
             **template_values,
         ),
     )
-    environment_manifest = (
-        _to_dict(rsp.desired.resources[f"workshop-{name}"].resource)
-        .get("spec", {})
-        .get("forProvider", {})
-        .get("manifest", {})
-    )
-    environment_objects = (
-        (environment_manifest.get("spec") or {}).get("environment") or {}
-    ).get("objects") or []
     workload_egress = [
         rule
-        for policy in environment_objects
+        for key in sorted(rsp.desired.resources)
+        for policy in [
+            _to_dict(rsp.desired.resources[key].resource)
+            .get("spec", {})
+            .get("forProvider", {})
+            .get("manifest", {})
+        ]
         if policy.get("kind") == "NetworkPolicy"
         and policy.get("metadata", {}).get("name")
         in ("allow-external-egress", "allow-internal-egress")
@@ -271,6 +301,20 @@ def _compose_instance(
         resources=resources,
         **template_values,
     )
+    snapshots = config.get("volumeSnapshots", False)
+    if type(snapshots) is not bool:
+        response.fatal(rsp, "data.vcluster.volumeSnapshots must be a boolean.")
+        return
+    configuration["sync"]["fromHost"]["volumeSnapshotClasses"] = {"enabled": snapshots}
+    for resource in ("volumeSnapshots", "volumeSnapshotContents"):
+        configuration["sync"]["toHost"][resource] = {"enabled": snapshots}
+    if snapshots:
+        support = _render_template(
+            req, "vcluster/snapshot-rbac", namespace=namespace, service_account=service_account,
+            snapshot_role=_resource_name(name, instance, "volume-snapshots"),
+        )["resources"]
+        for suffix, manifest in support.items():
+            emit(suffix, manifest)
     embedded = ((config.get("backingStore") or {}).get("database") or {}).get(
         "embedded"
     ) or {}
@@ -281,6 +325,40 @@ def _compose_instance(
         "enabled": bool(secret_mappings),
         "mappings": {"byName": secret_mappings},
     }
+    configuration["controlPlane"]["statefulSet"]["scheduling"].update(control_scheduling)
+    configuration["sync"]["fromHost"]["nodes"]["selector"]["labels"].update(
+        workload_scheduling.get("nodeSelector") or {}
+    )
+    configuration["sync"]["toHost"]["pods"]["enforceTolerations"] = enforced
+    if workload_scheduling.get("nodeSelector") or enforced:
+        policy = _render_template(
+            req, "vcluster/placement-policy", namespace=namespace,
+            policy_name=_resource_name(namespace, instance, "pod-placement"),
+            identity_expression=f"request.userInfo.username == {json.dumps(f'system:serviceaccount:{namespace}:{service_account}')}",
+        )
+        validations = policy["spec"]["validations"]
+        for key, value in sorted((workload_scheduling.get("nodeSelector") or {}).items()):
+            validations.append({
+                "expression": f"has(object.spec.nodeSelector) && {json.dumps(key)} in object.spec.nodeSelector && object.spec.nodeSelector[{json.dumps(key)}] == {json.dumps(value)}",
+                "message": f"Synced Pods must select {key}={value}.",
+            })
+        for tolerance in enforced:
+            pair, effect = tolerance.split(":")
+            key, separator, value = pair.partition("=")
+            match = f"t.key == {json.dumps(key)} && t.effect == {json.dumps(effect)}"
+            match += (f" && (!has(t.operator) || t.operator == 'Equal') && t.value == {json.dumps(value)}"
+                      if separator else " && t.operator == 'Exists'")
+            if effect == "NoExecute":
+                match += " && !has(t.tolerationSeconds)"
+            validations.append({
+                "expression": f"has(object.spec.tolerations) && object.spec.tolerations.exists(t, {match})",
+                "message": f"Synced Pods require toleration {tolerance}.",
+            })
+        emit("placement-policy", policy)
+        emit("placement-policy-binding", _render_template(
+            req, "vcluster/storage-policy-binding", namespace=namespace,
+            policy_name=policy["metadata"]["name"],
+        ))
     configuration_json = json.dumps(configuration, sort_keys=True)
     checksum = hashlib.sha256(
         (configuration_json + authentication).encode()
@@ -336,12 +414,6 @@ def _compose_instance(
             ),
         ),
         (
-            "limitrange",
-            _render_template(
-                req, "vcluster/limitrange", namespace=namespace, **template_values
-            ),
-        ),
-        (
             "control-plane-networkpolicy",
             _render_template(
                 req,
@@ -370,6 +442,11 @@ def _compose_instance(
             ),
         ),
     ):
+        if suffix == "role" and snapshots:
+            manifest["rules"].append({
+                "apiGroups": ["snapshot.storage.k8s.io"], "resources": ["volumesnapshots"],
+                "verbs": ["create", "delete", "patch", "update", "get", "list", "watch"],
+            })
         emit(suffix, manifest)
     source_namespaces = {key.split("/")[0] for key in secret_mappings} - {namespace}
     for source_namespace in sorted(source_namespaces):
@@ -393,21 +470,46 @@ def _compose_instance(
     )
     workload_policy["spec"]["egress"].extend(workload_egress)
     emit("workload-networkpolicy", workload_policy)
+    statefulset = _render_template(
+        req, "vcluster/statefulset", namespace=namespace,
+        configuration_checksum=checksum, resources=resources,
+        replicas=0 if instance_config.get("hibernated", False) else 1,
+        **template_values,
+    )
+    statefulset["metadata"]["annotations"] = {
+        "datalabs.versioneer.at/lifecycle-request": json.dumps({
+            "generation": _vcluster_cleanup_generation(
+                req, instance,
+                instance_config.get("hibernated", False),
+            ),
+            "hibernated": bool(instance_config.get("hibernated", False)),
+        }, sort_keys=True),
+    }
+    if control_scheduling:
+        statefulset["spec"]["template"]["spec"].update(control_scheduling)
     emit(
         "statefulset",
-        _render_template(
-            req,
-            "vcluster/statefulset",
-            namespace=namespace,
-            configuration_checksum=checksum,
-            resources=resources,
-            **template_values,
-        ),
+        statefulset,
         {
             "policy": "DeriveFromCelQuery",
             "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration == object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == object.spec.replicas && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision == object.status.updateRevision",
         },
     )
+    if workload_scheduling.get("nodeSelector") or enforced:
+        key = _resource_name("vcluster", name, instance, "statefulset")
+        dependencies = [_resource_name("vcluster", name, instance, suffix)
+                        for suffix in ("placement-policy", "placement-policy-binding")]
+        rsp.desired.resources[key].resource["spec"]["references"] = [
+            {"dependsOn": {"name": dependency, "namespace": claim_namespace}}
+            for dependency in dependencies
+        ]
+        for dependency in dependencies:
+            observed = req.observed.resources.get(dependency)
+            body = _to_dict(observed.resource) if observed else {}
+            if not any(c.get("type") == "Ready" and c.get("status") == "True"
+                       for c in body.get("status", {}).get("conditions", [])):
+                rsp.desired.resources[key].resource["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+                break
     virtual_provider = _resource_name(name, "vcluster", instance)
     emit(
         "virtual-providerconfig",
@@ -421,7 +523,7 @@ def _compose_instance(
         ),
     )
 
-    def virtual(suffix, manifest, preserve=False):
+    def virtual(suffix, manifest, preserve=False, readiness=None):
         key = _resource_name("vcluster", name, instance, "access", suffix)
         body = _render_template(
             req,
@@ -434,11 +536,20 @@ def _compose_instance(
         )
         if preserve:
             body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
+        if readiness:
+            body["spec"]["readiness"] = readiness
         body["metadata"].setdefault("labels", {})[
-            "datalabs.pkg.internal/vcluster"
+            "datalabs.versioneer.at/vcluster"
         ] = instance
         rsp.desired.resources[key].resource.update(body)
 
+    volumes = {
+        key: volume
+        for key, volume in ((_to_dict(req.observed.composite.resource).get("spec") or {}).get("volumes") or {}).items()
+        if volume["vcluster"] == instance
+    }
+    targets = {"default", *(group["namespace"] for group in groups if group["namespace"] != "*"),
+               *(volume.get("namespace", "default") for volume in volumes.values())}
     for storage_name in storage_classes:
         suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
         emit(
@@ -491,7 +602,7 @@ def _compose_instance(
                 **fields,
             },
         )
-    for target in sorted({group["namespace"] for group in groups} - {"*"}):
+    for target in sorted(targets - {"default"}):
         virtual(
             f"namespace-{target}",
             _render_template(

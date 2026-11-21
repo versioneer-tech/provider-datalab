@@ -2,7 +2,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check OAuth2 discovery after source Secret deletion and recovery in Kind."""
+"""Check OAuth2 discovery after source Secret deletion and recovery."""
 
 import argparse
 import json
@@ -13,12 +13,13 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kubeconfig", required=True)
+    parser.add_argument("--context", default="kind-provider-datalab-it")
     parser.add_argument("--datalab", required=True)
     args = parser.parse_args()
 
     def kube(*arguments, body=None, json_output=True):
         result = subprocess.run(
-            ["kubectl", "--kubeconfig", args.kubeconfig, "--context", "kind-provider-datalab-it",
+            ["kubectl", "--kubeconfig", args.kubeconfig, "--context", args.context,
              "--namespace", "workspace", *arguments],
             input=json.dumps(body) if body is not None else None,
             capture_output=True, text=True, timeout=60,
@@ -42,7 +43,7 @@ def main():
 
     source = f"secret/{args.datalab}-oauth-client"
     client = f"client.openidclient.keycloak.m.crossplane.io/{args.datalab}"
-    datalab = f"datalab/{args.datalab}"
+    datalab = f"datalabs.versioneer.at/{args.datalab}"
     paused = "crossplane.io/paused"
     client_state = get(client)
     previous_pause = client_state["metadata"].get("annotations", {}).get(paused)

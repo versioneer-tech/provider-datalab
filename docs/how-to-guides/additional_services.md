@@ -1,17 +1,35 @@
 # Additional services
 
-Run services such as Dask or MLflow as Kubernetes workloads from your Datalab
-terminal. These examples need Kubernetes API access and permission to create
-Pods, Deployments, Services, and PVCs in the target namespace.
-If the Datalab has no session, [declare one](usage_concepts.md#sessions) first.
-
-Use a vCluster for tools that need their own CRDs, controllers, or cluster
-roles. For a short-lived process, you can run it in the terminal and use the
-editor's Ports tab to open its web interface.
+Run services such as Dask or MLflow through a [virtual cluster profile](vcluster.md).
+Set `KUBECONFIG` to its downloaded file. These examples need permission to
+create Pods, Deployments, Services, and PVCs in the target virtual namespace.
+Use port forwarding to open a workload's web interface.
 
 Use the [Datalab service fields](usage_concepts.md#postgresql) for managed
 PostgreSQL, MongoDB, and Redis stores. The environment also supplies
 a [shared OCI registry](usage_concepts.md#oci-registry).
+
+The MLflow and psql examples below use virtual namespace `demo` and these
+[Secret bindings](connections.md#bind-a-connection). Add them to the Datalab's
+existing `vc0` configuration. The PostgreSQL example also needs `pg0` with a
+`dev` database, as in the [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml).
+
+```yaml
+spec:
+  vclusters:
+    vc0:
+      secretBindings:
+      - type: s3
+        name: primary
+        target:
+          namespace: demo
+          name: mlflow-storage
+      - type: postgres
+        name: pg0
+        target:
+          namespace: demo
+          name: postgres-credentials
+```
 
 ## Dask
 
@@ -86,19 +104,21 @@ spec:
 EOF
 ```
 
-Open the scheduler dashboard through the editor's Ports tab:
+Open the scheduler dashboard with port forwarding:
 
 ```bash
 kubectl port-forward svc/dask-scheduler 8787:8787
 ```
 
-Dask Gateway also needs cluster-wide resources. Use a vCluster or ask the
-operator to install it. With the `dask` Helm repository configured, run:
+Dask Gateway needs cluster-wide permissions. Use a virtual cluster
+administrator profile or ask the operator to install it:
 
 ```bash
+helm repo add dask https://helm.dask.org
 helm repo update
 helm install dask-gateway dask/dask-gateway \
-  -n "${DEFAULT_NAMESPACE:-default}" \
+  --version 2025.4.0 \
+  -n dask-gateway \
   --create-namespace \
   --set gateway.auth.type=simple \
   --set gateway.auth.simple.password='' \
@@ -112,34 +132,19 @@ helm install dask-gateway dask/dask-gateway \
 
 MLflow records experiment runs and their artifacts. This example stores its
 SQLite database on a PVC and artifacts in an existing S3 bucket. Set `BUCKET`
-to a bucket your Datalab can write to.
+to a bucket your Datalab can write to. The bound `mlflow-storage` Secret must
+contain `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`.
 
-The PVC belongs to the current namespace. Check namespace deletion rules and
+The PVC belongs to `demo`. Check namespace deletion rules and
 the volume's reclaim policy before storing records you need to keep.
+The Deployment stops the old Pod before an update so only one Pod uses SQLite.
 For a shared service, use a managed database and arrange artifact backups
 with the operator.
 
 ```bash
-export BUCKET=s-jeff # Use a bucket your Datalab can write to.
+export BUCKET=s-jeff
 
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-creds
-type: Opaque
-stringData:
-  accessKey: "${AWS_ACCESS_KEY_ID}"
-  secretKey: "${AWS_SECRET_ACCESS_KEY}"
-  sessionToken: "${AWS_SESSION_TOKEN:-}"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: minio-config
-data:
-  endpoint: "${AWS_ENDPOINT_URL}"
----
+kubectl -n demo apply -f - <<EOF
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -169,6 +174,8 @@ metadata:
   name: mlflow
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mlflow
@@ -189,9 +196,7 @@ spec:
                 --serve-artifacts \
                 --artifacts-destination s3://"${BUCKET}"/mlruns \
                 --host 0.0.0.0 --port 5000 \
-                --workers 2 \
-                --allowed-hosts '*' \
-                --cors-allowed-origins '*'
+                --workers 2
           ports:
             - containerPort: 5000
           resources:
@@ -200,16 +205,16 @@ spec:
           env:
             - name: MLFLOW_S3_ENDPOINT_URL
               valueFrom:
-                configMapKeyRef: { name: minio-config, key: endpoint }
+                secretKeyRef: { name: mlflow-storage, key: AWS_ENDPOINT_URL }
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
-                secretKeyRef: { name: minio-creds, key: accessKey }
+                secretKeyRef: { name: mlflow-storage, key: AWS_ACCESS_KEY_ID }
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
-                secretKeyRef: { name: minio-creds, key: secretKey }
+                secretKeyRef: { name: mlflow-storage, key: AWS_SECRET_ACCESS_KEY }
             - name: AWS_SESSION_TOKEN
               valueFrom:
-                secretKeyRef: { name: minio-creds, key: sessionToken }
+                secretKeyRef: { name: mlflow-storage, key: AWS_SESSION_TOKEN, optional: true }
             - name: AWS_S3_FORCE_PATH_STYLE
               value: "true"
             - name: AWS_EC2_METADATA_DISABLED
@@ -232,10 +237,10 @@ spec:
 EOF
 ```
 
-Open the MLflow interface through the editor's Ports tab:
+Open MLflow with port forwarding:
 
 ```bash
-kubectl port-forward svc/mlflow 5000:5000
+kubectl -n demo port-forward svc/mlflow 5000:5000
 ```
 
 Point your code at the forwarded tracking server:
@@ -246,12 +251,10 @@ export MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
 
 ## PostgreSQL with psql
 
-The [Jeff example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/002-lab.yaml)
-provides `POSTGRES_PG0_DEV_URL` for database `dev` on `pg0`. Run this command
-from a session with that variable to start a psql Pod in the current namespace:
+Create a psql Pod that reads the bound `postgres-credentials` Secret:
 
 ```bash
-envsubst '${POSTGRES_PG0_DEV_URL}' <<'EOF' | kubectl apply -f -
+kubectl -n demo apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
@@ -263,21 +266,27 @@ spec:
     image: postgres:17
     stdin: true
     tty: true
-    command:
-      - sh
-      - -lc
-      - |
-        exec psql "$POSTGRES_URL"
+    command: ["psql", "--dbname=dev"]
     env:
-      - name: POSTGRES_URL
-        value: ${POSTGRES_PG0_DEV_URL}
+    - name: PGHOST
+      valueFrom:
+        secretKeyRef: {name: postgres-credentials, key: host}
+    - name: PGPORT
+      valueFrom:
+        secretKeyRef: {name: postgres-credentials, key: port}
+    - name: PGUSER
+      valueFrom:
+        secretKeyRef: {name: postgres-credentials, key: user}
+    - name: PGPASSWORD
+      valueFrom:
+        secretKeyRef: {name: postgres-credentials, key: password}
 EOF
 ```
 
 Attach to the Pod after it starts:
 
 ```bash
-kubectl attach -it pgsql-debug
+kubectl -n demo attach -it pgsql-debug
 ```
 
 Check the connection with a temporary table:
@@ -293,4 +302,5 @@ SELECT value FROM datalab_check;
 
 Remove test services when the experiment ends. Before keeping one, agree with
 the platform team on its storage, backups, monitoring, maintenance, and deletion.
-Back up the service data separately from the session volume.
+Back up the service data and any application volumes. Use
+[named volumes](volumes.md) for provider-managed PVCs and snapshot schedules.

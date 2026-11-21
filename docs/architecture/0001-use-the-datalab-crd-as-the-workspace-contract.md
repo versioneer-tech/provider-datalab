@@ -1,117 +1,106 @@
 # ADR-001: Use Datalab as the Public Contract
 
-> Written: 02.12.2025. Revised: 03.11.2026.
+> Written: 02.12.2025. Revised: 21.11.2026.
 
 ## Status
 
-Accepted
-
-## Implementation
-
-Implemented.
-
-Users create a `Datalab`. Provider Datalab turns it into a working data
-workspace and reports session information on the same resource.
-
-Educates is the first implementation of runtime sessions. It provides the
-browser editor and terminal. Its resources are created and managed internally.
+Proposed. Design approval and runtime validation are pending.
 
 ## Context
 
-A data workspace needs many things: an editor, a terminal, persistent files,
-credentials, networking, and optional services. Exposing every resource needed
-to build that workspace would give users a complicated and fragile API.
-
-We need one stable contract that describes what a user wants, while allowing
-the implementation behind it to change.
+A team needs persistent files, credentials, networking, virtual Kubernetes
+clusters, and optional services. The platform needs a stable contract for
+these resources. Applications need control of their own installation and
+runtime lifecycle through the virtual Kubernetes API.
 
 ## Decision
 
-### Make `Datalab` the only public workspace resource
+### Use Datalab for team resources
 
-Users and GitOps tools work with the namespaced `Datalab` resource. It describes
-the desired workspace, including its named sessions and optional capabilities.
+Users and GitOps tools declare a namespaced `versioneer.at/v1` Datalab. It
+contains team membership, named virtual clusters, managed services, and named
+volumes. The operator-owned EnvironmentConfig sets platform
+identity, network, storage, and security policy.
 
-The Datalab name, namespace, and UID form its stable identity. Generated Pod,
-Secret, and runtime-resource names are not part of the public contract.
+The Datalab name, namespace, and UID form its identity. Crossplane creates a
+host service namespace with the Datalab name. Its quota, LimitRange, and
+network policies apply to services and synced workloads.
 
-### Keep the runtime implementation internal
+The Datalab is the network boundary. Host policies restrict traffic between
+Datalabs and permit shared networking within one Datalab, including across
+its virtual clusters. A virtual cluster is an API boundary. Separate Datalabs
+are required for separate team trust boundaries.
 
-The internal runtime provides the editor, terminal, workspace Pod, sessions,
-and optional applications. Crossplane translates a Datalab into the runtime
-and Kubernetes resources required to run it.
+### Keep infrastructure and applications under separate owners
 
-This translation is an implementation detail:
+Crossplane owns the generated host resources, virtual cluster configuration,
+identity settings, and declared storage. Application owners install CRDs,
+controllers, RBAC, templates, pools, and runtime images through the virtual API.
+Their installer needs suitable virtual permissions; it needs no host credentials.
 
-```text
-User or GitOps tool
-  -> Datalab
-     -> Provider Datalab reconciliation
-        -> internal runtime resources
-           -> working Datalab session
-```
+Provider Datalab installs no application controller or default runtime. A
+controller failure is an application health concern. Platform capabilities
+such as storage drivers, host runtime classes, and network enforcement remain
+under operator control.
 
-Clients never create, update, discover, or depend on runtime resources
-directly. Crossplane owns those generated resources. This keeps one source of
-truth and lets the runtime implementation evolve without changing how users
-manage a Datalab.
+### Use named volumes
 
-The same rule applies if the internal runtime changes later. Runtime resources
-remain projections of the Datalab and do not become a second public workspace
-API.
+`spec.volumes` is a map keyed by volume name, like the named managed
+services. Each volume selects a virtual cluster, namespace, and optional size.
+The provider creates a PVC with a stable name and reports its location in
+`status.volumes`. The virtual PVC also has a volume label for discovery
+without host API access.
 
-### Keep user choices separate from operator policy
+Volumes use an allowed StorageClass and count toward the host storage quota.
+The virtual cluster and namespace are fixed after creation. Workloads mount
+the existing claim and must not add ownership that deletes the claim with
+the runtime. Pod replacement and application removal preserve its storage.
+Removing the volume declaration deletes the PVC after its users release it.
 
-The Datalab spec contains choices that a user is allowed to make. The
-operator-owned `EnvironmentConfig` contains platform settings such as ingress,
-Keycloak realm, storage classes, security defaults, and extension packages.
+Application owners manage start, stop, runtime replacement, tasks, and access.
+These choices do not belong in the storage declaration. Whole-cluster
+hibernation remains under `spec.vclusters.<instance>.hibernated` and preserves
+virtual resource definitions and PVCs.
 
-Crossplane combines both sets of input. Users therefore get a small API, while
-operators keep control of security and infrastructure policy.
+### Protect volumes with optional CSI snapshots
 
-### Manage sessions through the Datalab
+The operator explicitly enables snapshot synchronization and supplies a
+snapshot class. It requires a snapshot-capable CSI driver and host snapshot
+infrastructure. Ordinary volumes do not require those prerequisites.
 
-Each session has a unique name and a desired state such as `started` or
-`stopped`. Provider Datalab creates the internal runtime for started sessions
-and reports the observed phase, message, and browser URL in
-`Datalab.status.sessions`. A stopped session keeps its workspace PVC.
+A volume with `backup: true` gets a virtual backup CronJob. Each run waits for
+a new snapshot to be ready before pruning older completed snapshots for the
+same PVC UID. The snapshot class uses deletion policy `Delete` so retention
+can remove underlying snapshots. Disabling the schedule keeps its snapshots.
+Incomplete attempts are removed before a new snapshot is created. Pending
+deletion blocks new attempts. Snapshot Jobs stop during virtual cluster
+hibernation. The operator owns the shared host snapshot role; the provider
+binds it only to syncers with snapshot support enabled.
 
-Clients read the Datalab status. They do not look up the internal runtime.
-Diagnostic phase and message text is not a stable machine-readable lifecycle
-API.
+`restoreFrom` initializes a new volume from a ready snapshot in the same
+virtual namespace. It cannot change after creation. The recovered PVC has its
+own lifecycle. Application consistency may require a flush or pause coordinated
+by the application owner. Control-plane backup and disaster recovery are
+separate platform responsibilities.
 
-### Keep credentials out of the API
+### Keep credentials out of the public API
 
-Credentials are read from referenced Kubernetes Secrets and copied only where
-the runtime needs them. Secret values never belong in the Datalab spec, status,
-logs, or normal client output.
+Credentials are read from referenced Secrets and copied only where needed.
+Values do not belong in Datalab spec, status, logs, or normal client output.
+Connection status reports Secret references. A downloaded virtual profile
+uses caller authentication and virtual RBAC. The private recovery kubeconfig
+stays under operator control.
 
-Credentials and security settings currently apply to the whole Datalab. Use
-separate Datalabs when workloads need different membership or trust boundaries.
-
-### Add tools without changing the contract
-
-Operators can add runtime tools through extension packages. This keeps the
-Datalab API stable and avoids putting every tool in one large base image.
-
-## Why This Design
-
-| Design choice | Reason |
-| --- | --- |
-| One Datalab API | Users have one clear object to create, review, and manage. |
-| Runtime stays internal | Clients are not coupled to runtime-specific resources or names. |
-| Crossplane owns generated resources | Reconciliation has one owner and does not compete with user changes. |
-| User input and operator policy are separate | Self-service does not bypass platform security or infrastructure rules. |
-| Status is copied to the Datalab | Clients do not need broad access to internal resources. |
-| Credentials stay in Secrets | The public API does not become a credential-delivery channel. |
+Clients can use virtual Kubernetes port forwarding where RBAC permits it.
+Application owners provide any direct or browser access their software needs.
+Kubernetes API authentication does not authenticate direct Pod traffic.
 
 ## Consequences
 
-- Provider Datalab is self-contained: clients need only the Datalab API.
-- Changing the internal runtime does not require a second public workspace
-  model.
-- Crossplane remains responsible for generated-resource ownership and cleanup.
-- Operators must validate user-selectable Secret references and other
-  policy-sensitive options.
-- Render tests check generated resources; live tests must also check session
-  transitions and access to services.
+- Datalab provides a stable contract for team infrastructure and storage.
+- Applications can change their controllers and images independently.
+- Persistent volumes can outlive the workloads that mount them.
+- Snapshot prerequisites and additional syncer permissions are optional.
+- Backup status and application health need their own operational checks.
+- Local checks validate generated resources and backup failure behavior.
+  Live checks must qualify storage, authorization, hibernation, and restore.

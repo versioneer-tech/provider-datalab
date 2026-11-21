@@ -1,23 +1,32 @@
 # Network policies
 
-Provider Datalab creates service and egress policies in `status.runtimeNamespace`.
+Provider Datalab creates ingress and egress policies in the Datalab-named host
+service namespace. This namespace is the team boundary. Services, virtual
+control planes, and synced workload Pods use it regardless of their virtual
+namespace. Virtual clusters in one Datalab share this boundary.
 The cluster CNI must enforce Kubernetes NetworkPolicy for these rules to take
 effect.
 
-## Generated egress policies
+NetworkPolicies inside a virtual cluster are not synced to the host. Configure
+team network access through EnvironmentConfig. The generated host policies
+permit same-team traffic; they do not isolate workloads within a team.
+
+## Generated namespace policies
 
 | Policy | Created when | Allows |
 | --- | --- | --- |
+| `deny-ingress` | By default | No ingress by itself; service and explicit internal rules can allow traffic. |
+| `allow-namespace-ingress` | By default | Traffic from Pods in the same host service namespace. |
 | `deny-egress` | By default | No egress by itself; other policies can allow traffic. |
 | `allow-namespace-egress` | By default | Traffic to Pods in the same runtime namespace. |
 | `allow-dns-egress` | External egress, Data, registry, or vCluster is enabled | DNS to `kube-system` on TCP and UDP port 53. |
-| `allow-vcluster-egress` | vCluster is enabled | TCP ports 443 and 8443 to the same Datalab's vCluster control-plane Pods. |
 | `allow-external-egress` | External egress is enabled | The configured external CIDRs, minus excluded ranges. |
 | `allow-internal-egress` | Internal targets are configured | The selected backend Pods and ports in other namespaces. |
+| `allow-internal-ingress` | Internal sources are configured | The selected source Pods and ports from other namespaces. Target selectors can limit the receiving Pods. |
 
-The DNS rule lets Data and registry resolve storage hosts and lets sessions resolve their
-vCluster Service. Namespace and Pod selectors on the vCluster rule limit it
-to the same Datalab.
+The DNS rule lets Data and the registry resolve storage hosts and lets
+workloads resolve their vCluster Service. Same-namespace rules permit access
+to the Datalab's virtual API.
 
 NetworkPolicies are additive. `deny-egress` selects Pods for egress isolation;
 it does not override an allow rule in another selected policy. Check all
@@ -38,7 +47,7 @@ Standard NetworkPolicy cannot express ordered deny rules or DNS-name rules.
 
 ## Service policies
 
-For session access, packageR accepts port 8888 from session Pods.
+For internal access, packageR accepts port 8888 from Pods in the service namespace.
 For permanent access, its OAuth proxy accepts port 4180. See
 [Data and sharing](../how-to-guides/usage_concepts.md#data-and-sharing) for
 browser access and public links.
@@ -50,6 +59,10 @@ that contains the Keycloak Pods.
 
 The registry accepts TCP port 5000. Its health port is not exposed by the
 Service or public routes. Object-storage access uses the Datalab's egress rules.
+
+Each virtual API accepts ingress on TCP port 8443 for authenticated Kubernetes
+access through the Gateway. Its workload and DNS policies permit the required
+control-plane traffic. These allowances add to the namespace policies.
 
 ## Replace or exclude policies
 

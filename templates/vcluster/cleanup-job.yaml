@@ -1,0 +1,53 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${job_name}
+  namespace: ${namespace}
+  annotations:
+    datalabs.versioneer.at/cleanup-generation: ${cleanup_generation}
+spec:
+  suspend: ${suspended}
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        datalabs.versioneer.at/lifecycle: ${lifecycle_name}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: ${lifecycle_name}
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: cleanup
+        image: ${cleanup_image}
+        command: [python, -B, /opt/cleanup/cleanup.py]
+        args: ['${namespace}', '${runtime}', '${cleanup_generation}']
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        volumeMounts:
+        - name: script
+          mountPath: /opt/cleanup
+          readOnly: true
+      volumes:
+      - name: script
+        configMap:
+          name: ${lifecycle_name}

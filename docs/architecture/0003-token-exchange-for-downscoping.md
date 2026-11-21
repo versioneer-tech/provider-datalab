@@ -1,6 +1,6 @@
 # ADR-003: Token Exchange for Downscoping
 
-> Written: 04.11.2026.
+> Written: 04.11.2026. Revised: 21.11.2026.
 
 ## Status
 
@@ -132,6 +132,20 @@ resources keep a policy's scope and profile until the policy has been deleted.
 
 Keycloak 26.8.1 or later is required. Default identity scopes must contain no
 role grants or role mappers.
+
+### Use the virtual API for workload access
+
+Workload clients authenticate to the virtual Kubernetes API with the existing
+Keycloak token and configured vcluster role. Kubernetes RBAC authorizes
+resource operations, Pod discovery, and `pods/portforward`. A namespace-profile
+token can forward ports where its role permits; it does not need `ws_access`.
+A `ws_api`-only service account cannot access the virtual cluster.
+
+Application owners install their controllers and define their runtime access.
+Keep application credentials separate from the Data and S3 proxy Secrets.
+Port forwarding authenticates the API connection; direct Pod traffic needs the
+application's own controls when required. The shared network boundary is
+described in [ADR-001](0001-use-the-datalab-crd-as-the-workspace-contract.md#use-datalab-for-team-resources).
 
 ## Consequences
 

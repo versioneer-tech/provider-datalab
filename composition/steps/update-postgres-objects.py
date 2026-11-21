@@ -5,7 +5,6 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 from composition.helpers import (
     _backup_enabled,
-    _extract_manifest,
     _string_value,
     _to_dict,
 )
@@ -50,15 +49,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     ]
     users_all = [admin_user] + other_users
 
-    observed = getattr(req.observed, "resources", None) or {}
-    env_key = f"workshopenvironment-{xr_name}"
-    environment_manifest = _extract_manifest(observed.get(env_key))
-
-    educates_status = (environment_manifest.get("status") or {}).get("educates") or {}
-    workshop_namespace = _string_value(educates_status.get("namespace") or xr_name)
-
-    if not workshop_namespace:
-        return
+    runtime_namespace = xr_name
 
     def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
         body = _render_template(
@@ -109,7 +100,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "postgres/init-sql",
             cm_name=cm_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             init_sql=init_sql,
         )
 
@@ -124,7 +115,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "postgres/postgres-cluster",
             cluster_name=cluster_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             cm_name=cm_name,
             data_vcs=data_vcs,
         )
@@ -166,12 +157,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not has_gateway_parent:
             continue
 
-        hostname = f"{cluster_name}-{workshop_namespace}.{ingress_domain}"
+        hostname = f"{cluster_name}-{runtime_namespace}.{ingress_domain}"
         route = _render_template(
             req,
             "postgres/route",
             cluster_name=cluster_name,
-            workshop_ns=workshop_namespace,
+            runtime_namespace=runtime_namespace,
             gateway_parent_name=gateway_parent_name,
             gateway_parent_ns=gateway_parent_ns,
             gateway_section=gateway_section,

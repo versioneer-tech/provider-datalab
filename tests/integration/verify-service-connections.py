@@ -13,11 +13,12 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kubeconfig", required=True)
+    parser.add_argument("--context", default="kind-provider-datalab-it")
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--datalab", required=True)
     parser.add_argument("--deleted", action="store_true")
     args = parser.parse_args()
-    command = ["kubectl", "--kubeconfig", args.kubeconfig, "--context", "kind-provider-datalab-it"]
+    command = ["kubectl", "--kubeconfig", args.kubeconfig, "--context", args.context]
     reader = "verify-connection-reader"
     identity = f"system:serviceaccount:{args.namespace}:{reader}"
 
@@ -46,9 +47,9 @@ def main():
 
     def published():
         return [body for body in kube("get", "secrets", "--namespace", args.namespace,
-                                     "--selector", "datalabs.pkg.internal/name=" + args.datalab, "-o", "json")["items"]
-                if body["metadata"].get("labels", {}).get("datalabs.pkg.internal/name") == args.datalab
-                and body["metadata"].get("labels", {}).get("datalabs.pkg.internal/connection")]
+                                     "--selector", "datalabs.versioneer.at/name=" + args.datalab, "-o", "json")["items"]
+                if body["metadata"].get("labels", {}).get("datalabs.versioneer.at/name") == args.datalab
+                and body["metadata"].get("labels", {}).get("datalabs.versioneer.at/connection")]
 
     if args.deleted:
         def removed():
@@ -69,7 +70,7 @@ def main():
     ]})
 
     def current():
-        xr = get("datalab", args.datalab)
+        xr = get("datalabs.versioneer.at", args.datalab)
         sources = kube("get", "objects.kubernetes.m.crossplane.io", "--namespace", args.namespace,
                        "--selector", "crossplane.io/composite=" + args.datalab, "-o", "json")["items"]
         connections = [c for c in xr["status"].get("connections", [])

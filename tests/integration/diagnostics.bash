@@ -8,10 +8,9 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-require_command kind
 require_command kubectl
 
-if ! kind_cluster_exists; then
+if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]] && ! kind_cluster_exists; then
   printf 'The dedicated Kind cluster was not created; no cluster diagnostics are available.\n'
   exit 0
 fi
@@ -20,16 +19,12 @@ require_cluster
 resource_budget || true
 
 kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io || true
-kube get datalabs.pkg.internal --all-namespaces || true
+kube get datalabs.versioneer.at --all-namespaces || true
 kube get objects.kubernetes.m.crossplane.io --all-namespaces || true
 kube get postgresclusters.postgres-operator.crunchydata.com --all-namespaces || true
 kube get mongodbcommunity.mongodbcommunity.mongodb.com --all-namespaces || true
 kube get redis.redis.redis.opstreelabs.in --all-namespaces || true
-# WorkshopSession default columns include browser credentials.
-kube get workshops,workshopenvironments,workshopsessions --all-namespaces \
-  -o custom-columns='KIND:.kind,NAMESPACE:.metadata.namespace,NAME:.metadata.name,PHASE:.status.phase' || true
 kube get deployments,services --all-namespaces --selector app.kubernetes.io/name=package-r || true
 kube get networkpolicies.networking.k8s.io --all-namespaces || true
-kube get validatingpolicies.policies.kyverno.io || true
 kube get pods --all-namespaces -o wide || true
 kube get events --all-namespaces --sort-by=.lastTimestamp || true

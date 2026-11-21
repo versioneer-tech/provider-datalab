@@ -1,6 +1,6 @@
 # ADR-002: Provide Managed Database Services
 
-> Written: 10.12.2025. Revised: 03.11.2026.
+> Written: 10.12.2025. Revised: 21.11.2026.
 
 ## Status
 
@@ -8,13 +8,8 @@ Accepted
 
 ## Context
 
-Teams need relational databases, document databases, and key-value stores for
-their applications and data work. They need to request these capabilities
-without deploying database servers or maintaining backup jobs themselves.
-
-The platform operator needs control over storage, access, maintenance, and
-recovery. A common service API lets users work independently within those
-controls and lets the operator provide defined service guarantees.
+Teams need databases and caches without managing their servers and backup
+jobs. The platform operator controls storage, access, maintenance, and recovery.
 
 ## Decision
 
@@ -31,38 +26,25 @@ to request these managed services:
 
 Crossplane creates the service resources. The installed database operators
 manage their workloads. Services belong to the Datalab and continue to run
-when an interactive session stops. `status.connections` reports their endpoints
+when an application stops. `status.connections` reports their endpoints
 and credential Secret references.
 
 ### Keep user configuration small
 
 Users select a service, name it, and set its data storage size. For PostgreSQL,
 MongoDB, and Redis, they can also set `backupStorage` to enable backups and size a
-separate backup volume:
-
-```yaml
-spec:
-  databases:
-    pg0:
-      names:
-      - app
-      storage: 10Gi
-      backupStorage: 30Gi
-  documentStores:
-    documents:
-      storage: 10Gi
-      backupStorage: 30Gi
-  cacheStores:
-    cache:
-      storage: 1Gi
-      backupStorage: 3Gi
-```
+separate backup volume.
 
 A positive `backupStorage` enables PostgreSQL, MongoDB, or Redis backups. Zero or an
 omitted value disables them. PostgreSQL uses pgBackRest; MongoDB uses a
 composition-managed dump job. Redis uses a composition-managed RDB snapshot
 job. A data volume alone is not a backup. The [backup guide](../how-to-guides/usage_concepts.md#backups)
-defines the current schedules, retention, and recovery limits.
+defines the configuration examples, schedules, and retention.
+
+Named application volumes use `spec.volumes`. Each entry creates a PVC;
+`backup: true` enables scheduled CSI `VolumeSnapshot` resources. These snapshots
+have no backup volume size. Database backup tools remain responsible for
+managed database recovery. See [Volumes](../how-to-guides/volumes.md).
 
 Users configure the Datalab resource. Crossplane owns the generated resources
 and can replace manual changes during reconciliation.
@@ -71,7 +53,7 @@ and can replace manual changes during reconciliation.
 
 Users own their application data, schemas, queries, and requested capacity.
 The platform operator owns service deployment, supported configurations,
-maintenance, storage classes, access controls, and operational support. Operator
+upgrades, storage classes, access controls, and operational support. Operator
 settings come from the platform's
 [EnvironmentConfig](../how-to-guides/installation.md#runtime-and-service-defaults).
 
@@ -96,7 +78,7 @@ and backup retention after Datalab deletion need separate operator provisions.
   without a separate database deployment or backup workflow.
 - The platform operator has clear responsibility for operations and the
   guarantees offered to users.
-- Service data is independent of session state. Its retention still depends
+- Service data is independent of application state. Its retention still depends
   on Datalab deletion and storage reclaim rules.
 - Users select from supported service settings. Other database products or
   configurations need a separate platform decision.

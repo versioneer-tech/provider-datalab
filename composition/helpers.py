@@ -19,6 +19,32 @@ def _to_dict(value):
     return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
 
+def _vcluster_cleanup_generation(req, instance, hibernated):
+    xr = _to_dict(req.observed.composite.resource)
+    generation = int(xr["metadata"].get("generation", 1))
+    if not hibernated:
+        return generation
+    # Composed Objects can be applied before XR status is saved.
+    # Use the latest request so stale status cannot reuse a completed cleanup.
+    requests = [(0, False)]
+    for state in (xr.get("status") or {}).get("vclusters") or []:
+        if state.get("name") == instance:
+            sleeping = state.get("phase") in ("Hibernating", "Hibernated", "Failed")
+            saved = int(state.get("cleanupGeneration" if sleeping else "observedGeneration", 0))
+            if saved:
+                requests.append((saved, sleeping))
+    key = _resource_name("vcluster", xr["metadata"]["name"], instance, "statefulset")
+    control = req.observed.resources.get(key)
+    if control:
+        manifest = (_to_dict(control.resource).get("spec") or {}).get("forProvider", {}).get("manifest") or {}
+        marker = json.loads((manifest.get("metadata") or {}).get("annotations", {}).get(
+            "datalabs.versioneer.at/lifecycle-request", "{}"))
+        if marker.get("generation"):
+            requests.append((int(marker["generation"]), marker.get("hibernated") is True))
+    saved, sleeping = max(requests, key=lambda item: item[0])
+    return saved if sleeping else generation
+
+
 def set_response_ttl(req, rsp, default_seconds):
     rsp.meta.ttl.FromSeconds(default_seconds)
     environment = (
@@ -96,20 +122,12 @@ def _backup_enabled(value):
     return Decimal(match[1]) > 0
 
 
-def _observed_manifests(observed_resource):
+def _extract_manifest(observed_resource):
     if not observed_resource or not getattr(observed_resource, "resource", None):
-        return {}, {}
+        return {}
     resource = _to_dict(observed_resource.resource)
     at_provider = (resource.get("status") or {}).get("atProvider") or {}
-    return (
-        at_provider.get("manifest") or {},
-        (at_provider.get("raw") or {}).get("manifest") or {},
-    )
-
-
-def _extract_manifest(observed_resource):
-    manifest, raw_manifest = _observed_manifests(observed_resource)
-    return manifest or raw_manifest
+    return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
 
 def require_secret(req, rsp, key, name, namespace):
@@ -157,21 +175,6 @@ def _strong_token(seed, *, suffix=":provider-datalab", length=32):
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
 
 
-def _session_name(session, *, stringify_none=False):
-    if isinstance(session, dict):
-        return _safe_str(session.get("name") or "")
-    return _string_value(session) if stringify_none else _safe_str(session)
-
-
-def _session_state(session):
-    state = (
-        _safe_str(session.get("state") or "started").lower()
-        if isinstance(session, dict)
-        else "started"
-    )
-    return {"running": "started", "paused": "stopped"}.get(state, state)
-
-
 def _resource_name(*parts, limit=63):
     name = "-".join(parts)
     if len(name) <= limit and (
@@ -205,12 +208,3 @@ def _vcluster_exchange_groups(config):
         if group["name"] != "cluster-admin"
     }
     return [groups[name] for name in sorted(groups)]
-
-
-def _runtime_namespace(req, name):
-    environment = _extract_manifest(
-        req.observed.resources.get(f"workshopenvironment-{name}")
-    )
-    return ((environment.get("status") or {}).get("educates") or {}).get(
-        "namespace"
-    ) or ""

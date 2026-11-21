@@ -2,9 +2,9 @@
 
 Packages:
 
-- [pkg.internal/v1beta2](#pkginternalv1beta2)
+- [versioneer.at/v1](#versioneeratv1)
 
-# pkg.internal/v1beta2
+# versioneer.at/v1
 
 Resource Types:
 
@@ -14,14 +14,14 @@ Resource Types:
 
 
 ## Datalab
-<sup><sup>[↩ Parent](#pkginternalv1beta2 )</sup></sup>
+<sup><sup>[↩ Parent](#versioneeratv1 )</sup></sup>
 
 
 
 
 
 
-A Datalab is a tenant-facing, namespaced composite resource. It defines membership, sessions, and data services.
+A Datalab is a tenant-facing, namespaced composite resource. It defines membership, data services, and virtual clusters.
 
 <table>
     <thead>
@@ -35,7 +35,7 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
     <tbody><tr>
       <td><b>apiVersion</b></td>
       <td>string</td>
-      <td>pkg.internal/v1beta2</td>
+      <td>versioneer.at/v1</td>
       <td>true</td>
       </tr>
       <tr>
@@ -54,6 +54,8 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
         <td>object</td>
         <td>
           Desired configuration of the datalab.<br/>
+          <br/>
+            <i>Validations</i>:<li>!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters): Each volume must select a declared virtual cluster.</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -106,7 +108,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecdatabaseskey">databases</a></b></td>
         <td>map[string]object</td>
         <td>
-          Optional PostgreSQL hosts (PostgresCluster instances) to provision for this datalab. Each host defines a data volume size and an optional pgBackRest repository size, plus a list of logical PostgreSQL databases to create inside that cluster. Ownership and privileges are derived from spec.users by the Composition.<br/>
+          PostgreSQL clusters with data storage, optional backup storage, and named databases. The operator creates the databases for the postgres account and adds logins from spec.users. Application setup manages additional ownership and grants.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
@@ -126,16 +128,7 @@ Desired configuration of the datalab.
         <td><b>environmentName</b></td>
         <td>string</td>
         <td>
-          Optional EnvironmentConfig name. See the installation guide for selection rules.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
-        <td>[]object</td>
-        <td>
-          Sessions declared for this datalab.<br/>
-          <br/>
-            <i>Default</i>: []<br/>
+          Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -155,6 +148,16 @@ Desired configuration of the datalab.
           <br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
+            <i>Default</i>: map[]<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvolumeskey">volumes</a></b></td>
+        <td>map[string]object</td>
+        <td>
+          Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$")): Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -307,44 +310,6 @@ Desired configuration of the datalab.
 </table>
 
 
-### Datalab.spec.sessions[index]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Session name.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired runtime lifecycle for this session. Started sessions create an active runtime session. Stopped sessions keep their Datalab-owned workspace PVC but do not create a runtime.
-<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-            <i>Default</i>: started<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-
 ### Datalab.spec.userOverrides[key]
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
 
@@ -405,6 +370,15 @@ Virtual Kubernetes clusters keyed by instance name.
         <td>[]object</td>
         <td>
           Additional profiles granted to Datalab users and administrators. Only Datalab administrators receive the built-in cluster-admin profile.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>hibernated</b></td>
+        <td>boolean</td>
+        <td>
+          Stop this instance and its synced Pods. Keep its storage. Set false to resume from the host Datalab.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -549,6 +523,68 @@ Virtual Kubernetes clusters keyed by instance name.
 </table>
 
 
+### Datalab.spec.volumes[key]
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>vcluster</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another virtual cluster.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backup</b></td>
+        <td>boolean</td>
+        <td>
+          Create scheduled CSI volume snapshots. Requires platform snapshot support.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another namespace.</li><li>!self.startsWith("kube-"): Volumes must use a workload namespace.</li>
+            <i>Default</i>: default<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>restoreFrom</b></td>
+        <td>string</td>
+        <td>
+          Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>storage</b></td>
+        <td>string</td>
+        <td>
+          Volume size. Defaults to the platform volume size, or 1Gi.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
 ### Datalab.status
 <sup><sup>[↩ Parent](#datalab)</sup></sup>
 
@@ -580,10 +616,17 @@ Current observed state of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabstatussessionsindex">sessions</a></b></td>
+        <td><b><a href="#datalabstatusvclustersindex">vclusters</a></b></td>
         <td>[]object</td>
         <td>
-          Session lifecycle state, persistent storage requests, workspace PVC references, and runtime details.<br/>
+          Instance lifecycle state. Hibernated means the control plane and synced host Pods are gone.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusvolumesindex">volumes</a></b></td>
+        <td>[]object</td>
+        <td>
+          Persistent volume references inside virtual clusters.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -807,12 +850,12 @@ Current observed state of the datalab.
 </table>
 
 
-### Datalab.status.sessions[index]
+### Datalab.status.vclusters[index]
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
 
 
-Observed state of a single datalab session.
+
 
 <table>
     <thead>
@@ -824,66 +867,63 @@ Observed state of a single datalab session.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          Session name from spec.sessions.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b><a href="#datalabstatussessionsindexpvcref">pvcRef</a></b></td>
-        <td>object</td>
-        <td>
-          Workspace PVC reference. Does not report PVC readiness.<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>state</b></td>
-        <td>enum</td>
-        <td>
-          Desired lifecycle state for the declared session.<br/>
-          <br/>
-            <i>Enum</i>: started, stopped<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
         <td><b>message</b></td>
         <td>string</td>
         <td>
-          Latest observed status message for the session runtime.<br/>
+          <br/>
         </td>
-        <td>false</td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
       </tr><tr>
         <td><b>phase</b></td>
-        <td>string</td>
+        <td>enum</td>
         <td>
-          Latest observed lifecycle phase for the session runtime.<br/>
+          <br/>
+          <br/>
+            <i>Enum</i>: Starting, Running, Hibernating, Hibernated, Resuming, Failed<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>cleanupGeneration</b></td>
+        <td>integer</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Format</i>: int64<br/>
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>pvcSize</b></td>
+        <td><b>cleanupJob</b></td>
         <td>string</td>
         <td>
-          Persistent session PVC request as a Kubernetes quantity. Retained while stopped, zero when none, and omitted when unknown. Shared PVCs are counted once.<br/>
+          <br/>
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>url</b></td>
-        <td>string</td>
+        <td><b>observedGeneration</b></td>
+        <td>integer</td>
         <td>
-          Public URL of the active session.<br/>
+          <br/>
+          <br/>
+            <i>Format</i>: int64<br/>
         </td>
         <td>false</td>
       </tr></tbody>
 </table>
 
 
-### Datalab.status.sessions[index].pvcRef
-<sup><sup>[↩ Parent](#datalabstatussessionsindex)</sup></sup>
+### Datalab.status.volumes[index]
+<sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
 
 
-Workspace PVC reference. Does not report PVC readiness.
+
 
 <table>
     <thead>
@@ -908,5 +948,26 @@ Workspace PVC reference. Does not report PVC readiness.
           <br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>pvcName</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>vcluster</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backupCronJobName</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>

@@ -58,7 +58,7 @@ def main():
     args = arguments()
     original = load("examples/base/002-lab.yaml")
     environments = list(yaml.safe_load_all(Path("tests/environmentconfig.yaml").read_text()))
-    environment = next(item for item in environments if item["metadata"]["name"] == "datalab-educates")
+    environment = next(item for item in environments if item["metadata"]["name"] == "datalab")
     environment["data"].setdefault("documentStore", {})["backupStorageClassName"] = "backup-test"
     environment["data"].setdefault("cacheStore", {})["backupStorageClassName"] = "backup-test"
     for size in (None, "0Gi", "1Gi"):
@@ -74,8 +74,7 @@ def main():
         assert ("backups" in cluster["spec"]) == enabled
         query = resources["db-postgrescluster-s-jeff-pg0"]["spec"]["readiness"]["celQuery"]
         assert ("pgbackrest" in query) == enabled
-        if not enabled:
-            assert "pg0-primary" in yaml.safe_dump(manifest(resources, "workshop-s-jeff"))
+        assert cluster["metadata"]["namespace"] == "s-jeff"
         mongo = manifest(resources, "mongodb-community-s-jeff-prod")
         backup_users = [user for user in mongo["spec"]["users"] if user["name"] == "prod-backup"]
         assert bool(backup_users) == enabled

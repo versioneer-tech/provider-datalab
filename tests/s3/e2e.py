@@ -59,6 +59,12 @@ def main():
         assert response.headers.get('Access-Control-Allow-Origin') == '*'
         assert 'GET' in response.headers.get('Access-Control-Allow-Methods', '')
         assert 'Range' in response.headers.get('Access-Control-Allow-Headers', '')
+    other_origin = urllib.request.Request(endpoint + '/share/public/', headers={
+        'Origin': 'https://other.example',
+    })
+    with opener.open(other_origin, timeout=10) as response:
+        assert response.status == 200
+        assert response.headers.get('Access-Control-Allow-Origin') == '*'
     print('PASS public package wildcard CORS and preflight', flush=True)
     if args.browser_only:
         return
@@ -119,6 +125,7 @@ def main():
     assert full['Body'].read() == content
     show('GET', object_path, full, {'Body': content.decode()})
     ranged = client.get_object(Bucket=bucket, Key=key, Range='bytes=4-10')
+    assert ranged['ResponseMetadata']['HTTPStatusCode'] == 206
     assert ranged['Body'].read() == content[4:11]
     assert ranged['ContentRange'] == f'bytes 4-10/{len(content)}'
     show('GET Range: bytes=4-10', object_path, ranged,

@@ -82,15 +82,23 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 data = json.load(sys.stdin)
 namespace = {}
 exec(compile(data['check']['input']['script'], 'check-connection-readiness', 'exec'), namespace)
-for resource_ready, connections, expected in (
-    (fnv1.READY_TRUE, [{'ready': False}], fnv1.READY_FALSE),
-    (fnv1.READY_TRUE, [{'ready': True}], fnv1.READY_TRUE),
-    (fnv1.READY_FALSE, [{'ready': True}], fnv1.READY_FALSE),
-    (fnv1.READY_TRUE, [], fnv1.READY_TRUE),
+for resource_ready, connections, states, expected in (
+    (fnv1.READY_TRUE, [{'ready': False}], [], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [{'ready': True}], [], fnv1.READY_TRUE),
+    (fnv1.READY_FALSE, [{'ready': True}], [], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [], [], fnv1.READY_TRUE),
+    (fnv1.READY_TRUE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_TRUE),
+    (fnv1.READY_TRUE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernating'}], fnv1.READY_FALSE),
+    (fnv1.READY_FALSE, [{'type': 'vcluster', 'instance': 'vc0', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_FALSE),
+    (fnv1.READY_TRUE, [{'type': 'postgres', 'ready': False}],
+     [{'name': 'vc0', 'phase': 'Hibernated'}], fnv1.READY_FALSE),
 ):
     req = fnv1.RunFunctionRequest()
     req.desired.composite.ready = resource_ready
-    req.desired.composite.resource.update({'status': {'connections': connections}})
+    req.desired.composite.resource.update({'status': {'connections': connections, 'vclusters': states}})
     rsp = response.to(req)
     namespace['compose'](req, rsp)
     assert rsp.desired.composite.ready == expected
@@ -114,17 +122,21 @@ assert not any(item['type'] == 'custom'
 
 
 class FunctionResponseTests(unittest.TestCase):
-    def test_connection_readiness_preserves_optional_sources_and_resource_checks(self):
-        pipeline = yaml.safe_load((ROOT / "composition.yaml").read_text())["spec"]["pipeline"]
+    def check_runtime(self, script, data):
         result = subprocess.run(
-            ["docker", "exec", "-i", RUNTIME, "/venv/fn/bin/python", "-c", READINESS_CHECK],
-            input=json.dumps({
-                "check": next(step for step in pipeline if step["step"] == "check-connection-readiness"),
-                "observe": next(step for step in pipeline if step["step"] == "observe-connection-secrets"),
-            }),
-            text=True, capture_output=True,
+            ["docker", "exec", "-i", RUNTIME, "/venv/fn/bin/python", "-c", script],
+            input=json.dumps(data), text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_connection_readiness_preserves_optional_sources_and_resource_checks(self):
+        pipeline = yaml.safe_load((ROOT / "composition.yaml").read_text())["spec"]["pipeline"]
+        self.check_runtime(
+            READINESS_CHECK, {
+                "check": next(step for step in pipeline if step["step"] == "check-connection-readiness"),
+                "observe": next(step for step in pipeline if step["step"] == "observe-connection-secrets"),
+            },
+        )
 
     def test_responses_use_environment_override_and_separate_function_settings(self):
         example = yaml.safe_load((ROOT / "examples/base/002-lab.yaml").read_text())
@@ -132,7 +144,7 @@ class FunctionResponseTests(unittest.TestCase):
             "apiVersion": example["apiVersion"],
             "kind": example["kind"],
             "metadata": {"name": "ttl-check", "namespace": "workspace"},
-            "spec": {"users": ["ttl-user"], "sessions": []},
+            "spec": {"users": ["ttl-user"], "volumes": {}},
         }
         environments = list(
             yaml.safe_load_all((ROOT / "tests/environmentconfig.yaml").read_text())
@@ -149,11 +161,7 @@ class FunctionResponseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="datalab-ttl-") as directory:
             root = Path(directory)
             shutil.copytree(ROOT / "composition", root / "composition")
-            (root / "scripts").mkdir()
-            shutil.copyfile(
-                ROOT / "scripts/vcluster-credentials.py",
-                root / "scripts/vcluster-credentials.py",
-            )
+            shutil.copytree(ROOT / "scripts", root / "scripts")
             (root / "templates").symlink_to(
                 ROOT / "templates", target_is_directory=True
             )
@@ -205,29 +213,15 @@ class FunctionResponseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "No response TTL configuration"):
                 BUILDER["build"](root)
 
-        result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                "-i",
-                RUNTIME,
-                "/venv/fn/bin/python",
-                "-c",
-                RUNTIME_CHECK,
-            ],
-            input=json.dumps(
-                {
-                    "cases": cases,
-                    "xrs": [empty, example],
-                    "environment": environments[0]["data"],
-                    "auto_ready": RUNTIME.removesuffix("-python") + "-auto-ready",
-                    "environment_function": RUNTIME.removesuffix("-python") + "-function-environment-configs",
-                }
-            ),
-            text=True,
-            capture_output=True,
+        self.check_runtime(
+            RUNTIME_CHECK, {
+                "cases": cases,
+                "xrs": [empty, example],
+                "environment": environments[0]["data"],
+                "auto_ready": RUNTIME.removesuffix("-python") + "-auto-ready",
+                "environment_function": RUNTIME.removesuffix("-python") + "-function-environment-configs",
+            },
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -23,25 +23,25 @@ data = json.load(sys.stdin)
 label = 'datalabs.pkg.internal/name'
 with grpc.insecure_channel(data['target'] + ':9443') as channel:
     stub = fnv1_grpc.FunctionRunnerServiceStub(channel)
-    cases = [
-        ('no configs', False, False, ()),
-        ('default only', False, False, (0,)),
-        ('render fallback', False, False, (0, 1)),
-        ('explicit composition', True, False, (0, 1)),
-        ('named override', True, True, (0, 1, 2)),
-        ('Datalab override', True, True, (0, 1, 2, 3)),
-        ('optional field omitted', True, False, (0, 1, 2)),
-        ('missing named config', True, True, (0, 1)),
-        ('missing composition config', True, True, (0, 2, 3)),
-    ]
-    for case, explicit, named, present in cases:
-        composition = 'test-composition' if explicit else data['composition']
+    layers = ('default', 'composition', 'named', 'datalab')
+    for case, explicit_composition, named_environment, available in (
+        ('all layers', True, True, layers),
+        ('composition fallback', False, True, layers),
+        ('named override', True, True, ('default', 'composition', 'named')),
+        ('missing named config', True, True, ('default', 'composition')),
+        ('omitted environmentName', False, False, ('default', 'composition', 'named')),
+        ('named config only', False, True, ('named',)),
+        ('Datalab config only', False, False, ('datalab',)),
+        ('default only', False, False, ('default',)),
+        ('no matching configs', False, True, ()),
+    ):
+        composition = 'test-composition' if explicit_composition else data['composition']
         names = ['default', composition, 'test-environment', 'test-datalab']
         req = fnv1.RunFunctionRequest()
         spec = {'users': []}
-        if explicit:
+        if explicit_composition:
             spec['crossplane'] = {'compositionRef': {'name': composition}}
-        if named:
+        if named_environment:
             spec['environmentName'] = names[2]
         req.observed.composite.resource.update({
             'metadata': {'name': names[3], 'namespace': 'test-space'},
@@ -50,8 +50,8 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
         req.input.update(data['input'])
         configs, expected, annotations = [], {}, {}
         expected_ttl = None
-        for index, name in enumerate(names):
-            if index not in present:
+        for index, (layer, name) in enumerate(zip(layers, names)):
+            if layer not in available:
                 continue
             values = {'domain': f'layer-{index}.example.test',
                       'annotations': {f'layer-{index}': 'retained', 'shared': str(index)}}
@@ -63,7 +63,7 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
                 'metadata': {'name': name, **({'labels': {label: name}} if index else {})},
                 'data': {'ingress': values, 'datalab': {'responseTTL': f'{index + 2}m'}},
             })
-            if index != 2 or named:
+            if layer != 'named' or named_environment:
                 expected_ttl = f'{index + 2}m'
                 expected['domain'] = values['domain']
                 annotations.update(values['annotations'])
@@ -71,15 +71,21 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
                     expected['enabled'] = True
         if expected:
             expected['annotations'] = annotations
-        for name in ('test-unrelated', data['composition'] if explicit else 'test-other'):
+        for name in ('test-unrelated', data['composition'] if explicit_composition else 'test-other'):
             configs.append({'metadata': {'name': name, 'labels': {label: name}},
                             'data': {'ingress': {'domain': 'wrong.example.test'}}})
-        # A matching name alone must not select a dynamic config.
+        # Named configs need the selector label even when their names match.
         configs.extend({'metadata': {'name': name},
                         'data': {'ingress': {'domain': 'unlabeled.example.test'}}}
                        for name in names[1:] if name not in [c['metadata']['name'] for c in configs])
+        configs.append({
+            'metadata': {'name': 'test-storage-config',
+                         'labels': {'storages.pkg.internal/name': composition}},
+            'data': {'ingress': {'domain': 'storage.example.test'}},
+        })
         rsp = stub.RunFunction(req, timeout=10)
-        for key, selector in rsp.requirements.resources.items():
+        selectors = dict(rsp.requirements.resources)
+        for key, selector in selectors.items():
             selected = req.required_resources[key]
             selected.SetInParent()
             for config in configs:
@@ -95,7 +101,26 @@ with grpc.insecure_channel(data['target'] + ':9443') as channel:
         actual = MessageToDict(rsp.context)['apiextensions.crossplane.io/environment']
         assert actual.get('ingress', {}) == expected, (case, actual, expected)
         assert actual.get('datalab', {}).get('responseTTL') == expected_ttl, (case, actual, expected_ttl)
-print('PASS environment and TTL precedence, nested maps, missing configs, optional field, labels, and render fallback')
+    duplicates = 0
+    for key, selector in selectors.items():
+        if selector.match_labels.labels.get(label) != data['composition']:
+            continue
+        for index in (1, 0):
+            duplicates += 1
+            req.required_resources[key].items.add().resource.update({
+                'apiVersion': 'apiextensions.crossplane.io/v1beta1',
+                'kind': 'EnvironmentConfig',
+                'metadata': {'name': f'test-duplicate-{index}',
+                             'labels': {label: data['composition']}},
+                'data': {'ingress': {'domain': f'duplicate-{index}.example.test'}},
+            })
+    assert duplicates == 2, selectors
+    rsp = stub.RunFunction(req, timeout=10)
+    assert not any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results), rsp.results
+    actual = MessageToDict(rsp.context)['apiextensions.crossplane.io/environment']
+    assert actual['ingress']['domain'] == 'duplicate-0.example.test', actual
+print('PASS environment config selection and merging')
+print('PASS duplicate selector labels select only the first config by name')
 """
 
 

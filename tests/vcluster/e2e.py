@@ -17,6 +17,7 @@ import socket
 import threading
 import ssl
 import subprocess
+import sys
 import time
 from tempfile import TemporaryDirectory
 from urllib.parse import urlencode
@@ -32,6 +33,12 @@ CATALOG_PATH = "/api/v1/namespaces/demo/services/catalog:8080/proxy"
 COLLECTION = "verify-vcluster-catalog"
 
 
+class ApiError(AssertionError):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
 def wait_until(check, message, seconds=300):
     deadline = time.monotonic() + seconds
     while not check():
@@ -39,13 +46,46 @@ def wait_until(check, message, seconds=300):
         time.sleep(3)
 
 
+def check_workload_quota(api, bearer):
+    # These limits exceed the host budget even when this profile uses a larger quota.
+    for resource, limit in (("cpu", "1000"), ("memory", "1Ti")):
+        name = "test-" + resource + "-quota"
+        api("/api/v1/namespaces/demo/pods", bearer, {
+            "apiVersion": "v1", "kind": "Pod", "metadata": {"name": name},
+            "spec": {"restartPolicy": "Never", "automountServiceAccountToken": False,
+                     "containers": [{"name": "probe", "image": "busybox:1.36.1",
+                                     "command": ["sleep", "3600"],
+                                     "resources": {"requests": {"cpu": "10m", "memory": "16Mi"},
+                                                   "limits": {"cpu": "1", "memory": "512Mi", resource: limit}}}]},
+        }, method="POST", expected=201)
+        wait_until(lambda: any(
+            "exceeded quota" in event.get("message", "") and "limits." + resource in event["message"]
+            for event in api("/api/v1/namespaces/demo/events?fieldSelector=involvedObject.name%3D" + name, bearer)["items"]
+        ), "Virtual " + resource + " probe did not report host quota rejection", seconds=60)
+        api("/api/v1/namespaces/demo/pods/" + name, bearer, method="DELETE", expected=(200, 202))
+    print("PASS virtual workloads cannot exceed host CPU and memory quotas", flush=True)
+
+
 def check_catalog(api, bearer):
-    result = api(
-        CATALOG_PATH + "/search",
-        bearer,
-        {"collections": [COLLECTION], "bbox": [16, 47, 18, 49]},
-        method="POST",
-    )
+    result = None
+
+    def searchable():
+        nonlocal result
+        try:
+            result = api(
+                CATALOG_PATH + "/search",
+                bearer,
+                {"collections": [COLLECTION], "bbox": [16, 47, 18, 49]},
+                method="POST",
+            )
+        except ApiError as error:
+            if error.status != 503:
+                raise
+            return False
+        return True
+
+    # The virtual API can be ready before the catalog Pod after resume.
+    wait_until(searchable, "STAC catalog search stayed unavailable", seconds=300)
     assert [item["id"] for item in result["features"]] == ["catalog-item"]
     assert result["features"][0]["collection"] == COLLECTION
     print(
@@ -55,18 +95,14 @@ def check_catalog(api, bearer):
 
 def deploy_catalog(api, bearer):
     postgres = Path("/postgres")
-    values = {
-        target: (postgres / source).read_text().strip()
-        for target, source in (
-            ("PGHOST", "POSTGRES_PG0_HOST"),
-            ("PGPORT", "POSTGRES_PG0_PORT"),
-            ("PGUSER", "POSTGRES_PG0_USER"),
-            ("PGPASSWORD", "POSTGRES_PG0_PASSWORD"),
-        )
+    admin_values = {
+        key: (postgres / key).read_text().strip()
+        for key in ("host", "port", "user", "password")
     }
+    values = {"PG" + key.upper(): value for key, value in admin_values.items()}
     values["PGDATABASE"] = "catalog"
     for name, data in (
-        ("catalog-postgres-admin", values),
+        ("catalog-postgres-admin", admin_values),
         (
             "catalog-postgres",
             {**values, "PGUSER": "catalog", "PGPASSWORD": secrets.token_urlsafe(32)},
@@ -469,6 +505,7 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("gateway_ip")
+    parser.add_argument("--storage-class", default="standard")
     parser.add_argument("--other-only", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--read-only", action="store_true")
@@ -515,12 +552,14 @@ def main():
         data = result.read()
         connection.close()
         allowed = expected if isinstance(expected, tuple) else (expected,)
-        assert (
-            result.status in allowed
-        ), f"{method} {path}: expected {expected}, got {result.status}"
+        if result.status not in allowed:
+            raise ApiError(
+                result.status,
+                f"{method} {path}: expected {expected}, got {result.status}",
+            )
         return data.decode() if raw else (json.loads(data) if data else None)
 
-    def profile_token(profile, instance="vc0", scope=""):
+    def profile_token(profile, instance="vc0", bearer=None):
         config = json.loads(Path(f"/profiles/{profile}/kubeconfig").read_text())
         assert (
             config["clusters"][0]["cluster"]["server"] == f"https://{HOST}/.{instance}"
@@ -540,7 +579,7 @@ def main():
         secret_file = next(Path("/oauth") / key for key in ("clientSecret", "client_secret") if (Path("/oauth") / key).is_file())
         with TemporaryDirectory(prefix="test-vcluster-") as directory:
             # Automated probes supply a token and do not start user login.
-            value = token(LAB, secret_file.read_text().strip(), scope=scope)
+            value = bearer if bearer is not None else token(LAB, secret_file.read_text().strip())
             token_file = Path(directory) / "access-token"
             token_file.write_text(value)
             token_file.chmod(0o600)
@@ -552,7 +591,9 @@ def main():
                 text=True,
                 env={**os.environ, **sources},
             )
-        return json.loads(credential.stdout)["status"]["token"]
+        actual = json.loads(credential.stdout)["status"]["token"]
+        assert actual == value, "The profile helper changed the caller token"
+        return actual
 
     def granted_token(profile, role, instance="vc0"):
         # Only this test assigns a vcluster role to the workspace account.
@@ -560,10 +601,13 @@ def main():
         try:
             scope = (LAB + ":interactive" if role.endswith("_cluster-admin")
                      else LAB + ":vclusters_" + role.removeprefix("vcluster_"))
-            value = profile_token(profile, instance, scope)
+            value = token(LAB, next((Path("/oauth") / key).read_text().strip()
+                                   for key in ("clientSecret", "client_secret")
+                                   if (Path("/oauth") / key).is_file()), scope=scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
-            return value
+            assert LAB in ([claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"])
+            return profile_token(profile, instance, value)
         finally:
             set_workspace_roles([])
 
@@ -649,15 +693,6 @@ def main():
     api("/api/v1/namespaces/demo/configmaps", admin_profile)
     print("PASS cluster-admin download keeps the caller's namespace role", flush=True)
     marker.write_text(editor)
-    for value, expected_role in (
-        (bearer, "vcluster_vc0_cluster-admin"),
-        (editor, "vcluster_vc0_namespace-demo"),
-    ):
-        claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
-        assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", expected_role}
-        assert LAB in (
-            [claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"]
-        )
     deadline = time.monotonic() + 90
     while True:
         try:
@@ -670,6 +705,10 @@ def main():
     print("PASS HTTPS prefix route and downloaded credential helper", flush=True)
 
     def volume_pod(pod_name, command):
+        path = "/api/v1/namespaces/demo/pods/" + pod_name
+        api(path, editor, method="DELETE", expected=(200, 202, 404))
+        wait_until(lambda: api(path, editor, expected=(200, 404)).get("kind") != "Pod",
+                   "The previous volume probe did not terminate")
         api(
             "/api/v1/namespaces/demo/pods",
             editor,
@@ -703,7 +742,7 @@ def main():
                     "volumes": [
                         {
                             "name": "data",
-                            "persistentVolumeClaim": {"claimName": "workload-data"},
+                            "persistentVolumeClaim": {"claimName": "volume-analysis"},
                         }
                     ],
                 },
@@ -722,6 +761,8 @@ def main():
     path = "/api/v1/namespaces/default/configmaps/restart-marker"
     if args.check_only:
         assert api(path, bearer)["data"]["marker"] == "persistent"
+        claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
+        assert claim["metadata"]["uid"] == Path("/tmp/vcluster-volume-uid").read_text()
         volume_pod("volume-reader", "cat /data/marker && echo && sleep 3600")
         deadline = time.monotonic() + 60
         while (
@@ -766,7 +807,7 @@ def main():
     )
     print("PASS same-named objects have separate state in vc0 and vc1", flush=True)
     classes = api("/apis/storage.k8s.io/v1/storageclasses", bearer)["items"]
-    assert {item["metadata"]["name"] for item in classes} == {"standard"}
+    assert {item["metadata"]["name"] for item in classes} == {args.storage_class}
     assert (
         classes[0]["metadata"]["annotations"][
             "storageclass.kubernetes.io/is-default-class"
@@ -919,34 +960,23 @@ def main():
         },
         expected=403,
     )
-    api(
-        "/api/v1/namespaces/demo/persistentvolumeclaims",
-        editor,
-        method="POST",
-        expected=201,
-        body={
-            "apiVersion": "v1",
-            "kind": "PersistentVolumeClaim",
-            "metadata": {"name": "workload-data"},
-            "spec": {
-                "accessModes": ["ReadWriteOnce"],
-                "storageClassName": "standard",
-                "resources": {"requests": {"storage": "1Mi"}},
-            },
-        },
-    )
+    claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
+    assert claim["metadata"]["labels"]["datalabs.versioneer.at/volume"] == "analysis"
+    assert not any(owner.get("kind") in ("Pod", "Deployment", "StatefulSet")
+                   for owner in claim["metadata"].get("ownerReferences", []))
+    Path("/tmp/vcluster-volume-uid").write_text(claim["metadata"]["uid"])
     volume_pod(
         "volume-writer",
         "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
     )
     assert (
-        api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)[
+        api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)[
             "status"
         ]["phase"]
         == "Bound"
     )
     print(
-        "PASS namespace profile, denied escalation, and host-provisioned workload PVC",
+        "PASS namespace profile, denied escalation, and provider-managed volume",
         flush=True,
     )
 
@@ -1063,6 +1093,7 @@ def main():
             "PASS kubectl exec, logs, watch, and port forwarding through /.vc0",
             flush=True,
         )
+        check_workload_quota(api, bearer)
     finally:
         proxy.shutdown()
         proxy.server_close()

@@ -142,9 +142,12 @@ def build(root=ROOT, response_ttl=None):
     settings = yaml.safe_load((root / "composition/settings.yaml").read_text())
     ttl = settings["responseTTL"] if response_ttl is None else response_ttl
     seconds = response_ttl_seconds(ttl)
+    composition = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
+    steps = [step["step"] for step in composition["spec"]["pipeline"]]
+    if len(steps) != len(set(steps)):
+        raise ValueError("Composition pipeline step names must be unique.")
     for key in ("environmentConfigsTTL", "autoReadyTTL"):
         response_ttl_seconds(settings[key])
-    composition = yaml.safe_load((root / "composition/pipeline.yaml").read_text())
     helper_source = (root / "composition/helpers.py").read_text()
     renderer = (root / "composition/render.py").read_text()
     for step in composition["spec"]["pipeline"]:

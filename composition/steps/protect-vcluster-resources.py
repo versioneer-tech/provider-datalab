@@ -18,12 +18,6 @@ def compose(req, rsp):
         for key, value in {**req.observed.resources, **rsp.desired.resources}.items()
     }
 
-    if not any(
-        body.get("metadata", {}).get("labels", {}).get("datalabs.pkg.internal/vcluster")
-        for body in objects.values()
-    ):
-        return
-
     def reference(key):
         body = objects[key]
         return _render_template(
@@ -96,7 +90,7 @@ def compose(req, rsp):
         {
             body.get("metadata", {})
             .get("labels", {})
-            .get("datalabs.pkg.internal/vcluster")
+            .get("datalabs.versioneer.at/vcluster")
             for body in objects.values()
         }
         - {None}
@@ -105,7 +99,6 @@ def compose(req, rsp):
         protect(
             f"{instance}-quota", f"resourcequota-{name}-overall-storage", control_plane
         )
-        protect(f"{instance}-environment", f"workshopenvironment-{name}", control_plane)
         for suffix in (
             "authentication",
             "config",
@@ -116,13 +109,15 @@ def compose(req, rsp):
             "rolebinding",
             "service",
             "headless-service",
-            "limitrange",
             "storage-policy",
             "storage-policy-binding",
             "control-plane-networkpolicy",
             "workload-networkpolicy",
             "dns-networkpolicy",
             "snapshot-networkpolicy",
+            "snapshot-binding",
+            "placement-policy",
+            "placement-policy-binding",
         ):
             protect(
                 f"{instance}-{suffix}",
@@ -130,8 +125,14 @@ def compose(req, rsp):
                 control_plane,
             )
         for key, body in objects.items():
+            if (body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster") == instance
+                    and body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/lifecycle") == "cleanup"):
+                protect(f"{instance}-cleanup-control", control_plane, key)
+                for suffix in ("account", "script", "role", "binding", "network", "policy", "policy-binding"):
+                    protect(f"{instance}-cleanup-{suffix}", _resource_name("vcluster", name, instance, f"cleanup-{suffix}"), key)
+        for key, body in objects.items():
             if body.get("metadata", {}).get("labels", {}).get(
-                "datalabs.pkg.internal/vcluster"
+                "datalabs.versioneer.at/vcluster"
             ) == instance and body.get("spec", {}).get("providerConfigRef", {}).get(
                 "name"
             ) == _resource_name(

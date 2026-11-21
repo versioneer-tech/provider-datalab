@@ -4,19 +4,19 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-educates
+  name: datalab
   labels:
-    datalabs.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   iam:
     realm: integration
   ingress:
@@ -37,10 +37,6 @@ data:
     provider: Minio
     region: us-east-1
     secretNamespace: workspace
-    type: s3
-  storageClasses:
-    allowed:
-      - standard
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -49,6 +45,15 @@ data:
       - 10.244.0.0/16
     blacklistIPs:
       - 169.254.169.254/32
+    internalIngress:
+      - namespace: workspace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: datalab-service-probe
+        ports:
+          - {protocol: TCP, port: 5432}
+          - {protocol: TCP, port: 27017}
+          - {protocol: TCP, port: 6379}
     internalEgress:
       - namespace: minio
         podSelector:
@@ -58,8 +63,6 @@ data:
           - protocol: TCP
             port: 9000
   defaults:
-    vcluster:
-      enabled: false
     registry:
       enabled: false
     data:
@@ -68,7 +71,6 @@ data:
     overallQuota:
       storage: 100Gi
     security:
-      kubernetesAccess: false
       externalEgress: true
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -79,14 +81,14 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -110,10 +112,6 @@ data:
     provider: Minio
     region: us-east-1
     secretNamespace: workspace
-    type: s3
-  storageClasses:
-    allowed:
-      - standard
   network:
     externalEgressCIDRs:
       - 0.0.0.0/0
@@ -122,6 +120,15 @@ data:
       - 10.244.0.0/16
     blacklistIPs:
       - 169.254.169.254/32
+    internalIngress:
+      - namespace: workspace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: datalab-service-probe
+        ports:
+          - {protocol: TCP, port: 5432}
+          - {protocol: TCP, port: 27017}
+          - {protocol: TCP, port: 6379}
     internalEgress:
       - namespace: minio
         podSelector:
@@ -131,17 +138,12 @@ data:
           - protocol: TCP
             port: 9000
   defaults:
-    vcluster:
-      enabled: false
     data:
       enabled: false
       readOnlyMount: false
     overallQuota:
       storage: 100Gi
     registry:
-      enabled: true
-    quota:
-      storage: 2Gi
+      enabled: false
     security:
-      kubernetesAccess: false
       externalEgress: false

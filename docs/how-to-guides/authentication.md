@@ -63,8 +63,12 @@ redirect_uri=http://localhost:8080/callback
 scope=openid profile email s-joe:interactive s-joe:vclusters_vc0_namespace-demo
 ```
 
-Use the normal state and PKCE checks, then authenticate the confidential client
-when redeeming the code. Request only the scopes needed by the application.
+Add `http://localhost:8080/callback` to `EnvironmentConfig.data.iam.redirectURIs`
+for this example. Set `iam.webOrigins` only for additional browser origins.
+The Data callback is included by default.
+
+Check OAuth state, use PKCE, and authenticate the confidential client when
+redeeming the code. Request only the scopes needed by the application.
 For a namespace-only direct login, omit `s-joe:interactive`.
 
 You can also use a separate login client in the same realm. Its scope mappings
@@ -75,21 +79,17 @@ requested roles. Configure those claims on the separate login client.
 ### CLI device login
 
 The provider enables Device Authorization Grant on the existing confidential
-client. The built-in `cluster-admin` kubeconfig helper uses this flow with a
-separate client secret. It requests `openid offline_access <datalab>:interactive`,
-prints a verification URL and user code to stderr, and waits for the user to
-approve the login in a browser. No localhost callback is needed.
+client. The built-in `cluster-admin` kubeconfig helper uses this flow with
+`openid offline_access <datalab>:interactive`. No localhost callback is needed.
 
 The resulting access token represents the user who signs in. Only that user's
 assigned roles can appear. Possession of the client secret does not grant
 cluster-admin. The service account remains assigned only `ws_api`; the helper
 does not use `grant_type=client_credentials`.
 
-The helper reuses cached tokens and attempts refresh before starting a new
-login. A valid cached token needs no client secret. Login and refresh require
-the secret through a private file or a hidden terminal prompt. See
-[human access](vcluster.md#human-access) for commands and cache settings.
-Additional profiles use a caller-supplied access token and do not start login.
+See [human access](vcluster.md#human-access) for login commands, credential
+files, and token cache behavior. Additional profiles use a caller-supplied
+access token and do not start login.
 
 ### Login lifetime
 
@@ -101,15 +101,11 @@ Keycloak sets these lifetimes; the helper uses the issued expiry values.
 | Access token validity | Inherited realm Access Token Lifespan |
 | CLI offline session validity | Offline Session Idle/Max and Client Offline Session Idle/Max |
 
-For the CLI cache duration, offline session limits, and revocation, see
-[human login lifetime](vcluster.md#human-login-lifetime).
-
-Device and standard flows inherit the realm's access-token lifespan. The
-device helper requests offline access and can refresh tokens for up to 30 days,
-subject to realm limits. Exchanged access tokens inherit the same lifespan
-and have no refresh token in the current setup. See
-[ADR-004](../architecture/0004-token-lifetime-for-delegated-access.md) for options
-for longer delegated access.
+The device helper can refresh tokens for up to 30 days, subject to realm
+limits. See [human login lifetime](vcluster.md#human-login-lifetime) for cache
+and revocation details. Exchanged tokens have no refresh token; longer
+delegated access is discussed in
+[ADR-004](../architecture/0004-token-lifetime-for-delegated-access.md).
 
 ## User-token exchange
 
@@ -123,9 +119,8 @@ permissions. A managed client policy combines the `grant-type` and
 `<datalab>:interactive` during token exchange, including requests that combine
 it with allowed profile scopes. Direct interactive login can still use it.
 
-Send this form to the configured realm's token endpoint. Authenticate with the
-existing confidential `s-joe` client through the approved credential path.
-The placeholder below represents the original caller access token.
+Post this form to the configured realm's token endpoint and authenticate as
+the confidential `s-joe` client:
 
 ```text
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
@@ -175,8 +170,7 @@ client, configure the Datalab audience on that client.
 Keycloak checks the user's role grants before applying an optional profile
 scope. A user without the role can receive a successful response with that
 scope and role omitted. Consumers must reject a result missing a requested
-role. This is the documented server behavior; actual issuance must be checked
-against the deployed server. Render checks do not prove token contents. See
+role. See
 [Keycloak scope permissions](https://www.keycloak.org/docs/latest/server_admin/index.html#_client_scopes_permissions).
 
 Reconciliation removes a deleted or renamed profile's optional association,
@@ -188,10 +182,14 @@ token first, then give the recipient the profile and returned access token.
 The additional profile helper reads that token from a file and needs no client
 secret. The virtual API still checks the realm issuer, Datalab audience,
 signature, validity, and configured Datalab roles.
-Its username is `sub`; groups are `datalab:<datalab>:<role>`. Existing virtual
-RoleBinding and ClusterRoleBinding rules apply without an authentication change.
+Its username is `sub`; groups are `datalab:<datalab>:<role>`. Virtual
+RoleBinding and ClusterRoleBinding rules apply.
 
 ## Credential Secrets and machine access
+
+Workload clients use the [virtual API and Kubernetes RBAC](vcluster.md#api-access).
+They do not need the runtime OAuth Secret below. See
+[Workload access](../security/workload-access.md) for the network boundary.
 
 | Secret | Namespace | Use |
 | --- | --- | --- |
@@ -199,10 +197,9 @@ RoleBinding and ClusterRoleBinding rules apply without an authentication change.
 | `<datalab>-oauth2-client` | Runtime namespace | Created only for public Data/S3 OAuth2 proxies; contains `client_id`, `client_secret`, and `cookie_secret` |
 
 The runtime copy is needed only when Data is enabled and exposed through an
-Ingress or HTTPRoute. It is created after the runtime namespace is known and
-removed when that proxy is disabled. Token exchange and virtual-cluster access
-do not need this copy. The aggregate session Secret includes OAuth fields
-delivered to sessions.
+Ingress or HTTPRoute. It uses the Datalab service namespace and is removed
+when that proxy is disabled. Token exchange and virtual-cluster access do not
+need this copy. Storage and database Secrets do not contain OAuth credentials.
 
 Anyone with the client secret can request a service-account token. Grant read
 access only to authorized callers. With `grant_type=client_credentials` and no
@@ -252,107 +249,3 @@ references; credentials stay in the referenced Secret.
 Readiness requires the observed client and credential Secret to be ready, with
 matching client credentials. Removed sources clear stale entries. Discovery
 does not grant permission to read a Secret or authorize a service request.
-
-## Session ingress
-
-Configure sign-in before users start a session. The examples use Kyverno to
-configure NGINX or APISIX session Ingress objects.
-
-### Set the shared ingress settings
-
-Set the ingress class, domain, and TLS Secret in the
-[EnvironmentConfig](installation.md#identity-and-endpoints). Use the same
-values in the session runtime installation, for example:
-
-```yaml
-clusterIngressDomain: lab.acme.com
-clusterIngressClass: apisix
-tlsCertificateRef:
-  name: wildcard-tls
-  namespace: workspace
-```
-
-Use a wildcard certificate for `*.lab.acme.com`.
-
-### Generated session resources
-
-For a Datalab named `s-jane` with a `default` session, set `ingress.domain` to
-`lab.acme.com`. The session ingress hosts include:
-
-```text
-s-jane-default.lab.acme.com
-editor-s-jane-default.lab.acme.com
-s-jane-default-editor.lab.acme.com
-data-s-jane-default.lab.acme.com
-s-jane-default-data.lab.acme.com
-```
-
-The generated ingresses carry labels that are suitable for platform policy:
-
-```yaml
-training.educates.dev/application: workshop
-training.educates.dev/component: session
-training.educates.dev/environment.name: s-jane
-```
-
-For `s-jane`, the generated client includes redirect and web-origin entries
-for the Datalab root and each declared session host:
-
-```text
-https://s-jane.lab.acme.com/*
-https://s-jane-default.lab.acme.com/*
-https://editor-s-jane-default.lab.acme.com/*
-https://s-jane-default-editor.lab.acme.com/*
-https://data-s-jane-default.lab.acme.com/*
-https://s-jane-default-data.lab.acme.com/*
-http://localhost:*
-```
-
-A service that belongs to `s-jane` can use this client. Shared browser ingress
-can use a central platform client and check the generated Datalab roles.
-
-### Apply ingress policy
-
-Apply controller settings through platform policy so they cover every session
-Ingress. The examples use Kyverno CEL policies. They need CRDs that serve
-`MutatingPolicy` and `GeneratingPolicy` in `policies.kyverno.io/v1`.
-Kyverno is required for these policies, not for Provider Datalab itself.
-Adapt the domains, issuer, and controller settings in the linked manifests.
-
-#### NGINX Ingress with OAuth2 Proxy
-
-Run OAuth2 Proxy as a shared service with its own OAuth client. Use a redirect
-URI such as `https://auth.lab.acme.com/oauth2/callback`. Its authorization
-policy must check access to the Datalab named in the requested host.
-
-Apply the [NGINX policy](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/ingress-protection/nginx-oauth2-proxy-workshop-session-protection.yaml)
-to add external-auth annotations to matching session Ingress objects.
-Set the proxy cookie domain to cover the session hosts, for example
-`.lab.acme.com`, and allow redirects only to that domain.
-
-#### APISIX Ingress configured by Kyverno
-
-The [APISIX manifest](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/ingress-protection/apisix-workshop-session-protection.yaml)
-gives Kyverno permission to create `ApisixPluginConfig` resources, generates
-one in each session namespace, and attaches it to matching Ingress objects.
-APISIX checks incoming requests; Kyverno configures the resources.
-
-The example uses `openid-connect` with a central public client named
-`datalab-sessions`. Its `opa` entry points to an external OPA service.
-The manifest does not deploy that service or supply its policy. Configure
-both for your platform so that the authorizer checks access to the requested
-Datalab. OPA is needed only for this example.
-
-The policies do not read Secrets. For a confidential central client, use the
-ingress controller's supported Secret mechanism to supply its credential.
-
-The plugin forwards the access token in `Authorization` and disables ID token,
-userinfo, and refresh token forwarding. Check that your authorizer and
-upstream service accept these settings.
-
-Kyverno generates the plugin's session secret once. Synchronization is disabled
-to keep it stable. After changing the template, recreate an existing generated
-plugin config or restart its session to apply the change.
-
-For another ingress controller, match session Ingress objects by label and
-domain, then attach its authentication and authorization settings.

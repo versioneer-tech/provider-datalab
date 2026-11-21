@@ -32,8 +32,8 @@ def environment():
     return {
         "apiVersion": "apiextensions.crossplane.io/v1beta1",
         "kind": "EnvironmentConfig",
-        "metadata": {"name": "datalab-educates",
-                     "labels": {"datalabs.pkg.internal/name": "datalab-educates"}},
+        "metadata": {"name": "datalab",
+                     "labels": {"datalabs.pkg.internal/name": "datalab"}},
         "data": {
             "iam": {"realm": "acme", "issuerURL": "https://identity.acme.com/realms/acme",
                     "internalURL": "http://keycloak.keycloak:8080/realms/acme"},

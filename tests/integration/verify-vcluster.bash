@@ -5,11 +5,9 @@
 set -Eeuo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
-source "${INTEGRATION_DIR}/educates.bash"
+source "${INTEGRATION_DIR}/runtime.bash"
 source "${INTEGRATION_DIR}/postgres.bash"
-: "${EDUCATES_DEPENDENCIES_VERSION:=2.2.1}"
 : "${KEEP_VCLUSTER_RESOURCES:=0}"
-readonly EDUCATES_NAMESPACE=educates
 readonly VCLUSTER_NAMESPACE=verify-vcluster
 readonly CONTOUR_VERSION=v1.33.7
 work_directory="$(mktemp -d /tmp/datalab-vcluster.XXXXXX)"
@@ -18,8 +16,8 @@ trap 'rm -rf "${work_directory}"' EXIT
 report_failure() {
   local result=$?
   trap - ERR
-  kube get datalab/verify-vcluster --namespace workspace || true
-  kube get datalab/s-john datalab/s-jane --namespace workspace || true
+  kube get datalabs.versioneer.at/verify-vcluster --namespace workspace || true
+  kube get datalabs.versioneer.at/s-john datalabs.versioneer.at/s-jane --namespace workspace || true
   kube get objects.kubernetes.m.crossplane.io --namespace workspace --selector crossplane.io/composite=verify-vcluster || true
   kube get statefulsets,pods,httproutes,backendtlspolicies --namespace "${VCLUSTER_NAMESPACE}" || true
   kube get events --namespace "${VCLUSTER_NAMESPACE}" --sort-by=.lastTimestamp | tail -25 || true
@@ -32,26 +30,50 @@ trap report_failure ERR
 build_catalog_image() {
   local digest
   digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,initialize.py} | sha256sum | cut -c1-16)"
-  catalog_image="datalab-stac:${digest}"
+  catalog_image="${VCLUSTER_CATALOG_IMAGE:-}"
   mkdir -p "${work_directory}/docker" "${work_directory}/build/tests/vcluster"
   cp "${REPO_ROOT}/tests/vcluster/initialize.py" "${work_directory}/build/tests/vcluster/"
-  if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${catalog_image}" >/dev/null 2>&1; then
-    DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${catalog_image}" \
-      --file "${REPO_ROOT}/tests/vcluster/catalog.Dockerfile" "${work_directory}/build"
+  if [[ -z "${catalog_image}" ]]; then
+    require_command docker
+    catalog_image="$(test_image_name "datalab-stac:${digest}")"
+    if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${catalog_image}" >/dev/null 2>&1; then
+      DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${catalog_image}" \
+        --file "${REPO_ROOT}/tests/vcluster/catalog.Dockerfile" "${work_directory}/build"
+    fi
+    publish_test_image "${catalog_image}" "${work_directory}/docker"
   fi
-  if ! docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl inspecti "docker.io/library/${catalog_image}" >/dev/null 2>&1; then
-    DOCKER_CONFIG="${work_directory}/docker" KUBECONFIG="${PROVIDER_DATALAB_KUBECONFIG}" kind load docker-image "${catalog_image}" --name "${KIND_CLUSTER_NAME}"
-  fi
-  python3 - "${REPO_ROOT}/examples/vcluster/stac-fastapi.yaml" "${catalog_image}" >"${work_directory}/catalog.json" <<'CATALOG'
+  python3 - "${REPO_ROOT}/examples/vcluster/stac-fastapi.yaml" "${catalog_image}" "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" >"${work_directory}/catalog.json" <<'CATALOG'
 import json, sys, yaml
 from pathlib import Path
-print(json.dumps(list(yaml.safe_load_all(Path(sys.argv[1]).read_text().replace('__CATALOG_IMAGE__', sys.argv[2])))))
+documents = list(yaml.safe_load_all(Path(sys.argv[1]).read_text().replace('__CATALOG_IMAGE__', sys.argv[2])))
+if sys.argv[3]:
+    for document in documents:
+        template = document.get('spec', {}).get('template')
+        if template:
+            template['spec']['imagePullSecrets'] = [{'name': sys.argv[3]}]
+print(json.dumps(documents))
 CATALOG
+}
+
+build_client_image() {
+  local digest
+  if [[ -n "${VCLUSTER_CLIENT_IMAGE:-}" ]]; then
+    client_image="${VCLUSTER_CLIENT_IMAGE}"
+    return
+  fi
+  require_command docker
+  digest="$(sha256sum "${REPO_ROOT}/tests/vcluster/client.Dockerfile" | cut -c1-16)"
+  client_image="$(test_image_name "datalab-vcluster-client:${digest}")"
+  mkdir -p "${work_directory}/client-build" "${work_directory}/docker"
+  if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${client_image}" >/dev/null 2>&1; then
+    DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${client_image}" \
+      --file "${REPO_ROOT}/tests/vcluster/client.Dockerfile" "${work_directory}/client-build"
+  fi
+  publish_test_image "${client_image}" "${work_directory}/docker"
 }
 
 install_prerequisites() {
   create_ingress_certificate
-  install_educates
   install_pgo
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
@@ -90,7 +112,7 @@ install_prerequisites() {
   fi
   kube patch deployment/keycloak --namespace keycloak --type=strategic --patch "$(
     jq -n --arg checksum "$(sha256sum "${work_directory}/issuer.crt" | cut -d' ' -f1)" '{spec:{template:{
-      metadata:{annotations:{"datalabs.pkg.internal/issuer-checksum":$checksum}},
+      metadata:{annotations:{"datalabs.versioneer.at/issuer-checksum":$checksum}},
       spec:{containers:[{name:"keycloak",args:["start-dev","--import-realm","--https-certificate-file=/tls/tls.crt","--https-certificate-key-file=/tls/tls.key"],
         volumeMounts:[{name:"tls",mountPath:"/tls",readOnly:true}]}],
         volumes:[{name:"tls",secret:{secretName:"verify-vcluster-issuer"}}]}}}}'
@@ -101,7 +123,7 @@ install_prerequisites() {
   kube wait gateway/verify-vcluster --namespace projectcontour --for=condition=Programmed --timeout=10m
   kube wait deployment --namespace projectcontour --selector gateway.networking.k8s.io/gateway-name=verify-vcluster \
     --for=condition=Available --timeout=10m
-  kube apply -f "${MANIFEST_DIR}/vcluster/environmentconfig.yaml"
+  apply_environment_config "${MANIFEST_DIR}/vcluster/environmentconfig.yaml"
   kube patch environmentconfig/datalab-vcluster-it --type=merge \
     --patch "$(jq -n --rawfile ca "${work_directory}/issuer.crt" --rawfile gateway_ca "${work_directory}/gateway.crt" '{data:{vcluster:{issuerCA:$ca},ingress:{certificateAuthority:$gateway_ca}}}')"
 }
@@ -110,13 +132,13 @@ install_prerequisites() {
 verify_custom_connections() {
   local team namespace key deadline expected
   kube patch environmentconfig/datalab-custom --type=merge --patch \
-    '{"data":{"customSecrets":[{"name":"apikey-1"},{"name":"apikey-2"}],"defaults":{"data":{"enabled":false},"registry":{"enabled":false},"vcluster":{"enabled":false}}}}'
+    '{"data":{"customSecrets":[{"name":"apikey-1"},{"name":"apikey-2"}],"defaults":{"data":{"enabled":false},"registry":{"enabled":false}}}}'
   for team in s-john s-jane; do
     kube create secret generic "${team}" --namespace workspace \
       --from-literal=AWS_ACCESS_KEY_ID=minioadmin --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin \
       --dry-run=client -o yaml | kube apply -f -
     kube apply -f - <<DATALAB
-apiVersion: pkg.internal/v1beta2
+apiVersion: versioneer.at/v1
 kind: Datalab
 metadata:
   name: ${team}
@@ -124,14 +146,13 @@ metadata:
 spec:
   environmentName: datalab-custom
   users: [verify-s3]
-  sessions: []
 DATALAB
   done
   for team in s-john s-jane; do
     namespace="$(wait_for_runtime_namespace "${team}")"
     [[ "${namespace}" == "${team}" ]]
-    kube wait "datalab/${team}" --namespace workspace --for=condition=Ready --timeout=10m
-    kube get "datalab/${team}" --namespace workspace -o json \
+    kube wait "datalabs.versioneer.at/${team}" --namespace workspace --for=condition=Ready --timeout=10m
+    kube get "datalabs.versioneer.at/${team}" --namespace workspace -o json \
       | jq -e '[.status.connections[]? | select(.type == "custom")] | length == 0' >/dev/null
     for key in apikey-1 apikey-2; do
       [[ "${team}" != s-jane || "${key}" != apikey-2 ]] || continue
@@ -143,31 +164,95 @@ DATALAB
     expected='["apikey-1","apikey-2"]'
     [[ "${team}" != s-jane ]] || expected='["apikey-1"]'
     deadline=$((SECONDS + 600))
-    until kube get "datalab/${team}" --namespace workspace -o json | jq -e --argjson expected "${expected}" \
+    until kube get "datalabs.versioneer.at/${team}" --namespace workspace -o json | jq -e --argjson expected "${expected}" \
       '([.status.connections[]? | select(.type == "custom") | .name] | sort) == $expected and all(.status.connections[]?; .ready)' >/dev/null; do
       ((SECONDS < deadline)) || return 1
       sleep 2
     done
-    kube wait "datalab/${team}" --namespace workspace --for=condition=Ready --timeout=5m
+    kube wait "datalabs.versioneer.at/${team}" --namespace workspace --for=condition=Ready --timeout=5m
     python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
-      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace workspace --datalab "${team}"
+      --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace workspace --datalab "${team}"
   done
   printf 'PASS John has both custom keys; Jane has only apikey-1; missing keys do not block readiness\n'
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
-    kube delete datalab/s-john datalab/s-jane --namespace workspace --wait=false
+    kube delete datalabs.versioneer.at/s-john datalabs.versioneer.at/s-jane --namespace workspace --wait=false
     for team in s-john s-jane; do
-      kube wait "datalab/${team}" --namespace workspace --for=delete --timeout=10m
+      kube wait "datalabs.versioneer.at/${team}" --namespace workspace --for=delete --timeout=10m
       python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
-        --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --namespace workspace --datalab "${team}" --deleted
+        --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace workspace --datalab "${team}" --deleted
       kube wait "namespace/${team}" --for=delete --timeout=10m
     done
     kube delete secret/s-john secret/s-jane --namespace workspace
   fi
 }
 
+verify_hibernation() {
+  local previous_pvcs services deadline
+  previous_pvcs="$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')"
+  services="$(kube get service/vcluster-vc0 service/vcluster-vc1 --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[].metadata.uid]')"
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge \
+    --patch '{"spec":{"vclusters":{"vc0":{"hibernated":true},"vc1":{"hibernated":true}}}}'
+  deadline=$((SECONDS + 900))
+  until kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
+    .metadata.generation as $generation |
+    (.status.vclusters | length == 2) and
+    all(.status.vclusters[]; .phase == "Hibernated" and .observedGeneration == $generation)
+  ' >/dev/null; do
+    ((SECONDS < deadline)) || return 1
+    sleep 3
+  done
+  kube get statefulset/vcluster-vc0 statefulset/vcluster-vc1 --namespace "${VCLUSTER_NAMESPACE}" -o json \
+    | jq -e 'all(.items[]; .spec.replicas == 0 and (.status.replicas // 0) == 0)' >/dev/null
+  kube get pods --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -e --argjson services "${services}" '
+    all(.items[]; all(.metadata.ownerReferences[]?;
+      .kind != "Service" or (.uid as $uid | $services | index($uid) == null)))
+  ' >/dev/null
+  kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
+    all(.status.connections[] | select(.type == "vcluster"); .ready == false)
+  ' >/dev/null
+  kube get postgrescluster/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
+    | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  [[ "$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')" == "${previous_pvcs}" ]]
+  kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=5m
+  printf 'PASS both instances hibernate without synced Pods and retain their PVCs and PostgreSQL\n'
+
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge \
+    --patch '{"spec":{"vclusters":{"vc0":{"hibernated":false},"vc1":{"hibernated":false}}}}'
+  deadline=$((SECONDS + 900))
+  until kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
+    .metadata.generation as $generation |
+    (.status.vclusters | length == 2) and
+    all(.status.vclusters[]; .phase == "Running" and .observedGeneration == $generation)
+  ' >/dev/null; do
+    ((SECONDS < deadline)) || return 1
+    sleep 3
+  done
+  kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
+  [[ "$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')" == "${previous_pvcs}" ]]
+  printf 'PASS both instances resume with the same PVC identities\n'
+}
+
 verify_vcluster() {
   local service gateway_ip deadline administrator_secret editor_secret other_secret
-  kube apply -f "${MANIFEST_DIR}/vcluster/datalab.yaml"
+  if [[ -n "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" ]]; then
+    kube patch environmentconfig/datalab-vcluster-it --type=merge --patch "$(
+      jq -cn --arg name "${PROVIDER_DATALAB_IMAGE_PULL_SECRET}" \
+        '{data:{customSecrets:[{name:$name,namespace:"workspace"}]}}'
+    )"
+  fi
+  python3 - "${MANIFEST_DIR}/vcluster/datalab.yaml" "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" <<'DATALAB' | kube apply -f -
+from pathlib import Path
+import sys
+import yaml
+
+document = yaml.safe_load(Path(sys.argv[1]).read_text())
+if sys.argv[2]:
+    document['spec']['vclusters']['vc0']['secretBindings'].append({
+        'type': 'custom', 'name': sys.argv[2],
+        'target': {'namespace': 'demo', 'name': sys.argv[2]},
+    })
+yaml.safe_dump(document, sys.stdout)
+DATALAB
   runtime_namespace="$(wait_for_runtime_namespace verify-vcluster)"
   [[ "${runtime_namespace}" == "${VCLUSTER_NAMESPACE}" ]]
   kube apply -f "${MANIFEST_DIR}/vcluster/postgres-network.yaml"
@@ -181,9 +266,9 @@ verify_vcluster() {
     ((SECONDS < deadline)) || return 1
     sleep 5
   done
-  wait_for_connection_secret verify-vcluster-datalab verify-vcluster 600 POSTGRES_PG0_PASSWORD POSTGRES_PG0_HOST
+  wait_for_connection_secret verify-vcluster-postgres-pg0 verify-vcluster 600 password host
   connection_secret() {
-    kube get datalab/verify-vcluster --namespace workspace -o json | jq -er --arg instance "$1" --arg group "$2" \
+    kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -er --arg instance "$1" --arg group "$2" \
       '.status.connections[] | select(.type == "vcluster" and .instance == $instance and .group == $group) | .secretRef.name'
   }
   administrator_secret="$(connection_secret vc0 cluster-admin)"
@@ -194,8 +279,8 @@ verify_vcluster() {
     kube get "secret/${profile}" --namespace workspace -o json \
       | jq -e '(.data | keys | sort) == ["client-id", "issuer-url", "kubeconfig"]' >/dev/null
   done
-  kube wait datalab/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
-  kube get datalab/verify-vcluster --namespace workspace -o json | python3 -c '
+  kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=15m
+  kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | python3 -c '
 import json, sys
 status = json.load(sys.stdin)["status"]
 assert status["oauth2"] == [{"name": "verify-vcluster", "type": "client", "issuerUrl": "https://keycloak.keycloak:8443/realms/integration", "secretRef": {"name": "verify-vcluster-oauth-client", "namespace": "workspace"}, "ready": True}]
@@ -205,7 +290,7 @@ assert len(connections) == 4 and all(c["ready"] for c in connections)
 assert {c["instance"] for c in connections} == {"vc0", "vc1"}
 assert all(set(c) <= {"name", "type", "instance", "group", "targetNamespace", "role", "endpoint", "ready", "secretRef"} for c in connections)
 print("PASS connection status contains ready profile references without credentials")'
-  if kube patch datalab/verify-vcluster --namespace workspace --subresource=status --dry-run=server --type=merge \
+  if kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --subresource=status --dry-run=server --type=merge \
     --patch '{"status":{"oauth2":[{"name":"duplicate","type":"client","issuerUrl":"https://identity.example","secretRef":{"name":"test","namespace":"workspace"},"ready":false},{"name":"duplicate","type":"client","issuerUrl":"https://identity.example","secretRef":{"name":"test","namespace":"workspace"},"ready":false}]}}' \
     >"${work_directory}/oauth-admission.log" 2>&1; then
     printf 'Kubernetes admitted duplicate OAuth2 discovery names.\n' >&2
@@ -214,7 +299,7 @@ print("PASS connection status contains ready profile references without credenti
   grep -F 'Duplicate value' "${work_directory}/oauth-admission.log" >/dev/null
   printf 'PASS OAuth2 discovery is separate and Kubernetes rejects duplicate client names\n'
   python3 "${INTEGRATION_DIR}/verify-oauth-discovery.py" \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --datalab verify-vcluster
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster
   for instance in vc0 vc1; do
     if kube create --dry-run=server --as "system:serviceaccount:${runtime_namespace}:vc-vcluster-${instance}" \
       -f - >"${work_directory}/storage-admission.log" 2>&1 <<PVC
@@ -242,30 +327,33 @@ PVC
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod/verify-vcluster-client --namespace workspace --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/vcluster/client.yaml" \
-    ADMINISTRATOR_SECRET "${administrator_secret}" EDITOR_SECRET "${editor_secret}" OTHER_SECRET "${other_secret}"
+    ADMINISTRATOR_SECRET "${administrator_secret}" EDITOR_SECRET "${editor_secret}" OTHER_SECRET "${other_secret}" \
+    CLIENT_IMAGE "${client_image}" IMAGE_PULL_SECRETS "$(test_image_pull_secrets)"
   kube wait pod/verify-vcluster-client --namespace workspace --for=condition=Ready --timeout=5m
   cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
   kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
-  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-removed
-  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3","verify-vcluster-member"]}}'
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}"
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-removed
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3","verify-vcluster-member"]}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}"
+  verify_hibernation
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --check-only
   kube rollout restart statefulset/vcluster-vc0 --namespace "${runtime_namespace}"
   kube rollout status statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --timeout=10m
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --check-only
-  kube patch datalab/verify-vcluster --namespace workspace --type=json \
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --check-only
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"replace","path":"/spec/vclusters/vc0/groups/0/role","value":"view"}]'
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --read-only
-  kube patch datalab/verify-vcluster --namespace workspace --type=json \
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --read-only
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --revoked
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --revoked
   kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
-  kube patch datalab/verify-vcluster --namespace workspace --type=json --patch '[{"op":"remove","path":"/spec/vclusters/vc0"}]'
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"replace","path":"/spec/volumes","value":{}},{"op":"remove","path":"/spec/vclusters/vc0"}]'
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --other-only
-  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --member-roles --member-instance vc1
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1
   kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
   printf 'PASS PostgreSQL remains ready after removing vc0\n'
 }
@@ -286,15 +374,13 @@ value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "name
 result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
 assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
 print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
-for version in ('v1beta2',):
-    source['apiVersion'] = 'pkg.internal/' + version
-    for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
-        for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
-            value = deepcopy(source)
-            config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
-            value['spec'][field] = {key: config}
-            result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
-            assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
+for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+    for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
+        value = deepcopy(source)
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        value['spec'][field] = {key: config}
+        result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
+        assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
 print('PASS Kubernetes admission rejects invalid instance names for all maps')
 ADMISSION
 }
@@ -303,13 +389,14 @@ main() {
   require_cluster
   install_prerequisites
   build_catalog_image
+  build_client_image
   verify_name_admission
   verify_custom_connections
   verify_vcluster
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete pod/verify-vcluster-client configmap/verify-vcluster-client --namespace workspace --ignore-not-found
-    kube delete datalab/verify-vcluster --namespace workspace --wait=false
-    kube wait datalab/verify-vcluster --namespace workspace --for=delete --timeout=10m
+    kube delete datalabs.versioneer.at/verify-vcluster --namespace workspace --wait=false
+    kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=delete --timeout=10m
     kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=10m
     stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
   fi

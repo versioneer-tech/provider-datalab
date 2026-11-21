@@ -31,6 +31,17 @@ def load_helpers(*names):
 
 
 class HelperTests(unittest.TestCase):
+    def test_build_rejects_duplicate_pipeline_steps(self):
+        with TemporaryDirectory(prefix="test-pipeline-") as directory:
+            root = Path(directory)
+            (root / "composition").mkdir()
+            (root / "composition/settings.yaml").write_text("responseTTL: 5m\n")
+            (root / "composition/pipeline.yaml").write_text(
+                "spec:\n  pipeline:\n  - step: registry\n  - step: registry\n"
+            )
+            with self.assertRaisesRegex(ValueError, "step names must be unique"):
+                BUILDER["build"](root)
+
     def test_backup_size_controls_enablement(self):
         enabled = load_helpers("_backup_enabled")["_backup_enabled"]
         for size in (None, "", "0", "0Gi", "0.0Gi", "0.0G", "0e3"):
@@ -64,6 +75,203 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(
             token("sample:redis", suffix="", length=28), "E6xDTnRLBJ1XV75rV3xJDiEsGpHp"
         )
+
+
+class VolumeSnapshotTests(unittest.TestCase):
+    def run_backup(self, *, phase="Bound", ready=True, error=False, policy="Delete",
+                   incomplete=False, cleanup_pending=False, attempts=1):
+        module = runpy.run_path(str(ROOT / "scripts/volume-snapshot.py"))
+        label, source = module["LABEL"], module["SOURCE"]
+        calls = []
+
+        def snapshot(name, uid="pvc-current", volume="analysis", completed=True):
+            return {"metadata": {"name": name, "uid": name + "-uid",
+                                 "creationTimestamp": name,
+                                 "labels": {label: volume, source: uid}},
+                    "spec": {"source": {"persistentVolumeClaimName": "volume-analysis"}},
+                    "status": {"readyToUse": completed}}
+
+        snapshots = {item["metadata"]["name"]: item for item in (
+            snapshot("20261120"), snapshot("20261121"),
+            snapshot("old-volume", uid="pvc-replaced"), snapshot("other-volume", volume="another"),
+        )}
+        if incomplete:
+            snapshots["incomplete"] = snapshot("incomplete", completed=False)
+
+        class API:
+            def call(self, method, path, body=None):
+                calls.append((method, path, body))
+                if "/volumesnapshotclasses/" in path:
+                    return {"deletionPolicy": policy}
+                if "/persistentvolumeclaims/" in path:
+                    return {"metadata": {"uid": "pvc-current"}, "status": {"phase": phase}}
+                if method == "POST":
+                    name = "20261122-" + str(sum(method == "POST" for method, _, _ in calls))
+                    item = snapshot(name, completed=ready)
+                    if error:
+                        item["status"]["error"] = {"message": "failed"}
+                    snapshots[name] = item
+                    return item
+                if method == "DELETE":
+                    name = path.rsplit("/", 1)[-1]
+                    self_uid = snapshots[name]["metadata"]["uid"]
+                    assert body["preconditions"]["uid"] == self_uid
+                    if cleanup_pending:
+                        snapshots[name]["metadata"]["deletionTimestamp"] = "2026-11-22T00:00:00Z"
+                    else:
+                        del snapshots[name]
+                    return {}
+                if "?" in path:
+                    return {"items": list(snapshots.values())}
+                return snapshots[path.rsplit("/", 1)[-1]]
+
+        failure = None
+        with redirect_stdout(StringIO()):
+            for _ in range(attempts):
+                try:
+                    module["backup"](API(), "demo", "analysis", "volume-analysis", "snapshots", 1, timeout=0)
+                except RuntimeError as error_result:
+                    failure = error_result
+        return calls, failure, snapshots
+
+    def test_completed_backup_prunes_only_older_completed_snapshots_of_this_pvc(self):
+        calls, failure, snapshots = self.run_backup()
+        self.assertIsNone(failure)
+        created = next(body for method, _, body in calls if method == "POST")
+        self.assertEqual(created["spec"]["source"]["persistentVolumeClaimName"], "volume-analysis")
+        self.assertNotIn("ownerReferences", created["metadata"])
+        removed = [(path.rsplit("/", 1)[-1], body["preconditions"])
+                   for method, path, body in calls if method == "DELETE"]
+        self.assertEqual(removed, [("20261121", {"uid": "20261121-uid"}),
+                                   ("20261120", {"uid": "20261120-uid"})])
+        self.assertEqual(set(snapshots), {"20261122-1", "old-volume", "other-volume"})
+
+    def test_snapshot_failure_or_timeout_preserves_completed_backups(self):
+        for options in ({"ready": False}, {"error": True}):
+            with self.subTest(options=options):
+                calls, failure, _ = self.run_backup(**options)
+                self.assertIsInstance(failure, RuntimeError)
+                self.assertFalse(any(method == "DELETE" for method, _, _ in calls))
+
+    def test_unbound_source_does_not_create_a_backup(self):
+        calls, failure, _ = self.run_backup(phase="Pending")
+        self.assertIsInstance(failure, RuntimeError)
+        self.assertFalse(any(method == "POST" for method, _, _ in calls))
+
+    def test_retained_snapshot_class_does_not_start_an_unbounded_backup(self):
+        calls, failure, _ = self.run_backup(policy="Retain")
+        self.assertIsInstance(failure, RuntimeError)
+        self.assertFalse(any(method in ("POST", "DELETE") for method, _, _ in calls))
+
+    def test_repeated_failures_keep_one_incomplete_attempt_and_all_recovery_points(self):
+        for options in ({"ready": False}, {"ready": False, "error": True}):
+            with self.subTest(options=options):
+                calls, failure, snapshots = self.run_backup(attempts=3, **options)
+                self.assertIsInstance(failure, RuntimeError)
+                self.assertEqual(sum(method == "POST" for method, _, _ in calls), 3)
+                self.assertEqual(set(snapshots), {"20261120", "20261121", "old-volume", "other-volume", "20261122-3"})
+
+    def test_cleanup_must_finish_before_a_new_snapshot_is_created(self):
+        calls, failure, snapshots = self.run_backup(incomplete=True, cleanup_pending=True, attempts=3)
+        self.assertIn("Waiting for previous snapshot cleanup", str(failure))
+        self.assertFalse(any(method == "POST" for method, _, _ in calls))
+        self.assertIn("20261121", snapshots)
+        self.assertEqual(sum(method == "DELETE" for method, _, _ in calls), 1)
+
+    def test_provider_can_observe_the_class_and_bind_the_operator_owned_snapshot_role(self):
+        objects = list(yaml.safe_load_all((ROOT / "dependencies/rbac.yaml").read_text()))
+        roles = {item["metadata"]["name"]: item for item in objects if item["kind"] == "ClusterRole"}
+        bindings = [item for item in objects if item["kind"] == "ClusterRoleBinding"
+                    and {"kind": "ServiceAccount", "name": "provider-kubernetes", "namespace": "crossplane"}
+                    in item.get("subjects", [])]
+        rules = [rule for binding in bindings for rule in roles[binding["roleRef"]["name"]]["rules"]]
+
+        def allowed(group, resource, verb, name=None):
+            return any(group in rule["apiGroups"] and resource in rule["resources"]
+                       and verb in rule["verbs"]
+                       and ("resourceNames" not in rule or name in rule["resourceNames"]) for rule in rules)
+
+        for verb in ("get", "list", "watch"):
+            self.assertTrue(allowed("snapshot.storage.k8s.io", "volumesnapshotclasses", verb))
+        for verb in ("get", "list", "watch", "create", "update", "patch", "delete"):
+            self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterrolebindings", verb))
+        self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "datalab-vcluster-volume-snapshots"))
+        self.assertFalse(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "cluster-admin"))
+
+
+class VclusterCleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.cleanup = runpy.run_path(str(ROOT / "scripts/vcluster-cleanup.py"))["cleanup_once"]
+        self.sts = {"metadata": {"uid": "control-uid", "generation": 1, "annotations": {
+            "datalabs.versioneer.at/lifecycle-request": json.dumps({"generation": 2, "hibernated": True})}},
+            "spec": {"replicas": 0}}
+        self.pods = []
+        self.deleted = []
+
+    def call(self, method, path, body=None):
+        self.assertIn("/namespaces/test-team/", path)
+        if method == "DELETE":
+            self.assertIn("/pods/", path)
+            self.deleted.append((path.rsplit("/", 1)[1], body["preconditions"]["uid"]))
+            return {}
+        if "/statefulsets/" in path:
+            return json.loads(json.dumps(self.sts))
+        if "/services/" in path:
+            return {"metadata": {"uid": "service-uid"}}
+        self.assertTrue(path.endswith("/pods"))
+        return {"items": self.pods}
+
+    def pod(self, name, kind="Service", owner="service-uid", phase="Running"):
+        return {"metadata": {"name": name, "uid": name + "-uid", "ownerReferences": [
+            {"kind": kind, "uid": owner}], "labels": {"vcluster.loft.sh/managed-by": "vcluster-vc0"}},
+                "status": {"phase": phase}}
+
+    def test_cleanup_waits_for_control_plane_and_keeps_other_instances(self):
+        self.pods = [self.pod("control", "StatefulSet", "control-uid"), self.pod("worker")]
+        self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.assertEqual(self.deleted, [])
+        self.pods = [self.pod("worker"), self.pod("pending", phase="Pending"),
+                     self.pod("coredns"), self.pod("application-controller"),
+                     self.pod("other-instance", owner="other-service"),
+                     {"metadata": {"name": "shared-host-service"}}]
+        self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.assertEqual(self.deleted, [(name, name + "-uid") for name in
+                                       ("worker", "pending", "coredns", "application-controller")])
+
+    def test_cleanup_is_repeatable_and_never_deletes_storage(self):
+        self.pods = [self.pod("worker")]
+        self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.pods[0]["metadata"]["deletionTimestamp"] = "2026-11-20T00:00:00Z"
+        self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.assertEqual(len(self.deleted), 1)
+        self.pods = []
+        self.assertTrue(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.assertTrue(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+
+    def test_cleanup_does_not_run_against_a_resumed_control_plane(self):
+        self.sts["spec"]["replicas"] = 1
+        self.pods = [self.pod("resumed-worker")]
+        self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
+        self.assertEqual(self.deleted, [])
+
+    def test_resume_during_pod_list_invalidates_cleanup(self):
+        original = self.call
+
+        def resume(method, path, body=None):
+            result = original(method, path, body)
+            if path.endswith('/pods'):
+                self.sts['metadata']['generation'] += 1
+                self.sts['spec']['replicas'] = 1
+            return result
+
+        self.call = resume
+        self.pods = [self.pod('resumed-worker')]
+        self.assertFalse(self.cleanup(self, 'test-team', 'vcluster-vc0', 2))
+        self.assertEqual(self.deleted, [])
+        self.sts['metadata']['annotations']['datalabs.versioneer.at/lifecycle-request'] = json.dumps(
+            {'generation': 3, 'hibernated': False})
+        with self.assertRaisesRegex(RuntimeError, 'superseded'):
+            self.cleanup(self, 'test-team', 'vcluster-vc0', 2)
 
 
 class VclusterCredentialTests(unittest.TestCase):
@@ -435,7 +643,128 @@ class VclusterDelegatedTokenTests(unittest.TestCase):
 
 
 class BuildAndHarnessTests(unittest.TestCase):
-    def test_test_ttl_override_cannot_replace_the_deployment_artifact(self):
+    def test_existing_cluster_does_not_adopt_other_namespaces(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+source "$1"
+kube() { printf 'crossplane '; }
+check_test_namespaces
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already exists outside this test suite", result.stderr)
+
+    def test_network_traffic_checks_run_only_in_kind(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER="$2"
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+export PROVIDER_DATALAB_CONTEXT=test-virtual
+source "$1"
+require_cluster() { :; }
+require_command() { :; }
+apply_verification_resources() { :; }
+wait_for_verification_resources() { printf 'network probes\\n'; }
+python3() { printf 'resource limit checks\\n'; }
+run_network_checks() { printf 'network traffic checks\\n'; }
+cleanup_successful_verification() { :; }
+main
+'''
+        for mode in ("kind", "existing"):
+            with self.subTest(mode=mode):
+                result = subprocess.run(["bash", "-c", script, "test",
+                                         str(ROOT / "tests/integration/verify-network.bash"), mode],
+                                        capture_output=True, text=True, check=True)
+                self.assertIn("resource limit checks", result.stdout)
+                if mode == "kind":
+                    self.assertIn("network traffic checks", result.stdout)
+                    self.assertNotIn("SKIP", result.stdout)
+                else:
+                    self.assertNotIn("network probes", result.stdout)
+                    self.assertNotIn("network traffic checks", result.stdout)
+                    self.assertIn("SKIP NetworkPolicy traffic checks", result.stdout)
+
+    def test_existing_cluster_requires_an_explicit_context(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+unset PROVIDER_DATALAB_CONTEXT
+source "$1"
+kube() { printf 'unexpected Kubernetes call\\n'; }
+require_cluster
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("explicit kubeconfig and context", result.stderr)
+        self.assertNotIn("unexpected Kubernetes call", result.stdout)
+
+    def test_existing_cluster_uses_only_the_selected_target(self):
+        with TemporaryDirectory(prefix="test-cluster-target-") as directory:
+            kubectl = Path(directory) / "kubectl"
+            kubectl.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            kubectl.chmod(0o755)
+            script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
+export PROVIDER_DATALAB_CONTEXT=test-virtual
+source "$1"
+PATH="$2:/usr/bin:/bin"
+kind_cluster_exists() { printf 'unexpected Kind call\\n'; return 1; }
+export_kind_kubeconfig() { printf 'unexpected kubeconfig write\\n'; return 1; }
+require_cluster
+kube get namespaces
+'''
+            result = subprocess.run(["bash", "-c", script, "test",
+                                     str(ROOT / "tests/integration/lib.bash"), directory],
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout.splitlines(), [
+                "--kubeconfig", "/test/selected.kubeconfig", "--context", "test-virtual",
+                "get", "namespaces",
+            ])
+
+    def test_existing_cluster_does_not_load_images_into_kind(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing
+source "$1"
+docker() { printf '%s\\n' "$*"; }
+kind() { printf 'unexpected Kind call\\n'; return 1; }
+publish_test_image registry.example.org/tests/client:test /test/empty-docker-config
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/lib.bash")],
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), "push registry.example.org/tests/client:test")
+
+    def test_cluster_settings_reach_every_environment(self):
+        configure = runpy.run_path(str(ROOT / "tests/integration/environment.py"))["configure"]
+        documents = [{"data": {"network": {"internalEgress": [{"namespace": "minio"}]}}},
+                     {"data": {"vcluster": {"resources": {"limits": {"cpu": "4"}}}}}]
+        result = configure(documents, "test-storage", "10.20.0.0/16", "10.30.0.0/16,10.40.0.0/16")
+        for item in result:
+            self.assertEqual(item["data"]["network"]["serviceCIDR"], "10.20.0.0/16")
+            self.assertEqual(item["data"]["network"]["podCIDRs"], ["10.30.0.0/16", "10.40.0.0/16"])
+            self.assertEqual(item["data"]["vcluster"]["storageClasses"], {
+                "allowed": ["test-storage"], "default": "test-storage",
+            })
+        self.assertEqual(result[0]["data"]["network"]["internalEgress"], [{"namespace": "minio"}])
+        self.assertEqual(result[1]["data"]["vcluster"]["resources"]["limits"]["cpu"], "4")
+        with self.assertRaises(ValueError):
+            configure(documents, "test-storage", "invalid", "10.30.0.0/16")
+
+    def test_registry_bucket_has_storage_credentials(self):
+        manifests = ROOT / "tests/integration/manifests"
+        datalab = yaml.safe_load((manifests / "registry/datalab.yaml").read_text())
+        bucket = yaml.safe_load((manifests / "registry/bucket.yaml").read_text())
+        secrets = {
+            (item["metadata"]["namespace"], item["metadata"]["name"])
+            for item in yaml.safe_load_all((manifests / "storage-secrets.yaml").read_text())
+            if item["kind"] == "Secret"
+        }
+        secret_name = bucket["spec"]["containers"][0]["envFrom"][0]["secretRef"]["name"]
+        self.assertEqual(secret_name, datalab["metadata"]["name"])
+        self.assertIn((datalab["metadata"]["namespace"], secret_name), secrets)
+
+    def test_ttl_override_cannot_replace_deployment_artifact(self):
         artifact = ROOT / "composition.yaml"
         original = artifact.read_bytes()
         result = subprocess.run(

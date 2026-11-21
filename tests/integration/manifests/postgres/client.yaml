@@ -6,6 +6,8 @@ kind: Pod
 metadata:
   name: __PROBE_NAME__
   namespace: __PROBE_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: datalab-service-probe
 spec:
   restartPolicy: Never
   containers:
@@ -16,7 +18,7 @@ spec:
         - name: POSTGRES_URL
           valueFrom:
             secretKeyRef:
-              name: __DATALAB_SECRET__
+              name: __CONNECTION_SECRET__
               key: __POSTGRES_URL_KEY__
         - name: PGCONNECT_TIMEOUT
           value: "10"

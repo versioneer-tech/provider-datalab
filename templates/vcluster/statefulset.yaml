@@ -16,11 +16,11 @@ spec:
       release: ${runtime}
   serviceName: ${headless_service}
   podManagementPolicy: Parallel
-  replicas: 1
+  replicas: ${replicas}
   template:
     metadata:
       annotations:
-        datalabs.pkg.internal/configuration-checksum: ${configuration_checksum}
+        datalabs.versioneer.at/configuration-checksum: ${configuration_checksum}
       labels:
         app: ${runtime}
         release: ${runtime}
@@ -47,7 +47,7 @@ spec:
           claimName: ${data_pvc}
       initContainers:
       - name: kubernetes
-        image: ghcr.io/loft-sh/kubernetes:v1.36.0
+        image: ghcr.io/loft-sh/kubernetes:v1.36.6
         volumeMounts:
         - mountPath: /binaries
           name: binaries
@@ -68,7 +68,7 @@ spec:
       enableServiceLinks: true
       containers:
       - name: syncer
-        image: ghcr.io/loft-sh/vcluster-oss:0.36.1
+        image: ghcr.io/loft-sh/vcluster-oss:0.38.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

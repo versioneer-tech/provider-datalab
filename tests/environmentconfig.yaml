@@ -4,21 +4,23 @@
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
-  name: datalab-educates
+  name: datalab
   labels:
-    datalabs.pkg.internal/name: datalab-educates
+    datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   iam:
     realm: acme
+    redirectURIs:
+    - http://localhost:8080/callback
   ingress:
     class: nginx
     domain: lab.acme.com
@@ -37,11 +39,6 @@ data:
     provider: Other
     region: acme
     secretNamespace: datalab
-    type: s3
-  storageClasses:
-    allowed:
-    - sbs-default
-    - sbs-default-retain
   network:
     externalEgressCIDRs:
     - 0.0.0.0/0
@@ -65,33 +62,16 @@ data:
       - protocol: TCP
         port: 9000
     excludePolicies: []
-  packages:
-    - name: awscli
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-    - name: rclone
-      files:
-        - image:
-            url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
-    vcluster:
-      enabled: true
     registry:
       enabled: true
     data:
       enabled: true
       readOnlyMount: false
-    quota:
-      memory: 2Gi
-      storage: 1Gi
-      budget: medium
     overallQuota:
       storage: 100Gi
     security:
       policy: baseline
-      kubernetesAccess: true
-      kubernetesRole: edit
       externalEgress: true
   database:
     tlsRoute:
@@ -109,14 +89,14 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
     registry: registry:3.1.2
-    rclone: rclone/rclone:1.71.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.12-ubi8
-    mongoBackup: mongo:8.0.12
-    redis: quay.io/opstree/redis:v7.0.15
-    redisBackup: redis:7.0.15
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    rclone: rclone/rclone:1.76.0
+    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
+    mongoBackup: mongo:8.0.38
+    redis: quay.io/opstree/redis:v7.2.17
+    redisBackup: redis:7.2.17
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -127,6 +107,8 @@ data:
       default: sbs-default
   iam:
     realm: acme
+    redirectURIs:
+    - http://localhost:8080/callback
     issuerURL: https://identity.acme.com/realms/acme
     internalURL: http://keycloak.keycloak:8080/realms/acme
     extraAudiences:
@@ -160,11 +142,6 @@ data:
     provider: Other
     region: acme
     secretNamespace: datalab
-    type: s3
-  storageClasses:
-    allowed:
-    - sbs-default
-    - sbs-default-retain
   network:
     internalIngress:
     - namespace: operations
@@ -199,45 +176,17 @@ data:
         port: 443
       - protocol: TCP
         port: 9000
-  packages:
-  - name: awscli
-    files:
-    - image:
-        url: ghcr.io/versioneer-tech/educates-extension-packages/awscli:v2.29.0
-  - name: rclone
-    files:
-    - image:
-        url: ghcr.io/versioneer-tech/educates-extension-packages/rclone:v1.71.0
   defaults:
     data:
       enabled: true
       readOnlyMount: true
-    vcluster:
-      enabled: true
-    quota:
-      memory: 4Gi
-      storage: 40Gi
-      budget: x-large
     overallQuota:
       storage: 200Gi
     security:
       policy: privileged
-      kubernetesAccess: true
-      kubernetesRole: admin
       externalEgress: true
     registry:
       enabled: true
-    persistence:
-      storageClassName: sbs-default-retain
-    files:
-    - git:
-        url: https://github.com/versioneer-tech/datalab-example
-        ref: origin/main
-      includePaths:
-      - /workshop/**
-      - /data/**
-      - /README.md
-      path: .
   database:
     tlsRoute:
       parentName: default

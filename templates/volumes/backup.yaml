@@ -1,0 +1,123 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+resources:
+  account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    automountServiceAccountToken: false
+  role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    rules:
+    - apiGroups: ['']
+      resources: [persistentvolumeclaims]
+      resourceNames: ['${pvc_name}']
+      verbs: [get]
+    - apiGroups: [snapshot.storage.k8s.io]
+      resources: [volumesnapshots]
+      verbs: [create, get, list, delete]
+  binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ${backup_name}
+  script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    data:
+      backup.py: ${backup_script}
+  class-role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: ${backup_role}
+    rules:
+    - apiGroups: [snapshot.storage.k8s.io]
+      resources: [volumesnapshotclasses]
+      resourceNames: ['${snapshot_class}']
+      verbs: [get]
+  class-binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: ${backup_role}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: ${backup_role}
+  cronjob:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    spec:
+      schedule: ${schedule}
+      timeZone: Etc/UTC
+      concurrencyPolicy: Forbid
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 1
+      jobTemplate:
+        spec:
+          backoffLimit: 1
+          activeDeadlineSeconds: 900
+          template:
+            spec:
+              restartPolicy: Never
+              serviceAccountName: ${backup_name}
+              automountServiceAccountToken: true
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65532
+                runAsGroup: 65532
+                seccompProfile:
+                  type: RuntimeDefault
+              containers:
+              - name: backup
+                image: ${backup_image}
+                command: [python, -B, /opt/backup/backup.py]
+                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${retention}']
+                resources:
+                  requests:
+                    cpu: 20m
+                    memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: [ALL]
+                volumeMounts:
+                - name: script
+                  mountPath: /opt/backup
+                  readOnly: true
+              volumes:
+              - name: script
+                configMap:
+                  name: ${backup_name}
