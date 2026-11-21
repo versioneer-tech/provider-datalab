@@ -77,6 +77,109 @@ class HelperTests(unittest.TestCase):
         )
 
 
+class SandboxStartTests(unittest.TestCase):
+    def run_start(self, sandbox, conflict=False):
+        with TemporaryDirectory(prefix="test-session-start-") as directory:
+            work = Path(directory)
+            state = work / "state.json"
+            state.write_text(json.dumps({"sandbox": sandbox, "creates": 0, "patches": 0, "conflict": conflict}))
+            kubectl = work / "kubectl"
+            kubectl.write_text("#!" + sys.executable + "\n" + '''
+import json
+from pathlib import Path
+import sys
+state = Path(STATE_PATH)
+value = json.loads(state.read_text())
+args = sys.argv[7:]
+if args[0] == 'create':
+    resource = json.load(sys.stdin)
+    resource['metadata'].update(uid='sandbox-uid', resourceVersion='1', generation=1)
+    resource['status'] = {'conditions': [{'type': 'Ready', 'status': 'True', 'observedGeneration': 1}]}
+    value['sandbox'] = resource
+    value['creates'] += 1
+    state.write_text(json.dumps(value))
+    if value['conflict']:
+        sys.exit(1)
+    print(json.dumps(resource))
+elif args[0] == 'patch':
+    resource = value['sandbox']
+    patch = json.loads(args[args.index('--patch') + 1])
+    for operation in patch:
+        if operation['op'] == 'test':
+            assert resource['metadata'][operation['path'].split('/')[-1]] == operation['value']
+    resource['spec']['operatingMode'] = 'Running'
+    resource['metadata']['generation'] += 1
+    resource['status'] = {'conditions': [{'type': 'Ready', 'status': 'True',
+        'observedGeneration': resource['metadata']['generation']}]}
+    value['patches'] += 1
+    state.write_text(json.dumps(value))
+    print('patched')
+elif args[1].startswith('persistentvolumeclaim/'):
+    print('pvc-uid')
+elif args[1].startswith('sandboxtemplate.'):
+    print(json.dumps({'spec': {'podTemplate': {'spec': {
+        'containers': [{'name': 'sandboxd', 'volumeMounts': [{'name': 'workspace', 'mountPath': '/workspace'}]}]
+    }}, 'volumeClaimTemplates': [{'metadata': {'name': 'workspace'}}]}}))
+elif args[1].startswith('sandbox.'):
+    if value['sandbox'] is not None:
+        print(json.dumps(value['sandbox']))
+    elif '--ignore-not-found' not in args:
+        sys.exit(1)
+else:
+    print('Pod and PVC are present')
+'''.replace('STATE_PATH', repr(str(state))))
+            kubectl.chmod(0o700)
+            result = subprocess.run([
+                "bash", str(ROOT / "docs/examples/start-sandbox.sh"),
+                "/unused/kubeconfig", "test-context", "demo", "analysis", "session-analysis",
+            ], capture_output=True, text=True, timeout=10, env={"PATH": f"{work}:/usr/bin:/bin"})
+            return result, json.loads(state.read_text())
+
+    def sandbox(self, mode="Running"):
+        return {"metadata": {"name": "analysis", "uid": "sandbox-uid", "resourceVersion": "1", "generation": 1,
+                "labels": {"datalabs.versioneer.at/session": "analysis"},
+                "annotations": {"datalabs.versioneer.at/session-pvc-uid": "pvc-uid"}},
+            "spec": {"operatingMode": mode, "podTemplate": {"spec": {
+                "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}],
+                "containers": [{"name": "sandboxd", "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}]}]}}},
+            "status": {"conditions": [{"type": "Ready", "status": "True", "observedGeneration": 1}]}}
+
+    def test_existing_session_is_reused_or_resumed_without_recreation(self):
+        for mode in ("Running", "Suspended"):
+            with self.subTest(mode=mode):
+                result, state = self.run_start(self.sandbox(mode))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(state["creates"], 0)
+                self.assertEqual(state["patches"], int(mode == "Suspended"))
+                self.assertEqual(state["sandbox"]["metadata"]["uid"], "sandbox-uid")
+
+    def test_creation_and_concurrent_creation_use_the_existing_pvc(self):
+        for conflict in (False, True):
+            with self.subTest(conflict=conflict):
+                result, state = self.run_start(None, conflict)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                spec = state["sandbox"]["spec"]
+                self.assertNotIn("volumeClaimTemplates", spec)
+                self.assertEqual(spec["podTemplate"]["spec"]["volumes"], [
+                    {"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}])
+
+    def test_another_owner_or_replaced_pvc_is_not_adopted(self):
+        for change in ("owner", "pvc", "volume"):
+            sandbox = self.sandbox("Suspended")
+            if change == "owner":
+                sandbox["metadata"]["ownerReferences"] = [{"uid": "claim-uid", "kind": "SandboxClaim"}]
+            elif change == "pvc":
+                sandbox["metadata"]["annotations"]["datalabs.versioneer.at/session-pvc-uid"] = "old-pvc-uid"
+            else:
+                sandbox["spec"]["podTemplate"]["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"] = "other-session"
+            with self.subTest(change=change):
+                result, state = self.run_start(sandbox)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Refusing", result.stderr)
+                self.assertEqual(state["creates"], 0)
+                self.assertEqual(state["patches"], 0)
+
+
 class VclusterCleanupTests(unittest.TestCase):
     def setUp(self):
         self.cleanup = runpy.run_path(str(ROOT / "scripts/vcluster-cleanup.py"))["cleanup_once"]

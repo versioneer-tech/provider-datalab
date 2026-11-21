@@ -37,9 +37,8 @@ issuer, allowed StorageClasses, and an HTTPS Gateway listener. The package runs
 vCluster OSS `0.38.0` with Kubernetes `1.36.6`. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
-Each virtual cluster installs Agent Sandbox CRDs, its controller, and a
-sandboxd template. Use [Run a sandbox](sandboxes.md) to check command access,
-file access, and session storage after the virtual cluster is ready.
+Virtual clusters also install Agent Sandbox. Use
+[Run a sandbox](sandboxes.md) to check its runtime and storage after setup.
 
 ### Dependency baseline
 

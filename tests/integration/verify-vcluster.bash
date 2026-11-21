@@ -325,6 +325,7 @@ PVC
   kube create configmap verify-vcluster-client --namespace workspace \
     --from-file="${work_directory}/gateway.crt" --from-file="${work_directory}/issuer.crt" \
     --from-file="${work_directory}/catalog.json" --from-file="${REPO_ROOT}/tests/vcluster/e2e.py" \
+    --from-file="${REPO_ROOT}/docs/examples/start-sandbox.sh" \
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod/verify-vcluster-client --namespace workspace --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/vcluster/client.yaml" \

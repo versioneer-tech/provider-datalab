@@ -2,12 +2,13 @@
 
 Each virtual cluster installs Agent Sandbox CRDs and its controller. A
 `sandboxd` SandboxTemplate is available in `default`, configured profile
-namespaces, and session namespaces. The start script copies its Pod settings
+namespaces, and session namespaces. Each has a `sandboxd-tasks` pool with zero
+spare replicas. The start script copies the template's Pod settings
 into a Sandbox. The controller starts the Pod, where sandboxd provides a
 file API over HTTP and command execution over gRPC.
 
 This guide creates a Sandbox, connects to both APIs from your computer, and
-checks that a file survives workload replacement. Run the commands from the
+checks that a file survives suspend/resume and workload replacement. Run the commands from the
 repository checkout with Bash, `kubectl`, `jq`, `curl`, Python 3, and
 [grpcurl](https://github.com/fullstorydev/grpcurl#installation) installed.
 
@@ -42,6 +43,14 @@ walkthrough uses the built-in `cluster-admin` profile and an authorized Datalab
 administrator. A namespace role also works if it grants access to Sandboxes,
 SandboxTemplates, Pods, port-forwarding, and PVCs in `demo`.
 
+Clients use Kubernetes RBAC through the virtual API. There is no Sandbox
+Router, Sandbox-specific oauth2-proxy, or separate sandboxd token. The
+[session client Role](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/session-client-rbac.yaml)
+shows permissions for a trusted external service without Secret access or PVC
+deletion. Keep its credentials outside Sandboxes. Built-in namespace `edit`
+and `admin` roles do not include the Sandbox CRDs. An administrator must bind
+the example Role to the client's ServiceAccount or Keycloak group when needed.
+
 Set the path to your downloaded file. These commands use only that virtual
 cluster:
 
@@ -67,14 +76,21 @@ bash docs/examples/start-sandbox.sh \
 ```
 
 The script reads the installed sandboxd template, mounts the session PVC at
-`/workspace`, creates Sandbox `analysis`, and waits for it to become Ready.
-It uses the image and resource settings from the installed template. It fails
-if that Sandbox name already exists.
+`/workspace`, and creates Sandbox `analysis` on first use. Later calls reuse a
+Running Sandbox or resume a Suspended Sandbox. It checks the session label,
+PVC name and UID, and absence of another controller owner. It refuses an
+unrelated Sandbox or a changed PVC binding. It waits for readiness at the
+current generation and does not replace the Pod of an already Running Sandbox.
+
+The script uses the installed image and resource settings only on creation.
+It does not reapply them to an existing Sandbox. Crossplane owns the PVC and
+template; the external client owns the Sandbox and its operating mode.
 
 The [Sandbox manifest](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/sandbox.yaml)
 is an alternative for users who need to change the Pod settings. Use it in
 place of the start script. Its image is fixed in the example; the script uses
-the installed template, including any `images.sandboxd` override.
+the installed template, including any `images.sandboxd` override. The script
+does not adopt a manually created Sandbox without its PVC UID annotation.
 
 ## 4. Forward the sandboxd ports
 
@@ -87,6 +103,17 @@ In the same terminal, run:
 Leave this command running. Local port `18080` reaches the HTTP file API and
 health endpoint. Local port `19090` reaches the gRPC command API. Kubernetes
 authenticates and authorizes the connection.
+
+The same connection can forward an application TCP port in the Pod. For an
+application listening on port 8000:
+
+```bash
+"${kube[@]}" port-forward --address 127.0.0.1 pod/analysis 18000:8000
+```
+
+RBAC controls `pods/portforward`, not individual ports. No Service or public
+route is required. A forward ends when its Pod stops or is replaced; reconnect
+after resume. Workloads within the Datalab still share its network.
 
 ## 5. Check files and commands from your computer
 
@@ -119,7 +146,35 @@ additional tools. The image must start sandboxd. Set `data.images.sandbox`
 to change the Agent Sandbox controller image. See
 [service images](installation.md#service-images) for the default tags.
 
-## 6. Check persistence after replacement
+## 6. Suspend and resume
+
+Stop port-forwarding with Ctrl-C. Record the Sandbox UID, then suspend it:
+
+```bash
+sandbox_uid="$("${kube[@]}" get sandbox/analysis -o jsonpath='{.metadata.uid}')"
+"${kube[@]}" patch sandbox/analysis --type=merge \
+  --patch '{"spec":{"operatingMode":"Suspended"}}'
+"${kube[@]}" wait sandbox/analysis --for=condition=Suspended --timeout=5m
+"${kube[@]}" wait pod/analysis --for=delete --timeout=5m
+
+bash docs/examples/start-sandbox.sh \
+  "$sandbox_kubeconfig" "$sandbox_context" demo analysis session-analysis
+
+test "$sandbox_uid" = "$("${kube[@]}" get sandbox/analysis -o jsonpath='{.metadata.uid}')" \
+  && printf 'PASS Sandbox UID after resume\n'
+"${kube[@]}" port-forward --address 127.0.0.1 pod/analysis 18080:8080 19090:9090
+```
+
+Run `bash docs/examples/check-sandbox.sh read 18080 19090` in the second
+terminal. The Sandbox and PVC remain; its Pod is replaced and saved files
+must still be readable. Running processes do not survive suspension.
+
+Do not add operating mode or running flags to Datalab. The external client
+patches the native Sandbox. Whole-vcluster hibernation also retains Sandbox
+definitions and PVCs: Running Sandboxes can restart after resume, while
+Suspended Sandboxes remain suspended.
+
+## 7. Check persistence after replacement
 
 In the first terminal, press Ctrl-C to stop port-forwarding. Record the PVC
 identity, delete the Sandbox, and wait for its Pod to disappear:
@@ -149,22 +204,18 @@ workload uses the same storage.
 
 ## Stop and remove
 
-Stop port-forwarding with Ctrl-C. Delete the Sandbox to stop its workload:
+Stop port-forwarding with Ctrl-C, then [suspend the Sandbox](#6-suspend-and-resume)
+for an ordinary stop.
 
-```bash
-"${kube[@]}" delete sandbox.agents.x-k8s.io/analysis --wait=true
-"${kube[@]}" wait pod/analysis --for=delete --timeout=5m
-"${kube[@]}" get pvc/session-analysis
-```
-
-The session PVC remains. Remove the session entry from the Datalab only when
+Delete the Sandbox only to remove its runtime definition. Its session PVC
+remains. Remove the session entry from the Datalab only when
 you intend to delete its storage, after all workloads that mount it have
 stopped. Back up data before removing a session, virtual cluster, or Datalab.
 
 ## Use a SandboxClaim
 
 For a workload that does not need a declared session PVC, create a claim in a
-namespace with the sandboxd template:
+namespace with the sandboxd template and its `sandboxd-tasks` pool:
 
 ```yaml
 apiVersion: extensions.agents.x-k8s.io/v1beta1
@@ -173,13 +224,54 @@ metadata:
   name: task
   namespace: demo
 spec:
-  sandboxTemplateRef:
-    name: sandboxd
+  warmPoolRef:
+    name: sandboxd-tasks
 ```
 
 Agent Sandbox creates the workload and a separate workspace PVC from the
-template. Its controller manages that PVC's lifetime. Use a declared session
-PVC when files must remain independent of the workload's lifetime.
+template. Claims cannot override the template's volume claims. They do not
+mount the persistent session PVC. The pool creates no idle Sandboxes; the
+Claim starts its workload on demand.
+
+After creating the Claim, wait for readiness and connect:
+
+```bash
+"${kube[@]}" wait sandboxclaim/task --for=condition=Ready --timeout=5m
+task_sandbox="$("${kube[@]}" get sandboxclaim/task -o jsonpath='{.status.sandbox.name}')"
+"${kube[@]}" port-forward --address 127.0.0.1 "pod/$task_sandbox" 18080:8080 19090:9090
+```
+
+This zero-replica pool uses a cold start, with the Pod named after the Sandbox.
+The external service must remove the Claim after the task. Stop the forward,
+then remove the Claim and its owned resources:
+
+```bash
+"${kube[@]}" delete sandboxclaim/task --cascade=foreground --wait=true
+```
+
+The task PVC is deleted with its Sandbox; the session PVC remains. External
+services should also set an absolute `spec.lifecycle.shutdownTime` and
+`shutdownPolicy: DeleteForeground` to bound abandoned tasks. A completion TTL
+alone does not stop a daemon that keeps running.
+
+## External client contract
+
+The trusted external service reads the Datalab session definition and
+`status.sessions`, then uses the selected virtual kubeconfig and namespace.
+It checks the PVC binding, creates or discovers the named Sandbox, and reads
+readiness and operating mode from that Sandbox. The start script records
+`datalabs.versioneer.at/session` and the PVC UID annotation
+`datalabs.versioneer.at/session-pvc-uid` for safe reuse.
+
+Keep Sandbox identity and Pod discovery separate from HTTP and gRPC calls.
+After replacement, verify the current Pod belongs to the expected Sandbox UID
+before opening new forwards. This leaves storage and lifecycle unchanged if
+a later client adds another transport. Direct routing and browser routing
+are deferred.
+
+The service creates task Claims, connects to each runtime, transfers selected
+files, and removes completed tasks. Session Sandboxes do not orchestrate Task
+Sandboxes or receive the service's Kubernetes credentials.
 
 ## If a check fails
 

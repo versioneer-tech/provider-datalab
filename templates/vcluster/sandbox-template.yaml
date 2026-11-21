@@ -7,6 +7,9 @@ metadata:
   name: sandboxd
   namespace: ${target}
 spec:
+  service: false
+  networkPolicyManagement: Unmanaged
+  volumeClaimTemplatesPolicy: Disallowed
   podTemplate:
     spec:
       automountServiceAccountToken: false

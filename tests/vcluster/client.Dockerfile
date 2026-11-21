@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 FROM python:3.13-slim
+RUN apt-get update && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir 'grpcio-tools==1.85.1'
 COPY tests/vcluster/process.proto /tmp/process.proto
 RUN mkdir -p /opt/sandbox && python -m grpc_tools.protoc -I/tmp --python_out=/opt/sandbox --grpc_python_out=/opt/sandbox /tmp/process.proto

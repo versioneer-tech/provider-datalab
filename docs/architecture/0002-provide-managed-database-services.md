@@ -33,31 +33,13 @@ and credential Secret references.
 
 Users select a service, name it, and set its data storage size. For PostgreSQL,
 MongoDB, and Redis, they can also set `backupStorage` to enable backups and size a
-separate backup volume:
-
-```yaml
-spec:
-  databases:
-    pg0:
-      names:
-      - app
-      storage: 10Gi
-      backupStorage: 30Gi
-  documentStores:
-    documents:
-      storage: 10Gi
-      backupStorage: 30Gi
-  cacheStores:
-    cache:
-      storage: 1Gi
-      backupStorage: 3Gi
-```
+separate backup volume.
 
 A positive `backupStorage` enables PostgreSQL, MongoDB, or Redis backups. Zero or an
 omitted value disables them. PostgreSQL uses pgBackRest; MongoDB uses a
 composition-managed dump job. Redis uses a composition-managed RDB snapshot
 job. A data volume alone is not a backup. The [backup guide](../how-to-guides/usage_concepts.md#backups)
-defines the current schedules, retention, and recovery limits.
+defines the configuration examples, schedules, and retention.
 
 Users configure the Datalab resource. Crossplane owns the generated resources
 and can replace manual changes during reconciliation.

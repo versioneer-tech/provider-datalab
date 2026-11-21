@@ -75,3 +75,7 @@ record the source release and checksum. Virtual cluster startup applies both
 inside the virtual API. EnvironmentConfig `images.sandbox` selects the controller
 image; `images.sandboxd` selects the runtime image in SandboxTemplates. Check
 controller compatibility when changing its image or CRD schema.
+
+`vcluster/sandbox-template.yaml` and `vcluster/sandbox-pool.yaml` define the
+task runtime and pool. See [ADR-001](../docs/architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md#keep-session-storage-independent-of-workloads)
+for session storage and lifecycle ownership.

@@ -2333,6 +2333,62 @@ metadata:
     crossplane.io/paused: 'true'
   labels:
     datalabs.versioneer.at/vcluster: vc0
+  name: vcluster-s-jane-vc0-access-sandbox-pool-default-2a8c88e768
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: extensions.agents.x-k8s.io/v1beta1
+      kind: SandboxWarmPool
+      metadata:
+        name: sandboxd-tasks
+        namespace: default
+      spec:
+        replicas: 0
+        sandboxTemplateRef:
+          name: sandboxd
+  providerConfigRef:
+    kind: ProviderConfig
+    name: s-jane-vcluster-vc0-25fc5fbd42
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/paused: 'true'
+  labels:
+    datalabs.versioneer.at/vcluster: vc0
+  name: vcluster-s-jane-vc0-access-sandbox-pool-demo-e3f92c2bc5
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: extensions.agents.x-k8s.io/v1beta1
+      kind: SandboxWarmPool
+      metadata:
+        name: sandboxd-tasks
+        namespace: demo
+      spec:
+        replicas: 0
+        sandboxTemplateRef:
+          name: sandboxd
+  providerConfigRef:
+    kind: ProviderConfig
+    name: s-jane-vcluster-vc0-25fc5fbd42
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  annotations:
+    crossplane.io/paused: 'true'
+  labels:
+    datalabs.versioneer.at/vcluster: vc0
   name: vcluster-s-jane-vc0-access-sandbox-template-default-cf1dda8877
   namespace: default
 spec:
@@ -2344,6 +2400,7 @@ spec:
         name: sandboxd
         namespace: default
       spec:
+        networkPolicyManagement: Unmanaged
         podTemplate:
           spec:
             automountServiceAccountToken: false
@@ -2384,6 +2441,7 @@ spec:
               runAsNonRoot: true
               seccompProfile:
                 type: RuntimeDefault
+        service: false
         volumeClaimTemplates:
         - metadata:
             name: workspace
@@ -2393,6 +2451,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
+        volumeClaimTemplatesPolicy: Disallowed
   providerConfigRef:
     kind: ProviderConfig
     name: s-jane-vcluster-vc0-25fc5fbd42
@@ -2418,6 +2477,7 @@ spec:
         name: sandboxd
         namespace: demo
       spec:
+        networkPolicyManagement: Unmanaged
         podTemplate:
           spec:
             automountServiceAccountToken: false
@@ -2458,6 +2518,7 @@ spec:
               runAsNonRoot: true
               seccompProfile:
                 type: RuntimeDefault
+        service: false
         volumeClaimTemplates:
         - metadata:
             name: workspace
@@ -2467,6 +2528,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
+        volumeClaimTemplatesPolicy: Disallowed
   providerConfigRef:
     kind: ProviderConfig
     name: s-jane-vcluster-vc0-25fc5fbd42
@@ -3619,6 +3681,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: vcluster-usage-vc0-control-1255421aec7b-s-jane-vclus-ccc8456471
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-sandbox-pool-default-2a8c88e768
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: vcluster-usage-vc0-control-26297469f53c-s-jane-vclus-81ff68fcf2
   namespace: default
 spec:
@@ -3699,6 +3779,24 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-control-c7a046d8a278-s-jane-vclus-8b19dacfea
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-sandbox-pool-demo-e3f92c2bc5
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -3817,6 +3915,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: vcluster-usage-vc0-provider-1255421aec7b-s-jane-vclu-2b89de54fe
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-sandbox-pool-default-2a8c88e768
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: vcluster-usage-vc0-provider-26297469f53c-s-jane-vclu-1ceeb3e4bd
   namespace: default
 spec:
@@ -3897,6 +4013,24 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: vcluster-usage-vc0-provider-c7a046d8a278-s-jane-vclu-3afb82e862
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: vcluster-s-jane-vc0-access-sandbox-pool-demo-e3f92c2bc5
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

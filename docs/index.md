@@ -9,4 +9,5 @@ For team workflows, see [Virtual clusters](how-to-guides/vcluster.md) and
 [Use a Datalab](how-to-guides/usage_concepts.md).
 Use [Sandboxes](how-to-guides/sandboxes.md) for command execution and durable
 workspaces, and [Connections](how-to-guides/connections.md) for service credentials.
-The [API reference](reference-guides/api.md) describes resource fields and status.
+See [Security](security/index.md) for access controls and the
+[API reference](reference-guides/api.md) for resource fields and status.

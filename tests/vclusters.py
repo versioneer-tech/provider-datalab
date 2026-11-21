@@ -90,7 +90,18 @@ def check_instance_isolation(resources):
         pod = template["spec"]["podTemplate"]["spec"]
         assert pod["containers"][0]["name"] == "sandboxd"
         assert pod["automountServiceAccountToken"] is False
+        assert template["spec"]["service"] is False
+        assert template["spec"]["networkPolicyManagement"] == "Unmanaged"
+        assert template["spec"]["volumeClaimTemplatesPolicy"] == "Disallowed"
+        for target in ("default", "demo"):
+            pool = manifest(resources, resource_name("vcluster", "s-joe", instance, "access", f"sandbox-pool-{target}"))
+            assert pool["metadata"] == {"name": "sandboxd-tasks", "namespace": target}
+            assert pool["spec"] == {"replicas": 0, "sandboxTemplateRef": {"name": "sandboxd"}}
         assert (resource_name("vcluster", "s-joe", instance, "access", "session-analysis") in resources) == (instance == "vc0")
+    assert not any(
+        value.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") in ("Sandbox", "SandboxClaim")
+        for value in resources.values()
+    ), "A session or task pool must not start a Sandbox."
     pvc = manifest(resources, resource_name("vcluster", "s-joe", "vc0", "access", "session-analysis"))
     assert pvc["metadata"] == {"name": "session-analysis", "namespace": "demo"}
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"

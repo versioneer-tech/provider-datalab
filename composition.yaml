@@ -3311,6 +3311,10 @@ spec:
                     f"sandbox-template-{target}",
                     _render_template(req, "vcluster/sandbox-template", target=target, sandbox_image=sandbox_image),
                 )
+                virtual(
+                    f"sandbox-pool-{target}",
+                    _render_template(req, "vcluster/sandbox-pool", target=target),
+                )
             for session in sessions:
                 target = session.get("namespace", "default")
                 virtual(
@@ -13661,6 +13665,16 @@ spec:
                 targetPort: metrics
               selector:
                 app: agent-sandbox-controller
+        vcluster/sandbox-pool:
+          apiVersion: extensions.agents.x-k8s.io/v1beta1
+          kind: SandboxWarmPool
+          metadata:
+            name: sandboxd-tasks
+            namespace: ${target}
+          spec:
+            replicas: 0
+            sandboxTemplateRef:
+              name: sandboxd
         vcluster/sandbox-template:
           apiVersion: extensions.agents.x-k8s.io/v1beta1
           kind: SandboxTemplate
@@ -13668,6 +13682,9 @@ spec:
             name: sandboxd
             namespace: ${target}
           spec:
+            service: false
+            networkPolicyManagement: Unmanaged
+            volumeClaimTemplatesPolicy: Disallowed
             podTemplate:
               spec:
                 automountServiceAccountToken: false
