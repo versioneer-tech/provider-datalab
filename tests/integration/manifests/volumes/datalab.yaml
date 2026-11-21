@@ -1,0 +1,14 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: versioneer.at/v1
+kind: Datalab
+metadata:
+  name: verify-volumes
+  namespace: workspace
+spec:
+  environmentName: datalab-volumes-it
+  users: []
+  volumes:
+    analysis:
+      storage: 1Gi

@@ -28,7 +28,7 @@ explicit service Secret bindings for application namespaces. See
 
 Application owners install controllers and CRDs through the virtual API with
 virtual cluster administration credentials. See [Volumes](volumes.md)
-for persistent volumes that applications can mount independently.
+to bind Datalab-owned host storage into a virtual namespace.
 
 ## API access
 
@@ -333,50 +333,16 @@ creation is denied. `DATALAB_ACCESS_TOKEN_FILE` contains a file path, not the
 token value. The helper reads that file and returns the token to kubectl.
 It makes no login or refresh request and does not use the device-login cache.
 
-#### Delegated token lifetime and revocation
+#### Delegated token lifetime
 
-The received token's `exp` claim is its expiry time. The exchange response's
-`expires_in` reports its remaining lifetime when issued. Do not assume a
-fixed duration or that exchange starts a new full session. The helper sets
-`ExecCredential.expirationTimestamp` from `exp`. When the token expires, ask
-the issuing user or service for a new exchange result and replace the token
-file. The recipient has no refresh token to renew it.
+The token's `exp` claim gives its expiry; the exchange response's `expires_in`
+gives its remaining lifetime when issued. The helper uses `exp` for
+`ExecCredential.expirationTimestamp`. When the token expires, obtain a new
+exchange result and replace the token file. The recipient has no refresh token.
 
-To display the expiry in UTC without printing the token, run:
-
-```bash
-python3 - "$DATALAB_ACCESS_TOKEN_FILE" <<'PY'
-import base64
-from datetime import datetime, timezone
-import json
-from pathlib import Path
-import sys
-
-payload = Path(sys.argv[1]).read_text().strip().split('.')[1]
-claims = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
-print(datetime.fromtimestamp(claims['exp'], timezone.utc).isoformat())
-PY
-```
-
-This command reads the expiry claim; the virtual API verifies the signature
-and decides whether to accept the token.
-
-The virtual API validates JWTs locally. Issued tokens can remain usable until
-expiry after role removal, logout, or client-secret rotation. Keycloak also
-[does not revoke an exchanged token when its source token is revoked](https://www.keycloak.org/securing-apps/token-exchange#_revocation).
-
-For earlier denial, remove the configured profile or its Kubernetes RBAC
-binding through the source configuration. After reconciliation, this denies
-all callers that use the profile. Revoke the user's offline session in
-Keycloak to stop further CLI refresh; ordinary browser logout does not end
-offline access.
-
-| Action | Human device login | Delegated access token |
-| --- | --- | --- |
-| Access token expires | Helper attempts refresh with the client secret. | Recipient must obtain a new token. |
-| Offline session expires or is revoked | Refresh stops; a new device login is needed. | An issued token can remain usable until `exp`. |
-| Keycloak role assignment is removed | New tokens lose the role; issued tokens can retain it. | An issued token can retain the role until `exp`. |
-| Configured profile or required RBAC binding is removed | Access is denied after the API configuration or binding changes. | The same denial applies to the delegated token. |
+Issued tokens can retain access after role removal or logout. See
+[Token revocation](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#token-revocation)
+for the controls and their limits.
 
 ### Machine access
 
@@ -398,17 +364,26 @@ scope=s-joe:vclusters_vc0_namespace-demo
 ```
 
 Save the returned access token in a private file and use
-`DATALAB_ACCESS_TOKEN_FILE` as shown above. The downloaded helper accepts only
-an access token file for additional profiles. The built-in `cluster-admin`
-helper uses a supplied client secret for user device login, not machine access.
-Client credentials alone produce a token with only `ws_api` and cannot access
-the virtual API.
+`DATALAB_ACCESS_TOKEN_FILE` as shown above. Additional profiles accept only an
+access token file. The built-in `cluster-admin` helper uses a client secret for
+user device login. Request machine tokens separately as shown above.
 
 ## Secret bindings
 
 Use [connection bindings](connections.md#bind-a-connection) to copy selected
 service or custom credentials into a virtual namespace. That guide contains
 the binding examples, source settings, and update and deletion rules.
+
+## Volume bindings
+
+Use `spec.vclusters.<instance>.volumeBindings` to mount a named Datalab volume
+from a virtual workload. The provider creates the target virtual namespace and
+PVC; applications mount that PVC through the virtual API. See
+[Bind to a virtual cluster](volumes.md#bind-to-a-virtual-cluster) for the XR and Pod example.
+
+The host PVC and its backups remain when the virtual PVC, binding, or cluster
+is removed, while its `spec.volumes` entry remains. Application-owned PVCs created
+directly through the virtual API keep their own lifecycle and backup requirements.
 
 ## Platform settings
 
@@ -428,6 +403,7 @@ data:
     httpSectionName: workspaces-http
   vcluster:
     storage: 5Gi
+  volumes:
     storageClasses:
       allowed: [sbs-default]
       default: sbs-default
@@ -442,7 +418,11 @@ issuer. For a private Gateway CA, set `ingress.certificateAuthority`.
 Apply `dependencies/rbac.yaml`. It grants Job permissions to the Kubernetes
 provider and Pod and Job read access to Crossplane. The host must serve
 `ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding` in
-`admissionregistration.k8s.io/v1`. The Gateway must support HTTPRoute prefix
+`admissionregistration.k8s.io/v1`. Volume bindings also require Kubernetes 1.36
+or later, serving `MutatingAdmissionPolicy` and `MutatingAdmissionPolicyBinding`
+in the same API version. See the
+[Kubernetes policy reference](https://kubernetes.io/docs/reference/access-authn-authz/mutating-admission-policy/).
+The Gateway must support HTTPRoute prefix
 rewriting, BackendTLSPolicy, and Kubernetes streaming requests.
 `vcluster.backendTLS.apiVersion` defaults to
 `gateway.networking.k8s.io/v1`; set it to the version served by your platform.
@@ -459,10 +439,10 @@ boundaries apply to their virtual APIs.
 The `vcluster` EnvironmentConfig section supplies defaults for all declared
 instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
 `vcluster.storageClassName` selects its class; otherwise the default class is
-used. Only classes in `vcluster.storageClasses.allowed` are exposed to virtual
+used. Only classes in `volumes.storageClasses.allowed` are exposed to virtual
 workloads. A host admission policy enforces this list for each syncer.
 Control-plane, workload, database, and volume PVCs share the
-`defaults.overallQuota.storage` limit. All Pod CPU and memory requests and limits
+`overallQuota.storage` limit. All Pod CPU and memory requests and limits
 count against the same [host namespace quota](installation.md#resource-quotas-and-container-defaults),
 across every virtual namespace and cluster in the Datalab.
 
@@ -611,16 +591,10 @@ virtual namespace `demo`. The administrator Secret uses `host`, `port`, `user`, 
 Use an operator-approved [Secret binding](connections.md#bind-a-connection)
 with `type: postgres` and `name: pg0` for setup. Supply the API login
 separately with suitable backend permissions.
-Build the image from the repository root and push it to a registry that the
-host nodes can read:
-
-```bash
-docker build -f tests/vcluster/catalog.Dockerfile -t registry.acme.com/team/catalog:demo .
-docker push registry.acme.com/team/catalog:demo
-```
-
-Replace `__CATALOG_IMAGE__` with that image reference. Apply only the Job
-document from the example first and wait for setup:
+Obtain a catalog image from the platform operator, or use the
+[build instructions](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/README.md#stac-example-image).
+Replace `__CATALOG_IMAGE__` with its reference. Apply only the Job document from
+the example first and wait for setup:
 
 ```bash
 kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo \
@@ -648,6 +622,7 @@ Removing a group removes its role and binding after reconciliation while
 retaining its virtual namespace data. Removing an instance removes its runtime
 and control-plane PVC. Other instances, databases, the registry, and the shared
 namespace remain. Deletion follows the host StorageClass retention policy.
+Named host volumes and their backups remain while declared in `spec.volumes`.
 Back up control-plane and database volumes before removing an instance or Datalab.
 
-For access revocation, see [token lifetime and revocation](#delegated-token-lifetime-and-revocation).
+For access revocation, see [Token revocation](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#token-revocation).

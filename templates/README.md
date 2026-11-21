@@ -12,12 +12,12 @@ the step files. The build embeds each imported helper and its dependencies.
 Keep service-specific logic in its step file.
 
 The build embeds these scripts with `_embedded_script()`. Rebuild after
-changing either file.
+changing any of them.
 
 | Script | Use |
 | --- | --- |
 | `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
-| `scripts/volume-snapshot.py` | CSI snapshot creation and retention from a virtual Job. |
+| `scripts/volume-snapshot.py` | Host CSI snapshot creation and retention. |
 | `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
 Crossplane can cache a function response for its TTL. Set the build defaults in
@@ -56,8 +56,22 @@ bash tests/unit.bash
 The build embeds the steps and templates in `composition.yaml`. Deploy this
 file. Unit tests, CI, and pre-commit reject a stale build.
 
+For a source installation, apply the XRD and generated Composition to the
+configured test cluster before creating Datalabs:
+
+```bash
+kubectl apply -f xrd.yaml
+kubectl apply -f composition.yaml
+```
+
+Install dependencies and set the shared environment as described in the
+[installation guide](../docs/how-to-guides/installation.md) first.
+
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
+The platform must apply `dependencies/rbac.yaml` and EnvironmentConfigs
+separately. Volume bindings need the supplied admission policy permissions
+before the Composition reconciles them.
 
 Integration can build a separate artifact with a Python TTL default:
 
@@ -69,8 +83,13 @@ A TTL override requires a separate output file. It does not change the
 environment or auto-ready TTLs, `composition/settings.yaml`, or the normal
 deployment artifact. An environment value takes precedence over this default.
 
-`volumes/pvc.yaml` defines named application storage. The volume
-step creates optional snapshot schedules from `volumes/backup.yaml`.
-`scripts/volume-snapshot.py` uses only the Python standard library. The
-virtual cluster step enables snapshot synchronization only when the operator
-sets `vcluster.volumeSnapshots`. Applications own their runtime installation.
+`volumes/pvc.yaml` defines named host storage. The volume step creates
+snapshot schedules from `volumes/backup.yaml`. `scripts/volume-snapshot.py`
+uses only the Python standard library. It runs on the host with a scoped
+ServiceAccount. Virtual cluster lifecycle changes do not pause these resources.
+
+Keep the virtual PV binder active to bind and release static volume records.
+Their Object wrappers omit `Delete`; provider references supply the virtual
+binding policy's owner UID. Deleting that policy uses background garbage
+collection so PVC protection cannot hold the control plane during removal.
+These records have no ownership of the host PVC or backups.

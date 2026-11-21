@@ -513,6 +513,7 @@ def main():
     parser.add_argument("--member-roles", action="store_true")
     parser.add_argument("--member-removed", action="store_true")
     parser.add_argument("--member-instance", action="append")
+    parser.add_argument("--volume-binding", choices=("write", "recreate-claim", "check", "absent"))
     args = parser.parse_args()
     if args.member_roles or args.member_removed:
         verify_member_roles(args.member_removed, args.member_instance or ["vc0", "vc1"])
@@ -638,6 +639,10 @@ def main():
         api("/api/v1/namespaces", denied, expected=401, instance=instance)
     print("PASS every downloaded profile rejects the workspace account with only ws_api", flush=True)
     bearer = granted_token("administrator", "vcluster_vc0_cluster-admin")
+    if args.volume_binding:
+        from volume_bindings import check_volume_binding
+        check_volume_binding(api, bearer, args.volume_binding)
+        return
     marker = Path("/tmp/vcluster-editor-token")
     if args.read_only or args.revoked:
         editor = marker.read_text()
@@ -742,7 +747,7 @@ def main():
                     "volumes": [
                         {
                             "name": "data",
-                            "persistentVolumeClaim": {"claimName": "volume-analysis"},
+                            "persistentVolumeClaim": {"claimName": "workload-data"},
                         }
                     ],
                 },
@@ -761,7 +766,7 @@ def main():
     path = "/api/v1/namespaces/default/configmaps/restart-marker"
     if args.check_only:
         assert api(path, bearer)["data"]["marker"] == "persistent"
-        claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
+        claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)
         assert claim["metadata"]["uid"] == Path("/tmp/vcluster-volume-uid").read_text()
         volume_pod("volume-reader", "cat /data/marker && echo && sleep 3600")
         deadline = time.monotonic() + 60
@@ -960,8 +965,12 @@ def main():
         },
         expected=403,
     )
-    claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
-    assert claim["metadata"]["labels"]["datalabs.versioneer.at/volume"] == "analysis"
+    api("/api/v1/namespaces/demo/persistentvolumeclaims", editor, method="POST", expected=201, body={
+        "apiVersion": "v1", "kind": "PersistentVolumeClaim", "metadata": {"name": "workload-data"},
+        "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": args.storage_class,
+                 "resources": {"requests": {"storage": "1Mi"}}},
+    })
+    claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)
     assert not any(owner.get("kind") in ("Pod", "Deployment", "StatefulSet")
                    for owner in claim["metadata"].get("ownerReferences", []))
     Path("/tmp/vcluster-volume-uid").write_text(claim["metadata"]["uid"])
@@ -970,13 +979,13 @@ def main():
         "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
     )
     assert (
-        api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)[
+        api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)[
             "status"
         ]["phase"]
         == "Bound"
     )
     print(
-        "PASS namespace profile, denied escalation, and provider-managed volume",
+        "PASS namespace profile, denied escalation, and workload PVC",
         flush=True,
     )
 

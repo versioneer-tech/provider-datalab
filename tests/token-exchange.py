@@ -12,8 +12,8 @@ from keycloak_policy import verify_keycloak_policy
 
 def main():
     args, env = arguments(), environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
-    env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
+    env["data"]["volumes"] = {"storageClasses": {"allowed": ["standard"]}}
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "workspace"},

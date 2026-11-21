@@ -22,7 +22,7 @@ def compose(req, rsp):
     name, namespace = meta["name"], meta.get("namespace") or "default"
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
     registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
-    if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
+    if not _boolish((env.get("registry") or {}).get("enabled", True)):
         return
     runtime_namespace = name
 

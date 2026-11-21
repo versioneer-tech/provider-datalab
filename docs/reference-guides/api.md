@@ -54,8 +54,6 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
         <td>object</td>
         <td>
           Desired configuration of the datalab.<br/>
-          <br/>
-            <i>Validations</i>:<li>!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters): Each volume must select a declared virtual cluster.</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -155,7 +153,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecvolumeskey">volumes</a></b></td>
         <td>map[string]object</td>
         <td>
-          Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.<br/>
+          Named PVCs with scheduled snapshots in the Datalab host namespace, independent of virtual clusters.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$")): Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.</li>
             <i>Default</i>: map[]<br/>
@@ -397,6 +395,15 @@ Virtual Kubernetes clusters keyed by instance name.
           Control-plane PVC size. The environment default is used when omitted.<br/>
         </td>
         <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvclusterskeyvolumebindingsindex">volumeBindings</a></b></td>
+        <td>[]object</td>
+        <td>
+          Named host volumes to expose as PVCs in this virtual cluster. Requires host mutating admission policies.<br/>
+          <br/>
+            <i>Default</i>: []<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
@@ -523,6 +530,76 @@ Virtual Kubernetes clusters keyed by instance name.
 </table>
 
 
+### Datalab.spec.vclusters[key].volumeBindings[index]
+<sup><sup>[↩ Parent](#datalabspecvclusterskey)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          A name declared in spec.volumes.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvclusterskeyvolumebindingsindextarget">target</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.spec.vclusters[key].volumeBindings[index].target
+<sup><sup>[↩ Parent](#datalabspecvclusterskeyvolumebindingsindex)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          PVC name in the virtual namespace.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>!self.startsWith("kube-"): A volume binding must use a workload namespace.</li>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
 ### Datalab.spec.volumes[key]
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
 
@@ -540,38 +617,10 @@ Virtual Kubernetes clusters keyed by instance name.
         </tr>
     </thead>
     <tbody><tr>
-        <td><b>vcluster</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-          <br/>
-            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another virtual cluster.</li>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>backup</b></td>
-        <td>boolean</td>
-        <td>
-          Create scheduled CSI volume snapshots. Requires platform snapshot support.<br/>
-          <br/>
-            <i>Default</i>: false<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-          <br/>
-            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another namespace.</li><li>!self.startsWith("kube-"): Volumes must use a workload namespace.</li>
-            <i>Default</i>: default<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b>restoreFrom</b></td>
         <td>string</td>
         <td>
-          Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.<br/>
+          Existing VolumeSnapshot in the Datalab host namespace to restore into this new volume.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -626,7 +675,7 @@ Current observed state of the datalab.
         <td><b><a href="#datalabstatusvolumesindex">volumes</a></b></td>
         <td>[]object</td>
         <td>
-          Persistent volume references inside virtual clusters.<br/>
+          Host PVC state and completed snapshot backups for each named volume.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -942,31 +991,98 @@ Current observed state of the datalab.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>phase</b></td>
+        <td>enum</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Enum</i>: Pending, Bound, Lost<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusvolumesindexpvcref">pvcRef</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusvolumesindexbackup">backup</a></b></td>
+        <td>object</td>
+        <td>
+          <br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.status.volumes[index].pvcRef
+<sup><sup>[↩ Parent](#datalabstatusvolumesindex)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
         <td><b>namespace</b></td>
         <td>string</td>
         <td>
           <br/>
         </td>
         <td>true</td>
-      </tr><tr>
-        <td><b>pvcName</b></td>
-        <td>string</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.status.volumes[index].backup
+<sup><sup>[↩ Parent](#datalabstatusvolumesindex)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>readySnapshots</b></td>
+        <td>integer</td>
         <td>
+          Ready snapshots for the current PVC UID, excluding snapshots being deleted.<br/>
           <br/>
+            <i>Minimum</i>: 0<br/>
         </td>
         <td>true</td>
       </tr><tr>
-        <td><b>vcluster</b></td>
+        <td><b>lastSuccessfulTime</b></td>
         <td>string</td>
         <td>
+          Creation time of the latest ready snapshot. Absent until a snapshot is ready.<br/>
           <br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>backupCronJobName</b></td>
-        <td>string</td>
-        <td>
-          <br/>
+            <i>Format</i>: date-time<br/>
         </td>
         <td>false</td>
       </tr></tbody>

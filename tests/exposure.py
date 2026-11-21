@@ -37,8 +37,8 @@ def main():
         if exposure == "gateway":
             env["data"]["httpRoute"].pop("enableS3")
         if exposure == "disabled-data":
-            env["data"]["defaults"] = {"data": {"enabled": False}}
-        env["data"].setdefault("defaults", {})["registry"] = {"enabled": False}
+            env["data"].update({"packageR": {"enabled": False}})
+        env["data"]["registry"] = {"enabled": False}
         if exposure == "ingress":
             env["data"]["ingress"]["annotations"] = {
                 "nginx.ingress.kubernetes.io/proxy-body-size": "0",
@@ -152,7 +152,7 @@ def main():
     pending = render(args, environment(), observed=[oauth_observer("initial-client-secret")])
     assert "oauth2-client-secret-s-joe" in pending
     disabled_env = environment()
-    disabled_env["data"]["defaults"] = {"data": {"enabled": False}}
+    disabled_env["data"].update({"packageR": {"enabled": False}})
     disabled = render(args, disabled_env, observed=observed + [
         oauth_observer("initial-client-secret"), outputs[0]["oauth2-client-secret-s-joe"],
     ])

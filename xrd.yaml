@@ -30,9 +30,6 @@ spec:
               description: Desired configuration of the datalab.
               required:
                 - users
-              x-kubernetes-validations:
-              - rule: '!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters)'
-                message: Each volume must select a declared virtual cluster.
               properties:
                 environmentName:
                   type: string
@@ -69,43 +66,22 @@ spec:
                   type: object
                   default: {}
                   maxProperties: 50
-                  description: Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.
+                  description: Named PVCs with scheduled snapshots in the Datalab host namespace, independent of virtual clusters.
                   x-kubernetes-validations:
                   - rule: 'self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$"))'
                     message: Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.
                   additionalProperties:
                     type: object
-                    required: [vcluster]
                     properties:
-                      vcluster:
-                        type: string
-                        maxLength: 63
-                        x-kubernetes-validations:
-                        - rule: self == oldSelf
-                          message: A volume cannot move to another virtual cluster.
-                      namespace:
-                        type: string
-                        default: default
-                        maxLength: 63
-                        pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
-                        x-kubernetes-validations:
-                        - rule: self == oldSelf
-                          message: A volume cannot move to another namespace.
-                        - rule: '!self.startsWith("kube-")'
-                          message: Volumes must use a workload namespace.
                       storage:
                         type: string
                         pattern: '^([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[EPTGMK]i|[EPTGMkmun])?$'
                         description: Volume size. Defaults to the platform volume size, or 1Gi.
-                      backup:
-                        type: boolean
-                        default: false
-                        description: Create scheduled CSI volume snapshots. Requires platform snapshot support.
                       restoreFrom:
                         type: string
                         maxLength: 253
                         pattern: '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
-                        description: Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.
+                        description: Existing VolumeSnapshot in the Datalab host namespace to restore into this new volume.
                     x-kubernetes-validations:
                     - rule: 'has(self.restoreFrom) == has(oldSelf.restoreFrom) && (!has(self.restoreFrom) || self.restoreFrom == oldSelf.restoreFrom)'
                       message: A volume restore source cannot change after creation.
@@ -195,6 +171,38 @@ spec:
                                   type: string
                                   maxLength: 253
                                   pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                      volumeBindings:
+                        type: array
+                        default: []
+                        maxItems: 50
+                        description: Named host volumes to expose as PVCs in this virtual cluster. Requires host mutating admission policies.
+                        x-kubernetes-list-type: map
+                        x-kubernetes-list-map-keys: [name]
+                        items:
+                          type: object
+                          required: [name, target]
+                          properties:
+                            name:
+                              type: string
+                              maxLength: 40
+                              pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                              description: A name declared in spec.volumes.
+                            target:
+                              type: object
+                              required: [namespace, name]
+                              properties:
+                                namespace:
+                                  type: string
+                                  maxLength: 63
+                                  pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                                  x-kubernetes-validations:
+                                  - rule: '!self.startsWith("kube-")'
+                                    message: A volume binding must use a workload namespace.
+                                name:
+                                  type: string
+                                  maxLength: 63
+                                  pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
+                                  description: PVC name in the virtual namespace.
                       storage:
                         type: string
                         description: Control-plane PVC size. The environment default is used when omitted.
@@ -341,23 +349,38 @@ spec:
                         format: int64
                 volumes:
                   type: array
-                  description: Persistent volume references inside virtual clusters.
+                  description: Host PVC state and completed snapshot backups for each named volume.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [name]
                   items:
                     type: object
-                    required: [name, vcluster, namespace, pvcName]
+                    required: [name, pvcRef, phase]
                     properties:
                       name:
                         type: string
-                      vcluster:
+                      pvcRef:
+                        type: object
+                        required: [name, namespace]
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                      phase:
                         type: string
-                      namespace:
-                        type: string
-                      pvcName:
-                        type: string
-                      backupCronJobName:
-                        type: string
+                        enum: [Pending, Bound, Lost]
+                      backup:
+                        type: object
+                        required: [readySnapshots]
+                        properties:
+                          readySnapshots:
+                            type: integer
+                            minimum: 0
+                            description: Ready snapshots for the current PVC UID, excluding snapshots being deleted.
+                          lastSuccessfulTime:
+                            type: string
+                            format: date-time
+                            description: Creation time of the latest ready snapshot. Absent until a snapshot is ready.
                 oauth2:
                   type: array
                   description: OAuth2 discovery by client ID. Contains metadata and Secret references only.

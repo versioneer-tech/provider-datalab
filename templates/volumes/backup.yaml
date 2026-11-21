@@ -45,21 +45,37 @@ resources:
       namespace: ${target}
     data:
       backup.py: ${backup_script}
-  class-role:
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
+  network:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
     metadata:
-      name: ${backup_role}
-    rules:
-    - apiGroups: [snapshot.storage.k8s.io]
-      resources: [volumesnapshotclasses]
-      resourceNames: ['${snapshot_class}']
-      verbs: [get]
+      name: ${backup_name}
+      namespace: ${target}
+    spec:
+      podSelector:
+        matchLabels:
+          datalabs.versioneer.at/volume-backup: ${volume_name}
+      policyTypes: [Ingress, Egress]
+      ingress: []
+      egress:
+      - ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
   class-binding:
     apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRoleBinding
     metadata:
-      name: ${backup_role}
+      name: ${backup_binding}
     subjects:
     - kind: ServiceAccount
       name: ${backup_name}
@@ -67,7 +83,7 @@ resources:
     roleRef:
       apiGroup: rbac.authorization.k8s.io
       kind: ClusterRole
-      name: ${backup_role}
+      name: datalab-volume-snapshot-classes
   cronjob:
     apiVersion: batch/v1
     kind: CronJob
@@ -86,6 +102,9 @@ resources:
           backoffLimit: 1
           activeDeadlineSeconds: 900
           template:
+            metadata:
+              labels:
+                datalabs.versioneer.at/volume-backup: ${volume_name}
             spec:
               restartPolicy: Never
               serviceAccountName: ${backup_name}
@@ -100,7 +119,7 @@ resources:
               - name: backup
                 image: ${backup_image}
                 command: [python, -B, /opt/backup/backup.py]
-                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${retention}']
+                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${max_snapshots}']
                 resources:
                   requests:
                     cpu: 20m

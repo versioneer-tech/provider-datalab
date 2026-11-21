@@ -23,7 +23,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr_namespace = metadata.get("namespace") or "default"
 
     environment = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-    data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get("enabled")
+    data_enabled = (environment.get("packageR") or {}).get("enabled")
     if data_enabled is not None and not _boolish(data_enabled):
         return
     if not (

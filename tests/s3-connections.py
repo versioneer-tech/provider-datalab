@@ -13,7 +13,7 @@ from render import arguments, environment, render
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
     env["data"]["storage"] = {"endpoint": "https://s3.acme.com", "region": "acme"}
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",

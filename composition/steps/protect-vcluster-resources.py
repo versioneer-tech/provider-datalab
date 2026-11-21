@@ -115,7 +115,6 @@ def compose(req, rsp):
             "workload-networkpolicy",
             "dns-networkpolicy",
             "snapshot-networkpolicy",
-            "snapshot-binding",
             "placement-policy",
             "placement-policy-binding",
         ):

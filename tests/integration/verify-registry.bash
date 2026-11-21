@@ -23,7 +23,7 @@ apply_registry_datalab() {
   log 'Applying the registry verification Datalab'
   apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
   kube patch environmentconfig datalab-custom --type=merge \
-    --patch '{"data":{"defaults":{"registry":{"enabled":true}}}}'
+    --patch '{"data":{"registry":{"enabled":true}}}'
   kube delete pod/verify-registry-bucket --namespace "${WORKSPACE_NAMESPACE}" \
     --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/registry/bucket.yaml" \

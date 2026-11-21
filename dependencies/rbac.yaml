@@ -217,6 +217,8 @@ rules:
   resources:
   - validatingadmissionpolicies
   - validatingadmissionpolicybindings
+  - mutatingadmissionpolicies
+  - mutatingadmissionpolicybindings
   verbs:
   - get
   - list
@@ -284,17 +286,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: datalab-vcluster-volume-snapshots
+  name: datalab-volume-snapshot-classes
 rules:
-- apiGroups: ['']
-  resources: [persistentvolumes]
-  verbs: [get, list]
 - apiGroups: [snapshot.storage.k8s.io]
   resources: [volumesnapshotclasses]
-  verbs: [get, list, watch]
-- apiGroups: [snapshot.storage.k8s.io]
-  resources: [volumesnapshotcontents]
-  verbs: [create, delete, patch, update, get, list, watch]
+  verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -303,13 +299,13 @@ metadata:
 rules:
 - apiGroups: [snapshot.storage.k8s.io]
   resources: [volumesnapshotclasses]
-  verbs: [get, list, watch]
+  verbs: [get, list, watch, patch]
 - apiGroups: [rbac.authorization.k8s.io]
   resources: [clusterrolebindings]
   verbs: [get, list, watch, create, update, patch, delete]
 - apiGroups: [rbac.authorization.k8s.io]
   resources: [clusterroles]
-  resourceNames: [datalab-vcluster-volume-snapshots]
+  resourceNames: [datalab-volume-snapshot-classes]
   verbs: [get, bind]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -337,10 +333,14 @@ rules:
   resources:
   - secrets
   - pods
+  - persistentvolumeclaims
   verbs:
   - get
   - list
   - watch
 - apiGroups: [batch]
   resources: [jobs]
+  verbs: [get, list, watch]
+- apiGroups: [snapshot.storage.k8s.io]
+  resources: [volumesnapshots]
   verbs: [get, list, watch]

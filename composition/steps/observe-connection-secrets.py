@@ -257,12 +257,12 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                         instance=store_name,
                     )
 
-    registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
     if registry_enabled:
         observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                 kind="registry", instance="primary")
 
-    data_config = (environment.get("defaults") or {}).get("data") or {}
+    data_config = environment.get("packageR") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:
         data_enabled = True

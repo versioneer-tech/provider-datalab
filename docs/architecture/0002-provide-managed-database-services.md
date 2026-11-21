@@ -41,8 +41,8 @@ composition-managed dump job. Redis uses a composition-managed RDB snapshot
 job. A data volume alone is not a backup. The [backup guide](../how-to-guides/usage_concepts.md#backups)
 defines the configuration examples, schedules, and retention.
 
-Named application volumes use `spec.volumes`. Each entry creates a PVC;
-`backup: true` enables scheduled CSI `VolumeSnapshot` resources. These snapshots
+Named application volumes use `spec.volumes`. Each entry creates a host PVC
+and scheduled CSI `VolumeSnapshot` backups. These snapshots
 have no backup volume size. Database backup tools remain responsible for
 managed database recovery. See [Volumes](../how-to-guides/volumes.md).
 

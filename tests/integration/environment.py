@@ -20,7 +20,7 @@ def configure(documents, storage_class, service_cidr, pod_cidrs):
         data.setdefault("network", {}).update(serviceCIDR=service_cidr, podCIDRs=pod_cidrs)
         vcluster = data.setdefault("vcluster", {})
         vcluster["storageClassName"] = storage_class
-        vcluster["storageClasses"] = {"allowed": [storage_class], "default": storage_class}
+        data.setdefault("volumes", {})["storageClasses"] = {"allowed": [storage_class], "default": storage_class}
     return documents
 
 

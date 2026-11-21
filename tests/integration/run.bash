@@ -19,11 +19,12 @@ while (($#)); do
       target_option=existing
       export PROVIDER_DATALAB_CLUSTER=existing PROVIDER_DATALAB_KUBECONFIG="$2"
       shift 2 ;;
-    --context|--storage-class|--service-cidr|--pod-cidrs|--image-registry|--docker-config|--image-pull-secret)
+    --context|--storage-class|--snapshot-class|--service-cidr|--pod-cidrs|--image-registry|--docker-config|--image-pull-secret)
       [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { printf 'Missing value for %s.\n' "$1" >&2; exit 2; }
       case "$1" in
         --context) export PROVIDER_DATALAB_CONTEXT="$2" ;;
         --storage-class) export PROVIDER_DATALAB_STORAGE_CLASS="$2" ;;
+        --snapshot-class) export PROVIDER_DATALAB_SNAPSHOT_CLASS="$2" ;;
         --service-cidr) export PROVIDER_DATALAB_SERVICE_CIDR="$2" ;;
         --pod-cidrs) export PROVIDER_DATALAB_POD_CIDRS="$2" ;;
         --image-registry) export PROVIDER_DATALAB_IMAGE_REGISTRY="$2" ;;
@@ -45,9 +46,14 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
 
 if [[ "${profile}" == all ]]; then
-  profiles=(verify-network verify-data verify-s3 verify-postgres verify-mongo verify-redis verify-registry verify-vcluster)
+  profiles=(verify-network verify-data verify-s3 verify-postgres verify-mongo verify-redis verify-registry verify-volumes verify-vcluster)
 else
   profiles=("$(selected_profile "${profile}" "$0")")
+fi
+if [[ ( "${profile}" == all || "${profile}" == verify-volumes || "${profile}" == verify-vcluster ) \
+  && -z "${PROVIDER_DATALAB_SNAPSHOT_CLASS:-}" ]]; then
+  printf 'Volume integration needs --snapshot-class for the selected CSI StorageClass.\n' >&2
+  exit 2
 fi
 check_test_images "${profile}"
 started=${SECONDS}
@@ -56,6 +62,14 @@ if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind && "${check_only}" == 0 ]]; then
 fi
 check_cluster_settings
 check_test_namespaces
+if [[ "${profile}" == all || "${profile}" == verify-volumes || "${profile}" == verify-vcluster ]]; then
+  source "${INTEGRATION_DIR}/snapshots.bash"
+  if [[ "${profile}" == verify-volumes ]]; then
+    check_volume_snapshot_settings
+  else
+    check_volume_binding_settings
+  fi
+fi
 if ((check_only)); then
   exit 0
 fi

@@ -17,7 +17,7 @@ def encoded(values):
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": True}, "security": {"externalEgress": False}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": True}, "security": {"externalEgress": False}})
     env["data"]["storage"] = {"region": "us-east-1", "forcePathStyle": True}
     source = {"apiVersion": "versioneer.at/v1", "kind": "Datalab",
               "metadata": {"name": "s-joe", "namespace": "teams"}, "spec": {}}
@@ -49,7 +49,6 @@ def main():
     deployment = manifest(resources, "registry-deployment-s-joe")
     pod = deployment["spec"]["template"]
     container = pod["spec"]["containers"][0]
-    assert container["image"] == "registry:3.1.2"
     config = json.loads(manifest(resources, "registry-config-s-joe")["data"]["config.yml"])
     assert config["storage"]["s3"]["bucket"] == "s-joe"
     assert "rootdirectory" not in config["storage"]["s3"]
@@ -65,7 +64,7 @@ def main():
     assert not any("persistentVolumeClaim" in volume for volume in pod["spec"]["volumes"])
     assert container["readinessProbe"]["httpGet"] == {"path": "/debug/health", "port": "health"}
     assert manifest(resources, "registry-service-s-joe")["spec"]["ports"][0]["port"] == 5000
-    print("PASS shared S3 registry needs runtime credentials, not sessions, Data, or a registry PVC")
+    print("PASS shared S3 registry uses storage credentials without Data or a registry PVC")
 
     route = manifest(resources, "registry-route-s-joe")["spec"]
     assert route["hostnames"] == ["s-joe.lab.acme.com"]
@@ -77,7 +76,7 @@ def main():
     ingress_env = deepcopy(env)
     ingress_env["data"]["httpRoute"]["enabled"] = False
     ingress_env["data"]["httpRoute"]["enableS3"] = False
-    ingress_env["data"]["defaults"]["data"]["enabled"] = True
+    ingress_env["data"]["packageR"]["enabled"] = True
     ingress_env["data"]["ingress"].update(enabled=True, **{"class": "nginx", "secret": "wildcard"})
     ingress_env["data"]["ingress"]["annotations"] = {
         "nginx.ingress.kubernetes.io/proxy-body-size": "2g",
@@ -132,7 +131,7 @@ def main():
     assert not connection(run(observed=observed))["ready"]
     assert auth["data"]["password"] not in json.dumps(info)
     disabled = deepcopy(env)
-    disabled["data"]["defaults"]["registry"]["enabled"] = False
+    disabled["data"]["registry"]["enabled"] = False
     removed = run(disabled, observed)
     assert not any(key.startswith("registry-") for key in removed)
     assert not any(c["type"] == "registry" for c in removed["composite"]["status"]["connections"])

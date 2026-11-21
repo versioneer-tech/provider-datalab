@@ -6,10 +6,8 @@ Use that client for browser login, CLI device login, machine access, and
 restricted user-token exchange. The same client credentials and Secret
 references serve these flows.
 
-Use Keycloak 26.8.1 or later with Standard Token Exchange V2 and client policies
-enabled. Default scopes must not add the unrestricted client-role mapper.
-Enable the `grant-type`, `client-scopes`, and `reject-request` client-policy
-providers and the built-in Role Name and Realm Roles protocol mappers.
+The operator must configure the
+[identity prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#identity-prerequisites).
 
 ## Groups and roles
 
@@ -189,7 +187,7 @@ RoleBinding and ClusterRoleBinding rules apply.
 
 Workload clients use the [virtual API and Kubernetes RBAC](vcluster.md#api-access).
 They do not need the runtime OAuth Secret below. See
-[Workload access](../security/workload-access.md) for the network boundary.
+[Workload access](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#workload-access) for the network boundary.
 
 | Secret | Namespace | Use |
 | --- | --- | --- |
@@ -210,20 +208,8 @@ Virtual API profile Secrets contain public settings and no credentials. See
 [virtual API access](vcluster.md#api-access) for credential files. Permission to
 download a profile is separate from permission to read service credentials.
 
-## Exchange caller checks
-
-A service that exchanges tokens for users must:
-
-- Accept full profile scope names, or translate short names with the Datalab name.
-- Allow only currently configured additional profiles and check each requested
-  role against the caller's validated token.
-- Retain the original caller access token for `subject_token` and authenticate
-  exchange with the existing Datalab client credentials.
-- Validate the returned signature, validity, issuer, exact audiences, user
-  subject, requested roles, and absence of unexpected authorization permissions.
-- Reject missing requested roles even when the token endpoint returns success.
-- Check that the caller is allowed to request token issuance through that
-  service, in addition to the token and role checks above.
+Before integrating exchange into a service, apply the
+[caller checks](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#token-exchange-callers).
 
 ## OAuth2 discovery
 

@@ -9,7 +9,7 @@ Declare a team's users, volumes, and services in a `Datalab` resource; Crossplan
 creates them from the platform's identity, network, and storage settings.
 
 > [!NOTE]
-> The `v1` branch develops `versioneer.at/v1`.
+> The `main` branch uses `versioneer.at/v1`.
 > The `legacy` branch maintains the latest `0.12.x` releases, the last series
 > with direct Educates support and limited to `pkg.internal/v1beta2`.
 
@@ -26,6 +26,10 @@ Complete manifests are in [examples/base](examples/base).
 See [Manifest templates](templates/README.md) for source and build instructions,
 [Tests](tests/README.md) for required checks, and
 [Integration tests](tests/integration/README.md) for live validation.
+
+## Security
+
+See [Security](SECURITY.md) for access controls, network setup, and backup permissions.
 
 ## License
 

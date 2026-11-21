@@ -7,6 +7,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
 source "${INTEGRATION_DIR}/runtime.bash"
 source "${INTEGRATION_DIR}/postgres.bash"
+source "${INTEGRATION_DIR}/snapshots.bash"
 : "${KEEP_VCLUSTER_RESOURCES:=0}"
 readonly VCLUSTER_NAMESPACE=verify-vcluster
 readonly CONTOUR_VERSION=v1.33.7
@@ -20,6 +21,7 @@ report_failure() {
   kube get datalabs.versioneer.at/s-john datalabs.versioneer.at/s-jane --namespace workspace || true
   kube get objects.kubernetes.m.crossplane.io --namespace workspace --selector crossplane.io/composite=verify-vcluster || true
   kube get statefulsets,pods,httproutes,backendtlspolicies --namespace "${VCLUSTER_NAMESPACE}" || true
+  kube get pvc,cronjobs,jobs,volumesnapshots --namespace "${VCLUSTER_NAMESPACE}" || true
   kube get events --namespace "${VCLUSTER_NAMESPACE}" --sort-by=.lastTimestamp | tail -25 || true
   kube logs statefulset/vcluster-vc0 --namespace "${VCLUSTER_NAMESPACE}" --tail=40 || true
   printf 'vCluster resources were kept for diagnosis.\n' >&2
@@ -125,14 +127,94 @@ install_prerequisites() {
     --for=condition=Available --timeout=10m
   apply_environment_config "${MANIFEST_DIR}/vcluster/environmentconfig.yaml"
   kube patch environmentconfig/datalab-vcluster-it --type=merge \
-    --patch "$(jq -n --rawfile ca "${work_directory}/issuer.crt" --rawfile gateway_ca "${work_directory}/gateway.crt" '{data:{vcluster:{issuerCA:$ca},ingress:{certificateAuthority:$gateway_ca}}}')"
+    --patch "$(jq -n --rawfile ca "${work_directory}/issuer.crt" --rawfile gateway_ca "${work_directory}/gateway.crt" \
+      --arg snapshot_class "${PROVIDER_DATALAB_SNAPSHOT_CLASS}" \
+      '{data:{vcluster:{issuerCA:$ca},ingress:{certificateAuthority:$gateway_ca},volumes:{snapshotClassName:$snapshot_class,schedule:"0 0 1 1 *"}}}')"
+}
+
+
+verify_volume_bindings() {
+  local gateway_ip=$1 deadline operation
+  local -a binding_objects
+  mapfile -t binding_objects < <(kube get objects.kubernetes.m.crossplane.io --namespace workspace \
+    --selector crossplane.io/composite=verify-vcluster,datalabs.versioneer.at/vcluster=vc0 -o json | jq -r '
+      [.items[] | .spec.forProvider.manifest as $manifest |
+      if $manifest.kind == "PersistentVolumeClaim" and $manifest.metadata.namespace == "demo" and $manifest.metadata.name == "demo" then
+        .metadata.name, (.spec.references[] | (.dependsOn.name // .patchesFrom.name) | select(startswith("vcluster-")))
+      elif $manifest.kind == "PersistentVolume" and $manifest.metadata.labels["datalabs.versioneer.at/volume"] == "demo" then
+        .metadata.name
+      else empty end] | unique[]')
+  [[ "${#binding_objects[@]}" == 6 ]]
+  bound_volume_uid="$(kube get pvc/volume-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
+  bound_backup_uid="$(kube get cronjob/volume-snapshot-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
+  for operation in patch delete; do
+    local -a request=("${operation}" pvc/volume-demo --namespace "${VCLUSTER_NAMESPACE}"
+      --as "system:serviceaccount:${VCLUSTER_NAMESPACE}:vc-vcluster-vc0" --dry-run=server)
+    if [[ "${operation}" == patch ]]; then
+      request+=(--type=merge --patch '{"metadata":{"labels":{"test-change":"denied"}}}')
+    fi
+    if kube "${request[@]}" >"${work_directory}/volume-admission.log" 2>&1; then
+      printf 'The syncer could %s a host-owned volume.\n' "${operation}" >&2
+      return 1
+    fi
+    grep -F 'Datalab owns this host PVC' "${work_directory}/volume-admission.log" >/dev/null
+  done
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding write
+  kube create job test-bound-volume-backup --from=cronjob/volume-snapshot-demo --namespace "${VCLUSTER_NAMESPACE}"
+  deadline=$((SECONDS + 900))
+  while true; do
+    local job_status
+    job_status="$(kube get job/test-bound-volume-backup --namespace "${VCLUSTER_NAMESPACE}" -o json)"
+    if jq -e 'any(.status.conditions[]?; .type == "Complete" and .status == "True")' <<<"${job_status}" >/dev/null; then
+      break
+    fi
+    if ((SECONDS >= deadline)) || jq -e 'any(.status.conditions[]?; .type == "Failed" and .status == "True")' <<<"${job_status}" >/dev/null; then
+      kube describe job/test-bound-volume-backup --namespace "${VCLUSTER_NAMESPACE}" || true
+      kube logs job/test-bound-volume-backup --namespace "${VCLUSTER_NAMESPACE}" --tail=80 || true
+      return 1
+    fi
+    sleep 3
+  done
+  bound_snapshot="$(kube get volumesnapshots --namespace "${VCLUSTER_NAMESPACE}" \
+    --selector "datalabs.versioneer.at/volume=demo,datalabs.versioneer.at/source-pvc-uid=${bound_volume_uid}" -o json \
+    | jq -er '[.items[] | select(.status.readyToUse == true)] | if length == 1 then .[0].metadata.name else error("Expected one ready volume snapshot") end')"
+  bound_snapshot_uid="$(kube get "volumesnapshot/${bound_snapshot}" --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding recreate-claim
+  kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"vclusters":{"vc0":{"volumeBindings":[]}}}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding absent
+  for object in "${binding_objects[@]}"; do
+    kube wait "object.kubernetes.m.crossplane.io/${object}" --namespace workspace --for=delete --timeout=5m
+  done
+  kube patch datalab/verify-vcluster --namespace workspace --type=merge \
+    --patch '{"spec":{"vclusters":{"vc0":{"volumeBindings":[{"name":"demo","target":{"namespace":"demo","name":"demo"}}]}}}}'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
+  deadline=$((SECONDS + 90))
+  until kube get pods --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -e '
+    [.items[] | select(.metadata.annotations["vcluster.loft.sh/object-name"] == "test-bound-volume"
+       and .metadata.annotations["vcluster.loft.sh/object-namespace"] == "demo")] |
+    length == 1 and
+    (.[0].spec.volumes | any(.name == "data" and .persistentVolumeClaim.claimName == "volume-demo" and .persistentVolumeClaim.readOnly == true)) and
+    (.[0].spec.volumes | any(.name == "scratch" and has("emptyDir")))
+  ' >/dev/null; do
+    ((SECONDS < deadline)) || return 1
+    sleep 3
+  done
+  verify_bound_volume_preserved
+  printf 'PASS host admission preserves read-only mounts and other volumes; virtual claim and binding recreation keep data\n'
+}
+
+verify_bound_volume_preserved() {
+  [[ "$(kube get pvc/volume-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')" == "${bound_volume_uid}" ]]
+  [[ "$(kube get cronjob/volume-snapshot-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')" == "${bound_backup_uid}" ]]
+  kube get "volumesnapshot/${bound_snapshot}" --namespace "${VCLUSTER_NAMESPACE}" -o json \
+    | jq -e --arg uid "${bound_snapshot_uid}" '.metadata.uid == $uid and .status.readyToUse == true' >/dev/null
 }
 
 
 verify_custom_connections() {
   local team namespace key deadline expected
   kube patch environmentconfig/datalab-custom --type=merge --patch \
-    '{"data":{"customSecrets":[{"name":"apikey-1"},{"name":"apikey-2"}],"defaults":{"data":{"enabled":false},"registry":{"enabled":false}}}}'
+    '{"data":{"customSecrets":[{"name":"apikey-1"},{"name":"apikey-2"}],"packageR":{"enabled":false},"registry":{"enabled":false}}}'
   for team in s-john s-jane; do
     kube create secret generic "${team}" --namespace workspace \
       --from-literal=AWS_ACCESS_KEY_ID=minioadmin --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -324,6 +406,7 @@ PVC
   kube create configmap verify-vcluster-client --namespace workspace \
     --from-file="${work_directory}/gateway.crt" --from-file="${work_directory}/issuer.crt" \
     --from-file="${work_directory}/catalog.json" --from-file="${REPO_ROOT}/tests/vcluster/e2e.py" \
+    --from-file="${REPO_ROOT}/tests/vcluster/volume_bindings.py" \
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod/verify-vcluster-client --namespace workspace --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/vcluster/client.yaml" \
@@ -338,6 +421,7 @@ PVC
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3","verify-vcluster-member"]}}'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}"
+  verify_volume_bindings "${gateway_ip}"
   verify_hibernation
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --check-only
   kube rollout restart statefulset/vcluster-vc0 --namespace "${runtime_namespace}"
@@ -350,11 +434,14 @@ PVC
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --revoked
   kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
-  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"replace","path":"/spec/volumes","value":{}},{"op":"remove","path":"/spec/vclusters/vc0"}]'
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"remove","path":"/spec/vclusters/vc0"}]'
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1
   kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  verify_bound_volume_preserved
+  printf 'PASS a running bound workload does not block vc0 removal; host volume, backup schedule, and snapshot remain\n'
   printf 'PASS PostgreSQL remains ready after removing vc0\n'
 }
 
@@ -387,6 +474,7 @@ ADMISSION
 
 main() {
   require_cluster
+  check_volume_binding_settings
   install_prerequisites
   build_catalog_image
   build_client_image

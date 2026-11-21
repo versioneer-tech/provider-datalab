@@ -12,7 +12,7 @@ This adds the S3 endpoint to each Data-enabled Datalab's browser hostname.
 Use a Gateway API controller that supports HTTPRoute header regular
 expressions, such as Contour. Add a ReferenceGrant if its certificate Secret
 is in another namespace. With S3 disabled, Data requests use the browser service.
-The [network policies](../security/network-policies.md#service-policies)
+The [network policies](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#service-policies)
 must permit access from the Gateway and access to object storage and IAM.
 
 ## S3 access to s-jane

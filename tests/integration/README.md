@@ -14,6 +14,14 @@ not installed or tested.
 
 ## Select a cluster
 
+`all`, `verify-volumes`, and `verify-vcluster` need a snapshot-capable CSI driver,
+its snapshotter sidecar, a snapshot controller, and the three snapshot CRDs. Dedicated Kind
+setup supplies these resources. Existing targets must already provide them.
+
+The selected StorageClass and VolumeSnapshotClass must use the same CSI driver;
+the snapshot class must use deletion policy `Delete`. These profiles check
+these prerequisites without installing or changing them.
+
 For an existing cluster, supply its kubeconfig, context, StorageClass, Service
 CIDR, and comma-separated Pod CIDRs. Use values from the selected cluster:
 
@@ -21,6 +29,7 @@ CIDR, and comma-separated Pod CIDRs. Use values from the selected cluster:
 tests/integration/run.bash all \
   --kubeconfig /tmp/datalab-test.kubeconfig --context datalab-test \
   --storage-class standard-rwo \
+  --snapshot-class workspace-snapshots \
   --service-cidr 10.20.0.0/16 --pod-cidrs 10.30.0.0/16 \
   --image-registry registry.acme.com/team/integration
 ```
@@ -50,6 +59,14 @@ Standalone profile scripts use `PROVIDER_DATALAB_CLUSTER=existing`,
 Set `PROVIDER_DATALAB_STORAGE_CLASS`, `PROVIDER_DATALAB_SERVICE_CIDR`, and
 `PROVIDER_DATALAB_POD_CIDRS` to the same values used by the runner. Set
 `PROVIDER_DATALAB_IMAGE_REGISTRY` when the profile builds remote images.
+For `all`, `verify-volumes`, or `verify-vcluster` on an existing target, also set
+`PROVIDER_DATALAB_SNAPSHOT_CLASS`. Kind uses its setup defaults.
+
+A virtual target must already expose the snapshot APIs and matching classes
+through its platform storage configuration. The runner uses only the selected
+virtual API; it does not change the physical host or virtual cluster sync settings.
+The virtual cluster profile also needs stable mutating admission policies
+on its selected target (Kubernetes 1.36 or later).
 
 ## Run profiles
 
@@ -57,14 +74,25 @@ Run the [unit suite](../README.md#run-the-suite) first. Then run all profiles
 with one platform setup, or select a profile from the table below:
 
 ```bash
-tests/integration/run.bash all
+tests/integration/run.bash all --kind
 tests/integration/run.bash verify-s3
 ```
 
 Without an existing target, the runner creates or reuses the dedicated Kind
-cluster. `--kind` selects this mode explicitly. It reuses matching
-dependency releases after readiness checks. To apply charts again after changing
-values, set `REUSE_DEPENDENCIES=0`:
+cluster. `--kind` selects this mode explicitly. Its
+[`cluster setup`](create-cluster.bash) prepares NFS CSI storage and snapshots on
+new and reused clusters. The default classes are `datalab-nfs` and
+`datalab-nfs-snapshots`. Use `--storage-class` and `--snapshot-class` to select
+other matching classes.
+
+[`kind-storage.bash`](kind-storage.bash) installs NFS CSI `4.13.6`, snapshot
+CRDs and controllers, and an NFS-Ganesha server in `test-volume-snapshots`.
+Kind nodes need NFS client support. The server uses `emptyDir`; replacing its
+Pod discards the test data. This setup is for the dedicated test cluster.
+
+The runner reuses matching dependency releases after readiness checks.
+To apply charts again after changing values, set
+`REUSE_DEPENDENCIES=0`:
 
 ```bash
 REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
@@ -81,6 +109,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | Registry | `KEEP_REGISTRY_RESOURCES` |
 | PostgreSQL | `KEEP_POSTGRES_RESOURCES` |
 | MongoDB or Redis | `KEEP_STORE_RESOURCES` |
+| Volumes | `KEEP_VOLUME_RESOURCES` |
 | Virtual clusters | `KEEP_VCLUSTER_RESOURCES` |
 
 ## Datalab manifests by profile
@@ -94,7 +123,8 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL write/read through connection Secrets; backup configuration enabled on `pg0` and absent on `pg1`. |
 | `verify-mongo` | [MongoDB](manifests/mongo/datalab.yaml) | Document write/read; back up and restore the probe document with oplog replay in a separate MongoDB process. |
 | `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Key write/read; restore a backup in a separate Redis process, then disable backups and retain the backup PVC. |
-| `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and storage persistence. See below. |
+| `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
+| `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |
 
 The fixtures use profile-named prerequisite Secrets and disable services outside
 their checks. Most use `datalab` or `datalab-custom`; the virtual cluster profile
@@ -125,6 +155,38 @@ The test policies allow labeled service probes on PostgreSQL, MongoDB, and Redis
 ports and block other outside clients. Operators and CRDs use the versions in
 the [installation guide](../../docs/how-to-guides/installation.md#prerequisites).
 
+## Volume checks
+
+`verify-volumes` prepares the shared Keycloak test realm, then declares a
+Datalab with named host storage and no virtual cluster. The Datalab must become
+ready after the first PVC mount. Each volume gets a backup schedule. The profile
+runs Jobs from the generated CronJob. The default retention must leave exactly
+two ready snapshots.
+
+The profile consumes the selected target's CSI and snapshot infrastructure.
+Kind provisions this during cluster setup. Existing targets use the classes
+passed with `--storage-class` and `--snapshot-class`; missing snapshot capability
+stops the run before platform setup.
+
+The profile checks:
+
+- Actual file recovery after the source changes, and independent writes to the
+  restored PVC.
+- Two ready recovery points for the current PVC UID; unrelated snapshots remain.
+- Completed recovery points after a failed Job, and incomplete snapshot cleanup
+  before another successful backup.
+- Backup identity denial for PVC deletion, Secret reads, and snapshots in
+  another namespace.
+- The observed PVC reference and phase, ready-snapshot count, and last successful
+  time in Datalab status.
+- Independent backup schedules for source and restored volumes; volume removal
+  removes its schedule and preserves the other volume.
+- Recovery from a snapshot after the source volume declaration and PVC are removed.
+
+These checks use the selected test cluster API because the resources being
+tested are host resources. They do not install resources through a separate
+physical host API when the selected target is a virtual cluster.
+
 ## Virtual cluster checks
 
 The profile installs PGO, Keycloak, and Contour and uses a disposable certificate
@@ -140,11 +202,16 @@ individual vcluster roles and requests their optional scopes. It checks
 namespace access, denied escalation, role downgrade, and revocation of tokens
 that have not expired. Downloaded helpers must return the caller token unchanged.
 
-Storage checks mount a provider-managed named PVC in ordinary Pods. Workload
+Storage checks create an application PVC through the virtual API and mount it in ordinary Pods. Workload
 replacement, vCluster hibernation, and control-plane restart must keep the
 same claim and files. Oversized virtual Pods must report host CPU and memory
 quota rejection. Controller installation uses only the virtual API.
-CSI backup and restore require a snapshot-capable test target.
+
+Named-volume checks mount a Datalab host PVC through an explicit binding.
+Virtual claim replacement and binding removal must keep file contents, the host
+PVC UID, the backup schedule, and a ready snapshot. Host admission must preserve
+read-only mounts and other Pod volumes. Removing `vc0` with a running bound Pod
+must finish and keep the host volume and its backups.
 
 Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
 and different custom Secrets for John and Jane. STAC item search must still work
@@ -175,9 +242,11 @@ apply. See [build settings](../../templates/README.md).
 
 The [workflow](../../.github/workflows/pr.yaml) uses the
 [shared check selection](../README.md#select-checks). Runtime changes and manual
-runs execute the full unit suite and all eight profiles in one Kind cluster.
-Documentation-only changes run documentation and static checks. The final
-required check waits for every selected job.
+runs execute the full unit suite and all nine profiles in one Kind cluster.
+Draft pull requests run the unit suite but defer Kubernetes integration;
+marking the pull request ready enables it. Documentation-only changes run
+documentation and static checks. The final required check waits for every
+selected job.
 
 Tag publication requires a successful push test run for the tagged commit and
 does not repeat tests. Use tags such as `1.0.0`, without a `v` prefix.

@@ -1,0 +1,26 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: ${namespace}
+    resourceRules:
+    - apiGroups: ['']
+      apiVersions: [v1]
+      operations: [CREATE, UPDATE, DELETE]
+      resources: [persistentvolumeclaims]
+  matchConditions:
+  - name: virtual-syncer
+    expression: ${syncer_expression}
+  - name: owned-volume
+    expression: ${claim_expression}
+  validations:
+  - expression: 'false'
+    message: Datalab owns this host PVC. Virtual clusters cannot change or delete it.

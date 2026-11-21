@@ -121,6 +121,10 @@ jobs:
           cluster_name: provider-datalab-it
           config: tests/integration/manifests/kind.yaml
 
+      - name: Prepare Kind storage and snapshots
+        if: env.RUN_INTEGRATION == 'true'
+        run: tests/integration/create-cluster.bash
+
       - name: Deploy integration platform
         if: env.RUN_INTEGRATION == 'true'
         run: |
@@ -168,6 +172,12 @@ jobs:
         if: env.RUN_INTEGRATION == 'true'
         run: |
           tests/integration/verify-redis.bash
+          tests/integration/resource-budget.bash
+
+      - name: Verify Datalab volumes and snapshot recovery
+        if: env.RUN_INTEGRATION == 'true'
+        run: |
+          tests/integration/verify-volumes.bash
           tests/integration/resource-budget.bash
 
       - name: Verify Datalab virtual clusters and STAC catalog

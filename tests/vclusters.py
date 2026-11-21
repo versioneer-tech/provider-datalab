@@ -5,6 +5,7 @@
 
 from copy import deepcopy
 import base64
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -33,6 +34,212 @@ def configuration(resources, instance):
 
 def connections(resources):
     return [c for c in resources["composite"]["status"]["connections"] if c["type"] == "vcluster"]
+
+
+def check_volume_bindings(args, env, source, baseline):
+    bound_source = deepcopy(source)
+    binding = {"name": "analysis", "target": {"namespace": "demo", "name": "analysis"}}
+    bound_source["spec"]["vclusters"]["vc0"]["volumeBindings"] = [binding]
+
+    def keys(target):
+        target_id = hashlib.sha256(json.dumps(target, sort_keys=True).encode()).hexdigest()[:10]
+        suffix = "volume-binding-analysis-" + target_id
+        return {
+            ending: resource_name("vcluster", "s-joe", "vc0", *(["access"] if virtual else []), suffix + ending)
+            for ending, virtual in (("-pv", True), ("-pvc", True), ("-claim-policy", True),
+                                    ("-claim-policy-binding", True), ("-mount-policy", False),
+                                    ("-mount-policy-binding", False))
+        }
+
+    binding_keys = keys(binding["target"])
+    rendered = render(args, env, bound_source, [], include_composite=True)
+    pvc_key = binding_keys["-pvc"]
+    pv = manifest(rendered, binding_keys["-pv"])
+    pvc = manifest(rendered, pvc_key)
+    assert pvc["metadata"]["namespace"] == "demo" and pvc["metadata"]["name"] == "analysis"
+    assert pvc["metadata"]["labels"]["vcluster.loft.sh/controlled-by"] == "datalab-volume"
+    assert pv["metadata"]["labels"] == pvc["metadata"]["labels"]
+    assert pvc["spec"]["volumeName"] == pv["metadata"]["name"]
+    assert pvc["spec"]["storageClassName"] == pv["spec"]["storageClassName"] == ""
+    assert pvc["spec"]["resources"]["requests"]["storage"] == pv["spec"]["capacity"]["storage"] == "2Gi"
+    assert pv["spec"]["persistentVolumeReclaimPolicy"] == "Retain"
+    anchor = manifest(rendered, binding_keys["-claim-policy"])
+    owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
+             "name": anchor["metadata"]["name"], "uid": "", "controller": True, "blockOwnerDeletion": False}
+    for ending in ("-pv", "-pvc"):
+        assert rendered[binding_keys[ending]]["spec"]["managementPolicies"] == ["Observe", "Create", "Update"]
+        assert manifest(rendered, binding_keys[ending])["metadata"]["ownerReferences"] == [owner]
+        patches = [reference for reference in rendered[binding_keys[ending]]["spec"]["references"] if "patchesFrom" in reference]
+        assert patches == [{"patchesFrom": {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
+                                            "name": binding_keys["-claim-policy"], "namespace": "workspace",
+                                            "fieldPath": "status.atProvider.manifest.metadata.uid"},
+                            "toFieldPath": "metadata.ownerReferences[0].uid"}]
+    assert rendered[binding_keys["-claim-policy"]]["spec"]["forProvider"]["deletionPropagationPolicy"] == "Background"
+    controller_args = configuration(rendered, "vc0")["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"]
+    controllers = next(value.removeprefix("--controllers=").split(",") for value in controller_args if value.startswith("--controllers="))
+    assert "*" in controllers and "-persistentvolume-binder" not in controllers
+    assert "-attachdetach" in controllers and "-persistentvolume-expander" in controllers
+    assert configuration(rendered, "vc1")["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"] == controller_args
+    assert configuration(baseline, "vc0")["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"] == controller_args
+    assert pv["spec"]["claimRef"] == {"namespace": "demo", "name": "analysis", "uid": ""}
+    readiness = rendered[pvc_key]["spec"]["readiness"]
+    assert readiness["policy"] == "DeriveFromCelQuery" and "Bound" in readiness["celQuery"]
+
+    host_keys = {key for key in baseline if key.startswith("volume-")}
+    for key in host_keys:
+        assert rendered[key]["spec"] == baseline[key]["spec"]
+        assert "vcluster.loft.sh/managed-by" not in manifest(rendered, key).get("metadata", {}).get("labels", {})
+    host_guard = resource_name("volume", "s-joe", "analysis", "claim-policy")
+    host_guard_binding = resource_name("volume", "s-joe", "analysis", "claim-policy-binding")
+    protection = [binding_keys["-mount-policy"], binding_keys["-mount-policy-binding"], host_guard, host_guard_binding]
+    dependencies = {reference["dependsOn"]["name"] for reference in rendered[pvc_key]["spec"]["references"] if "dependsOn" in reference}
+    assert dependencies == {*protection, binding_keys["-claim-policy"], binding_keys["-claim-policy-binding"]}
+    assert all(reference["dependsOn"]["namespace"] == "workspace"
+               for reference in rendered[pvc_key]["spec"]["references"] if "dependsOn" in reference)
+    control = resource_name("vcluster", "s-joe", "vc0", "statefulset")
+    assert manifest(rendered, control)["spec"]["replicas"] == 0
+    assert manifest(rendered, resource_name("vcluster", "s-joe", "vc1", "statefulset"))["spec"]["replicas"] == 1
+    assert {reference["dependsOn"]["name"] for reference in rendered[control]["spec"]["references"]} >= set(protection)
+
+    observed = []
+    for key in protection:
+        ready = deepcopy(rendered[key])
+        ready["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+        observed.append(ready)
+    released = render(args, env, bound_source, observed)
+    assert manifest(released, control)["spec"]["replicas"] == 1
+    native = deepcopy(pvc)
+    pvc_observation = deepcopy(rendered[pvc_key])
+    for uid, deleting, expected in (("old-claim", False, "old-claim"),
+                                    ("old-claim", True, ""), ("new-claim", False, "new-claim")):
+        native["metadata"]["uid"] = uid
+        native["metadata"].pop("deletionTimestamp", None)
+        if deleting:
+            native["metadata"]["deletionTimestamp"] = "2026-11-21T01:00:00Z"
+        pvc_observation["status"] = {"atProvider": {"manifest": deepcopy(native)}}
+        rebound = render(args, env, bound_source, [*observed, pvc_observation])
+        assert manifest(rebound, binding_keys["-pv"])["spec"]["claimRef"]["uid"] == expected
+    print("PASS bindings wait for host protection and can rebind after virtual PVC replacement")
+
+    retargeted = deepcopy(bound_source)
+    retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"]["namespace"] = "a" * 63
+    moved = render(args, env, retargeted, observed)
+    moved_keys = keys(retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"])
+    assert not set(binding_keys.values()) & set(moved)
+    for ending in binding_keys:
+        old = manifest(rendered, binding_keys[ending])["metadata"]
+        new = manifest(moved, moved_keys[ending])["metadata"]
+        assert (old.get("namespace"), old["name"]) != (new.get("namespace"), new["name"])
+    check_binding_admission(rendered, binding_keys, host_guard)
+    check_mount_scope(manifest(moved, moved_keys["-mount-policy"]), "a" * 63,
+                      "analysis-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-ad510d73dd")
+    records = [rendered[binding_keys[ending]] for ending in ("-pv", "-pvc")]
+    ready_control = deepcopy(released[control])
+    ready_control["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+    cleaned = render(args, env, source, [ready_control, *records])
+    assert not set(binding_keys.values()) & set(cleaned)
+    removed = deepcopy(bound_source)
+    removed["spec"]["vclusters"].pop("vc0")
+    without_instance = render(args, env, removed, records)
+    for key in host_keys:
+        assert without_instance[key]["spec"] == baseline[key]["spec"]
+    assert not set(binding_keys.values()) & set(without_instance)
+    assert not set(binding_keys.values()) & set(baseline)
+    print("PASS retargeting replaces virtual records; removing bindings or instances keeps host data and backups")
+
+    invalid = deepcopy(bound_source)
+    invalid["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["name"] = "missing"
+    render(args, env, invalid, [], error="Each volume binding must select a declared named volume")
+    invalid = deepcopy(bound_source)
+    invalid["spec"]["vclusters"]["vc1"]["volumeBindings"] = [binding]
+    render(args, env, invalid, [], error="A named volume can have one virtual binding")
+    invalid = deepcopy(bound_source)
+    invalid["spec"]["volumes"]["other"] = {}
+    invalid["spec"]["vclusters"]["vc0"]["volumeBindings"].append({"name": "other", "target": binding["target"]})
+    render(args, env, invalid, [], error="target PVCs must be unique")
+    print("PASS undeclared volumes and conflicting virtual bindings fail")
+
+
+def admission_case(name, policy, values, allowed):
+    return {"Name": name, "Matches": [item["expression"] for item in policy["spec"]["matchConditions"]],
+            "Validations": [item["expression"] for item in policy["spec"]["validations"]],
+            "Values": deepcopy(values), "Allowed": allowed}
+
+
+def run_admission(tests):
+    subprocess.run(["go", "run", "."], cwd=Path(__file__).parent / "admission",
+                   input=json.dumps(tests), text=True, check=True, timeout=180)
+
+
+def check_mount_scope(policy, namespace, translated):
+    # A deny rule makes the mutation's match conditions observable in the CEL runner.
+    scope = deepcopy(policy)
+    scope["spec"]["validations"] = [{"expression": "false"}]
+    values = {"request": {"userInfo": {"username": "system:serviceaccount:s-joe:vc-vcluster-vc0"}},
+              "object": {"metadata": {"annotations": {"vcluster.loft.sh/object-namespace": namespace}},
+                         "spec": {"volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": translated}}]}},
+              "oldObject": {}, "params": {}}
+    cases = [admission_case("only this translated claim matches the mount policy", scope, values, False)]
+    for name, change in (
+            ("another virtual cluster", lambda value: value["request"]["userInfo"].update(username="system:serviceaccount:s-joe:vc-vcluster-vc1")),
+            ("another virtual namespace", lambda value: value["object"]["metadata"]["annotations"].update({"vcluster.loft.sh/object-namespace": "other"})),
+            ("another translated claim", lambda value: value["object"]["spec"]["volumes"][0]["persistentVolumeClaim"].update(claimName="other")),
+            ("Pod without volumes", lambda value: value["object"]["spec"].pop("volumes")),
+            ("Pod without namespace annotation", lambda value: value["object"]["metadata"].pop("annotations"))):
+        changed = deepcopy(values)
+        change(changed)
+        cases.append(admission_case(name + " is outside the mount policy", scope, changed, True))
+    run_admission(cases)
+
+
+def check_binding_admission(resources, keys, host_guard):
+    host = manifest(resources, host_guard)
+    virtual = manifest(resources, keys["-claim-policy"])
+    values = {"request": {"operation": "CREATE", "namespace": "s-joe", "userInfo": {
+        "username": "system:serviceaccount:s-joe:vc-vcluster-vc0"}},
+        "object": {"metadata": {"name": "volume-analysis"}}, "oldObject": None, "params": {}}
+    tests = []
+    for operation in ("CREATE", "UPDATE", "DELETE"):
+        changed = deepcopy(values)
+        changed["request"]["operation"] = operation
+        if operation == "DELETE":
+            changed["object"], changed["oldObject"] = None, changed["object"]
+        tests.append(admission_case("syncer cannot " + operation + " a host volume", host, changed, False))
+    for name, change in (
+            ("other host claim", lambda value: value["object"]["metadata"].update(name="application-data")),
+            ("operator identity", lambda value: value["request"]["userInfo"].update(username="system:serviceaccount:crossplane-system:provider-kubernetes")),
+            ("other workspace syncer", lambda value: value["request"]["userInfo"].update(username="system:serviceaccount:other:vc-vcluster-vc0"))):
+        changed = deepcopy(values)
+        change(changed)
+        tests.append(admission_case(name + " is outside host protection", host, changed, True))
+    values["request"].update(namespace="demo", operation="UPDATE")
+    values["object"] = deepcopy(manifest(resources, keys["-pvc"]))
+    values["object"]["metadata"]["ownerReferences"][0]["uid"] = "test-policy-uid"
+    values["oldObject"] = deepcopy(values["object"])
+    tests.append(admission_case("valid virtual claim binding", virtual, values, True))
+    creation = deepcopy(values)
+    creation["request"]["operation"] = "CREATE"
+    creation["oldObject"] = None
+    tests.append(admission_case("new virtual claim has a valid GC owner", virtual, creation, True))
+    creation["object"]["metadata"]["ownerReferences"][0]["uid"] = ""
+    tests.append(admission_case("unpatched GC owner UID is denied", virtual, creation, False))
+    for name, change in (
+            ("removed sync marker", lambda value: value["object"]["metadata"].pop("labels")),
+            ("changed sync marker", lambda value: value["object"]["metadata"]["labels"].update({"vcluster.loft.sh/controlled-by": "other"})),
+            ("changed volume", lambda value: value["object"]["spec"].update(volumeName="other")),
+            ("dynamic storage class", lambda value: value["object"]["spec"].update(storageClassName="standard")),
+            ("removed GC owner", lambda value: value["object"]["metadata"].pop("ownerReferences")),
+            ("changed GC owner", lambda value: value["object"]["metadata"]["ownerReferences"][0].update(uid="other-policy-uid")),
+            ("additional GC owner", lambda value: value["object"]["metadata"]["ownerReferences"].append({"apiVersion": "v1", "kind": "Namespace", "name": "demo", "uid": "other-owner"}))):
+        changed = deepcopy(values)
+        change(changed)
+        tests.append(admission_case(name + " is denied", virtual, changed, False))
+    values["object"]["metadata"]["name"] = "application-data"
+    tests.append(admission_case("ordinary virtual PVCs are outside binding protection", virtual, values, True))
+    assert virtual["spec"]["matchConstraints"]["resourceRules"][0]["operations"] == ["CREATE", "UPDATE"]
+    assert host["spec"]["matchConstraints"]["namespaceSelector"]["matchLabels"] == {"kubernetes.io/metadata.name": "s-joe"}
+    run_admission(tests)
+    check_mount_scope(manifest(resources, keys["-mount-policy"]), "demo", "analysis-x-demo-x-vcluster-vc0")
 
 
 def check_instance_isolation(resources):
@@ -78,74 +285,7 @@ def check_instance_isolation(resources):
             not in authentication["jwt"][0]["claimValidationRules"][0]["expression"]
         )
         assert configuration(resources, instance)["experimental"]["deploy"]["vcluster"]["manifests"] == ""
-        assert (resource_name("vcluster", "s-joe", instance, "access", "volumes", "analysis", "pvc") in resources) == (instance == "vc0")
-    pvc = manifest(resources, resource_name("vcluster", "s-joe", "vc0", "access", "volumes", "analysis", "pvc"))
-    assert pvc["metadata"] == {"name": "volume-analysis", "namespace": "demo",
-                               "labels": {"datalabs.versioneer.at/volume": "analysis"}}
-    assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
-    assert pvc["spec"]["storageClassName"] == "standard"
-    assert "ownerReferences" not in pvc["metadata"]
-    assert resources["composite"]["status"]["volumes"] == [{
-        "name": "analysis", "vcluster": "vc0", "namespace": "demo", "pvcName": "volume-analysis",
-    }]
-    print("PASS virtual clusters have separate routes, roles, and persistent volumes")
-
-
-def check_volumes(args, env, source, baseline):
-    for instance in ("vc0", "vc1"):
-        native = configuration(baseline, instance)
-        assert native["sync"]["toHost"]["volumeSnapshots"]["enabled"] is False
-        assert resource_name("vcluster", "s-joe", instance, "snapshot-binding") not in baseline
-
-    enabled_env, enabled_source = deepcopy(env), deepcopy(source)
-    enabled_env["data"]["vcluster"]["volumeSnapshots"] = True
-    enabled_env["data"]["volumeSnapshots"] = {"snapshotClassName": "workspace-snapshots", "retention": 2}
-    enabled_source["spec"]["volumes"]["analysis"]["backup"] = True
-    enabled_source["spec"]["volumes"]["recovered"] = {
-        "vcluster": "vc0", "namespace": "recovery", "storage": "2Gi", "restoreFrom": "saved-analysis",
-    }
-    resources = render(args, enabled_env, enabled_source, [], include_composite=True)
-    def storage_key(name, suffix):
-        return resource_name("vcluster", "s-joe", "vc0", "access", "volumes", name, suffix)
-
-    restored = manifest(resources, storage_key("recovered", "pvc"))
-    assert restored["spec"]["dataSource"] == {
-        "apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": "saved-analysis",
-    }
-    assert manifest(resources, resource_name("vcluster", "s-joe", "vc0", "access", "namespace-recovery"))["metadata"]["name"] == "recovery"
-    assert "dataSource" not in manifest(resources, storage_key("analysis", "pvc"))["spec"]
-    job = manifest(resources, storage_key("analysis", "backup-cronjob"))
-    pod = job["spec"]["jobTemplate"]["spec"]["template"]["spec"]
-    assert job["spec"]["concurrencyPolicy"] == "Forbid"
-    assert pod["containers"][0]["args"] == ["demo", "analysis", "volume-analysis", "workspace-snapshots", "2"]
-    assert not any("persistentVolumeClaim" in volume for volume in pod["volumes"])
-    assert not any("secret" in volume for volume in pod["volumes"])
-    role = manifest(resources, storage_key("analysis", "backup-role"))
-    assert role["rules"][0] == {"apiGroups": [""], "resources": ["persistentvolumeclaims"],
-                                "resourceNames": ["volume-analysis"], "verbs": ["get"]}
-    for instance in ("vc0", "vc1"):
-        native = configuration(resources, instance)
-        assert native["sync"]["toHost"]["volumeSnapshots"]["enabled"] is True
-        assert native["sync"]["toHost"]["volumeSnapshotContents"]["enabled"] is True
-        binding = manifest(resources, resource_name("vcluster", "s-joe", instance, "snapshot-binding"))
-        assert binding["roleRef"]["name"] == "datalab-vcluster-volume-snapshots"
-    reference = next(item for item in resources["composite"]["status"]["volumes"] if item["name"] == "analysis")
-    assert reference["backupCronJobName"] == "volume-snapshot-analysis"
-    disabled_source = deepcopy(enabled_source)
-    disabled_source["spec"]["volumes"]["analysis"]["backup"] = False
-    disabled = render(args, enabled_env, disabled_source, [])
-    assert storage_key("analysis", "pvc") in disabled
-    assert storage_key("analysis", "backup-cronjob") not in disabled
-    assert not any(body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "VolumeSnapshot"
-                   for body in resources.values()), "Backup snapshots must have a lifecycle separate from Crossplane resources."
-    render(args, env, enabled_source, [], error="require data.vcluster.volumeSnapshots=true")
-    bad_env = deepcopy(enabled_env)
-    bad_env["data"]["volumeSnapshots"].pop("snapshotClassName")
-    render(args, bad_env, enabled_source, [], error="requires data.volumeSnapshots.snapshotClassName")
-    bad_env = deepcopy(enabled_env)
-    bad_env["data"]["volumeSnapshots"]["retention"] = 0
-    render(args, bad_env, enabled_source, [], error="retention must be an integer")
-    print("PASS optional snapshot schedules, new-volume restore, and prerequisite validation")
+    print("PASS virtual clusters have separate routes and roles")
 
 
 def check_membership(args, env, source, resources):
@@ -189,9 +329,15 @@ def check_membership(args, env, source, resources):
     explicit["spec"]["vclusters"]["vc0"]["groups"] = [
         {"name": "cluster-admin", "namespace": "*", "role": "cluster-admin"}
     ]
-    compatible = render(args, env, explicit, observed, include_composite=True)
-    assert set(compatible) == set(automatic)
-    assert all(body.get("spec") == automatic[key].get("spec") for key, body in compatible.items() if key != "composite")
+    repeated = render(args, env, explicit, observed, include_composite=True)
+    bindings = [manifest(repeated, key) for key, body in repeated.items()
+                if body.get("kind") == "Object"
+                and body["metadata"].get("labels", {}).get("datalabs.versioneer.at/vcluster") == "vc0"
+                and manifest(repeated, key).get("kind") == "ClusterRoleBinding"]
+    assert len(bindings) == 1 and bindings[0]["roleRef"]["name"] == "cluster-admin"
+    profiles = [c for c in repeated["composite"]["status"]["connections"]
+                if c["type"] == "vcluster" and c["instance"] == "vc0" and c["group"] == "cluster-admin"]
+    assert len(profiles) == 1
     implicit["spec"]["users"].remove("jane")
     implicit["spec"]["vclusters"] = {}
     implicit["spec"]["volumes"] = {}
@@ -373,7 +519,6 @@ def check_public_profiles(args, env, source, resources):
 def check_instance_removal(args, env, source, resources):
     reduced = deepcopy(source)
     del reduced["spec"]["vclusters"]["vc0"]
-    reduced["spec"]["volumes"] = {}
     reduced_resources = render(args, env, reduced, [])
     assert resource_name("vcluster", "s-joe", "vc0", "statefulset") not in reduced_resources
     assert user_roles(reduced_resources) == {
@@ -382,7 +527,9 @@ def check_instance_removal(args, env, source, resources):
     assert manifest(
         reduced_resources, resource_name("vcluster", "s-joe", "vc1", "statefulset")
     ) == manifest(resources, resource_name("vcluster", "s-joe", "vc1", "statefulset"))
-    print("PASS removing one instance preserves the other instance")
+    key = resource_name("volume", "s-joe", "analysis")
+    assert manifest(reduced_resources, key) == manifest(resources, key)
+    print("PASS removing one instance preserves the other instance and host volumes")
 
 
 def check_name_collisions(args, env, source):
@@ -502,9 +649,10 @@ def check_hibernation(args, env, source, baseline):
         if body.get("spec", {}).get("providerConfigRef", {}).get("name") == provider:
             assert body["metadata"]["annotations"]["crossplane.io/paused"] == "true"
             assert body["spec"] == baseline[key]["spec"]
-    for parts in (("data",), ("access", "volumes", "analysis", "pvc")):
-        key = resource_name("vcluster", "s-joe", "vc0", *parts)
+    for key in (resource_name("vcluster", "s-joe", "vc0", "data"), resource_name("volume", "s-joe", "analysis")):
         assert manifest(sleeping, key) == manifest(baseline, key)
+    host_volume = sleeping[resource_name("volume", "s-joe", "analysis")]
+    assert "crossplane.io/paused" not in host_volume["metadata"]["annotations"]
     assert [c["secretRef"] for c in connections(sleeping)] == [c["secretRef"] for c in connections(baseline)]
     assert not any(c["ready"] for c in connections(sleeping) if c["instance"] == "vc0")
     repeated = render(args, env, source, observed(sleeping), include_composite=True)
@@ -659,15 +807,16 @@ def check_admission(placed, sleeping):
     case("cannot delete another instance despite a matching name", cleanup, values, False)
     values["oldObject"]["metadata"] = {"labels": {"vcluster.loft.sh/managed-by": "vcluster-vc0"}}
     case("tenant labels cannot authorize cleanup", cleanup, values, False)
-    subprocess.run(["go", "run", "."], cwd=Path(__file__).parent / "admission",
-                   input=json.dumps(tests), text=True, check=True, timeout=180)
+    run_admission(tests)
 
 
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
-    env["data"]["vcluster"] = {"storageClasses": {"allowed": ["standard"]}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
+    env["data"]["vcluster"] = {}
+    env["data"]["volumes"] = {"storageClasses": {"allowed": ["standard"]},
+                              "snapshotClassName": "workspace-snapshots"}
     group = {"name": "demo", "namespace": "demo", "role": "edit"}
     source = {
         "apiVersion": "versioneer.at/v1",
@@ -675,15 +824,15 @@ def main():
         "metadata": {"name": "s-joe", "namespace": "workspace"},
         "spec": {
             "users": ["joe"],
-            "volumes": {"analysis": {"vcluster": "vc0", "namespace": "demo", "storage": "2Gi"}},
+            "volumes": {"analysis": {"storage": "2Gi"}},
             "vclusters": {
                 key: {"groups": [group], "storage": "2Gi"} for key in ("vc0", "vc1")
             },
         },
     }
     resources = render(args, env, source, [], include_composite=True)
+    check_volume_bindings(args, env, source, resources)
     check_instance_isolation(resources)
-    check_volumes(args, env, source, resources)
     check_membership(args, env, source, resources)
     check_secret_bindings(args, env, source)
     check_control_plane_settings(args, env, source, resources)

@@ -19,6 +19,20 @@ def _to_dict(value):
     return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
 
+def _volume_storage_classes(environment):
+    volumes = environment.get("volumes") or {}
+    config = volumes.get("storageClasses") if isinstance(volumes, dict) else None
+    allowed = config.get("allowed") if isinstance(config, dict) else None
+    if (not isinstance(allowed, list) or not allowed
+            or any(not isinstance(item, str) or not item.strip() for item in allowed)
+            or len(set(allowed)) != len(allowed)):
+        raise ValueError("data.volumes.storageClasses.allowed must be a non-empty list of unique StorageClass names.")
+    default = config.get("default") or allowed[0]
+    if default not in allowed:
+        raise ValueError("data.volumes.storageClasses.default must be in data.volumes.storageClasses.allowed.")
+    return allowed, default
+
+
 def _vcluster_cleanup_generation(req, instance, hibernated):
     xr = _to_dict(req.observed.composite.resource)
     generation = int(xr["metadata"].get("generation", 1))

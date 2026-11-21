@@ -13,7 +13,7 @@ from render import arguments, environment, render
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
     env["data"]["iam"]["redirectURIs"] = ["http://localhost:8080/callback"] * 2
     env["data"]["iam"]["webOrigins"] = ["https://tools.example"]
     source = {

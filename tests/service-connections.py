@@ -17,7 +17,7 @@ def encoded(values):
 def main():
     args = arguments()
     env = environment()
-    env["data"]["defaults"] = {"data": {"enabled": False}, "registry": {"enabled": False}}
+    env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
     env["data"]["customSecrets"] = [{"name": "apikey"}]
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",

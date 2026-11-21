@@ -32,15 +32,14 @@ def compose(req, rsp):
     env = _to_dict(req.context).get(
         "apiextensions.crossplane.io/environment", {}
     )
-    defaults = env.get("defaults") or {}
-    security = defaults.get("security") or {}
+    security = env.get("security") or {}
     vcluster = bool(spec.get("vclusters"))
-    data_enabled = (defaults.get("data") or {}).get("enabled")
+    data_enabled = (env.get("packageR") or {}).get("enabled")
     data_enabled = data_enabled is None or _boolish(data_enabled)
-    registry_enabled = _boolish((defaults.get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((env.get("registry") or {}).get("enabled", True))
     policy = security.get("policy") or "baseline"
     overall_storage = str(
-        (defaults.get("overallQuota") or {}).get("storage")
+        (env.get("overallQuota") or {}).get("storage")
         or "100Gi"
     )
     external_egress = security.get("externalEgress")
@@ -255,10 +254,10 @@ def compose(req, rsp):
             "requests.memory": "8Gi",
             "limits.cpu": "16",
             "limits.memory": "32Gi",
-            **((defaults.get("overallQuota") or {}).get("hard") or {}),
+            **((env.get("overallQuota") or {}).get("hard") or {}),
         }
     )
-    limits = defaults.get("limitRange") or {}
+    limits = env.get("limitRange") or {}
     emit(
         "LimitRange",
         _render_template(

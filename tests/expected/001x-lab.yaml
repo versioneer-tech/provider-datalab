@@ -115,7 +115,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-joe-storage
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -185,7 +185,7 @@ spec:
               command:
               - /bin/sh
               - -ec
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
               imagePullPolicy: IfNotPresent
               name: prepare-database
               resources:

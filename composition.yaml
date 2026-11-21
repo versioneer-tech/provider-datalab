@@ -150,12 +150,12 @@ spec:
                 return
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-            data = (environment.get("defaults") or {}).get("data") or {}
+            data = environment.get("packageR") or {}
             data_enabled = data.get("enabled")
             if data_enabled is None:
                 data_enabled = True
             data_enabled = _boolish(data_enabled)
-            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
             if not (data_enabled or registry_enabled):
                 return
 
@@ -606,12 +606,12 @@ spec:
                                 instance=store_name,
                             )
 
-            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
             if registry_enabled:
                 observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                         kind="registry", instance="primary")
 
-            data_config = (environment.get("defaults") or {}).get("data") or {}
+            data_config = environment.get("packageR") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
                 data_enabled = True
@@ -2008,7 +2008,7 @@ spec:
             xr_namespace = metadata.get("namespace") or "default"
 
             environment = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            data_enabled = ((environment.get("defaults") or {}).get("data") or {}).get("enabled")
+            data_enabled = (environment.get("packageR") or {}).get("enabled")
             if data_enabled is not None and not _boolish(data_enabled):
                 return
             if not (
@@ -2191,15 +2191,14 @@ spec:
             env = _to_dict(req.context).get(
                 "apiextensions.crossplane.io/environment", {}
             )
-            defaults = env.get("defaults") or {}
-            security = defaults.get("security") or {}
+            security = env.get("security") or {}
             vcluster = bool(spec.get("vclusters"))
-            data_enabled = (defaults.get("data") or {}).get("enabled")
+            data_enabled = (env.get("packageR") or {}).get("enabled")
             data_enabled = data_enabled is None or _boolish(data_enabled)
-            registry_enabled = _boolish((defaults.get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((env.get("registry") or {}).get("enabled", True))
             policy = security.get("policy") or "baseline"
             overall_storage = str(
-                (defaults.get("overallQuota") or {}).get("storage")
+                (env.get("overallQuota") or {}).get("storage")
                 or "100Gi"
             )
             external_egress = security.get("externalEgress")
@@ -2414,10 +2413,10 @@ spec:
                     "requests.memory": "8Gi",
                     "limits.cpu": "16",
                     "limits.memory": "32Gi",
-                    **((defaults.get("overallQuota") or {}).get("hard") or {}),
+                    **((env.get("overallQuota") or {}).get("hard") or {}),
                 }
             )
-            limits = defaults.get("limitRange") or {}
+            limits = env.get("limitRange") or {}
             emit(
                 "LimitRange",
                 _render_template(
@@ -2578,9 +2577,9 @@ spec:
             environment = (
                 _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
             )
-            data = (environment.get("defaults") or {}).get("data") or {}
+            data = environment.get("packageR") or {}
             enabled = data.get("enabled")
-            registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
             if enabled is not None and not _boolish(enabled) and not registry_enabled:
                 return
             meta = _to_dict(req.observed.composite.resource)["metadata"]
@@ -2673,6 +2672,19 @@ spec:
             if isinstance(value, dict):
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
+
+        def _volume_storage_classes(environment):
+            volumes = environment.get("volumes") or {}
+            config = volumes.get("storageClasses") if isinstance(volumes, dict) else None
+            allowed = config.get("allowed") if isinstance(config, dict) else None
+            if (not isinstance(allowed, list) or not allowed
+                    or any(not isinstance(item, str) or not item.strip() for item in allowed)
+                    or len(set(allowed)) != len(allowed)):
+                raise ValueError("data.volumes.storageClasses.allowed must be a non-empty list of unique StorageClass names.")
+            default = config.get("default") or allowed[0]
+            if default not in allowed:
+                raise ValueError("data.volumes.storageClasses.default must be in data.volumes.storageClasses.allowed.")
+            return allowed, default
 
         def _vcluster_cleanup_generation(req, instance, hibernated):
             xr = _to_dict(req.observed.composite.resource)
@@ -2784,20 +2796,151 @@ spec:
             }
 
 
+        def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
+                                    claim_namespace, service_account, env, emit, virtual):
+            volume = binding["name"]
+            target = binding["target"]
+            xr = _to_dict(req.observed.composite.resource)
+            source = xr["spec"]["volumes"][volume]
+            size = source.get("storage") or (env.get("volumes") or {}).get("storage") or "1Gi"
+            target_id = hashlib.sha256(json.dumps(target, sort_keys=True).encode()).hexdigest()[:10]
+            suffix = "volume-binding-" + volume + "-" + target_id
+            pv_name = _resource_name("datalab-volume", namespace, instance, volume, target["namespace"], target["name"])
+            marker = "vcluster.loft.sh/controlled-by"
+            labels = {marker: "datalab-volume", "datalabs.versioneer.at/volume": volume}
+            pvc_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-pvc")
+            observed = req.observed.resources.get(pvc_key)
+            state = _to_dict(observed.resource).get("status", {}).get("atProvider", {}) if observed else {}
+            claim = state.get("manifest") or state.get("raw", {}).get("manifest") or {}
+            metadata = claim.get("metadata") or {}
+            uid = metadata.get("uid", "") if not metadata.get("deletionTimestamp") else ""
+
+            protection = _resource_name("datalab-volume", namespace, instance, volume, target_id, "claim")
+            owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
+                     "name": protection, "uid": "", "controller": True, "blockOwnerDeletion": False}
+            # The syncer skips these records. Only host admission maps their Pod mounts.
+            # Background GC removes aliases without holding the virtual API for PVC protection.
+            virtual(suffix + "-pv", {
+                "apiVersion": "v1", "kind": "PersistentVolume",
+                "metadata": {"name": pv_name, "labels": labels, "ownerReferences": [owner]},
+                "spec": {"capacity": {"storage": size}, "accessModes": ["ReadWriteOnce"],
+                         "storageClassName": "", "persistentVolumeReclaimPolicy": "Retain",
+                         "claimRef": {"namespace": target["namespace"], "name": target["name"], "uid": uid},
+                         "csi": {"driver": "host-volume.datalabs.versioneer.at",
+                                 "volumeHandle": namespace + "/volume-" + volume}},
+            }, preserve=True)
+            virtual(suffix + "-claim-policy", _render_template(
+                req, "vcluster/volume-claim-policy", policy_name=protection,
+                claim_expression=("request.namespace == " + json.dumps(target["namespace"])
+                                  + " && object.metadata.name == " + json.dumps(target["name"])),
+                binding_expression=("has(object.metadata.labels) && " + json.dumps(marker)
+                                    + " in object.metadata.labels && object.metadata.labels[" + json.dumps(marker)
+                                    + "] == 'datalab-volume' && has(object.spec.volumeName) && object.spec.volumeName == "
+                                    + json.dumps(pv_name) + " && has(object.spec.storageClassName) && object.spec.storageClassName == ''"),
+                owner_expression=("has(object.metadata.ownerReferences) && object.metadata.ownerReferences.size() == 1 && "
+                                  "object.metadata.ownerReferences[0].apiVersion == 'admissionregistration.k8s.io/v1' && "
+                                  "object.metadata.ownerReferences[0].kind == 'ValidatingAdmissionPolicy' && "
+                                  "object.metadata.ownerReferences[0].name == " + json.dumps(protection) + " && "
+                                  "has(object.metadata.ownerReferences[0].uid) && object.metadata.ownerReferences[0].uid != '' && "
+                                  "has(object.metadata.ownerReferences[0].controller) && object.metadata.ownerReferences[0].controller && "
+                                  "(!has(object.metadata.ownerReferences[0].blockOwnerDeletion) || !object.metadata.ownerReferences[0].blockOwnerDeletion) && "
+                                  "(request.operation != 'UPDATE' || object.metadata.ownerReferences == oldObject.metadata.ownerReferences)"),
+            ))
+            virtual(suffix + "-claim-policy-binding", {
+                "apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicyBinding",
+                "metadata": {"name": protection}, "spec": {"policyName": protection, "validationActions": ["Deny"]},
+            })
+            # This is vCluster 0.38 single-namespace SafeConcatName, including its hash.
+            translated = target["name"] + "-x-" + target["namespace"] + "-x-" + runtime
+            if len(translated) > 63:
+                translated = translated[:52] + "-" + hashlib.sha256(translated.encode()).hexdigest()[:10]
+            policy_name = _resource_name("datalab-volume", namespace, instance, volume, target_id, "mount")
+            emit(suffix + "-mount-policy", _render_template(
+                req, "vcluster/volume-mount-policy", policy_name=policy_name, namespace=namespace,
+                syncer_expression="request.userInfo.username == " + json.dumps("system:serviceaccount:" + namespace + ":" + service_account),
+                namespace_expression=("has(object.metadata.annotations) && 'vcluster.loft.sh/object-namespace' in object.metadata.annotations && "
+                                      "object.metadata.annotations['vcluster.loft.sh/object-namespace'] == " + json.dumps(target["namespace"])),
+                claim_expression=("has(object.spec.volumes) && object.spec.volumes.exists(v, has(v.persistentVolumeClaim) && "
+                                  "v.persistentVolumeClaim.claimName == " + json.dumps(translated) + ")"),
+                mount_expression=("Object{spec: Object.spec{volumes: object.spec.volumes.filter(v, has(v.persistentVolumeClaim) && "
+                                  "v.persistentVolumeClaim.claimName == " + json.dumps(translated) + ").map(v, "
+                                  "Object.spec.volumes{name: v.name, persistentVolumeClaim: Object.spec.volumes.persistentVolumeClaim{claimName: "
+                                  + json.dumps("volume-" + volume) + "}})}}"),
+            ))
+            emit(suffix + "-mount-policy-binding", {
+                "apiVersion": "admissionregistration.k8s.io/v1", "kind": "MutatingAdmissionPolicyBinding",
+                "metadata": {"name": policy_name}, "spec": {"policyName": policy_name,
+                    "matchResources": {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": namespace}}}},
+            })
+            virtual(suffix + "-pvc", {
+                "apiVersion": "v1", "kind": "PersistentVolumeClaim",
+                "metadata": {"namespace": target["namespace"], "name": target["name"], "labels": labels, "ownerReferences": [owner]},
+                "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": "", "volumeName": pv_name,
+                         "resources": {"requests": {"storage": size}}},
+            }, preserve=True, readiness={"policy": "DeriveFromCelQuery", "celQuery": "has(object.status) && object.status.phase == 'Bound'"})
+            for ending in ("-pv", "-pvc"):
+                key = _resource_name("vcluster", namespace, instance, "access", suffix + ending)
+                rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/volume-binding"] = volume
+            dependencies = [
+                _resource_name("vcluster", namespace, instance, suffix + "-mount-policy"),
+                _resource_name("vcluster", namespace, instance, suffix + "-mount-policy-binding"),
+                _resource_name("volume", namespace, volume, "claim-policy"),
+                _resource_name("volume", namespace, volume, "claim-policy-binding"),
+                *(_resource_name("vcluster", namespace, instance, "access", suffix + ending)
+                  for ending in ("-claim-policy", "-claim-policy-binding")),
+            ]
+            anchor_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-claim-policy")
+            rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"
+            owner_reference = {
+                "patchesFrom": {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
+                                "namespace": claim_namespace, "name": anchor_key,
+                                "fieldPath": "status.atProvider.manifest.metadata.uid"},
+                "toFieldPath": "metadata.ownerReferences[0].uid",
+            }
+            rsp.desired.resources[pvc_key].resource["spec"]["references"] = [
+                *({"dependsOn": {"name": key, "namespace": claim_namespace}} for key in dependencies), owner_reference,
+            ]
+            pv_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-pv")
+            rsp.desired.resources[pv_key].resource["spec"]["references"] = [owner_reference]
+            statefulset_key = _resource_name("vcluster", namespace, instance, "statefulset")
+            statefulset = rsp.desired.resources[statefulset_key].resource
+            references = _to_dict(statefulset).get("spec", {}).get("references", [])
+            for key in dependencies[:4]:
+                references.append({"dependsOn": {"name": key, "namespace": claim_namespace}})
+                observed_policy = req.observed.resources.get(key)
+                policy = _to_dict(observed_policy.resource) if observed_policy else {}
+                if not any(c.get("type") == "Ready" and c.get("status") == "True"
+                           for c in policy.get("status", {}).get("conditions", [])):
+                    statefulset["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
+            statefulset["spec"]["references"] = references
+
+
         def compose(req, rsp):
             if not set_response_ttl(req, rsp, 60):
                 return
             xr = _to_dict(req.observed.composite.resource)
             instances = (xr.get("spec") or {}).get("vclusters") or {}
-            volumes = (xr.get("spec") or {}).get("volumes") or {}
-            if any(volume["vcluster"] not in instances for volume in volumes.values()):
-                response.fatal(rsp, "Each volume must select a declared virtual cluster.")
-                return
+
             if not instances:
                 return
             meta = xr["metadata"]
             name = meta["name"]
             namespace = name
+            volumes = (xr.get("spec") or {}).get("volumes") or {}
+            bound_volumes = set()
+            for instance_config in instances.values():
+                targets = set()
+                for binding in instance_config.get("volumeBindings") or []:
+                    volume = binding["name"]
+                    target = (binding["target"]["namespace"], binding["target"]["name"])
+                    if volume not in volumes:
+                        response.fatal(rsp, "Each volume binding must select a declared named volume.")
+                        return
+                    if volume in bound_volumes or target in targets:
+                        response.fatal(rsp, "A named volume can have one virtual binding; target PVCs must be unique.")
+                        return
+                    bound_volumes.add(volume)
+                    targets.add(target)
             for instance, instance_config in sorted(instances.items()):
                 _compose_instance(
                     req,
@@ -2962,29 +3105,16 @@ spec:
                 in ("allow-external-egress", "allow-internal-egress")
                 for rule in policy.get("spec", {}).get("egress", [])
             ]
-            storage_config = config.get("storageClasses") or {}
-            storage_classes = (
-                storage_config.get("allowed") if isinstance(storage_config, dict) else None
-            )
-            if (
-                not isinstance(storage_classes, list)
-                or not storage_classes
-                or any(
-                    (not isinstance(item, str) or not item.strip() for item in storage_classes)
-                )
-                or (len(set(storage_classes)) != len(storage_classes))
-            ):
-                response.fatal(
-                    rsp,
-                    "EnvironmentConfig data.vcluster.storageClasses.allowed must be a non-empty list of unique StorageClass names.",
-                )
+            try:
+                storage_classes, default_class = _volume_storage_classes(env)
+            except ValueError as error:
+                response.fatal(rsp, str(error))
                 return
-            default_class = storage_config.get("default") or storage_classes[0]
             storage_class = config.get("storageClassName") or default_class
-            if default_class not in storage_classes or storage_class not in storage_classes:
+            if storage_class not in storage_classes:
                 response.fatal(
                     rsp,
-                    "The vcluster default and control-plane StorageClass must be in data.vcluster.storageClasses.allowed.",
+                    "The vcluster control-plane StorageClass must be in data.volumes.storageClasses.allowed.",
                 )
                 return
             emit(
@@ -3041,20 +3171,6 @@ spec:
                 resources=resources,
                 **template_values,
             )
-            snapshots = config.get("volumeSnapshots", False)
-            if type(snapshots) is not bool:
-                response.fatal(rsp, "data.vcluster.volumeSnapshots must be a boolean.")
-                return
-            configuration["sync"]["fromHost"]["volumeSnapshotClasses"] = {"enabled": snapshots}
-            for resource in ("volumeSnapshots", "volumeSnapshotContents"):
-                configuration["sync"]["toHost"][resource] = {"enabled": snapshots}
-            if snapshots:
-                support = _render_template(
-                    req, "vcluster/snapshot-rbac", namespace=namespace, service_account=service_account,
-                    snapshot_role=_resource_name(name, instance, "volume-snapshots"),
-                )["resources"]
-                for suffix, manifest in support.items():
-                    emit(suffix, manifest)
             embedded = ((config.get("backingStore") or {}).get("database") or {}).get(
                 "embedded"
             ) or {}
@@ -3070,6 +3186,10 @@ spec:
                 workload_scheduling.get("nodeSelector") or {}
             )
             configuration["sync"]["toHost"]["pods"]["enforceTolerations"] = enforced
+            # Keep the binder active so it can release aliases after the last unbind.
+            configuration["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"] = [
+                "--controllers=*,-nodeipam,-nodelifecycle,-attachdetach,-persistentvolume-expander,-cloud-node-lifecycle,-ttl",
+            ]
             if workload_scheduling.get("nodeSelector") or enforced:
                 policy = _render_template(
                     req, "vcluster/placement-policy", namespace=namespace,
@@ -3182,11 +3302,6 @@ spec:
                     ),
                 ),
             ):
-                if suffix == "role" and snapshots:
-                    manifest["rules"].append({
-                        "apiGroups": ["snapshot.storage.k8s.io"], "resources": ["volumesnapshots"],
-                        "verbs": ["create", "delete", "patch", "update", "get", "list", "watch"],
-                    })
                 emit(suffix, manifest)
             source_namespaces = {key.split("/")[0] for key in secret_mappings} - {namespace}
             for source_namespace in sorted(source_namespaces):
@@ -3283,13 +3398,9 @@ spec:
                 ] = instance
                 rsp.desired.resources[key].resource.update(body)
 
-            volumes = {
-                key: volume
-                for key, volume in ((_to_dict(req.observed.composite.resource).get("spec") or {}).get("volumes") or {}).items()
-                if volume["vcluster"] == instance
-            }
+            bindings = instance_config.get("volumeBindings") or []
             targets = {"default", *(group["namespace"] for group in groups if group["namespace"] != "*"),
-                       *(volume.get("namespace", "default") for volume in volumes.values())}
+                       *(binding["target"]["namespace"] for binding in bindings)}
             for storage_name in storage_classes:
                 suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
                 emit(
@@ -3350,6 +3461,9 @@ spec:
                     ),
                     preserve=True,
                 )
+            for binding in bindings:
+                _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
+                                        claim_namespace, service_account, env, emit, virtual)
             for group in groups:
                 target = group["namespace"]
                 role = group["role"]
@@ -4630,21 +4744,6 @@ spec:
                 protocol: TCP
               - port: 6443
                 protocol: TCP
-        vcluster/snapshot-rbac:
-          resources:
-            snapshot-binding:
-              apiVersion: rbac.authorization.k8s.io/v1
-              kind: ClusterRoleBinding
-              metadata:
-                name: ${snapshot_role}
-              subjects:
-              - kind: ServiceAccount
-                name: ${service_account}
-                namespace: ${namespace}
-              roleRef:
-                apiGroup: rbac.authorization.k8s.io
-                kind: ClusterRole
-                name: datalab-vcluster-volume-snapshots
         vcluster/statefulset:
           apiVersion: apps/v1
           kind: StatefulSet
@@ -4844,6 +4943,65 @@ spec:
                 name: ${service_account}
                 namespace: ${namespace}
                 key: config
+        vcluster/volume-claim-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            matchConstraints:
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                resources:
+                - persistentvolumeclaims
+            matchConditions:
+            - name: bound-claim
+              expression: ${claim_expression}
+            validations:
+            - expression: ${binding_expression}
+              message: This virtual PVC must keep its Datalab volume binding.
+            - expression: ${owner_expression}
+              message: This virtual PVC must keep its Datalab binding owner.
+        vcluster/volume-mount-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: MutatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            reinvocationPolicy: IfNeeded
+            matchConstraints:
+              namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ${namespace}
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                resources:
+                - pods
+            matchConditions:
+            - name: virtual-syncer
+              expression: ${syncer_expression}
+            - name: virtual-namespace
+              expression: ${namespace_expression}
+            - name: bound-volume
+              expression: ${claim_expression}
+            mutations:
+            - patchType: ApplyConfiguration
+              applyConfiguration:
+                expression: ${mount_expression}
         vcluster/workload-networkpolicy:
           apiVersion: networking.k8s.io/v1
           kind: NetworkPolicy
@@ -4941,6 +5099,19 @@ spec:
                 return value
             return json_format.MessageToDict(value, preserving_proto_field_name=True)
 
+        def _volume_storage_classes(environment):
+            volumes = environment.get("volumes") or {}
+            config = volumes.get("storageClasses") if isinstance(volumes, dict) else None
+            allowed = config.get("allowed") if isinstance(config, dict) else None
+            if (not isinstance(allowed, list) or not allowed
+                    or any(not isinstance(item, str) or not item.strip() for item in allowed)
+                    or len(set(allowed)) != len(allowed)):
+                raise ValueError("data.volumes.storageClasses.allowed must be a non-empty list of unique StorageClass names.")
+            default = config.get("default") or allowed[0]
+            if default not in allowed:
+                raise ValueError("data.volumes.storageClasses.default must be in data.volumes.storageClasses.allowed.")
+            return allowed, default
+
         def set_response_ttl(req, rsp, default_seconds):
             rsp.meta.ttl.FromSeconds(default_seconds)
             environment = (
@@ -4979,7 +5150,8 @@ spec:
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        from crossplane.function import response
+        import json
+        from crossplane.function import request, response
 
         BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{LABEL}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(LABEL) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    incomplete = [item for item in snapshots if item.get("status", {}).get("readyToUse") is not True]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": "volume-" + volume + "-",\n                     "labels": {LABEL: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
@@ -4988,82 +5160,105 @@ spec:
             if not set_response_ttl(req, rsp, 60):
                 return
             xr = _to_dict(req.observed.composite.resource)
-            spec = xr.get("spec") or {}
-            volumes = spec.get("volumes") or {}
+            meta = xr["metadata"]
+            namespace = meta["name"]
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            config = env.get("volumeSnapshots") or {}
+            config = env.get("volumes") or {}
             status = _to_dict(rsp.desired.composite.resource).get("status") or {}
             references = []
-            for name, volume in sorted(volumes.items()):
-                instance = volume["vcluster"]
-                if instance not in (spec.get("vclusters") or {}):
-                    response.fatal(rsp, "Each volume must select a declared virtual cluster.")
+            volumes = (xr.get("spec") or {}).get("volumes") or {}
+            if volumes:
+                try:
+                    _, storage_class = _volume_storage_classes(env)
+                except ValueError as error:
+                    response.fatal(rsp, str(error))
                     return
-                target = volume.get("namespace", "default")
-                pvc_name = "volume-" + name
-                virtual_provider = _resource_name(xr["metadata"]["name"], "vcluster", instance)
-
-                def virtual(suffix, manifest):
-                    key = _resource_name("vcluster", xr["metadata"]["name"], instance, "access", "volumes", name, suffix)
-                    body = _render_template(
-                        req, "vcluster/body", key=key,
-                        claim_namespace=xr["metadata"].get("namespace") or "default",
-                        virtual_provider=virtual_provider, manifest=manifest,
-                    )
-                    body["metadata"]["labels"] = {"datalabs.versioneer.at/vcluster": instance}
-                    rsp.desired.resources[key].resource.update(body)
-
-                storage_config = (env.get("vcluster") or {}).get("storageClasses") or {}
-                classes = storage_config.get("allowed") or []
-                if not classes:
-                    response.fatal(rsp, "Volumes require allowed virtual cluster StorageClasses.")
+                snapshot_class = config.get("snapshotClassName")
+                if not isinstance(snapshot_class, str) or not snapshot_class.strip():
+                    response.fatal(rsp, "Named volumes require data.volumes.snapshotClassName.")
                     return
-                pvc = _render_template(
-                    req, "volumes/pvc", target=target, pvc_name=pvc_name, volume_name=name,
-                    storage=volume.get("storage") or (env.get("defaults") or {}).get("volumes", {}).get("storage") or "1Gi",
-                    storage_class=storage_config.get("default") or classes[0],
+                max_snapshots = config.get("maxSnapshots", 2)
+                if (isinstance(max_snapshots, bool) or not isinstance(max_snapshots, (int, float))
+                        or not 1 <= max_snapshots <= 100 or max_snapshots != int(max_snapshots)):
+                    response.fatal(rsp, "data.volumes.maxSnapshots must be an integer from 1 to 100.")
+                    return
+
+            def emit(key, manifest, readiness=None):
+                body = _render_template(
+                    req, "common/object", key=key,
+                    xr_namespace=meta.get("namespace") or "default", manifest=manifest,
+                    readiness=readiness or {"policy": "SuccessfulCreate"},
                 )
+                rsp.desired.resources[key].resource.update(body)
+
+            if volumes:
+                observer_key = _resource_name("volume-snapshot-class", namespace)
+                emit(observer_key, {
+                    "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
+                    "metadata": {"name": snapshot_class},
+                }, {"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"})
+                rsp.desired.resources[observer_key].resource["spec"].update({"managementPolicies": ["Observe"]})
+
+            for name, volume in sorted(volumes.items()):
+                pvc_name = "volume-" + name
+                key = _resource_name("volume", namespace, name)
+                pvc = _render_template(
+                    req, "volumes/pvc", target=namespace, pvc_name=pvc_name, volume_name=name,
+                    storage=volume.get("storage") or config.get("storage") or "1Gi",
+                )
+                pvc["spec"]["storageClassName"] = storage_class
                 if volume.get("restoreFrom"):
                     pvc["spec"]["dataSource"] = {
                         "apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": volume["restoreFrom"],
                     }
-                virtual("pvc", pvc)
-                reference = {"name": name, "vcluster": instance, "namespace": target, "pvcName": pvc_name}
-                if volume.get("backup") or volume.get("restoreFrom"):
-                    if (env.get("vcluster") or {}).get("volumeSnapshots") is not True:
-                        response.fatal(rsp, "Volume backup and restore require data.vcluster.volumeSnapshots=true.")
-                        return
-                if volume.get("backup"):
-                    snapshot_class = config.get("snapshotClassName")
-                    if not isinstance(snapshot_class, str) or not snapshot_class.strip():
-                        response.fatal(rsp, "Volume backup requires data.volumeSnapshots.snapshotClassName.")
-                        return
-                    observer_key = _resource_name("volumes", xr["metadata"]["name"], instance, "snapshot-class")
-                    observer = _render_template(
-                        req, "common/object", key=observer_key,
-                        xr_namespace=xr["metadata"].get("namespace") or "default",
-                        manifest={"apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
-                                  "metadata": {"name": snapshot_class}},
-                        readiness={"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"},
+                emit(key, pvc)
+                policy_name = _resource_name("volume", namespace, name, "claim")
+                emit(_resource_name("volume", namespace, name, "claim-policy"), _render_template(
+                    req, "volumes/claim-policy", namespace=namespace, policy_name=policy_name,
+                    syncer_expression="request.userInfo.username.startsWith(" + json.dumps("system:serviceaccount:" + namespace + ":vc-vcluster-") + ")",
+                    claim_expression="(request.operation == 'DELETE' ? oldObject.metadata.name : object.metadata.name) == " + json.dumps(pvc_name),
+                ))
+                emit(_resource_name("volume", namespace, name, "claim-policy-binding"), _render_template(
+                    req, "vcluster/storage-policy-binding", namespace=namespace, policy_name=policy_name,
+                ))
+                response.require_resources(rsp, name=key, api_version="v1", kind="PersistentVolumeClaim",
+                                           namespace=namespace, match_name=pvc_name)
+                observed = request.get_required_resource(req, key) or {}
+                uid = observed.get("metadata", {}).get("uid")
+                reference = {"name": name, "pvcRef": {"name": pvc_name, "namespace": namespace},
+                             "phase": observed.get("status", {}).get("phase") or "Pending"}
+
+                backup_name = "volume-snapshot-" + name
+                resources = _render_template(
+                    req, "volumes/backup", target=namespace, pvc_name=pvc_name, volume_name=name,
+                    backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
+                    backup_binding=_resource_name(namespace, backup_name),
+                    schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
+                    backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                )["resources"]
+                for suffix, manifest in resources.items():
+                    emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
+
+                backup = {"readySnapshots": 0}
+                if uid:
+                    snapshot_key = key + "-snapshots"
+                    response.require_resources(
+                        rsp, name=snapshot_key, api_version="snapshot.storage.k8s.io/v1", kind="VolumeSnapshot",
+                        namespace=namespace,
+                        match_labels={"datalabs.versioneer.at/volume": name, "datalabs.versioneer.at/source-pvc-uid": uid},
                     )
-                    observer["spec"]["managementPolicies"] = ["Observe"]
-                    rsp.desired.resources[observer_key].resource.update(observer)
-                    retention = config.get("retention", 4)
-                    if (isinstance(retention, bool) or not isinstance(retention, (int, float))
-                            or not 1 <= retention <= 100 or retention != int(retention)):
-                        response.fatal(rsp, "Snapshot retention must be an integer from 1 to 100.")
-                        return
-                    backup_name = "volume-snapshot-" + name
-                    resources = _render_template(
-                        req, "volumes/backup", target=target, pvc_name=pvc_name, volume_name=name,
-                        backup_name=backup_name, snapshot_class=snapshot_class, retention=str(int(retention)),
-                        backup_role=_resource_name("volume-snapshot", target, name),
-                        schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
-                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
-                    )["resources"]
-                    for suffix, manifest in resources.items():
-                        virtual("backup-" + suffix, manifest)
-                    reference["backupCronJobName"] = backup_name
+                    ready = [item for item in request.get_required_resources(req, snapshot_key)
+                             if item.get("metadata", {}).get("namespace") == namespace
+                             and item["metadata"].get("labels", {}).get("datalabs.versioneer.at/volume") == name
+                             and item["metadata"]["labels"].get("datalabs.versioneer.at/source-pvc-uid") == uid
+                             and not item["metadata"].get("deletionTimestamp")
+                             and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == pvc_name
+                             and item.get("status", {}).get("readyToUse") is True]
+                    backup["readySnapshots"] = len(ready)
+                    timestamps = [item["status"].get("creationTime") or item["metadata"].get("creationTimestamp") for item in ready]
+                    if any(timestamps):
+                        backup["lastSuccessfulTime"] = max(value for value in timestamps if value)
+                reference["backup"] = backup
                 references.append(reference)
             status["volumes"] = references
             rsp.desired.composite.resource.update({"status": status})
@@ -5084,23 +5279,19 @@ spec:
               manifest: ${manifest}
             readiness: ${readiness}
             watch: true
-        vcluster/body:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
+        vcluster/storage-policy-binding:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicyBinding
           metadata:
-            name: ${key}
-            namespace: ${claim_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
+            name: ${policy_name}
           spec:
-            providerConfigRef:
-              name: ${virtual_provider}
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${manifest}
-            watch: true
-            readiness:
-              policy: SuccessfulCreate
+            policyName: ${policy_name}
+            validationActions:
+            - Deny
+            matchResources:
+              namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ${namespace}
         volumes/backup:
           resources:
             account:
@@ -5156,25 +5347,43 @@ spec:
                 namespace: ${target}
               data:
                 backup.py: ${backup_script}
-            class-role:
-              apiVersion: rbac.authorization.k8s.io/v1
-              kind: ClusterRole
+            network:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
               metadata:
-                name: ${backup_role}
-              rules:
-              - apiGroups:
-                - snapshot.storage.k8s.io
-                resources:
-                - volumesnapshotclasses
-                resourceNames:
-                - ${snapshot_class}
-                verbs:
-                - get
+                name: ${backup_name}
+                namespace: ${target}
+              spec:
+                podSelector:
+                  matchLabels:
+                    datalabs.versioneer.at/volume-backup: ${volume_name}
+                policyTypes:
+                - Ingress
+                - Egress
+                ingress: []
+                egress:
+                - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 6443
+                    protocol: TCP
+                - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                    podSelector:
+                      matchLabels:
+                        k8s-app: kube-dns
+                  ports:
+                  - port: 53
+                    protocol: TCP
+                  - port: 53
+                    protocol: UDP
             class-binding:
               apiVersion: rbac.authorization.k8s.io/v1
               kind: ClusterRoleBinding
               metadata:
-                name: ${backup_role}
+                name: ${backup_binding}
               subjects:
               - kind: ServiceAccount
                 name: ${backup_name}
@@ -5182,7 +5391,7 @@ spec:
               roleRef:
                 apiGroup: rbac.authorization.k8s.io
                 kind: ClusterRole
-                name: ${backup_role}
+                name: datalab-volume-snapshot-classes
             cronjob:
               apiVersion: batch/v1
               kind: CronJob
@@ -5201,6 +5410,9 @@ spec:
                     backoffLimit: 1
                     activeDeadlineSeconds: 900
                     template:
+                      metadata:
+                        labels:
+                          datalabs.versioneer.at/volume-backup: ${volume_name}
                       spec:
                         restartPolicy: Never
                         serviceAccountName: ${backup_name}
@@ -5223,7 +5435,7 @@ spec:
                           - ${volume_name}
                           - ${pvc_name}
                           - ${snapshot_class}
-                          - ${retention}
+                          - ${max_snapshots}
                           resources:
                             requests:
                               cpu: 20m
@@ -5245,6 +5457,36 @@ spec:
                         - name: script
                           configMap:
                             name: ${backup_name}
+        volumes/claim-policy:
+          apiVersion: admissionregistration.k8s.io/v1
+          kind: ValidatingAdmissionPolicy
+          metadata:
+            name: ${policy_name}
+          spec:
+            failurePolicy: Fail
+            matchConstraints:
+              namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ${namespace}
+              resourceRules:
+              - apiGroups:
+                - ''
+                apiVersions:
+                - v1
+                operations:
+                - CREATE
+                - UPDATE
+                - DELETE
+                resources:
+                - persistentvolumeclaims
+            matchConditions:
+            - name: virtual-syncer
+              expression: ${syncer_expression}
+            - name: owned-volume
+              expression: ${claim_expression}
+            validations:
+            - expression: 'false'
+              message: Datalab owns this host PVC. Virtual clusters cannot change or delete it.
         volumes/pvc:
           apiVersion: v1
           kind: PersistentVolumeClaim
@@ -5256,7 +5498,6 @@ spec:
           spec:
             accessModes:
             - ReadWriteOnce
-            storageClassName: ${storage_class}
             resources:
               requests:
                 storage: ${storage}
@@ -5924,10 +6165,10 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.1.1"
+            package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.2.0"
             rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
             oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
-            data_config = (environment.get("defaults") or {}).get("data") or {}
+            data_config = environment.get("packageR") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
                 data_enabled = True
@@ -7211,7 +7452,7 @@ spec:
             name, namespace = meta["name"], meta.get("namespace") or "default"
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
             registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
-            if not _boolish(((env.get("defaults") or {}).get("registry") or {}).get("enabled", True)):
+            if not _boolish((env.get("registry") or {}).get("enabled", True)):
                 return
             runtime_namespace = name
 
@@ -9456,7 +9697,6 @@ spec:
                     "workload-networkpolicy",
                     "dns-networkpolicy",
                     "snapshot-networkpolicy",
-                    "snapshot-binding",
                     "placement-policy",
                     "placement-policy-binding",
                 ):

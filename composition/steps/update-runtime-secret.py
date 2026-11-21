@@ -9,9 +9,9 @@ def compose(req, rsp):
     environment = (
         _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
     )
-    data = (environment.get("defaults") or {}).get("data") or {}
+    data = environment.get("packageR") or {}
     enabled = data.get("enabled")
-    registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
     if enabled is not None and not _boolish(enabled) and not registry_enabled:
         return
     meta = _to_dict(req.observed.composite.resource)["metadata"]

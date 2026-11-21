@@ -64,13 +64,12 @@ data:
             port: 8080
           - protocol: TCP
             port: 8443
-  defaults:
-    registry:
-      enabled: false
-    data:
-      enabled: true
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-    security:
-      externalEgress: false
+  registry:
+    enabled: false
+  packageR:
+    enabled: true
+    readOnlyMount: false
+  overallQuota:
+    storage: 100Gi
+  security:
+    externalEgress: false

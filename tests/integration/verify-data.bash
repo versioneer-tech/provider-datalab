@@ -29,7 +29,7 @@ apply_data_datalabs() {
   log 'Applying the Data verification Datalab'
   apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"
   kube patch environmentconfig datalab-custom --type=merge \
-    --patch '{"data":{"defaults":{"data":{"enabled":true,"readOnlyMount":false}}}}'
+    --patch '{"data":{"packageR":{"enabled":true,"readOnlyMount":false}}}'
   apply_template "${MANIFEST_DIR}/data/storage-secrets.yaml" \
     ENABLED_STORAGE_SECRET "${ENABLED_STORAGE_SECRET}" \
     PACKAGE_R_ENDPOINT "${PACKAGE_R_ENDPOINT}" \
@@ -149,7 +149,7 @@ verify_read_only_access() {
 
   previous_pod_uid="$(package_pod_uid "${namespace}")"
   kube patch environmentconfig datalab-custom --type=merge \
-    --patch '{"data":{"defaults":{"data":{"readOnlyMount":true}}}}' >/dev/null
+    --patch '{"data":{"packageR":{"readOnlyMount":true}}}' >/dev/null
   while true; do
     pod_uid="$(package_pod_uid "${namespace}" 2>/dev/null || true)"
     if [[ -n "${pod_uid}" && "${pod_uid}" != "${previous_pod_uid}" ]]; then

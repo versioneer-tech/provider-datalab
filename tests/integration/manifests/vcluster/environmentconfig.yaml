@@ -28,6 +28,7 @@ data:
     storage: 1Gi
     backendTLS:
       apiVersion: gateway.networking.k8s.io/v1alpha3
+  volumes:
     storageClasses:
       allowed:
       - standard
@@ -52,15 +53,14 @@ data:
     - 0.0.0.0/0
     blacklistIPs:
     - 169.254.169.254/32
-  defaults:
-    registry:
-      enabled: false
-    data:
-      enabled: false
-    overallQuota:
-      storage: 20Gi
-      hard:
-        limits.cpu: '20'
-    security:
-      policy: baseline
-      externalEgress: false
+  registry:
+    enabled: false
+  packageR:
+    enabled: false
+  overallQuota:
+    storage: 20Gi
+    hard:
+      limits.cpu: '20'
+  security:
+    policy: baseline
+    externalEgress: false

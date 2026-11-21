@@ -88,7 +88,7 @@ for file in "${examples[@]}"; do
   fi
 done
 
-for suite in vclusters registry s3-connections service-connections oauth2 token-exchange; do
+for suite in vclusters volumes registry s3-connections service-connections oauth2 token-exchange; do
   python3 "tests/${suite}.py" --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 done
 python3 tests/environment-selection.py "${render_dir##*/}-python"

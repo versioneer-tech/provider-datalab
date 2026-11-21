@@ -92,18 +92,5 @@ spec:
           name: application-credentials
 ```
 
-## Access control
-
-PostgreSQL credentials use the `postgres` account, which has administrative
-access. Create application accounts and grants when a workload needs less access.
-
-Restrict access to Secrets and provider Object resources. Object specs can
-contain generated credentials; status redaction does not remove values from
-specs or Secret annotations.
-
-The supplied provider-kubernetes runtime enables `--sanitize-secrets`. The
-composition reads source Secrets through Crossplane's required-resource API,
-so it does not depend on credential values in Object status.
-
-A virtual administrator can read all Secrets in that virtual cluster. A user
-who can create Pods in a namespace can usually mount that namespace's Secrets.
+See [Credential access in SECURITY.md](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#credential-access)
+for Secret permissions, administrative database accounts, and provider Object access.

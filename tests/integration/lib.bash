@@ -15,7 +15,8 @@ readonly WORKSPACE_NAMESPACE=workspace
 if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
   : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
   : "${PROVIDER_DATALAB_CONTEXT:=kind-provider-datalab-it}"
-  : "${PROVIDER_DATALAB_STORAGE_CLASS:=standard}"
+  : "${PROVIDER_DATALAB_STORAGE_CLASS:=datalab-nfs}"
+  : "${PROVIDER_DATALAB_SNAPSHOT_CLASS:=datalab-nfs-snapshots}"
   : "${PROVIDER_DATALAB_SERVICE_CIDR:=10.96.0.0/16}"
   : "${PROVIDER_DATALAB_POD_CIDRS:=10.244.0.0/16}"
 fi
@@ -301,11 +302,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-vcluster)
+    verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-volumes|verify-vcluster)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-vcluster>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-volumes|verify-vcluster>\n' "$2" >&2
       exit 1
       ;;
   esac

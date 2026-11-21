@@ -12,13 +12,13 @@ def main():
     args = arguments()
     env = environment()
     env["metadata"].update(name="datalab-custom", labels={"datalabs.pkg.internal/name": "datalab-custom"})
-    env["data"]["defaults"] = {
-        "data": {"enabled": True, "readOnlyMount": True},
+    env["data"].update({
+        "packageR": {"enabled": True, "readOnlyMount": True},
         "registry": {"enabled": False},
         "overallQuota": {"storage": "50Gi", "hard": {"requests.cpu": "2", "requests.memory": "4Gi"}},
         "limitRange": {"default": {"memory": "1Gi"}, "defaultRequest": {"cpu": "50m"}},
         "security": {"policy": "restricted", "externalEgress": False},
-    }
+    })
     env["data"]["network"] = {
         "externalEgressCIDRs": ["0.0.0.0/0", "::/0"],
         "serviceCIDR": "10.96.0.0/16",
@@ -84,16 +84,16 @@ def main():
         containers = manifest(resources, key)["spec"]["template"]["spec"]["containers"]
         assert next(c["image"] for c in containers if c["name"] == "oauth2-proxy") == env["data"]["images"]["oauth2Proxy"]
     assert manifest(resources, "data-s3-deployment-s-joe")["spec"]["template"]["spec"]["containers"][0]["image"] == env["data"]["images"]["rclone"]
-    env["data"]["defaults"]["registry"]["enabled"] = True
+    env["data"]["registry"]["enabled"] = True
     observer = deepcopy(resources["observe-runtime-storage-secret-s-joe"])
     observer["status"] = {"atProvider": {"manifest": manifest(resources, "runtime-storage-secret-s-joe")}}
     with_registry = render(args, env, source, [observer])
     assert manifest(with_registry, "registry-deployment-s-joe")["spec"]["template"]["spec"]["containers"][0]["image"] == env["data"]["images"]["registry"]
-    env["data"]["defaults"]["registry"]["enabled"] = False
+    env["data"]["registry"]["enabled"] = False
     print("PASS environment service image overrides", flush=True)
 
-    env["data"]["defaults"]["data"]["readOnlyMount"] = False
-    env["data"]["defaults"]["security"]["externalEgress"] = True
+    env["data"]["packageR"]["readOnlyMount"] = False
+    env["data"]["security"]["externalEgress"] = True
     resources = render(args, env, source)
     assert "networkpolicy-s-joe-allow-external-egress" in resources
     egress = manifest(resources, "networkpolicy-s-joe-allow-external-egress")["spec"]["egress"]
@@ -104,7 +104,7 @@ def main():
     assert any("--perm.create=true" in arg for c in containers for arg in c.get("args", []))
     print("PASS environment writable Data and external egress", flush=True)
 
-    env["data"]["defaults"]["data"]["enabled"] = False
+    env["data"]["packageR"]["enabled"] = False
     resources = render(args, env, source)
     for name in ("data-deployment-s-joe", "observe-runtime-storage-secret-s-joe"):
         assert name not in resources

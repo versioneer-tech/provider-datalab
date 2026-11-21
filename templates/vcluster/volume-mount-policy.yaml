@@ -1,0 +1,30 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: ${namespace}
+    resourceRules:
+    - apiGroups: ['']
+      apiVersions: [v1]
+      operations: [CREATE, UPDATE]
+      resources: [pods]
+  matchConditions:
+  - name: virtual-syncer
+    expression: ${syncer_expression}
+  - name: virtual-namespace
+    expression: ${namespace_expression}
+  - name: bound-volume
+    expression: ${claim_expression}
+  mutations:
+  - patchType: ApplyConfiguration
+    applyConfiguration:
+      expression: ${mount_expression}

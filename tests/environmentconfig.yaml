@@ -9,7 +9,7 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
@@ -62,17 +62,16 @@ data:
       - protocol: TCP
         port: 9000
     excludePolicies: []
-  defaults:
-    registry:
-      enabled: true
-    data:
-      enabled: true
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-    security:
-      policy: baseline
-      externalEgress: true
+  registry:
+    enabled: true
+  packageR:
+    enabled: true
+    readOnlyMount: false
+  overallQuota:
+    storage: 100Gi
+  security:
+    policy: baseline
+    externalEgress: true
   database:
     tlsRoute:
       parentName: default
@@ -89,7 +88,7 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
@@ -102,6 +101,8 @@ data:
   - name: apikey-2
   vcluster:
     storage: 5Gi
+  volumes:
+    snapshotClassName: workspace-snapshots
     storageClasses:
       allowed: [sbs-default, sbs-default-retain]
       default: sbs-default
@@ -176,17 +177,16 @@ data:
         port: 443
       - protocol: TCP
         port: 9000
-  defaults:
-    data:
-      enabled: true
-      readOnlyMount: true
-    overallQuota:
-      storage: 200Gi
-    security:
-      policy: privileged
-      externalEgress: true
-    registry:
-      enabled: true
+  packageR:
+    enabled: true
+    readOnlyMount: true
+  overallQuota:
+    storage: 200Gi
+  security:
+    policy: privileged
+    externalEgress: true
+  registry:
+    enabled: true
   database:
     tlsRoute:
       parentName: default

@@ -46,31 +46,30 @@ data:
       - protocol: TCP
         port: 9000
     excludePolicies: []
-  defaults:
-    volumes:
-      storage: 1Gi
-    data:
-      enabled: true
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-      hard:
-        requests.cpu: '4'
-        requests.memory: 8Gi
-        limits.cpu: '16'
-        limits.memory: 32Gi
-    limitRange:
-      default:
-        cpu: '1'
-        memory: 512Mi
-        ephemeral-storage: 8Gi
-      defaultRequest:
-        cpu: 100m
-        memory: 128Mi
-        ephemeral-storage: 3Gi
-    security:
-      policy: baseline
-      externalEgress: true
+  registry:
+    enabled: true
+  packageR:
+    enabled: true
+    readOnlyMount: false
+  overallQuota:
+    storage: 100Gi
+    hard:
+      requests.cpu: '4'
+      requests.memory: 8Gi
+      limits.cpu: '16'
+      limits.memory: 32Gi
+  limitRange:
+    default:
+      cpu: '1'
+      memory: 512Mi
+      ephemeral-storage: 8Gi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+      ephemeral-storage: 3Gi
+  security:
+    policy: baseline
+    externalEgress: true
   database:
     tlsRoute:
       parentName: default
@@ -78,13 +77,12 @@ data:
       sectionName: postgres-passthrough
     storageClassName: ''
     backupStorageClassName: ''
-  vcluster:
-    volumeSnapshots: false
+  volumes:
+    storage: 1Gi
     storageClasses:
       allowed:
       - standard
       default: standard
-  volumeSnapshots:
     snapshotClassName: workspace-snapshots
     schedule: '0 1 * * *'
-    retention: 4
+    maxSnapshots: 2

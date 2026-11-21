@@ -1,0 +1,23 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ['']
+      apiVersions: [v1]
+      operations: [CREATE, UPDATE]
+      resources: [persistentvolumeclaims]
+  matchConditions:
+  - name: bound-claim
+    expression: ${claim_expression}
+  validations:
+  - expression: ${binding_expression}
+    message: This virtual PVC must keep its Datalab volume binding.
+  - expression: ${owner_expression}
+    message: This virtual PVC must keep its Datalab binding owner.

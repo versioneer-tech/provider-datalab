@@ -9,7 +9,7 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
@@ -62,16 +62,15 @@ data:
         ports:
           - protocol: TCP
             port: 9000
-  defaults:
-    registry:
-      enabled: false
-    data:
-      enabled: false
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-    security:
-      externalEgress: true
+  registry:
+    enabled: false
+  packageR:
+    enabled: false
+    readOnlyMount: false
+  overallQuota:
+    storage: 100Gi
+  security:
+    externalEgress: true
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
@@ -81,7 +80,7 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.1.1
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
@@ -137,13 +136,12 @@ data:
         ports:
           - protocol: TCP
             port: 9000
-  defaults:
-    data:
-      enabled: false
-      readOnlyMount: false
-    overallQuota:
-      storage: 100Gi
-    registry:
-      enabled: false
-    security:
-      externalEgress: false
+  packageR:
+    enabled: false
+    readOnlyMount: false
+  overallQuota:
+    storage: 100Gi
+  registry:
+    enabled: false
+  security:
+    externalEgress: false

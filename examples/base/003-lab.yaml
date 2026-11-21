@@ -12,8 +12,6 @@ spec:
     - jane
   volumes:
     analysis:
-      vcluster: vc0
-      namespace: demo
       storage: 2Gi
   databases:
     pg0:
@@ -24,6 +22,11 @@ spec:
   vclusters:
     vc0:
       storage: 1Gi
+      volumeBindings:
+      - name: analysis
+        target:
+          namespace: demo
+          name: analysis
       secretBindings:
       - type: postgres
         name: pg0

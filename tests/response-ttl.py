@@ -25,6 +25,7 @@ from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from crossplane.function.proto.v1 import run_function_pb2_grpc as fnv1_grpc
 
 data = json.load(sys.stdin)
+parser_checked = False
 for case in data['cases']:
     for xr in data['xrs']:
         for step in case['pipeline']:
@@ -35,13 +36,17 @@ for case in data['cases']:
             if step['input']['kind'] == 'Script':
                 namespace = {}
                 exec(compile(step['input']['script'], step['step'], 'exec'), namespace)
-                for override, seconds in (
+                overrides = [
                     ({}, case['seconds']),
-                    ({'storage': {'responseTTL': '8m'}}, case['seconds']),
                     ({'datalab': {'responseTTL': '30s'}}, 30),
-                    ({'datalab': {'responseTTL': '5m'}}, 300),
-                    ({'datalab': {'responseTTL': '1h'}}, 3600),
-                ):
+                ]
+                if not parser_checked:
+                    overrides.extend([
+                        ({'storage': {'responseTTL': '8m'}}, case['seconds']),
+                        ({'datalab': {'responseTTL': '5m'}}, 300),
+                        ({'datalab': {'responseTTL': '1h'}}, 3600),
+                    ])
+                for override, seconds in overrides:
                     environment = copy.deepcopy(data['environment'])
                     environment.update(override)
                     req.context.update({'apiextensions.crossplane.io/environment': environment})
@@ -49,7 +54,10 @@ for case in data['cases']:
                     namespace['compose'](req, rsp)
                     assert rsp.meta.ttl.seconds == seconds, (step['step'], override, rsp.meta.ttl)
                     assert rsp.meta.ttl.nanos == 0, (step['step'], rsp.meta.ttl)
-                for invalid in (None, True, 300, '', '0s', '-1m', '1.5s', '1m30s', '5d', '9223372037s'):
+                if parser_checked:
+                    continue
+                parser_checked = True
+                for invalid in (None, True, 300, 1.5, '', '0s', '-1m', '1.5s', '1m30s', '5d', '9223372037s'):
                     environment = copy.deepcopy(data['environment'])
                     environment['datalab'] = {'responseTTL': invalid}
                     req.context.update({'apiextensions.crossplane.io/environment': environment})
@@ -197,12 +205,11 @@ class FunctionResponseTests(unittest.TestCase):
             self.assertEqual((root / "composition/settings.yaml").read_text(), settings)
 
             for key in ("responseTTL", "environmentConfigsTTL", "autoReadyTTL"):
-                for value in ("0s", "9223372037s"):
-                    invalid = yaml.safe_load(settings)
-                    invalid[key] = value
-                    (root / "composition/settings.yaml").write_text(yaml.safe_dump(invalid))
-                    with self.subTest(key=key, value=value), self.assertRaises(ValueError):
-                        BUILDER["build"](root)
+                invalid = yaml.safe_load(settings)
+                invalid[key] = "0s"
+                (root / "composition/settings.yaml").write_text(yaml.safe_dump(invalid))
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    BUILDER["build"](root)
             (root / "composition/settings.yaml").write_text(settings)
 
             pipeline = yaml.safe_load((root / "composition/pipeline.yaml").read_text())

@@ -3,7 +3,6 @@
 
 import runpy
 import base64
-import re
 import subprocess
 import json
 import sys
@@ -55,20 +54,6 @@ class HelperTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "backupStorage"):
                     enabled(size)
 
-    def test_backup_schema_accepts_only_non_negative_quantities(self):
-        xrd = yaml.safe_load((ROOT / "xrd.yaml").read_text())
-        version = next(item for item in xrd["spec"]["versions"] if item["referenceable"])
-        schema = version["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"]
-        for field in ("databases", "documentStores", "cacheStores"):
-            quantity = schema[field]["additionalProperties"]["properties"]["backupStorage"]
-            with self.subTest(field=field):
-                self.assertEqual(quantity["default"], "0")
-                self.assertEqual(quantity["type"], "string")
-                for value in ("0", "0Gi", "0.0Gi", "1Gi", ".5G", "1e3"):
-                    self.assertIsNotNone(re.fullmatch(quantity["pattern"], value), value)
-                for value in ("", "-1Gi", "invalid", "1GB"):
-                    self.assertIsNone(re.fullmatch(quantity["pattern"], value), value)
-
     def test_service_tokens_do_not_change(self):
         token = load_helpers("_strong_token")["_strong_token"]
         self.assertEqual(token("sample:mongo"), "4YlC2SJsBu45oGi9FbJZFBypWCpXR-vU")
@@ -79,10 +64,11 @@ class HelperTests(unittest.TestCase):
 
 class VolumeSnapshotTests(unittest.TestCase):
     def run_backup(self, *, phase="Bound", ready=True, error=False, policy="Delete",
-                   incomplete=False, cleanup_pending=False, attempts=1):
+                   incomplete=False, cleanup_pending=False, source_replaced=False, attempts=1):
         module = runpy.run_path(str(ROOT / "scripts/volume-snapshot.py"))
         label, source = module["LABEL"], module["SOURCE"]
         calls = []
+        source_reads = 0
 
         def snapshot(name, uid="pvc-current", volume="analysis", completed=True):
             return {"metadata": {"name": name, "uid": name + "-uid",
@@ -100,11 +86,14 @@ class VolumeSnapshotTests(unittest.TestCase):
 
         class API:
             def call(self, method, path, body=None):
+                nonlocal source_reads
                 calls.append((method, path, body))
                 if "/volumesnapshotclasses/" in path:
                     return {"deletionPolicy": policy}
                 if "/persistentvolumeclaims/" in path:
-                    return {"metadata": {"uid": "pvc-current"}, "status": {"phase": phase}}
+                    source_reads += 1
+                    uid = "pvc-replacement" if source_replaced and source_reads > 1 else "pvc-current"
+                    return {"metadata": {"uid": uid}, "status": {"phase": phase}}
                 if method == "POST":
                     name = "20261122-" + str(sum(method == "POST" for method, _, _ in calls))
                     item = snapshot(name, completed=ready)
@@ -153,6 +142,14 @@ class VolumeSnapshotTests(unittest.TestCase):
                 self.assertIsInstance(failure, RuntimeError)
                 self.assertFalse(any(method == "DELETE" for method, _, _ in calls))
 
+    def test_source_replacement_during_backup_preserves_recovery_points(self):
+        calls, failure, snapshots = self.run_backup(source_replaced=True)
+        self.assertIn("source PVC changed", str(failure))
+        self.assertTrue(any(method == "POST" for method, _, _ in calls))
+        self.assertFalse(any(method == "DELETE" for method, _, _ in calls))
+        self.assertIn("20261120", snapshots)
+        self.assertIn("20261121", snapshots)
+
     def test_unbound_source_does_not_create_a_backup(self):
         calls, failure, _ = self.run_backup(phase="Pending")
         self.assertIsInstance(failure, RuntimeError)
@@ -191,12 +188,89 @@ class VolumeSnapshotTests(unittest.TestCase):
                        and verb in rule["verbs"]
                        and ("resourceNames" not in rule or name in rule["resourceNames"]) for rule in rules)
 
-        for verb in ("get", "list", "watch"):
+        for verb in ("get", "list", "watch", "patch"):
             self.assertTrue(allowed("snapshot.storage.k8s.io", "volumesnapshotclasses", verb))
         for verb in ("get", "list", "watch", "create", "update", "patch", "delete"):
             self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterrolebindings", verb))
-        self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "datalab-vcluster-volume-snapshots"))
+        self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "datalab-volume-snapshot-classes"))
         self.assertFalse(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "cluster-admin"))
+        self.assertEqual(roles["datalab-volume-snapshot-classes"]["rules"], [{
+            "apiGroups": ["snapshot.storage.k8s.io"], "resources": ["volumesnapshotclasses"], "verbs": ["get"],
+        }])
+
+    def test_snapshot_settings_are_checked_without_installation_for_every_target(self):
+        script = '''
+set -euo pipefail
+export PROVIDER_DATALAB_CLUSTER="$2"
+export PROVIDER_DATALAB_STORAGE_CLASS=test-storage
+export PROVIDER_DATALAB_SNAPSHOT_CLASS=test-snapshots
+snapshot_driver="$3"
+snapshot_policy="$4"
+snapshot_apis="$5"
+source "$1"
+kube() {
+  [[ "$1" == get ]] || { printf 'unexpected mutation'; return 1; }
+  if [[ "$2" == --raw=* ]]; then
+    if [[ "$snapshot_apis" == ready ]]; then
+      printf '{"resources":[{"name":"volumesnapshots"},{"name":"volumesnapshotcontents"},{"name":"volumesnapshotclasses"}]}'
+    else printf '{"resources":[]}'; fi
+  elif [[ "$2" == storageclass/test-storage ]]; then printf 'test.csi';
+  elif [[ "$2" == volumesnapshotclass/* ]]; then printf '{"driver":"%s","deletionPolicy":"%s"}' "$snapshot_driver" "$snapshot_policy";
+  else printf 'unexpected mutation'; return 1; fi
+}
+curl() { printf 'unexpected installation'; return 1; }
+check_volume_snapshot_settings
+'''
+        for mode in ("kind", "existing"):
+            for driver, policy, apis, accepted in (
+                ("test.csi", "Delete", "ready", True), ("other.csi", "Delete", "ready", False),
+                ("test.csi", "Retain", "ready", False), ("test.csi", "Delete", "missing", False),
+            ):
+                with self.subTest(mode=mode, driver=driver, policy=policy, apis=apis):
+                    result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"),
+                                             mode, driver, policy, apis], capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, accepted, result.stderr)
+                    self.assertNotIn("unexpected", result.stdout)
+
+    def test_existing_volume_runner_requires_a_snapshot_class_before_cluster_access(self):
+        script = '''
+unset PROVIDER_DATALAB_SNAPSHOT_CLASS
+kubectl() { printf 'unexpected Kubernetes access'; return 1; }
+kind() { printf 'unexpected Kind access'; return 1; }
+docker() { printf 'unexpected Docker access'; return 1; }
+export -f kubectl kind docker
+runner="$1"
+shift
+bash "$runner" "$@"
+'''
+        for profile in ("all", "verify-volumes", "verify-vcluster"):
+            with self.subTest(profile=profile):
+                result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/run.bash"),
+                                         profile, "--kubeconfig", "/test/selected.kubeconfig", "--context", "test-virtual"],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("needs --snapshot-class", result.stderr)
+                self.assertNotIn("unexpected", result.stdout)
+
+    def test_kind_setup_rejects_other_targets_before_cluster_access(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER="$2"
+export PROVIDER_DATALAB_CONTEXT="$3"
+kubectl() { printf 'unexpected Kubernetes access'; return 1; }
+helm() { printf 'unexpected Helm access'; return 1; }
+docker() { printf 'unexpected Docker access'; return 1; }
+kind() { printf 'unexpected Kind access'; return 1; }
+export -f kubectl helm docker kind
+bash "$1"
+'''
+        for setup in ("create-cluster.bash", "kind-storage.bash"):
+            for mode, context in (("existing", "test-virtual"), ("kind", "unrelated-kind")):
+                with self.subTest(setup=setup, mode=mode, context=context):
+                    result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration" / setup),
+                                             mode, context], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("only available for the dedicated Kind cluster", result.stderr)
+                    self.assertNotIn("unexpected", result.stdout)
 
 
 class VclusterCleanupTests(unittest.TestCase):
@@ -743,7 +817,7 @@ publish_test_image registry.example.org/tests/client:test /test/empty-docker-con
         for item in result:
             self.assertEqual(item["data"]["network"]["serviceCIDR"], "10.20.0.0/16")
             self.assertEqual(item["data"]["network"]["podCIDRs"], ["10.30.0.0/16", "10.40.0.0/16"])
-            self.assertEqual(item["data"]["vcluster"]["storageClasses"], {
+            self.assertEqual(item["data"]["volumes"]["storageClasses"], {
                 "allowed": ["test-storage"], "default": "test-storage",
             })
         self.assertEqual(result[0]["data"]["network"]["internalEgress"], [{"namespace": "minio"}])

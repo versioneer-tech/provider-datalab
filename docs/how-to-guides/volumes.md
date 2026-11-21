@@ -1,8 +1,8 @@
 # Use volumes
 
-Declare named volumes under `spec.volumes`, as you declare named PostgreSQL
-and Redis services. Each entry creates a `PersistentVolumeClaim` (PVC) in a
-virtual cluster. Applications mount the claim and manage their own workloads.
+Declare named PVCs under `spec.volumes`, as you declare named PostgreSQL and
+Redis services. Each PVC and its backup schedule run in the Datalab host namespace,
+independently of virtual clusters.
 
 ```yaml
 apiVersion: versioneer.at/v1
@@ -12,170 +12,172 @@ metadata:
   namespace: workspace
 spec:
   users: [joe]
+  volumes:
+    demo:
+      storage: 2Gi
+```
+
+This creates host PVC `s-joe/volume-demo` and its snapshot schedule.
+The size defaults to `EnvironmentConfig.data.volumes.storage`, or `1Gi`.
+The PVC uses filesystem volume mode and `ReadWriteOnce`. The operator selects
+the allowed classes with `EnvironmentConfig.data.volumes.storageClasses.allowed`.
+`volumes.storageClasses.default` selects the class for named volumes and virtual
+workloads; without that setting, the first allowed class applies. The allowlist
+must be non-empty when volumes or virtual clusters are declared.
+The request counts toward the Datalab's host storage quota.
+
+The operator must configure [snapshot infrastructure](installation.md#volume-snapshots).
+To use the volume through a virtual API, add a binding as shown below.
+
+## Check status
+
+```yaml
+status:
+  volumes:
+    - name: demo
+      pvcRef:
+        namespace: s-joe
+        name: volume-demo
+      phase: Bound
+      backup:
+        readySnapshots: 2
+        lastSuccessfulTime: '2026-11-21T01:00:00Z'
+```
+
+`phase` is the observed PVC phase: `Pending`, `Bound`, or `Lost`.
+A class with `WaitForFirstConsumer` keeps the claim Pending until a workload
+uses it. Datalab readiness does not require a consumer to bind the claim.
+
+`readySnapshots` counts completed snapshots for the current PVC UID, excluding
+snapshots being deleted. It is the number available now, not the total number
+ever taken. `lastSuccessfulTime` is the creation time of the latest ready
+snapshot and is absent until one is available. Failed or pending snapshots do
+not increase the count or change the last successful time.
+
+## Bind to a virtual cluster
+
+Add a binding to `vc0`. `name` selects the source from `spec.volumes`; `target`
+sets the PVC name and namespace in the virtual cluster:
+
+```yaml
+spec:
+  volumes:
+    demo:
+      storage: 2Gi
   vclusters:
     vc0:
-      storage: 5Gi
-  volumes:
-    analysis:
-      vcluster: vc0
-      namespace: demo
-      storage: 2Gi
+      volumeBindings:
+      - name: demo
+        target:
+          namespace: demo
+          name: demo
 ```
 
-The provider creates PVC `demo/volume-analysis` inside `vc0`. The size defaults
-to `defaults.volumes.storage`, or `1Gi`. The PVC uses the virtual cluster's
-default allowed StorageClass, filesystem volume mode, and `ReadWriteOnce`.
-Its request counts toward the Datalab's host storage quota.
+The provider creates virtual namespace `demo` and PVC `demo/demo`, backed by
+the existing host PVC `s-joe/volume-demo`. The binding allocates no second volume.
+Each named volume can have one binding. PVC targets must be unique within each
+virtual cluster. The host needs Kubernetes 1.36 or later with
+[mutating admission support](vcluster.md#host-requirements).
 
-`status.volumes` reports the volume name, virtual cluster, namespace, and
-PVC name. A volume cannot move to another virtual cluster or namespace. Its
-declaration creates storage without starting an application.
-
-## Mount a volume
-
-Obtain a [virtual cluster profile](vcluster.md#api-access). After that handoff,
-application installation and operation use the virtual API. Set the explicit
-kubeconfig and context for that cluster:
+Save the [mount Pod example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/volume-pod.yaml)
+as `volume-pod.yaml`. Use the downloaded virtual kubeconfig:
 
 ```bash
-volume_kubeconfig=/path/to/s-joe-vc0.kubeconfig
-volume_context="$(kubectl --kubeconfig "$volume_kubeconfig" config current-context)"
-kubectl --kubeconfig "$volume_kubeconfig" --context "$volume_context" \
-  --namespace demo get pvc --selector datalabs.versioneer.at/volume=analysis
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig apply -f volume-pod.yaml
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo \
+  wait pod/volume-demo --for=condition=Ready --timeout=5m
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo exec volume-demo -- \
+  sh -c 'printf "saved\n" > /data/message'
+kubectl --kubeconfig ./s-joe-vc0.kubeconfig -n demo exec volume-demo -- cat /data/message
 ```
 
-Mount the existing claim in a Pod or workload controller:
+Application installation and file access need only virtual cluster credentials.
+The complete Datalab is in the
+[virtual cluster example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/datalab.yaml).
+`ReadWriteOnce` permits mounts on one node; it does not prevent concurrent
+writes from Pods on that node. Use separate volumes for independent data.
+
+Deleting the Pod, virtual PVC, binding, or virtual cluster preserves the host
+PVC and its backups while `spec.volumes.demo` remains. A deleted virtual PVC is
+recreated and rebound while its binding remains. Stop workloads before removing
+or changing their binding. Removing a binding removes its virtual PV and PVC
+records after consumers release them.
+
+### Direct host mounts
+
+A host workload in the Datalab service namespace can use
+`persistentVolumeClaim.claimName: volume-demo`. Keep the host claim independent
+of application owner references. Removing an application must preserve it.
+
+## Backup policy
+
+The operator sets one policy in EnvironmentConfig:
 
 ```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: volume-reader
-  namespace: demo
-spec:
-  automountServiceAccountToken: false
-  restartPolicy: Never
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-  - name: reader
-    image: busybox:1.36.1
-    command: [sh, -c, 'ls /workspace; sleep 3600']
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop: [ALL]
-    volumeMounts:
-    - name: workspace
-      mountPath: /workspace
+data:
   volumes:
-  - name: workspace
-    persistentVolumeClaim:
-      claimName: volume-analysis
+    storage: 1Gi
+    storageClasses:
+      allowed: [workspace-storage]
+      default: workspace-storage
+    snapshotClassName: workspace-snapshots
+    schedule: '0 1 * * *'
+    maxSnapshots: 2
 ```
 
-Apply the manifest with the same kubeconfig and context. `ReadWriteOnce`
-permits mounts on one node; it does not give each writer a separate copy or
-prevent concurrent writes from Pods on that node. Use separate volumes for
-independent tasks.
+The default schedule is daily at 01:00 UTC, with two completed snapshots kept
+for the current PVC UID. `maxSnapshots` accepts an integer from 1 to 100.
+The policy applies to every named volume, including restored volumes.
 
-Application owners install their controllers, CRDs, templates, and images.
-Installing CRDs and cluster RBAC requires virtual cluster administration.
-Namespace roles can operate the installed resources when RBAC grants access.
-Provider Datalab supplies no application controller or runtime templates.
+The backup CronJob runs on the host. It continues when virtual clusters are
+hibernated or removed. It does not mount the source volume. The source PVC
+must be Bound before a backup can succeed.
 
-Keep the PVC independent of application owner references. Replacing a Pod or
-removing an application must preserve the claim and its namespace. Workloads
-remain subject to the [platform access and security rules](../security/workload-access.md).
+Each run creates a CSI `VolumeSnapshot`, waits for it to become ready, then
+removes older completed snapshots for the same PVC UID. Failed runs preserve
+completed recovery points. Before another attempt, the Job removes incomplete
+snapshots for that UID, including attempts left by an interrupted Job.
+If deletion has not finished, the run fails before allocating another snapshot.
+A later run retries cleanup.
 
-## Enable backups
+The PVC uses a `StorageClass`; its snapshots use a `VolumeSnapshotClass` with
+the same CSI driver. Snapshots need no second PVC or StorageClass. Their storage
+does not count toward the PVC request quota; monitor backend capacity separately.
 
-The operator must enable [CSI snapshot support](installation.md#volume-snapshots)
-before a volume can request backups:
+Successful daily backups leave up to 24 hours between recovery points.
+Failures extend that gap. Set a shorter interval when needed. Applications may
+need to flush or pause writes for a consistent recovery point. Managed databases
+use their own [backup tools](usage_concepts.md#backups).
 
-```yaml
-spec:
-  volumes:
-    analysis:
-      vcluster: vc0
-      namespace: demo
-      storage: 2Gi
-      backup: true
-```
-
-The provider creates a backup CronJob in the volume's virtual namespace. The
-default schedule is daily at 01:00 UTC, with four completed snapshots retained.
-`status.volumes[].backupCronJobName` identifies the CronJob. This reference
-reports configuration, not a successful backup.
-
-The source PVC must be `Bound`. A StorageClass with `WaitForFirstConsumer`
-needs a workload that uses the claim before the first backup.
-
-Each run creates a CSI `VolumeSnapshot`, waits for `readyToUse`, then removes
-older completed snapshots for the same PVC UID. A failed run keeps the earlier
-completed snapshots. Before another attempt, the Job removes incomplete
-snapshots for that PVC UID and waits for pending snapshot deletion. This also
-cleans up attempts left by an interrupted Job. A failed storage cleanup blocks
-new snapshots until the operator resolves it.
-
-There is no second backup PVC. CSI allocates storage for snapshots through the
-configured `VolumeSnapshotClass`.
-Snapshot storage does not count toward the PVC storage-request quota. The
-operator must set and monitor storage-backend limits separately.
-
-Check Job failures and snapshot readiness through the virtual API:
-
-```bash
-kubectl --kubeconfig "$volume_kubeconfig" --context "$volume_context" \
-  --namespace demo get cronjobs,jobs
-kubectl --kubeconfig "$volume_kubeconfig" --context "$volume_context" \
-  --namespace demo get volumesnapshots \
-  --selector datalabs.versioneer.at/volume=analysis
-```
-
-The scheduler runs inside the virtual cluster. It cannot take new backups
-while that cluster is hibernated. CSI snapshots capture volume state; an
-application may need to flush or stop writes for a consistent recovery point.
-They do not include Kubernetes objects or managed database data. Arrange
-control-plane recovery and independent disaster backups with the operator.
-
-PostgreSQL, MongoDB, and Redis use their own `backupStorage` setting and backup
-tools. A volume's `backup` setting applies only to its PVC; see
-[managed service backups](usage_concepts.md#backups).
+Check failed Jobs and snapshot readiness in the host service namespace.
+CSI snapshots do not include Kubernetes objects and may share the volume's
+storage failure boundary. Arrange an independent backup and test restores
+before relying on the recovery policy.
 
 ## Restore into a new volume
 
-Select a snapshot with `readyToUse: true` in the same virtual namespace. Declare
-a new volume with its snapshot name and a size at least as large as the source:
+Select a ready snapshot in the Datalab host namespace. Add a new entry alongside
+the existing volume. Set `storage` to at least the snapshot's `status.restoreSize`:
 
 ```yaml
 spec:
   volumes:
-    recovered-analysis:
-      vcluster: vc0
-      namespace: demo
+    recovered-demo:
       storage: 2Gi
-      restoreFrom: volume-analysis-example
+      restoreFrom: volume-demo-example
 ```
 
-Use the actual snapshot name in place of `volume-analysis-example`. The provider
-creates `demo/volume-recovered-analysis` with that snapshot as its data source.
-The source is fixed when the volume is created. Mount the new claim to check
-its files before using it. Restore does not change an existing volume.
+Use the actual snapshot name. The provider creates
+`s-joe/volume-recovered-demo` from that snapshot. The restore source is fixed
+at creation. Restore does not overwrite an existing volume. Check the restored
+files before using the new PVC.
 
 ## Remove storage
 
-Removing a volume entry deletes its PVC. Stop workloads that mount it first.
-Disabling `backup` removes the schedule and its RBAC but keeps existing
-snapshots. Removing a volume also keeps its snapshots while their namespace
-and virtual cluster remain. Automatic retention ends when its schedule ends.
+Stop workloads, remove their volume binding, then remove the volume entry.
+Removing the entry deletes the host PVC, its snapshot schedule, and its backup permissions.
+Completed snapshots remain in the Datalab namespace; automatic retention stops
+with the schedule.
 
-Deleting the virtual namespace, virtual cluster, or Datalab can delete the
-snapshot objects and their underlying storage. Keep an independent backup
-before deleting that boundary. See the upstream
-[volume snapshot documentation](https://kubernetes.io/docs/concepts/storage/volume-snapshots/).
+Deleting the Datalab or its host namespace deletes that storage boundary and can
+delete snapshots and their data. Keep an independent backup before deletion.

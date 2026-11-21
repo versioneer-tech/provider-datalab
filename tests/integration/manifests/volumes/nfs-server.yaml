@@ -1,0 +1,119 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-volume-snapshots
+  labels:
+    datalabs.versioneer.at/integration: 'true'
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nfs-server
+  namespace: test-volume-snapshots
+data:
+  ganesha.conf: |
+    NFS_Core_Param {
+      Protocols = 4;
+      fsid_device = false;
+      allow_set_io_flusher_fail = true;
+    }
+    NFSV4 {
+      Grace_Period = 0;
+    }
+    EXPORT {
+      Export_Id = 1;
+      Path = /export;
+      Pseudo = /;
+      Protocols = 4;
+      Transports = TCP;
+      Access_Type = RW;
+      Squash = No_Root_Squash;
+      SecType = sys;
+      FSAL { Name = VFS; }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nfs-server
+  namespace: test-volume-snapshots
+spec:
+  selector:
+    app: test-nfs-server
+  ports:
+  - name: nfs
+    port: 2049
+    targetPort: nfs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-server
+  namespace: test-volume-snapshots
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: test-nfs-server
+  template:
+    metadata:
+      labels:
+        app: test-nfs-server
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: nfs-server
+        image: ghcr.io/kubernetes-sigs/nfs-ganesha:V6.5
+        command: [sh, -ec]
+        args:
+        - |
+          mkdir -p /usr/local/var/run/ganesha
+          chmod 0777 /export
+          /usr/sbin/rpcbind -w
+          dbus-daemon --system --nopidfile
+          exec /usr/local/bin/ganesha.nfsd -F -L /dev/stdout -p /usr/local/var/run/ganesha/ganesha.pid -f /etc/ganesha/ganesha.conf
+        securityContext:
+          # Ganesha serves files through open_by_handle_at.
+          seccompProfile:
+            type: Unconfined
+          capabilities:
+            add: [DAC_READ_SEARCH]
+        ports:
+        - name: nfs
+          containerPort: 2049
+        readinessProbe:
+          tcpSocket:
+            port: nfs
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /export
+        - name: config
+          mountPath: /etc/ganesha
+          readOnly: true
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: nfs-server

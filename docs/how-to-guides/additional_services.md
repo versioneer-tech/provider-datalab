@@ -302,5 +302,8 @@ SELECT value FROM datalab_check;
 
 Remove test services when the experiment ends. Before keeping one, agree with
 the platform team on its storage, backups, monitoring, maintenance, and deletion.
-Back up the service data and any application volumes. Use
-[named volumes](volumes.md) for provider-managed PVCs and snapshot schedules.
+Back up the service data and any application volumes. These examples create
+application PVCs inside the virtual cluster; configure their backups separately.
+[Named volumes](volumes.md) provide host PVCs and snapshot schedules, with a
+separate lifecycle. Bind a named volume to the virtual namespace when the
+application needs its storage and backup policy.

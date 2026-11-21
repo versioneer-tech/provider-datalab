@@ -59,7 +59,8 @@ omit generated metadata that changes between runs. The other tests check:
 
 | Tests | Behavior |
 | --- | --- |
-| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, Secret bindings, and named persistent volumes. |
+| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, volume and Secret bindings, and virtual resources. |
+| `volumes.py` | Host PVCs without virtual clusters, automatic backups, restore sources, operator retention, and current snapshot counts. |
 | `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot setup permissions, build failures, and integration runner errors. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
@@ -70,6 +71,11 @@ omit generated metadata that changes between runs. The other tests check:
 
 The [integration suite](integration/README.md) checks deployed services,
 authorization, routing, and persistence in an existing test cluster or Kind.
+Its volume checks recover file contents from CSI snapshots, check retention
+and failure handling, and verify storage removal. Dedicated Kind setup supplies
+NFS CSI storage and snapshot infrastructure. Existing targets must already
+provide matching storage and snapshot classes, the driver, and snapshot controller.
+Test profiles use these resources without installing them.
 Draft pull requests run documentation and unit checks in CI. Kubernetes
 integration steps are deferred until the pull request is ready for review.
 Pushes to the configured target branches and manual runs include integration.
@@ -85,10 +91,23 @@ to check that Secret values take precedence.
 | --- | --- | --- |
 | `001` | `datalab` | Data, default environment, credential rotation |
 | `002` | `datalab` | Writable Data and managed stores |
-| `003` | `datalab-custom` | Virtual clusters, volume, read-only Data, PostgreSQL |
+| `003` | `datalab-custom` | Virtual clusters, bound host volume, read-only Data, PostgreSQL |
 | `004` | `datalab-custom` | Services with custom settings |
 
 Renders are written to `/tmp`; expected snapshots are in `tests/expected/`.
 Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml` and
 review the differences before replacing a snapshot. Use an existing example
 when it covers the behavior under test. Add one only for a missing case.
+
+## STAC example image
+
+Build the image for the [STAC workload example](../examples/vcluster/stac-fastapi.yaml)
+from the repository root and push it to a registry that the host nodes can read:
+
+```bash
+docker build -f tests/vcluster/catalog.Dockerfile -t registry.acme.com/team/catalog:demo .
+docker push registry.acme.com/team/catalog:demo
+```
+
+Use that reference for `__CATALOG_IMAGE__` in the example. Follow the
+[catalog guide](../docs/how-to-guides/vcluster.md#datalab-stac-catalog) to run it.

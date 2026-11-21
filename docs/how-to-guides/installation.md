@@ -35,7 +35,9 @@ with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
 For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
 issuer, allowed StorageClasses, and an HTTPS Gateway listener. The package runs
 vCluster OSS `0.38.0` with Kubernetes `1.36.6`. The host needs
-ValidatingAdmissionPolicy and BackendTLSPolicy support. See
+ValidatingAdmissionPolicy and BackendTLSPolicy support. Volume bindings require
+host Kubernetes 1.36 or later with `admissionregistration.k8s.io/v1`
+MutatingAdmissionPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
 Application owners install their controllers and workloads through the virtual
 API. Use [Volumes](volumes.md) to check persistent volumes after setup.
@@ -115,7 +117,7 @@ in this order:
 | `02-providers.yaml` | Install the Kubernetes and Keycloak providers. |
 | `03-providerConfigs.yaml` | Configure those providers in the claim namespace. |
 | `functions.yaml` | Install the composition functions. |
-| `rbac.yaml` | Grant provider access and let Crossplane read source Secrets. |
+| `rbac.yaml` | Grant provider access, admission policy management, and source Secret reads. |
 
 Apply `03-providerConfigs.yaml` with `kubectl apply -n workspace -f ...`.
 Create its referenced Keycloak credential Secret in that namespace through
@@ -132,7 +134,7 @@ Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
 package. The provider-kubernetes RBAC includes access to Pods for readiness
 checks, namespaces, quotas, and service PVCs. It also installs the shared
-snapshot role described under [Volume snapshots](#volume-snapshots).
+snapshot class read role described under [Volume snapshots](#volume-snapshots).
 
 Keep the supplied 64 MiB function message limits when you manage functions
 separately. Desired and observed virtual cluster configuration is included in
@@ -163,13 +165,13 @@ kubectl get configurationrevisions.pkg.crossplane.io
 
 The package installs the Datalab resource definition and composition. Its
 providers and functions are managed separately by the platform.
+The package does not contain `dependencies/rbac.yaml` or EnvironmentConfigs.
+Manage them separately and apply the supplied RBAC before the configuration.
 
-For a source installation, apply `xrd.yaml`, then `composition.yaml`, before
-creating Datalabs.
-
-The [manifest build guide](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md)
-explains how to set build defaults. Use `datalab.responseTTL` in the environment
-to change the Python response TTL without rebuilding a package.
+For a source build and installation, use the
+[manifest README](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md).
+Set `datalab.responseTTL` in the environment to change the Python response TTL
+without rebuilding a package.
 
 ## 4. Set the shared environment
 
@@ -242,8 +244,9 @@ data:
     excludePolicies: []
 ```
 
-Replace the network ranges, endpoints, and DNS names before applying it. Configure [authentication](authentication.md) before users access
-the services.
+Replace the network ranges, endpoints, and DNS names before applying it.
+Configure the [identity prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#identity-prerequisites)
+before users access the services.
 
 ### Named environment override
 
@@ -262,9 +265,8 @@ metadata:
 data:
   datalab:
     responseTTL: 5m
-  defaults:
-    overallQuota:
-      storage: 50Gi
+  overallQuota:
+    storage: 50Gi
 ---
 apiVersion: versioneer.at/v1
 kind: Datalab
@@ -356,16 +358,16 @@ not override these settings.
 
 | Setting | Default | Use |
 | --- | --- | --- |
-| `defaults.registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
-| `defaults.data.enabled` | `true` | Shared packageR service and its configured endpoint. |
-| `defaults.data.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
-| `defaults.overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the Datalab service namespace. |
-| `defaults.overallQuota.hard.requests.cpu` | `4` | Aggregate CPU requests in the host service namespace. |
-| `defaults.overallQuota.hard.requests.memory` | `8Gi` | Aggregate memory requests in the host service namespace. |
-| `defaults.overallQuota.hard.limits.cpu` | `16` | Aggregate CPU limits in the host service namespace. |
-| `defaults.overallQuota.hard.limits.memory` | `32Gi` | Aggregate memory limits in the host service namespace. |
-| `defaults.security.policy` | `baseline` | Pod security level: `restricted`, `baseline`, or `privileged`. |
-| `defaults.security.externalEgress` | `true` | Broad egress to the configured external CIDRs. |
+| `registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
+| `packageR.enabled` | `true` | Shared packageR service and its configured endpoint. |
+| `packageR.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
+| `overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the Datalab service namespace. |
+| `overallQuota.hard.requests.cpu` | `4` | Aggregate CPU requests in the host service namespace. |
+| `overallQuota.hard.requests.memory` | `8Gi` | Aggregate memory requests in the host service namespace. |
+| `overallQuota.hard.limits.cpu` | `16` | Aggregate CPU limits in the host service namespace. |
+| `overallQuota.hard.limits.memory` | `32Gi` | Aggregate memory limits in the host service namespace. |
+| `security.policy` | `baseline` | Pod security level: `restricted`, `baseline`, or `privileged`. |
+| `security.externalEgress` | `true` | Broad egress to the configured external CIDRs. |
 
 #### Service images
 
@@ -375,7 +377,7 @@ defaults below.
 
 | Setting | Default image tag | Use |
 | --- | --- | --- |
-| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.1.1` | Data server and its database init container. |
+| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its database init container. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
 | `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
 | `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. The default database version is `8.0.38`. |
@@ -383,7 +385,7 @@ defaults below.
 | `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
 | `images.redisBackup` | `redis:7.2.17` | Redis backup tools. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
-| `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job in the virtual cluster. |
+| `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job on the host. |
 | `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
 
 A MongoDB image tag that starts with `major.minor.patch` sets the database
@@ -398,13 +400,13 @@ Host admission rejects new Pods that exceed it. Quotas do not reserve capacity;
 size them for the host cluster and the number of teams. Include control planes,
 service sidecars, and temporary Pod overlap during rolling updates.
 
-Override individual quota entries under `defaults.overallQuota.hard`. Unset
+Override individual quota entries under `overallQuota.hard`. Unset
 entries keep their defaults. Additional native ResourceQuota entries are also
-accepted. `defaults.overallQuota.storage` sets the PVC request limit; an explicit
+accepted. `overallQuota.storage` sets the PVC request limit; an explicit
 `hard.requests.storage` takes priority.
 
-Use `defaults.limitRange.default` for missing container limits and
-`defaults.limitRange.defaultRequest` for missing requests. Default limits are
+Use `limitRange.default` for missing container limits and
+`limitRange.defaultRequest` for missing requests. Default limits are
 CPU `1`, memory `512Mi`, and ephemeral storage `8Gi`. Default requests are
 CPU `100m`, memory `128Mi`, and ephemeral storage `3Gi`. These defaults apply
 to containers without the corresponding resource settings.
@@ -448,15 +450,14 @@ to containers without the corresponding resource settings.
 | `vcluster.resources.limits` | CPU `4`, memory `4Gi`, ephemeral storage `10Gi` | Control-plane limits; supplied fields override these defaults. |
 | `vcluster.scheduling` | `{}` | Control-plane and workload selectors and tolerations; see [placement and hibernation](vcluster.md#placement-and-hibernation). |
 | `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
-| `defaults.volumes.storage` | `1Gi` | Default size of named persistent volumes. |
-| `vcluster.volumeSnapshots` | `false` | Enable CSI snapshot synchronization and its additional host RBAC. |
-| `volumeSnapshots.snapshotClassName` | Unset | Snapshot class for volume backups. Must use deletion policy `Delete`. |
-| `volumeSnapshots.schedule` | `0 1 * * *` | Backup schedule in UTC. |
-| `volumeSnapshots.retention` | `4` | Completed snapshots retained per PVC UID, from 1 to 100. |
+| `volumes.storage` | `1Gi` | Default size of named host PVCs. |
+| `volumes.snapshotClassName` | Required for named volumes | Snapshot class for volume backups. Must use deletion policy `Delete`. |
+| `volumes.schedule` | `0 1 * * *` | Backup schedule in UTC. |
+| `volumes.maxSnapshots` | `2` | Completed snapshots retained per PVC UID, from 1 to 100. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
-| `vcluster.storageClasses.allowed` | Required when virtual clusters are declared | Host classes exposed to virtual workloads. |
-| `vcluster.storageClasses.default` | First allowed class | Virtual workload default class. |
-| `vcluster.storageClassName` | Virtual default class | Control-plane StorageClass; must be allowed. |
+| `volumes.storageClasses.allowed` | Required for volumes or virtual clusters | Allowed classes for named host volumes and virtual workloads. |
+| `volumes.storageClasses.default` | First allowed class | Default class for named host volumes and virtual workloads. |
+| `vcluster.storageClassName` | `volumes.storageClasses.default` | Control-plane StorageClass; must be allowed. |
 | `vcluster.issuerCA` | System trust | PEM CA for the HTTPS issuer. |
 | `vcluster.discoveryURL` | Issuer discovery | Optional HTTPS discovery address. |
 | `vcluster.backendTLS.apiVersion` | `gateway.networking.k8s.io/v1` | BackendTLSPolicy API served by the Gateway. |
@@ -501,56 +502,8 @@ See [connection bindings](connections.md#bind-a-connection).
 
 ### Network access
 
-Set `network.podCIDRs` and `network.serviceCIDR` to the host cluster's network
-ranges. They are excluded from broad external egress so that it does not also
-allow access to other Datalab namespaces. Use the cluster configuration for
-the Service CIDR. A DNS Service IP alone does not identify the full range.
-Pod CIDRs can be listed with:
-
-```bash
-kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"  "}{.spec.podCIDR}{"  "}{.spec.podCIDRs}{"\n"}{end}'
-```
-
-Use `0.0.0.0/0` and `::/0` for all external IPv4 and IPv6 destinations,
-or list narrower ranges in `network.externalEgressCIDRs`.
-
-For a backend Pod in another namespace, add an `internalEgress` entry:
-
-```yaml
-network:
-  internalEgress:
-  - namespace: minio
-    podSelector:
-      matchLabels:
-        v1.min.io/tenant: default
-    ports:
-    - protocol: TCP
-      port: 443
-    - protocol: TCP
-      port: 9000
-```
-
-Use `network.internalIngress` for inbound traffic. It uses the same fields as
-`internalEgress`, with `namespace` and `podSelector` selecting the source:
-
-```yaml
-network:
-  internalIngress:
-  - namespace: operations
-    podSelector:
-      matchLabels:
-        app.kubernetes.io/name: prometheus
-    targetPodSelector:
-      matchLabels:
-        app.kubernetes.io/name: package-r
-    ports:
-    - protocol: TCP
-      port: 8888
-```
-
-These rules apply to existing runtime namespaces too. See
-[Network policies](../security/network-policies.md) for how policies combine,
-Data access, and policy exclusions.
+See [Network access in SECURITY.md](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#network-access)
+for host network ranges, cross-namespace rules, and policy checks.
 
 ## 5. Supply storage credentials
 
@@ -566,7 +519,7 @@ path-style S3 requests.
 The registry needs a bucket with the same name as the Datalab and permission
 to read, write, list, delete, and use multipart uploads. Distribution uses its
 standard object layout without an extra prefix or PVC. Disabling the registry
-retains its S3 objects. Set `defaults.registry.enabled: false` when the
+retains its S3 objects. Set `registry.enabled: false` when the
 platform does not provide this storage.
 
 For a manual setup, create the Secret with your credential values:
@@ -638,48 +591,33 @@ installation, and [volume persistence](volumes.md).
 
 ## Volume snapshots
 
-CSI snapshot support is optional. Install a snapshot-capable CSI driver, its
+Volume backups run on the host and need a snapshot-capable CSI driver, its
 snapshotter sidecar, the common snapshot controller, and the three snapshot
-CRDs on the host cluster. Create a matching `VolumeSnapshotClass` with
-`deletionPolicy: Delete` so retention can remove old snapshots.
+CRDs. Create a matching `VolumeSnapshotClass` with `deletionPolicy: Delete`
+so retention can remove old snapshots. The host must also serve
+`ValidatingAdmissionPolicy` for the source PVC guards.
 
-Enable the capability in the operator-owned EnvironmentConfig:
+Configure the operator policy in EnvironmentConfig:
 
 ```yaml
 data:
-  vcluster:
-    volumeSnapshots: true
-  volumeSnapshots:
+  volumes:
+    storage: 1Gi
+    storageClasses:
+      allowed: [workspace-storage]
+      default: workspace-storage
     snapshotClassName: workspace-snapshots
     schedule: '0 1 * * *'
-    retention: 4
+    maxSnapshots: 2
 ```
 
-This enables native VolumeSnapshot and VolumeSnapshotContent synchronization
-and makes host snapshot classes visible through the virtual API.
-`dependencies/rbac.yaml` installs ClusterRole
-`datalab-vcluster-volume-snapshots`. It permits host PersistentVolume reads,
-snapshot class reads, and snapshot content management. The provider can observe
-snapshot classes and bind this specific role. Snapshot setup does not create
-or change host ClusterRoles.
-For each enabled vcluster, the composition binds the role to its syncer and
-adds namespaced snapshot permissions.
+The PVC's StorageClass and the VolumeSnapshotClass must use the same CSI driver.
+No second PVC or StorageClass is needed for backups. The policy applies to every
+named volume, including restored volumes. See [Backup policy](volumes.md#backup-policy)
+for limits and failure handling.
 
-Keep the shared role under operator control. Snapshot content management is
-cluster-scoped. Ordinary PVC use keeps snapshot synchronization disabled and
-gets no snapshot role binding. Application installers and volume clients use
-virtual credentials only.
+See [Volume backup access in SECURITY.md](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#volume-backup-access)
+for the required roles, API network access, and backup identity.
 
-Keep snapshot synchronization enabled while snapshots or restored claims need
-it. Disabling a volume's backup schedule keeps its completed snapshots. The
-provider observes the selected host snapshot class and requires deletion policy
-`Delete` before its resources can report ready. Job and snapshot status report
-whether a backup succeeded. `status.volumes` reports the PVC and schedule
-references; it does not report a successful recovery point. Check failed Jobs
-and snapshot deletion that does not finish. See [Volumes](volumes.md#enable-backups).
-
-The scheduler is inside the virtual cluster and stops during hibernation.
-Back up the control-plane state and protect against loss of the virtual
-cluster separately. Native snapshots do not copy volume data to an independent
-backup service. Qualify restore with the actual CSI driver before relying on it.
-See [vCluster snapshot synchronization](https://www.vcluster.com/docs/vcluster/configure/sync/to-host/storage/volume-snapshots).
+Test restore with the deployed CSI driver before relying on it. See
+[Volumes](volumes.md) for status, recovery, and deletion.

@@ -16,12 +16,12 @@ from composition.helpers import (
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-    data = (environment.get("defaults") or {}).get("data") or {}
+    data = environment.get("packageR") or {}
     data_enabled = data.get("enabled")
     if data_enabled is None:
         data_enabled = True
     data_enabled = _boolish(data_enabled)
-    registry_enabled = _boolish(((environment.get("defaults") or {}).get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
     if not (data_enabled or registry_enabled):
         return
 

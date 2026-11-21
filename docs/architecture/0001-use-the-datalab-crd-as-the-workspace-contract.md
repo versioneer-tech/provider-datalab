@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed. Design approval and runtime validation are pending.
+Accepted. Live storage validation is pending.
 
 ## Context
 
@@ -43,45 +43,68 @@ controller failure is an application health concern. Platform capabilities
 such as storage drivers, host runtime classes, and network enforcement remain
 under operator control.
 
-### Use named volumes
+### Use named host volumes
 
-`spec.volumes` is a map keyed by volume name, like the named managed
-services. Each volume selects a virtual cluster, namespace, and optional size.
-The provider creates a PVC with a stable name and reports its location in
-`status.volumes`. The virtual PVC also has a volume label for discovery
-without host API access.
+`spec.volumes` is a map keyed by volume name, like the named managed services.
+Each entry creates a PVC in the Datalab host namespace. It selects a size and
+an optional restore source. It has no virtual cluster or virtual
+namespace field.
 
-Volumes use an allowed StorageClass and count toward the host storage quota.
-The virtual cluster and namespace are fixed after creation. Workloads mount
-the existing claim and must not add ownership that deletes the claim with
-the runtime. Pod replacement and application removal preserve its storage.
-Removing the volume declaration deletes the PVC after its users release it.
+The PVC belongs to the Datalab and counts toward its host storage quota.
+Applications must not add ownership that deletes it with a workload. Removing
+a virtual cluster leaves the PVC unchanged. Removing the volume declaration
+deletes the claim after its users release it.
 
-Application owners manage start, stop, runtime replacement, tasks, and access.
-These choices do not belong in the storage declaration. Whole-cluster
-hibernation remains under `spec.vclusters.<instance>.hibernated` and preserves
-virtual resource definitions and PVCs.
+Host volume provisioning and virtual workload attachment are separate concerns.
+`spec.vclusters.<instance>.volumeBindings` selects a named volume and a target
+virtual namespace and PVC name. Each source can have one binding; targets must
+be unique within an instance.
 
-### Protect volumes with optional CSI snapshots
+The provider creates static virtual PV and PVC records marked for external
+control. vCluster leaves these records unsynced. Host mutating admission directs
+matching workload Pod mounts to the existing host PVC, without a second storage
+allocation. The host needs Kubernetes 1.36 or later for the v1 policy API.
+Host admission denies syncer changes to named host claims. Virtual admission
+protects the binding label and static PV reference.
 
-The operator explicitly enables snapshot synchronization and supplies a
-snapshot class. It requires a snapshot-capable CSI driver and host snapshot
-infrastructure. Ordinary volumes do not require those prerequisites.
+Removing a virtual PVC, binding, or cluster preserves the host PVC and backups
+while the volume declaration remains. A deleted virtual PVC is recreated and
+rebound while its binding remains. Applications use virtual credentials to
+install and mount their workloads.
 
-A volume with `backup: true` gets a virtual backup CronJob. Each run waits for
-a new snapshot to be ready before pruning older completed snapshots for the
-same PVC UID. The snapshot class uses deletion policy `Delete` so retention
-can remove underlying snapshots. Disabling the schedule keeps its snapshots.
-Incomplete attempts are removed before a new snapshot is created. Pending
-deletion blocks new attempts. Snapshot Jobs stop during virtual cluster
-hibernation. The operator owns the shared host snapshot role; the provider
-binds it only to syncers with snapshot support enabled.
+The virtual binding policy owns its PV and PVC records. Background garbage
+collection removes those records after unbinding without holding virtual cluster
+removal. The virtual PV binder stays enabled to release storage protection
+after consumers stop, including after the last binding is removed.
 
-`restoreFrom` initializes a new volume from a ready snapshot in the same
-virtual namespace. It cannot change after creation. The recovered PVC has its
-own lifecycle. Application consistency may require a flush or pause coordinated
-by the application owner. Control-plane backup and disaster recovery are
-separate platform responsibilities.
+### Protect volumes with host CSI snapshots
+
+The operator supplies a snapshot-capable CSI driver, the host snapshot
+infrastructure, and a snapshot class.
+
+Every named volume gets a host backup CronJob. The operator sets the
+schedule and `maxSnapshots` in EnvironmentConfig. Defaults are daily at 01:00 UTC
+and two completed snapshots per PVC UID. The snapshot limit is not a per-volume field.
+
+Each run waits for a new snapshot to be ready before pruning older completed
+snapshots for that PVC UID. Failed runs preserve completed recovery points.
+Incomplete attempts are removed before a new allocation; unfinished deletion
+blocks the run. The snapshot class uses deletion policy `Delete` so retention
+can remove backend snapshots.
+
+Backups run independently of virtual cluster state. The backup identity can
+read its source PVC and manage snapshots in its host namespace. It can read
+snapshot classes but cannot delete PVCs or read Secrets. Virtual cluster
+syncers need no snapshot permissions.
+
+`status.volumes` reports the host PVC reference and phase. Backup status reports
+the number of ready snapshots and the latest successful snapshot time. It does
+not expose scheduler names or individual snapshot references.
+
+`restoreFrom` initializes a new host volume from a ready snapshot in the same
+Datalab namespace. It cannot change after creation. The restored PVC has its
+own lifecycle. Application consistency may require a flush or pause. Cluster
+state backup and independent disaster recovery remain platform responsibilities.
 
 ### Keep credentials out of the public API
 
@@ -100,7 +123,7 @@ Kubernetes API authentication does not authenticate direct Pod traffic.
 - Datalab provides a stable contract for team infrastructure and storage.
 - Applications can change their controllers and images independently.
 - Persistent volumes can outlive the workloads that mount them.
-- Snapshot prerequisites and additional syncer permissions are optional.
-- Backup status and application health need their own operational checks.
+- Named volumes require snapshot infrastructure and scoped backup permissions.
+- Snapshot counts and age do not replace Job failure monitoring or restore tests.
 - Local checks validate generated resources and backup failure behavior.
   Live checks must qualify storage, authorization, hibernation, and restore.

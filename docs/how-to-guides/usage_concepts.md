@@ -6,16 +6,14 @@ Complete [installation](installation.md) before applying these examples.
 
 ## Volumes
 
-Use `spec.volumes` to declare named PVCs in virtual clusters. Applications
-mount these volumes without giving their runtime controller ownership of the
-storage. Several applications can use the Datalab's managed services while
-keeping separate volumes.
+Use `spec.volumes` for named PVCs with automatic CSI snapshots in the Datalab
+host namespace. They remain when a virtual cluster stops or is removed.
+Add `volumeBindings` to a virtual cluster to expose a named volume as a PVC in
+one virtual namespace. Applications use the virtual API to mount it. See
+[Volumes](volumes.md) for bindings, status, restore, and deletion.
 
-See [Volumes](volumes.md) to declare, mount, back up, and restore a
-volume. Keep datasets in object storage and database records in managed services.
-
-Set `backup: true` on a volume to request CSI `VolumeSnapshot` backups. Managed
-database services keep their separate `backupStorage` settings and backup tools.
+Workloads can create their own PVCs through the virtual API. Arrange backups
+for those PVCs separately. Managed databases use the backup settings below.
 
 ## Service namespace and storage
 
@@ -54,8 +52,8 @@ External connections require a client that supports direct TLS with SNI.
 
 Use a [Secret binding](connections.md#bind-a-connection) to make the PostgreSQL
 connection available in a virtual namespace. See
-[connection access control](connections.md#access-control) before giving
-applications database credentials.
+[credential access](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#credential-access)
+before giving applications database credentials.
 
 See [Additional services](additional_services.md#postgresql-with-psql) for a
 psql example.
@@ -153,7 +151,7 @@ before you apply these manifests in your claim namespace.
 | --- | --- | --- |
 | [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data and storage access. |
 | [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
-| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and the shared registry. |
+| [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, a bound host volume, PostgreSQL, and the shared registry. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Read-only Data, custom connections, and namespace policy. |
 
 The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/environmentconfig.yaml)
@@ -175,7 +173,7 @@ kubectl describe datalab s-jeff -n workspace
 
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
-Persistent volume names and locations are in `status.volumes`.
+PVC references, phases, and backup counts are in `status.volumes`.
 Service connections and public virtual API profiles are in `status.connections`.
 Read each connection through its `secretRef`.
 

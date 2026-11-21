@@ -1,0 +1,29 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+controller:
+  runOnControlPlane: true
+  resources:
+    nfs:
+      limits:
+        memory: 512Mi
+externalSnapshotter:
+  enabled: true
+  name: datalab-snapshot-controller
+  customResourceDefinitions:
+    enabled: false
+storageClass:
+  create: true
+  name: datalab-nfs
+  parameters:
+    server: nfs-server.test-volume-snapshots.svc.cluster.local
+    share: /
+    mountPermissions: '0777'
+  reclaimPolicy: Delete
+  volumeBindingMode: Immediate
+  mountOptions:
+  - nfsvers=4.1
+volumeSnapshotClass:
+  create: true
+  name: datalab-nfs-snapshots
+  deletionPolicy: Delete
