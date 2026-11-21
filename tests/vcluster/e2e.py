@@ -33,6 +33,12 @@ CATALOG_PATH = "/api/v1/namespaces/demo/services/catalog:8080/proxy"
 COLLECTION = "verify-vcluster-catalog"
 
 
+class ApiError(AssertionError):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
 def wait_until(check, message, seconds=300):
     deadline = time.monotonic() + seconds
     while not check():
@@ -122,12 +128,25 @@ def check_sandbox(api, bearer, other, command):
 
 
 def check_catalog(api, bearer):
-    result = api(
-        CATALOG_PATH + "/search",
-        bearer,
-        {"collections": [COLLECTION], "bbox": [16, 47, 18, 49]},
-        method="POST",
-    )
+    result = None
+
+    def searchable():
+        nonlocal result
+        try:
+            result = api(
+                CATALOG_PATH + "/search",
+                bearer,
+                {"collections": [COLLECTION], "bbox": [16, 47, 18, 49]},
+                method="POST",
+            )
+        except ApiError as error:
+            if error.status != 503:
+                raise
+            return False
+        return True
+
+    # The virtual API can be ready before the catalog Pod after resume.
+    wait_until(searchable, "STAC catalog search stayed unavailable", seconds=300)
     assert [item["id"] for item in result["features"]] == ["catalog-item"]
     assert result["features"][0]["collection"] == COLLECTION
     print(
@@ -594,9 +613,11 @@ def main():
         data = result.read()
         connection.close()
         allowed = expected if isinstance(expected, tuple) else (expected,)
-        assert (
-            result.status in allowed
-        ), f"{method} {path}: expected {expected}, got {result.status}"
+        if result.status not in allowed:
+            raise ApiError(
+                result.status,
+                f"{method} {path}: expected {expected}, got {result.status}",
+            )
         return data.decode() if raw else (json.loads(data) if data else None)
 
     def profile_token(profile, instance="vc0", bearer=None):
