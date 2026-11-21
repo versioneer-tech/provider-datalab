@@ -28,28 +28,74 @@ When Data or the registry is enabled, `<datalab>-storage` supplies only storage
 credentials in the service namespace. Public Data and S3 proxies use a separate
 `<datalab>-oauth2-client` Secret. Neither runtime Secret contains database
 credentials. Database outputs are generated independently of storage access.
-PostgreSQL credentials use the `postgres` account. Create application accounts
-and grants when a workload needs less access.
 
 ## Bind a connection
 
-Use `spec.vclusters.<instance>.secretBindings` as a list of `type`, `name`,
-and `target` entries. Available service types are `s3`, `postgres`, `mongo`,
-`redis`, and `registry`. The operator can list predefined host Secrets in
-`EnvironmentConfig.data.customSecrets` for `custom` connections.
+Select a ready `status.connections` entry by `type` and `name`. Add it to
+`spec.vclusters.<instance>.secretBindings` with a target namespace and Secret
+name. Available service types are `s3`, `postgres`, `mongo`, `redis`, and
+`registry`. Only declared service instances can be selected.
 
-Bindings use ready source references from `status.connections`. vCluster creates
-the target namespace and copies the whole Secret with its original data keys.
-It applies source updates and deletion to the copy.
-Missing optional custom Secrets are omitted from status and do not block
-readiness. Ambiguous source or target mappings are omitted.
+```yaml
+spec:
+  databases:
+    pg0:
+      names: [analytics]
+      storage: 5Gi
+  vclusters:
+    vc0:
+      secretBindings:
+      - type: postgres
+        name: pg0
+        target:
+          namespace: applications
+          name: database-credentials
+```
 
-See [Secret bindings](vcluster.md#secret-bindings) for source names, operator
-settings, and examples. Applications must reload changed files or restart;
-environment variables do not update in a running process. Revoke the backend
-identity when access must end.
+The mapping uses the selected connection's `secretRef`. vCluster creates the
+target namespace and copies the whole Secret with its original data keys.
+It applies source updates and deletion to the copy. Only ready, unambiguous
+connections generate mappings; reconciliation removes mappings that are no
+longer ready. Source readiness does not confirm delivery in the virtual cluster.
+
+Applications must reload changed files or restart; environment variables do
+not update in a running process. Revoke the backend identity when access must end.
+
+### Custom connections
+
+The operator can list predefined host Secrets in
+`EnvironmentConfig.data.customSecrets`:
+
+```yaml
+data:
+  customSecrets:
+  - name: application-key
+  - name: shared-key
+    namespace: platform-secrets
+```
+
+Without `namespace`, the provider checks the Datalab's runtime namespace.
+Names must be unique. It observes the source without changing it. Missing
+optional sources are omitted from status and do not block Datalab readiness.
+An available source is listed with `ready: false` until its published copy is
+current. Bind it with the same API:
+
+```yaml
+spec:
+  vclusters:
+    vc0:
+      secretBindings:
+      - type: custom
+        name: application-key
+        target:
+          namespace: applications
+          name: application-credentials
+```
 
 ## Access control
+
+PostgreSQL credentials use the `postgres` account, which has administrative
+access. Create application accounts and grants when a workload needs less access.
 
 Restrict access to Secrets and provider Object resources. Object specs can
 contain generated credentials; status redaction does not remove values from

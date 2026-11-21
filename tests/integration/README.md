@@ -140,9 +140,14 @@ individual vcluster roles and requests their optional scopes. It checks
 namespace access, denied escalation, role downgrade, and revocation of tokens
 that have not expired. Downloaded helpers must return the caller token unchanged.
 
-Sandbox checks use REST, gRPC, and port-forwarding. Replacing a Sandbox must
-preserve its file content and session PVC UID. Oversized virtual Pods must report
-host CPU and memory quota rejection.
+Sandbox checks use REST, gRPC, and port-forwarding. The session script must
+reuse a Running Sandbox, resume a Suspended Sandbox,
+and reject a changed PVC binding. Native suspension keeps the Sandbox UID;
+deletion and recreation keeps only the session PVC. A task Claim uses the
+zero-replica pool, separate storage, and no mounted Kubernetes token. Claim
+deletion must remove its Pod and PVC. Running and Suspended Sandboxes must
+retain their modes and session files through vcluster hibernation and resume.
+Oversized virtual Pods must report host CPU and memory quota rejection.
 
 Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
 and different custom Secrets for John and Jane. STAC item search must still work

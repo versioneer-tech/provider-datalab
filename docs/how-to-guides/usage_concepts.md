@@ -6,44 +6,13 @@ Complete [installation](installation.md) before applying these examples.
 
 ## Sessions
 
-A session provides a named workspace PVC in a virtual cluster. Declare its
-cluster, namespace, and storage size in `spec.sessions`:
+A session provides a named workspace PVC in a virtual cluster. It creates
+storage without starting a workload. Several sessions can share the Datalab's
+managed services while using separate PVCs.
 
-```yaml
-spec:
-  vclusters:
-    vc0: {}
-  sessions:
-  - name: analysis
-    vcluster: vc0
-    namespace: demo
-    pvcSize: 2Gi
-```
-
-The provider creates `demo/session-analysis` in `vc0`. Start a Sandbox that
-mounts this PVC to use the workspace. See [Run a sandbox](sandboxes.md) for
-local connection scripts, file operations, commands, and workload replacement.
-Declaring a session does not start a workload. Several sessions can share the
-Datalab's managed services while using separate PVCs.
-
-`status.sessions` reports the virtual cluster and PVC location:
-
-```yaml
-status:
-  sessions:
-  - name: analysis
-    vcluster: vc0
-    namespace: demo
-    pvcName: session-analysis
-```
-
-## Persistence
-
-A Sandbox can mount its session PVC at `/workspace`. Removing the Sandbox
-keeps that PVC and its files. Stop workloads before removing a session entry
-from the Datalab; entry removal deletes the PVC. Keep datasets in object
-storage and database records in a managed database. Arrange backup and
-recovery with the operator.
+See [Run a sandbox](sandboxes.md) to declare a session, mount its PVC, and
+manage its runtime and storage. Keep datasets in object storage and database
+records in a managed database. Arrange backup and recovery with the operator.
 
 ## Service namespace and storage
 
@@ -81,9 +50,9 @@ External connections require a client that supports direct TLS with SNI.
 ### Connect from a workload
 
 Use a [Secret binding](connections.md#bind-a-connection) to make the PostgreSQL
-connection available in a virtual namespace. The generated connection uses
-the `postgres` account, which has administrative access. Create a separate
-database login and grants for applications that need less access.
+connection available in a virtual namespace. See
+[connection access control](connections.md#access-control) before giving
+applications database credentials.
 
 See [Additional services](additional_services.md#postgresql-with-psql) for a
 psql example.

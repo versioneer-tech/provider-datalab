@@ -247,7 +247,7 @@ deadline.
 
 | Limit | Default or setting | Effect on kubectl |
 | --- | --- | --- |
-| Access token | Realm or client Access Token Lifespan; upstream default is 5 minutes | The helper refreshes it when needed. |
+| Access token | Realm or client Access Token Lifespan | The helper refreshes it when needed. |
 | CLI cached login | 30 days after device approval | The helper starts device login again after this deadline. |
 | Client offline idle timeout | Provider sets 30 days | The session can expire if no refresh occurs within this period. |
 | Client offline maximum | Provider sets 30 days | Keycloak applies this limit when the realm enables Offline Session Max Limited. |
@@ -272,15 +272,10 @@ secret or browser login.
 
 #### 1. Obtain a token for the selected profile
 
-The user or platform service performs
-[token exchange](authentication.md#user-token-exchange) with the user's access
-token as `subject_token`. For the example profile, request:
-
-```text
-scope=s-joe:vclusters_vc0_namespace-demo
-audience=s-joe
-requested_token_type=urn:ietf:params:oauth:token-type:access_token
-```
+The user or platform service follows the
+[token exchange request](authentication.md#user-token-exchange), using the user's
+access token as `subject_token`. Select scope `s-joe:vclusters_vc0_namespace-demo`
+and audience `s-joe` for this example.
 
 The OAuth scope is `s-joe:vclusters_vc0_namespace-demo`; the corresponding
 Keycloak client role is `vcluster_vc0_namespace-demo`. Exchange can select
@@ -411,70 +406,9 @@ the virtual API.
 
 ## Secret bindings
 
-Select a Datalab connection by type and instance name:
-
-```yaml
-spec:
-  databases:
-    pg0:
-      names: [analytics]
-      storage: 5Gi
-  vclusters:
-    vc0:
-      secretBindings:
-      - type: postgres
-        name: pg0
-        target:
-          namespace: applications
-          name: database-credentials
-```
-
-The provider publishes each service connection in `status.connections`, with its `type`,
-`name`, `secretRef`, and readiness. A binding selects the same `type`
-and `name` pair. The mapping uses that connection's `secretRef`.
-
-See [Connections](connections.md) for the available types and Secret fields.
-
-Only declared service instances can be selected. The storage source namespace
-comes from `EnvironmentConfig.data.storage.secretNamespace`, or the claim
-namespace when unset. Use a custom connection for credentials such as a
-GitHub token.
-
-The operator can list predefined custom Secrets in the EnvironmentConfig:
-
-```yaml
-data:
-  customSecrets:
-  - name: apikey-1
-  - name: apikey-2
-```
-
-The provider checks these names in each Datalab's runtime namespace. Set
-`namespace` on an entry to use a shared source namespace. Names must be unique.
-It observes the source and does not create or change it. A custom connection
-is listed in `status.connections` after its source is confirmed ready. Its
-`ready` value stays false until the published copy is available and current.
-Missing custom sources do not block Datalab readiness.
-
-Bind an available custom connection through the same list:
-
-```yaml
-spec:
-  vclusters:
-    vc0:
-      secretBindings:
-      - type: custom
-        name: apikey-1
-        target:
-          namespace: applications
-          name: application-credentials
-```
-
-vCluster creates the target namespace and syncs the whole Secret, including
-source updates and deletion. Secret keys keep their source names. Only ready,
-unambiguous connections generate mappings. Missing or unready references are
-skipped; reconciliation adds or removes mappings as source readiness changes.
-Source readiness does not confirm delivery inside the virtual cluster.
+Use [connection bindings](connections.md#bind-a-connection) to copy selected
+service or custom credentials into a virtual namespace. That guide contains
+the binding examples, source settings, and update and deletion rules.
 
 ## Platform settings
 
@@ -534,10 +468,8 @@ across every virtual namespace and cluster in the Datalab.
 
 Set `vcluster.resources.requests` and `vcluster.resources.limits` in the
 EnvironmentConfig to change control-plane resources. Both the native vCluster
-configuration and the host StatefulSet use these values. The defaults are CPU
-`200m` and memory `1Gi` for requests, and CPU `4` and memory `4Gi` for limits.
-Ephemeral storage defaults to a `1Gi` request and a `10Gi` limit. Each supplied
-field overrides its default.
+configuration and the host StatefulSet use these values. Each supplied field
+overrides its [resource default](installation.md#storage-and-managed-stores).
 
 ### SQLite settings
 

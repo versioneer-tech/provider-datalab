@@ -18,6 +18,21 @@ runs as a non-root user. Workloads remain subject to the host's Pod security,
 network policies, and resource quota. The host service namespace is the team
 boundary across all virtual clusters in a Datalab.
 
+Client access uses Pod port-forwarding through the virtual Kubernetes API.
+RBAC controls `pods/portforward` access, not individual port numbers. A client
+can reach sandboxd and other TCP listeners in an authorized Pod. Reconnect
+after the Pod stops or is replaced. No Sandbox Router or separate sandboxd
+token is configured. RBAC does not authenticate direct Pod traffic. Workloads
+within the same Datalab can reach the sandboxd HTTP and gRPC listeners over
+the shared network without a sandboxd token.
+
+The [session client Role](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/session-client-rbac.yaml)
+is an example for a trusted external service. It cannot change templates or
+delete session PVCs, but it can create Sandboxes with Pod settings. Safe
+templates do not restrict a caller that has permission to submit arbitrary
+Sandboxes. Use admission rules when those settings must be enforced. RBAC
+grants are additive; another `edit` or `admin` binding can grant more access.
+
 Host mounts, runtime sockets, broad roles, and privileged containers can give
 workload code access beyond its namespace. Give this access only to workloads
 that need it. See the

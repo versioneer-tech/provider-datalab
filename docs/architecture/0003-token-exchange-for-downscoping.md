@@ -1,6 +1,6 @@
 # ADR-003: Token Exchange for Downscoping
 
-> Written: 04.11.2026.
+> Written: 04.11.2026. Revised: 21.11.2026.
 
 ## Status
 
@@ -132,6 +132,29 @@ resources keep a policy's scope and profile until the policy has been deleted.
 
 Keycloak 26.8.1 or later is required. Default identity scopes must contain no
 role grants or role mappers.
+
+### Use the virtual API for Sandbox access
+
+Sandbox clients authenticate to the virtual Kubernetes API with the existing
+Keycloak token and configured vcluster role. Kubernetes RBAC authorizes Pod
+discovery and `pods/portforward`. A restricted namespace-profile token can
+forward ports where its role permits; it does not need `ws_access`. A
+`ws_api`-only service account still cannot access the virtual cluster.
+
+Use port-forwarding for sandboxd HTTP and gRPC and for application TCP ports
+in the Sandbox Pod. Do not deploy Sandbox Router or a Sandbox-specific
+oauth2-proxy. Do not require router capabilities or `X-Sandboxd-Token` for this
+model. The runtime OAuth Secret remains for existing Data/S3 proxy consumers;
+Sandbox access does not need a copy.
+
+The external orchestration service keeps its Kubernetes credentials outside
+Sandboxes. It controls Session and Task Sandboxes through the virtual API and
+transfers selected files between their independent workspaces.
+
+Direct authenticated routing, scoped tokens, and browser routing are deferred.
+Keep the existing Keycloak client, role mappings, and token-exchange controls.
+Port-forward access does not change the shared network boundary described in
+[ADR-001](0001-use-the-datalab-crd-as-the-workspace-contract.md#use-datalab-for-team-resources).
 
 ## Consequences
 

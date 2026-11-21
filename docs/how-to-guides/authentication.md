@@ -79,21 +79,17 @@ requested roles. Configure those claims on the separate login client.
 ### CLI device login
 
 The provider enables Device Authorization Grant on the existing confidential
-client. The built-in `cluster-admin` kubeconfig helper uses this flow with a
-separate client secret. It requests `openid offline_access <datalab>:interactive`,
-prints a verification URL and user code to stderr, and waits for the user to
-approve the login in a browser. No localhost callback is needed.
+client. The built-in `cluster-admin` kubeconfig helper uses this flow with
+`openid offline_access <datalab>:interactive`. No localhost callback is needed.
 
 The resulting access token represents the user who signs in. Only that user's
 assigned roles can appear. Possession of the client secret does not grant
 cluster-admin. The service account remains assigned only `ws_api`; the helper
 does not use `grant_type=client_credentials`.
 
-The helper reuses cached tokens and attempts refresh before starting a new
-login. A valid cached token needs no client secret. Login and refresh require
-the secret through a private file or a hidden terminal prompt. See
-[human access](vcluster.md#human-access) for commands and cache settings.
-Additional profiles use a caller-supplied access token and do not start login.
+See [human access](vcluster.md#human-access) for login commands, credential
+files, and token cache behavior. Additional profiles use a caller-supplied
+access token and do not start login.
 
 ### Login lifetime
 
@@ -190,6 +186,10 @@ Its username is `sub`; groups are `datalab:<datalab>:<role>`. Virtual
 RoleBinding and ClusterRoleBinding rules apply.
 
 ## Credential Secrets and machine access
+
+Sandbox clients use the [virtual API and Kubernetes RBAC](sandboxes.md#2-connect-to-the-virtual-cluster).
+They do not need the runtime OAuth Secret below. See
+[Session access](../security/workspace-sessions.md) for the network boundary.
 
 | Secret | Namespace | Use |
 | --- | --- | --- |

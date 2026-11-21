@@ -571,6 +571,10 @@ def _compose_instance(
             f"sandbox-template-{target}",
             _render_template(req, "vcluster/sandbox-template", target=target, sandbox_image=sandbox_image),
         )
+        virtual(
+            f"sandbox-pool-{target}",
+            _render_template(req, "vcluster/sandbox-pool", target=target),
+        )
     for session in sessions:
         target = session.get("namespace", "default")
         virtual(

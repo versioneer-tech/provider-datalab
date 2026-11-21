@@ -6,7 +6,11 @@ kind: Sandbox
 metadata:
   name: analysis
   namespace: demo
+  labels:
+    datalabs.versioneer.at/session: analysis
 spec:
+  operatingMode: Running
+  service: false
   podTemplate:
     metadata:
       labels:
