@@ -46,178 +46,24 @@ def wait_until(check, message, seconds=300):
         time.sleep(3)
 
 
-def sandbox_ready(api, bearer, name):
-    sandbox = api("/apis/agents.x-k8s.io/v1beta1/namespaces/demo/sandboxes/" + name, bearer)
-    return any(c["type"] == "Ready" and c["status"] == "True"
-               and c.get("observedGeneration") == sandbox["metadata"]["generation"]
-               for c in sandbox.get("status", {}).get("conditions", []))
-
-
-def check_runtime_files(command, pod_name, write=False):
-    import grpc
-    import process_pb2
-    import process_pb2_grpc
-
-    ports = []
-    for _ in range(2):
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            ports.append(listener.getsockname()[1])
-    rest_port, grpc_port = ports
-    forward = subprocess.Popen([*command, "port-forward", "pod/" + pod_name,
-        f"{rest_port}:8080", f"{grpc_port}:9090"], stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE, text=True)
-    try:
-        def healthy():
-            if forward.poll() is not None:
-                raise AssertionError("sandboxd port-forward failed: " + forward.stderr.read())
-            try:
-                with urlopen(f"http://127.0.0.1:{rest_port}/v1/health", timeout=2) as result:
-                    return result.status == 200
-            except OSError:
-                return False
-        wait_until(healthy, "sandboxd port-forward did not start", seconds=60)
-        if write:
-            with urlopen(Request(f"http://127.0.0.1:{rest_port}/v1/files/marker",
-                data=b"persistent", method="PUT", headers={"Content-Type": "application/octet-stream"}), timeout=10) as result:
-                assert result.status in (200, 201, 204)
-        with urlopen(f"http://127.0.0.1:{rest_port}/v1/files/marker", timeout=10) as result:
-            assert result.read() == b"persistent"
-        with grpc.insecure_channel(f"127.0.0.1:{grpc_port}") as channel:
-            result = process_pb2_grpc.ProcessServiceStub(channel).Execute(
-                process_pb2.ExecuteRequest(config=process_pb2.ProcessConfig(command=["cat", "/workspace/marker"])), timeout=15)
-            assert result.exit_code == 0 and result.stdout == b"persistent"
-    finally:
-        forward.terminate()
-        forward.communicate(timeout=10)
-
-
-def check_sandbox_survival(api, bearer):
-    saved = json.loads(Path("/tmp/vcluster-sandbox-identities.json").read_text())
-    path = "/apis/agents.x-k8s.io/v1beta1/namespaces/demo/sandboxes/"
-    wait_until(lambda: sandbox_ready(api, bearer, "analysis"), "Session Sandbox did not recover")
-    for name in ("analysis", "test-suspended"):
-        sandbox = api(path + name, bearer)
-        assert sandbox["metadata"]["uid"] == saved[name]
-        assert sandbox["spec"]["operatingMode"] == ("Running" if name == "analysis" else "Suspended")
-    assert api("/api/v1/namespaces/demo/pods/test-suspended", bearer, expected=(200, 404)).get("kind") == "Status"
-    assert api("/api/v1/namespaces/demo/persistentvolumeclaims/session-analysis", bearer)["metadata"]["uid"] == saved["pvc"]
-    assert api("/api/v1/namespaces/demo/pods/analysis:8080/proxy/v1/files/marker", bearer, raw=True) == "persistent"
-    print("PASS running and suspended Sandbox identities, modes, and session files survive", flush=True)
-
-
-def start_session(command, bearer, *, check=True, timeout=330):
-    # The built-in namespace edit role does not include Sandbox CRDs.
-    with TemporaryDirectory(prefix="test-session-client-") as directory:
-        config = json.loads(Path(command[2]).read_text())
-        config["users"][0]["user"] = {"token": bearer}
-        kubeconfig = Path(directory) / "kubeconfig"
-        kubeconfig.write_text(json.dumps(config))
-        kubeconfig.chmod(0o600)
-        return subprocess.run([
-            "bash", "/test/start-sandbox.sh", str(kubeconfig), command[4], "demo", "analysis", "session-analysis",
-        ], check=check, capture_output=not check, text=True, timeout=timeout,
-            env={"PATH": "/tmp:/usr/local/bin:/usr/bin:/bin"})
-
-
-def check_sandbox(api, bearer, other, command):
-    sys.path.insert(0, "/opt/sandbox")
-
-    for instance in ("vc0", "vc1"):
-        for name in (
-            "sandboxes.agents.x-k8s.io", "sandboxclaims.extensions.agents.x-k8s.io",
-            "sandboxtemplates.extensions.agents.x-k8s.io", "sandboxwarmpools.extensions.agents.x-k8s.io",
-        ):
-            api("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/" + name, bearer if instance == "vc0" else other, instance=instance)
-    template = api("/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/demo/sandboxtemplates/sandboxd", bearer)
-    pod = template["spec"]["podTemplate"]
-    labels = {"datalabs.versioneer.at/session": "analysis"}
-    pod.setdefault("metadata", {}).setdefault("labels", {}).update(labels)
-    pod["spec"]["volumes"] = [{"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}]
-    # These limits also exceed the larger budget used by this profile.
+def check_workload_quota(api, bearer):
+    # These limits exceed the host budget even when this profile uses a larger quota.
     for resource, limit in (("cpu", "1000"), ("memory", "1Ti")):
-        name = f"test-{resource}-quota"
-        limits = {"cpu": "1", "memory": "512Mi", resource: limit}
+        name = "test-" + resource + "-quota"
         api("/api/v1/namespaces/demo/pods", bearer, {
             "apiVersion": "v1", "kind": "Pod", "metadata": {"name": name},
             "spec": {"restartPolicy": "Never", "automountServiceAccountToken": False,
-                "securityContext": pod["spec"]["securityContext"],
-                "containers": [{"name": "probe", "image": pod["spec"]["containers"][0]["image"],
-                    "securityContext": pod["spec"]["containers"][0]["securityContext"],
-                    "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": limits}}]},
+                     "containers": [{"name": "probe", "image": "busybox:1.36.1",
+                                     "command": ["sleep", "3600"],
+                                     "resources": {"requests": {"cpu": "10m", "memory": "16Mi"},
+                                                   "limits": {"cpu": "1", "memory": "512Mi", resource: limit}}}]},
         }, method="POST", expected=201)
         wait_until(lambda: any(
-            "exceeded quota" in event.get("message", "") and f"limits.{resource}" in event["message"]
-            for event in api(f"/api/v1/namespaces/demo/events?fieldSelector=involvedObject.name%3D{name}", bearer)["items"]
-        ), f"Virtual {resource} probe did not report host quota rejection", seconds=60)
-        api(f"/api/v1/namespaces/demo/pods/{name}", bearer, method="DELETE", expected=(200, 202))
+            "exceeded quota" in event.get("message", "") and "limits." + resource in event["message"]
+            for event in api("/api/v1/namespaces/demo/events?fieldSelector=involvedObject.name%3D" + name, bearer)["items"]
+        ), "Virtual " + resource + " probe did not report host quota rejection", seconds=60)
+        api("/api/v1/namespaces/demo/pods/" + name, bearer, method="DELETE", expected=(200, 202))
     print("PASS virtual workloads cannot exceed host CPU and memory quotas", flush=True)
-    path = "/apis/agents.x-k8s.io/v1beta1/namespaces/demo/sandboxes"
-    pvc = api("/api/v1/namespaces/demo/persistentvolumeclaims/session-analysis", bearer)
-    for stage in ("initial", "resumed", "recreated"):
-        start_session(command, bearer)
-        sandbox = api(path + "/analysis", bearer)
-        workload = api("/api/v1/namespaces/demo/pods/analysis", bearer)
-        assert sandbox["spec"].get("volumeClaimTemplates", []) == []
-        if stage == "initial":
-            sandbox_uid, pod_uid = sandbox["metadata"]["uid"], workload["metadata"]["uid"]
-            start_session(command, bearer, timeout=30)
-            assert api("/api/v1/namespaces/demo/pods/analysis", bearer)["metadata"]["uid"] == pod_uid
-            api(path + "/analysis", bearer, {"metadata": {"annotations": {
-                "datalabs.versioneer.at/session-pvc-uid": "different-pvc"}}}, method="PATCH")
-            rejected = start_session(command, bearer, check=False, timeout=30)
-            assert rejected.returncode != 0 and "Refusing" in rejected.stderr
-            api(path + "/analysis", bearer, {"metadata": {"annotations": {
-                "datalabs.versioneer.at/session-pvc-uid": pvc["metadata"]["uid"]}}}, method="PATCH")
-        elif stage == "resumed":
-            assert sandbox["metadata"]["uid"] == sandbox_uid
-            assert workload["metadata"]["uid"] != pod_uid
-        else:
-            assert sandbox["metadata"]["uid"] != sandbox_uid
-        check_runtime_files(command, "analysis", write=stage == "initial")
-        assert api("/api/v1/namespaces/demo/persistentvolumeclaims/session-analysis", bearer)["metadata"]["uid"] == pvc["metadata"]["uid"]
-        if stage == "initial":
-            api(path + "/analysis", bearer, {"spec": {"operatingMode": "Suspended"}}, method="PATCH")
-        elif stage == "resumed":
-            api(path + "/analysis", bearer, method="DELETE", expected=(200, 202))
-        if stage != "recreated":
-            wait_until(lambda: api("/api/v1/namespaces/demo/pods/analysis", bearer, expected=(200, 404)).get("kind") == "Status",
-                "Sandbox Pod was not removed")
-        if stage == "resumed":
-            wait_until(lambda: api(path + "/analysis", bearer, expected=(200, 404)).get("kind") == "Status",
-                "Sandbox was not removed")
-
-    api(path, bearer, {"apiVersion": "agents.x-k8s.io/v1beta1", "kind": "Sandbox",
-        "metadata": {"name": "test-suspended"}, "spec": {"operatingMode": "Suspended", "podTemplate": pod}},
-        method="POST", expected=201)
-    Path("/tmp/vcluster-sandbox-identities.json").write_text(json.dumps({
-        name: api(path + "/" + name, bearer)["metadata"]["uid"] for name in ("analysis", "test-suspended")
-    } | {"pvc": pvc["metadata"]["uid"]}))
-
-    pool = api("/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/demo/sandboxwarmpools/sandboxd-tasks", bearer)
-    assert pool["spec"]["replicas"] == 0
-    claims = "/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/demo/sandboxclaims"
-    api(claims + "?fieldValidation=Strict", bearer, {"apiVersion": "extensions.agents.x-k8s.io/v1beta1",
-        "kind": "SandboxClaim", "metadata": {"name": "test-task"}, "spec": {
-            "warmPoolRef": {"name": "sandboxd-tasks"},
-            "lifecycle": {"shutdownTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 600)),
-                          "shutdownPolicy": "DeleteForeground"}}}, method="POST", expected=201)
-    wait_until(lambda: any(c["type"] == "Ready" and c["status"] == "True"
-        for c in api(claims + "/test-task", bearer).get("status", {}).get("conditions", [])), "Task Claim did not become ready")
-    task_name = api(claims + "/test-task", bearer)["status"]["sandbox"]["name"]
-    task = api("/api/v1/namespaces/demo/pods/" + task_name, bearer)
-    task_pvcs = {v["persistentVolumeClaim"]["claimName"] for v in task["spec"]["volumes"] if "persistentVolumeClaim" in v}
-    assert task_pvcs and "session-analysis" not in task_pvcs
-    assert task["spec"]["automountServiceAccountToken"] is False
-    assert all(set(v) <= {"name", "persistentVolumeClaim"} for v in task["spec"]["volumes"])
-    check_runtime_files(command, task_name, write=True)
-    api(claims + "/test-task", bearer, method="DELETE", expected=(200, 202))
-    wait_until(lambda: api("/api/v1/namespaces/demo/pods/" + task_name, bearer, expected=(200, 404)).get("kind") == "Status",
-        "Task Pod was not removed")
-    for name in task_pvcs:
-        wait_until(lambda: api("/api/v1/namespaces/demo/persistentvolumeclaims/" + name, bearer, expected=(200, 404)).get("kind") == "Status",
-            "Task storage was not removed")
-    print("PASS session reuse, suspend/resume, deletion recovery, and independent task storage and cleanup", flush=True)
 
 
 def check_catalog(api, bearer):
@@ -755,7 +601,9 @@ def main():
         try:
             scope = (LAB + ":interactive" if role.endswith("_cluster-admin")
                      else LAB + ":vclusters_" + role.removeprefix("vcluster_"))
-            value = profile_token(profile, instance, scope)
+            value = token(LAB, next((Path("/oauth") / key).read_text().strip()
+                                   for key in ("clientSecret", "client_secret")
+                                   if (Path("/oauth") / key).is_file()), scope=scope)
             claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
             assert set(claims["resource_access"][LAB]["roles"]) == {"ws_api", role}
             assert LAB in ([claims["aud"]] if isinstance(claims["aud"], str) else claims["aud"])
@@ -894,7 +742,7 @@ def main():
                     "volumes": [
                         {
                             "name": "data",
-                            "persistentVolumeClaim": {"claimName": "workload-data"},
+                            "persistentVolumeClaim": {"claimName": "volume-analysis"},
                         }
                     ],
                 },
@@ -913,7 +761,8 @@ def main():
     path = "/api/v1/namespaces/default/configmaps/restart-marker"
     if args.check_only:
         assert api(path, bearer)["data"]["marker"] == "persistent"
-        check_sandbox_survival(api, bearer)
+        claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
+        assert claim["metadata"]["uid"] == Path("/tmp/vcluster-volume-uid").read_text()
         volume_pod("volume-reader", "cat /data/marker && echo && sleep 3600")
         deadline = time.monotonic() + 60
         while (
@@ -1111,34 +960,23 @@ def main():
         },
         expected=403,
     )
-    api(
-        "/api/v1/namespaces/demo/persistentvolumeclaims",
-        editor,
-        method="POST",
-        expected=201,
-        body={
-            "apiVersion": "v1",
-            "kind": "PersistentVolumeClaim",
-            "metadata": {"name": "workload-data"},
-            "spec": {
-                "accessModes": ["ReadWriteOnce"],
-                "storageClassName": args.storage_class,
-                "resources": {"requests": {"storage": "1Mi"}},
-            },
-        },
-    )
+    claim = api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)
+    assert claim["metadata"]["labels"]["datalabs.versioneer.at/volume"] == "analysis"
+    assert not any(owner.get("kind") in ("Pod", "Deployment", "StatefulSet")
+                   for owner in claim["metadata"].get("ownerReferences", []))
+    Path("/tmp/vcluster-volume-uid").write_text(claim["metadata"]["uid"])
     volume_pod(
         "volume-writer",
         "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
     )
     assert (
-        api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)[
+        api("/api/v1/namespaces/demo/persistentvolumeclaims/volume-analysis", editor)[
             "status"
         ]["phase"]
         == "Bound"
     )
     print(
-        "PASS namespace profile, denied escalation, and host-provisioned workload PVC",
+        "PASS namespace profile, denied escalation, and provider-managed volume",
         flush=True,
     )
 
@@ -1255,7 +1093,7 @@ def main():
             "PASS kubectl exec, logs, watch, and port forwarding through /.vc0",
             flush=True,
         )
-        check_sandbox(api, bearer, other, command)
+        check_workload_quota(api, bearer)
     finally:
         proxy.shutdown()
         proxy.server_close()

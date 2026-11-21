@@ -11,7 +11,7 @@ nav:
   - How-to guides:
     - Installation: how-to-guides/installation.md
     - Virtual clusters: how-to-guides/vcluster.md
-    - Sandboxes: how-to-guides/sandboxes.md
+    - Volumes: how-to-guides/volumes.md
     - Connections: how-to-guides/connections.md
     - Authentication: how-to-guides/authentication.md
     - Use a Datalab: how-to-guides/usage_concepts.md
@@ -19,8 +19,8 @@ nav:
     - Additional services: how-to-guides/additional_services.md
   - Security:
     - Overview: security/index.md
-    - Session access: security/workspace-sessions.md
-    - Network policies: security/sandbox-controls.md
+    - Workload access: security/workload-access.md
+    - Network policies: security/network-policies.md
   - Reference guides:
     - API: reference-guides/api.md
     - Architecture:

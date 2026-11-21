@@ -77,107 +77,126 @@ class HelperTests(unittest.TestCase):
         )
 
 
-class SandboxStartTests(unittest.TestCase):
-    def run_start(self, sandbox, conflict=False):
-        with TemporaryDirectory(prefix="test-session-start-") as directory:
-            work = Path(directory)
-            state = work / "state.json"
-            state.write_text(json.dumps({"sandbox": sandbox, "creates": 0, "patches": 0, "conflict": conflict}))
-            kubectl = work / "kubectl"
-            kubectl.write_text("#!" + sys.executable + "\n" + '''
-import json
-from pathlib import Path
-import sys
-state = Path(STATE_PATH)
-value = json.loads(state.read_text())
-args = sys.argv[7:]
-if args[0] == 'create':
-    resource = json.load(sys.stdin)
-    resource['metadata'].update(uid='sandbox-uid', resourceVersion='1', generation=1)
-    resource['status'] = {'conditions': [{'type': 'Ready', 'status': 'True', 'observedGeneration': 1}]}
-    value['sandbox'] = resource
-    value['creates'] += 1
-    state.write_text(json.dumps(value))
-    if value['conflict']:
-        sys.exit(1)
-    print(json.dumps(resource))
-elif args[0] == 'patch':
-    resource = value['sandbox']
-    patch = json.loads(args[args.index('--patch') + 1])
-    for operation in patch:
-        if operation['op'] == 'test':
-            assert resource['metadata'][operation['path'].split('/')[-1]] == operation['value']
-    resource['spec']['operatingMode'] = 'Running'
-    resource['metadata']['generation'] += 1
-    resource['status'] = {'conditions': [{'type': 'Ready', 'status': 'True',
-        'observedGeneration': resource['metadata']['generation']}]}
-    value['patches'] += 1
-    state.write_text(json.dumps(value))
-    print('patched')
-elif args[1].startswith('persistentvolumeclaim/'):
-    print('pvc-uid')
-elif args[1].startswith('sandboxtemplate.'):
-    print(json.dumps({'spec': {'podTemplate': {'spec': {
-        'containers': [{'name': 'sandboxd', 'volumeMounts': [{'name': 'workspace', 'mountPath': '/workspace'}]}]
-    }}, 'volumeClaimTemplates': [{'metadata': {'name': 'workspace'}}]}}))
-elif args[1].startswith('sandbox.'):
-    if value['sandbox'] is not None:
-        print(json.dumps(value['sandbox']))
-    elif '--ignore-not-found' not in args:
-        sys.exit(1)
-else:
-    print('Pod and PVC are present')
-'''.replace('STATE_PATH', repr(str(state))))
-            kubectl.chmod(0o700)
-            result = subprocess.run([
-                "bash", str(ROOT / "docs/examples/start-sandbox.sh"),
-                "/unused/kubeconfig", "test-context", "demo", "analysis", "session-analysis",
-            ], capture_output=True, text=True, timeout=10, env={"PATH": f"{work}:/usr/bin:/bin"})
-            return result, json.loads(state.read_text())
+class VolumeSnapshotTests(unittest.TestCase):
+    def run_backup(self, *, phase="Bound", ready=True, error=False, policy="Delete",
+                   incomplete=False, cleanup_pending=False, attempts=1):
+        module = runpy.run_path(str(ROOT / "scripts/volume-snapshot.py"))
+        label, source = module["LABEL"], module["SOURCE"]
+        calls = []
 
-    def sandbox(self, mode="Running"):
-        return {"metadata": {"name": "analysis", "uid": "sandbox-uid", "resourceVersion": "1", "generation": 1,
-                "labels": {"datalabs.versioneer.at/session": "analysis"},
-                "annotations": {"datalabs.versioneer.at/session-pvc-uid": "pvc-uid"}},
-            "spec": {"operatingMode": mode, "podTemplate": {"spec": {
-                "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}],
-                "containers": [{"name": "sandboxd", "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}]}]}}},
-            "status": {"conditions": [{"type": "Ready", "status": "True", "observedGeneration": 1}]}}
+        def snapshot(name, uid="pvc-current", volume="analysis", completed=True):
+            return {"metadata": {"name": name, "uid": name + "-uid",
+                                 "creationTimestamp": name,
+                                 "labels": {label: volume, source: uid}},
+                    "spec": {"source": {"persistentVolumeClaimName": "volume-analysis"}},
+                    "status": {"readyToUse": completed}}
 
-    def test_existing_session_is_reused_or_resumed_without_recreation(self):
-        for mode in ("Running", "Suspended"):
-            with self.subTest(mode=mode):
-                result, state = self.run_start(self.sandbox(mode))
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(state["creates"], 0)
-                self.assertEqual(state["patches"], int(mode == "Suspended"))
-                self.assertEqual(state["sandbox"]["metadata"]["uid"], "sandbox-uid")
+        snapshots = {item["metadata"]["name"]: item for item in (
+            snapshot("20261120"), snapshot("20261121"),
+            snapshot("old-volume", uid="pvc-replaced"), snapshot("other-volume", volume="another"),
+        )}
+        if incomplete:
+            snapshots["incomplete"] = snapshot("incomplete", completed=False)
 
-    def test_creation_and_concurrent_creation_use_the_existing_pvc(self):
-        for conflict in (False, True):
-            with self.subTest(conflict=conflict):
-                result, state = self.run_start(None, conflict)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                spec = state["sandbox"]["spec"]
-                self.assertNotIn("volumeClaimTemplates", spec)
-                self.assertEqual(spec["podTemplate"]["spec"]["volumes"], [
-                    {"name": "workspace", "persistentVolumeClaim": {"claimName": "session-analysis"}}])
+        class API:
+            def call(self, method, path, body=None):
+                calls.append((method, path, body))
+                if "/volumesnapshotclasses/" in path:
+                    return {"deletionPolicy": policy}
+                if "/persistentvolumeclaims/" in path:
+                    return {"metadata": {"uid": "pvc-current"}, "status": {"phase": phase}}
+                if method == "POST":
+                    name = "20261122-" + str(sum(method == "POST" for method, _, _ in calls))
+                    item = snapshot(name, completed=ready)
+                    if error:
+                        item["status"]["error"] = {"message": "failed"}
+                    snapshots[name] = item
+                    return item
+                if method == "DELETE":
+                    name = path.rsplit("/", 1)[-1]
+                    self_uid = snapshots[name]["metadata"]["uid"]
+                    assert body["preconditions"]["uid"] == self_uid
+                    if cleanup_pending:
+                        snapshots[name]["metadata"]["deletionTimestamp"] = "2026-11-22T00:00:00Z"
+                    else:
+                        del snapshots[name]
+                    return {}
+                if "?" in path:
+                    return {"items": list(snapshots.values())}
+                return snapshots[path.rsplit("/", 1)[-1]]
 
-    def test_another_owner_or_replaced_pvc_is_not_adopted(self):
-        for change in ("owner", "pvc", "volume"):
-            sandbox = self.sandbox("Suspended")
-            if change == "owner":
-                sandbox["metadata"]["ownerReferences"] = [{"uid": "claim-uid", "kind": "SandboxClaim"}]
-            elif change == "pvc":
-                sandbox["metadata"]["annotations"]["datalabs.versioneer.at/session-pvc-uid"] = "old-pvc-uid"
-            else:
-                sandbox["spec"]["podTemplate"]["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"] = "other-session"
-            with self.subTest(change=change):
-                result, state = self.run_start(sandbox)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Refusing", result.stderr)
-                self.assertEqual(state["creates"], 0)
-                self.assertEqual(state["patches"], 0)
+        failure = None
+        with redirect_stdout(StringIO()):
+            for _ in range(attempts):
+                try:
+                    module["backup"](API(), "demo", "analysis", "volume-analysis", "snapshots", 1, timeout=0)
+                except RuntimeError as error_result:
+                    failure = error_result
+        return calls, failure, snapshots
+
+    def test_completed_backup_prunes_only_older_completed_snapshots_of_this_pvc(self):
+        calls, failure, snapshots = self.run_backup()
+        self.assertIsNone(failure)
+        created = next(body for method, _, body in calls if method == "POST")
+        self.assertEqual(created["spec"]["source"]["persistentVolumeClaimName"], "volume-analysis")
+        self.assertNotIn("ownerReferences", created["metadata"])
+        removed = [(path.rsplit("/", 1)[-1], body["preconditions"])
+                   for method, path, body in calls if method == "DELETE"]
+        self.assertEqual(removed, [("20261121", {"uid": "20261121-uid"}),
+                                   ("20261120", {"uid": "20261120-uid"})])
+        self.assertEqual(set(snapshots), {"20261122-1", "old-volume", "other-volume"})
+
+    def test_snapshot_failure_or_timeout_preserves_completed_backups(self):
+        for options in ({"ready": False}, {"error": True}):
+            with self.subTest(options=options):
+                calls, failure, _ = self.run_backup(**options)
+                self.assertIsInstance(failure, RuntimeError)
+                self.assertFalse(any(method == "DELETE" for method, _, _ in calls))
+
+    def test_unbound_source_does_not_create_a_backup(self):
+        calls, failure, _ = self.run_backup(phase="Pending")
+        self.assertIsInstance(failure, RuntimeError)
+        self.assertFalse(any(method == "POST" for method, _, _ in calls))
+
+    def test_retained_snapshot_class_does_not_start_an_unbounded_backup(self):
+        calls, failure, _ = self.run_backup(policy="Retain")
+        self.assertIsInstance(failure, RuntimeError)
+        self.assertFalse(any(method in ("POST", "DELETE") for method, _, _ in calls))
+
+    def test_repeated_failures_keep_one_incomplete_attempt_and_all_recovery_points(self):
+        for options in ({"ready": False}, {"ready": False, "error": True}):
+            with self.subTest(options=options):
+                calls, failure, snapshots = self.run_backup(attempts=3, **options)
+                self.assertIsInstance(failure, RuntimeError)
+                self.assertEqual(sum(method == "POST" for method, _, _ in calls), 3)
+                self.assertEqual(set(snapshots), {"20261120", "20261121", "old-volume", "other-volume", "20261122-3"})
+
+    def test_cleanup_must_finish_before_a_new_snapshot_is_created(self):
+        calls, failure, snapshots = self.run_backup(incomplete=True, cleanup_pending=True, attempts=3)
+        self.assertIn("Waiting for previous snapshot cleanup", str(failure))
+        self.assertFalse(any(method == "POST" for method, _, _ in calls))
+        self.assertIn("20261121", snapshots)
+        self.assertEqual(sum(method == "DELETE" for method, _, _ in calls), 1)
+
+    def test_provider_can_observe_the_class_and_bind_the_operator_owned_snapshot_role(self):
+        objects = list(yaml.safe_load_all((ROOT / "dependencies/rbac.yaml").read_text()))
+        roles = {item["metadata"]["name"]: item for item in objects if item["kind"] == "ClusterRole"}
+        bindings = [item for item in objects if item["kind"] == "ClusterRoleBinding"
+                    and {"kind": "ServiceAccount", "name": "provider-kubernetes", "namespace": "crossplane"}
+                    in item.get("subjects", [])]
+        rules = [rule for binding in bindings for rule in roles[binding["roleRef"]["name"]]["rules"]]
+
+        def allowed(group, resource, verb, name=None):
+            return any(group in rule["apiGroups"] and resource in rule["resources"]
+                       and verb in rule["verbs"]
+                       and ("resourceNames" not in rule or name in rule["resourceNames"]) for rule in rules)
+
+        for verb in ("get", "list", "watch"):
+            self.assertTrue(allowed("snapshot.storage.k8s.io", "volumesnapshotclasses", verb))
+        for verb in ("get", "list", "watch", "create", "update", "patch", "delete"):
+            self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterrolebindings", verb))
+        self.assertTrue(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "datalab-vcluster-volume-snapshots"))
+        self.assertFalse(allowed("rbac.authorization.k8s.io", "clusterroles", "bind", "cluster-admin"))
 
 
 class VclusterCleanupTests(unittest.TestCase):
@@ -212,12 +231,12 @@ class VclusterCleanupTests(unittest.TestCase):
         self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
         self.assertEqual(self.deleted, [])
         self.pods = [self.pod("worker"), self.pod("pending", phase="Pending"),
-                     self.pod("coredns"), self.pod("sandbox-controller"),
+                     self.pod("coredns"), self.pod("application-controller"),
                      self.pod("other-instance", owner="other-service"),
                      {"metadata": {"name": "shared-host-service"}}]
         self.assertFalse(self.cleanup(self, "test-team", "vcluster-vc0", 2))
         self.assertEqual(self.deleted, [(name, name + "-uid") for name in
-                                       ("worker", "pending", "coredns", "sandbox-controller")])
+                                       ("worker", "pending", "coredns", "application-controller")])
 
     def test_cleanup_is_repeatable_and_never_deletes_storage(self):
         self.pods = [self.pod("worker")]

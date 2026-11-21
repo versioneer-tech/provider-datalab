@@ -10,7 +10,7 @@ The cluster needs Crossplane, an ingress or Gateway
 controller, Keycloak, and an S3-compatible object store. The CNI must enforce
 Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
-[metadata](https://github.com/versioneer-tech/provider-datalab/blob/legacy/crossplane.yaml).
+[metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
 Install the operators for the managed stores you offer. Provider
 Datalab integration tests use these versions:
@@ -24,7 +24,7 @@ Datalab integration tests use these versions:
 These are fixed test pins. Other versions need validation before use.
 
 Install each operator's CRDs before its controller. The
-[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/legacy/tests/integration/README.md) shows the tested
+[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/integration/README.md) shows the tested
 installation settings. Backup volumes need a StorageClass that supports
 `ReadWriteOnce`; see [backup settings](usage_concepts.md#backups).
 
@@ -37,8 +37,8 @@ issuer, allowed StorageClasses, and an HTTPS Gateway listener. The package runs
 vCluster OSS `0.38.0` with Kubernetes `1.36.6`. The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 [virtual cluster setup](vcluster.md#platform-settings).
-Virtual clusters also install Agent Sandbox. Use
-[Run a sandbox](sandboxes.md) to check its runtime and storage after setup.
+Application owners install their controllers and workloads through the virtual
+API. Use [Volumes](volumes.md) to check persistent volumes after setup.
 
 ### Dependency baseline
 
@@ -105,7 +105,7 @@ service namespace; their OAuth2 proxy credentials remain separate.
 ## 2. Install provider dependencies
 
 Apply the files in
-[`dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/legacy/dependencies)
+[`dependencies/`](https://github.com/versioneer-tech/provider-datalab/tree/main/dependencies)
 in this order:
 
 | File | Purpose |
@@ -131,11 +131,12 @@ The realm must permit the built-in `offline_access` scope and user role for
 Use the package pins in the dependency manifests. Wait for the provider and
 function revisions to report healthy before installing the configuration
 package. The provider-kubernetes RBAC includes access to Pods for readiness
-checks, namespaces, quotas, and service PVCs.
+checks, namespaces, quotas, and service PVCs. It also installs the shared
+snapshot role described under [Volume snapshots](#volume-snapshots).
 
 Keep the supplied 64 MiB function message limits when you manage functions
-separately. Sandbox bootstrap manifests add to each virtual cluster's desired
-and observed configuration in pipeline requests.
+separately. Desired and observed virtual cluster configuration is included in
+pipeline requests.
 
 ## 3. Install the configuration package
 
@@ -382,8 +383,7 @@ defaults below.
 | `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
 | `images.redisBackup` | `redis:7.2.17` | Redis backup tools. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
-| `images.sandbox` | `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10` | Agent Sandbox controller inside each virtual cluster. |
-| `images.sandboxd` | `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f` | Runtime for the virtual sandboxd templates. Use a compatible image that starts sandboxd and contains the required tools. |
+| `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job in the virtual cluster. |
 | `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
 
 A MongoDB image tag that starts with `major.minor.patch` sets the database
@@ -448,7 +448,11 @@ to containers without the corresponding resource settings.
 | `vcluster.resources.limits` | CPU `4`, memory `4Gi`, ephemeral storage `10Gi` | Control-plane limits; supplied fields override these defaults. |
 | `vcluster.scheduling` | `{}` | Control-plane and workload selectors and tolerations; see [placement and hibernation](vcluster.md#placement-and-hibernation). |
 | `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
-| `defaults.session.pvcSize` | `1Gi` | Default size of durable session PVCs. |
+| `defaults.volumes.storage` | `1Gi` | Default size of named persistent volumes. |
+| `vcluster.volumeSnapshots` | `false` | Enable CSI snapshot synchronization and its additional host RBAC. |
+| `volumeSnapshots.snapshotClassName` | Unset | Snapshot class for volume backups. Must use deletion policy `Delete`. |
+| `volumeSnapshots.schedule` | `0 1 * * *` | Backup schedule in UTC. |
+| `volumeSnapshots.retention` | `4` | Completed snapshots retained per PVC UID, from 1 to 100. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
 | `vcluster.storageClasses.allowed` | Required when virtual clusters are declared | Host classes exposed to virtual workloads. |
 | `vcluster.storageClasses.default` | First allowed class | Virtual workload default class. |
@@ -545,7 +549,7 @@ network:
 ```
 
 These rules apply to existing runtime namespaces too. See
-[Network policies](../security/sandbox-controls.md) for how policies combine,
+[Network policies](../security/network-policies.md) for how policies combine,
 Data access, and policy exclusions.
 
 ## 5. Supply storage credentials
@@ -579,7 +583,7 @@ credentials out of Git.
 ## 6. Create a Datalab
 
 Save this resource as `datalab.yaml`. The user `joe` must already exist in
-Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/001-lab.yaml)
+Keycloak. This uses the [Joe example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml)
 with an explicit claim namespace.
 
 ```yaml
@@ -601,7 +605,7 @@ kubectl get datalabs -n workspace
 kubectl describe datalab s-joe -n workspace
 ```
 
-See [Use a Datalab](usage_concepts.md) for sessions, managed services, and sharing.
+See [Use a Datalab](usage_concepts.md) for volume, managed services, and sharing.
 
 ## 7. Check the installation
 
@@ -629,5 +633,53 @@ kubectl api-resources --api-group=gateway.networking.k8s.io
 
 For a managed store, also check its API group from the prerequisite table.
 Verify the Data address, storage access, and each requested service before
-giving users access. For virtual clusters, also check user login and the
-[sandboxd APIs](sandboxes.md#5-check-files-and-commands-from-your-computer).
+giving users access. For virtual clusters, also check user login, application
+installation, and [volume persistence](volumes.md).
+
+## Volume snapshots
+
+CSI snapshot support is optional. Install a snapshot-capable CSI driver, its
+snapshotter sidecar, the common snapshot controller, and the three snapshot
+CRDs on the host cluster. Create a matching `VolumeSnapshotClass` with
+`deletionPolicy: Delete` so retention can remove old snapshots.
+
+Enable the capability in the operator-owned EnvironmentConfig:
+
+```yaml
+data:
+  vcluster:
+    volumeSnapshots: true
+  volumeSnapshots:
+    snapshotClassName: workspace-snapshots
+    schedule: '0 1 * * *'
+    retention: 4
+```
+
+This enables native VolumeSnapshot and VolumeSnapshotContent synchronization
+and makes host snapshot classes visible through the virtual API.
+`dependencies/rbac.yaml` installs ClusterRole
+`datalab-vcluster-volume-snapshots`. It permits host PersistentVolume reads,
+snapshot class reads, and snapshot content management. The provider can observe
+snapshot classes and bind this specific role. Snapshot setup does not create
+or change host ClusterRoles.
+For each enabled vcluster, the composition binds the role to its syncer and
+adds namespaced snapshot permissions.
+
+Keep the shared role under operator control. Snapshot content management is
+cluster-scoped. Ordinary PVC use keeps snapshot synchronization disabled and
+gets no snapshot role binding. Application installers and volume clients use
+virtual credentials only.
+
+Keep snapshot synchronization enabled while snapshots or restored claims need
+it. Disabling a volume's backup schedule keeps its completed snapshots. The
+provider observes the selected host snapshot class and requires deletion policy
+`Delete` before its resources can report ready. Job and snapshot status report
+whether a backup succeeded. `status.volumes` reports the PVC and schedule
+references; it does not report a successful recovery point. Check failed Jobs
+and snapshot deletion that does not finish. See [Volumes](volumes.md#enable-backups).
+
+The scheduler is inside the virtual cluster and stops during hibernation.
+Back up the control-plane state and protect against loss of the virtual
+cluster separately. Native snapshots do not copy volume data to an independent
+backup service. Qualify restore with the actual CSI driver before relying on it.
+See [vCluster snapshot synchronization](https://www.vcluster.com/docs/vcluster/configure/sync/to-host/storage/volume-snapshots).

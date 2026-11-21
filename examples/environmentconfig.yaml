@@ -9,8 +9,6 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    sandbox: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10
-    sandboxd: us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd:v20261108-v1.0.10-23-g653e16f
   iam:
     realm: acme
     redirectURIs: []
@@ -49,6 +47,8 @@ data:
         port: 9000
     excludePolicies: []
   defaults:
+    volumes:
+      storage: 1Gi
     data:
       enabled: true
       readOnlyMount: false
@@ -79,7 +79,12 @@ data:
     storageClassName: ''
     backupStorageClassName: ''
   vcluster:
+    volumeSnapshots: false
     storageClasses:
       allowed:
       - standard
       default: standard
+  volumeSnapshots:
+    snapshotClassName: workspace-snapshots
+    schedule: '0 1 * * *'
+    retention: 4

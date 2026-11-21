@@ -55,7 +55,7 @@ A Datalab is a tenant-facing, namespaced composite resource. It defines membersh
         <td>
           Desired configuration of the datalab.<br/>
           <br/>
-            <i>Validations</i>:<li>!has(self.sessions) || self.sessions.all(s, has(self.vclusters) && s.vcluster in self.vclusters): Each session must select a declared virtual cluster.</li>
+            <i>Validations</i>:<li>!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters): Each volume must select a declared virtual cluster.</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -132,15 +132,6 @@ Desired configuration of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabspecsessionsindex">sessions</a></b></td>
-        <td>[]object</td>
-        <td>
-          Durable workspace PVCs inside named virtual clusters. Workloads use the PVC independently; public session URLs are not provided.<br/>
-          <br/>
-            <i>Default</i>: []<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b><a href="#datalabspecuseroverrideskey">userOverrides</a></b></td>
         <td>map[string]object</td>
         <td>
@@ -157,6 +148,16 @@ Desired configuration of the datalab.
           <br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
+            <i>Default</i>: map[]<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecvolumeskey">volumes</a></b></td>
+        <td>map[string]object</td>
+        <td>
+          Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$")): Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.</li>
             <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
@@ -303,59 +304,6 @@ Desired configuration of the datalab.
           Storage size for the MongoDB backup PVC as a Kubernetes quantity. A positive value enables daily full backups with mongodump and the oplog. Zero or an omitted value disables backups.<br/>
           <br/>
             <i>Default</i>: 0<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-
-### Datalab.spec.sessions[index]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>vcluster</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-          <br/>
-            <i>Validations</i>:<li>self == oldSelf: A session cannot move to another virtual cluster.</li>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-          <br/>
-            <i>Validations</i>:<li>self == oldSelf: A session cannot move to another namespace.</li><li>!self.startsWith("kube-") && self != "agent-sandbox-system": Sessions must use a workload namespace.</li>
-            <i>Default</i>: default<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b>pvcSize</b></td>
-        <td>string</td>
-        <td>
-          PVC size. Defaults to the platform session size, or 1Gi.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -575,6 +523,68 @@ Virtual Kubernetes clusters keyed by instance name.
 </table>
 
 
+### Datalab.spec.volumes[key]
+<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>vcluster</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another virtual cluster.</li>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backup</b></td>
+        <td>boolean</td>
+        <td>
+          Create scheduled CSI volume snapshots. Requires platform snapshot support.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+          <br/>
+            <i>Validations</i>:<li>self == oldSelf: A volume cannot move to another namespace.</li><li>!self.startsWith("kube-"): Volumes must use a workload namespace.</li>
+            <i>Default</i>: default<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>restoreFrom</b></td>
+        <td>string</td>
+        <td>
+          Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>storage</b></td>
+        <td>string</td>
+        <td>
+          Volume size. Defaults to the platform volume size, or 1Gi.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
 ### Datalab.status
 <sup><sup>[↩ Parent](#datalab)</sup></sup>
 
@@ -606,17 +616,17 @@ Current observed state of the datalab.
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b><a href="#datalabstatussessionsindex">sessions</a></b></td>
-        <td>[]object</td>
-        <td>
-          Session PVC references inside virtual clusters.<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b><a href="#datalabstatusvclustersindex">vclusters</a></b></td>
         <td>[]object</td>
         <td>
           Instance lifecycle state. Hibernated means the control plane and synced host Pods are gone.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabstatusvolumesindex">volumes</a></b></td>
+        <td>[]object</td>
+        <td>
+          Persistent volume references inside virtual clusters.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -840,54 +850,6 @@ Current observed state of the datalab.
 </table>
 
 
-### Datalab.status.sessions[index]
-<sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>name</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>namespace</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>pvcName</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>vcluster</b></td>
-        <td>string</td>
-        <td>
-          <br/>
-        </td>
-        <td>true</td>
-      </tr></tbody>
-</table>
-
-
 ### Datalab.status.vclusters[index]
 <sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
 
@@ -950,6 +912,61 @@ Current observed state of the datalab.
           <br/>
           <br/>
             <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Datalab.status.volumes[index]
+<sup><sup>[↩ Parent](#datalabstatus)</sup></sup>
+
+
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>namespace</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>pvcName</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>vcluster</b></td>
+        <td>string</td>
+        <td>
+          <br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>backupCronJobName</b></td>
+        <td>string</td>
+        <td>
+          <br/>
         </td>
         <td>false</td>
       </tr></tbody>

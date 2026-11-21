@@ -9,7 +9,7 @@ cluster. Docker runs the composition functions and a disposable Keycloak server.
 Use the same selection locally, against the target branch or pull request base:
 
 ```bash
-python3 scripts/ci-checks.py --base origin/legacy
+python3 scripts/ci-checks.py --base origin/main
 ```
 
 Without `--head`, the comparison includes committed, staged, unstaged, and
@@ -59,8 +59,8 @@ omit generated metadata that changes between runs. The other tests check:
 
 | Tests | Behavior |
 | --- | --- |
-| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, Secret bindings, and session PVCs. |
-| `helpers.py` | Credentials, token caches, host Pod cleanup, build failures, and integration runner errors. |
+| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, Secret bindings, and named persistent volumes. |
+| `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot setup permissions, build failures, and integration runner errors. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
 | `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, storage, network rules, quotas, and environment settings. |
@@ -70,6 +70,9 @@ omit generated metadata that changes between runs. The other tests check:
 
 The [integration suite](integration/README.md) checks deployed services,
 authorization, routing, and persistence in an existing test cluster or Kind.
+Draft pull requests run documentation and unit checks in CI. Kubernetes
+integration steps are deferred until the pull request is ready for review.
+Pushes to the configured target branches and manual runs include integration.
 
 ## Fixtures
 
@@ -82,7 +85,7 @@ to check that Secret values take precedence.
 | --- | --- | --- |
 | `001` | `datalab` | Data, default environment, credential rotation |
 | `002` | `datalab` | Writable Data and managed stores |
-| `003` | `datalab-custom` | Virtual clusters, session PVCs, Sandbox setup, read-only Data, PostgreSQL |
+| `003` | `datalab-custom` | Virtual clusters, volume, read-only Data, PostgreSQL |
 | `004` | `datalab-custom` | Services with custom settings |
 
 Renders are written to `/tmp`; expected snapshots are in `tests/expected/`.

@@ -94,7 +94,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL write/read through connection Secrets; backup configuration enabled on `pg0` and absent on `pg1`. |
 | `verify-mongo` | [MongoDB](manifests/mongo/datalab.yaml) | Document write/read; back up and restore the probe document with oplog replay in a separate MongoDB process. |
 | `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Key write/read; restore a backup in a separate Redis process, then disable backups and retain the backup PVC. |
-| `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, Sandbox and STAC behavior, and storage persistence. See below. |
+| `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and storage persistence. See below. |
 
 The fixtures use profile-named prerequisite Secrets and disable services outside
 their checks. Most use `datalab` or `datalab-custom`; the virtual cluster profile
@@ -140,14 +140,11 @@ individual vcluster roles and requests their optional scopes. It checks
 namespace access, denied escalation, role downgrade, and revocation of tokens
 that have not expired. Downloaded helpers must return the caller token unchanged.
 
-Sandbox checks use REST, gRPC, and port-forwarding. The session script must
-reuse a Running Sandbox, resume a Suspended Sandbox,
-and reject a changed PVC binding. Native suspension keeps the Sandbox UID;
-deletion and recreation keeps only the session PVC. A task Claim uses the
-zero-replica pool, separate storage, and no mounted Kubernetes token. Claim
-deletion must remove its Pod and PVC. Running and Suspended Sandboxes must
-retain their modes and session files through vcluster hibernation and resume.
-Oversized virtual Pods must report host CPU and memory quota rejection.
+Storage checks mount a provider-managed named PVC in ordinary Pods. Workload
+replacement, vCluster hibernation, and control-plane restart must keep the
+same claim and files. Oversized virtual Pods must report host CPU and memory
+quota rejection. Controller installation uses only the virtual API.
+CSI backup and restore require a snapshot-capable test target.
 
 Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
 and different custom Secrets for John and Jane. STAC item search must still work

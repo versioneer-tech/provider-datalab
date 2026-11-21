@@ -27,13 +27,12 @@ spec:
           properties:
             spec:
               type: object
-              x-kubernetes-preserve-unknown-fields: true
               description: Desired configuration of the datalab.
               required:
                 - users
               x-kubernetes-validations:
-              - rule: '!has(self.sessions) || self.sessions.all(s, has(self.vclusters) && s.vcluster in self.vclusters)'
-                message: Each session must select a declared virtual cluster.
+              - rule: '!has(self.volumes) || self.volumes.all(k, has(self.vclusters) && self.volumes[k].vcluster in self.vclusters)'
+                message: Each volume must select a declared virtual cluster.
               properties:
                 environmentName:
                   type: string
@@ -66,27 +65,24 @@ spec:
                         description: >
                           RFC3339 timestamp indicating when the role became active.
                   default: {}
-                sessions:
-                  type: array
-                  default: []
-                  maxItems: 50
-                  description: Durable workspace PVCs inside named virtual clusters. Workloads use the PVC independently; public session URLs are not provided.
-                  x-kubernetes-list-type: map
-                  x-kubernetes-list-map-keys: [name]
-                  items:
+                volumes:
+                  type: object
+                  default: {}
+                  maxProperties: 50
+                  description: Named persistent volumes inside virtual clusters. Workloads mount these volumes independently.
+                  x-kubernetes-validations:
+                  - rule: 'self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$"))'
+                    message: Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.
+                  additionalProperties:
                     type: object
-                    required: [name, vcluster]
+                    required: [vcluster]
                     properties:
-                      name:
-                        type: string
-                        maxLength: 40
-                        pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
                       vcluster:
                         type: string
                         maxLength: 63
                         x-kubernetes-validations:
                         - rule: self == oldSelf
-                          message: A session cannot move to another virtual cluster.
+                          message: A volume cannot move to another virtual cluster.
                       namespace:
                         type: string
                         default: default
@@ -94,13 +90,25 @@ spec:
                         pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
                         x-kubernetes-validations:
                         - rule: self == oldSelf
-                          message: A session cannot move to another namespace.
-                        - rule: '!self.startsWith("kube-") && self != "agent-sandbox-system"'
-                          message: Sessions must use a workload namespace.
-                      pvcSize:
+                          message: A volume cannot move to another namespace.
+                        - rule: '!self.startsWith("kube-")'
+                          message: Volumes must use a workload namespace.
+                      storage:
                         type: string
                         pattern: '^([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[EPTGMK]i|[EPTGMkmun])?$'
-                        description: PVC size. Defaults to the platform session size, or 1Gi.
+                        description: Volume size. Defaults to the platform volume size, or 1Gi.
+                      backup:
+                        type: boolean
+                        default: false
+                        description: Create scheduled CSI volume snapshots. Requires platform snapshot support.
+                      restoreFrom:
+                        type: string
+                        maxLength: 253
+                        pattern: '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
+                        description: Existing VolumeSnapshot in the same virtual namespace to restore into this new volume.
+                    x-kubernetes-validations:
+                    - rule: 'has(self.restoreFrom) == has(oldSelf.restoreFrom) && (!has(self.restoreFrom) || self.restoreFrom == oldSelf.restoreFrom)'
+                      message: A volume restore source cannot change after creation.
                 vclusters:
                   type: object
                   default: {}
@@ -331,9 +339,9 @@ spec:
                       observedGeneration:
                         type: integer
                         format: int64
-                sessions:
+                volumes:
                   type: array
-                  description: Session PVC references inside virtual clusters.
+                  description: Persistent volume references inside virtual clusters.
                   x-kubernetes-list-type: map
                   x-kubernetes-list-map-keys: [name]
                   items:
@@ -347,6 +355,8 @@ spec:
                       namespace:
                         type: string
                       pvcName:
+                        type: string
+                      backupCronJobName:
                         type: string
                 oauth2:
                   type: array

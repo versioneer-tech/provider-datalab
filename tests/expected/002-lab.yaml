@@ -61,7 +61,7 @@ status:
       namespace: default
     type: registry
   oauth2: []
-  sessions: []
+  volumes: []
 ---
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage

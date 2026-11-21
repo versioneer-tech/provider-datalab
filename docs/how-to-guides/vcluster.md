@@ -26,9 +26,9 @@ Use one Datalab per team and add virtual clusters as needed. Configure
 explicit service Secret bindings for application namespaces. See
 [connection bindings](connections.md#bind-a-connection).
 
-Each virtual cluster installs Agent Sandbox CRDs and its controller. See
-[Sandboxes](sandboxes.md) to start sandboxd, use its APIs, and keep workspace
-files on a session PVC.
+Application owners install controllers and CRDs through the virtual API with
+virtual cluster administration credentials. See [Volumes](volumes.md)
+for persistent volumes that applications can mount independently.
 
 ## API access
 
@@ -461,7 +461,7 @@ instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
 `vcluster.storageClassName` selects its class; otherwise the default class is
 used. Only classes in `vcluster.storageClasses.allowed` are exposed to virtual
 workloads. A host admission policy enforces this list for each syncer.
-Control-plane, workload, database, and session PVCs share the
+Control-plane, workload, database, and volume PVCs share the
 `defaults.overallQuota.storage` limit. All Pod CPU and memory requests and limits
 count against the same [host namespace quota](installation.md#resource-quotas-and-container-defaults),
 across every virtual namespace and cluster in the Datalab.
@@ -520,7 +520,8 @@ label to `pool=vcluster` and its taint to `dedicated=vcluster:NoSchedule`.
 `controlPlane.tolerations` accepts Kubernetes toleration objects.
 `workloads.enforceTolerations` accepts `key[=value]:effect` strings. vCluster adds
 the configured selectors and tolerations and keeps compatible workload settings.
-Workload placement includes CoreDNS and the Sandbox controller.
+Workload placement includes CoreDNS and application controllers installed in
+the virtual cluster.
 
 A host admission policy enforces placement for each instance's syncer account.
 It rejects direct `nodeName` assignment, another scheduler, and missing required
@@ -556,8 +557,9 @@ resource finalizers can run.
 Set `hibernated` to `false`, its default, to resume. The provider stops previous
 cleanup Jobs before it starts the control plane with the same PVC. It resumes
 virtual resource reconciliation after the API is ready. Deployments,
-StatefulSets, and Sandboxes recreate their Pods. Standalone Pod recovery is not
-supported. Resume must be requested through the host Datalab; there is no
+StatefulSets, and installed application controllers recreate their Pods.
+Standalone Pod recovery is not supported. Resume must be requested through
+the host Datalab; there is no
 inactivity timer or wake on traffic.
 
 Check `status.vclusters` for each instance. Its `observedGeneration` must match
@@ -579,7 +581,7 @@ then request hibernation again.
 
 ## Datalab STAC catalog
 
-The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/vcluster/stac-fastapi.yaml)
+The [STAC workload example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/vcluster/stac-fastapi.yaml)
 runs `stac-fastapi-pgstac` in virtual namespace `demo`. Its PostgreSQL database
 is a Datalab-managed service on the host. Add this request alongside `vclusters`:
 

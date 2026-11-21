@@ -6,6 +6,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: ${pvc_name}
   namespace: ${target}
+  labels:
+    datalabs.versioneer.at/volume: ${volume_name}
 spec:
   accessModes:
   - ReadWriteOnce

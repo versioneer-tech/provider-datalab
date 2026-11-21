@@ -302,4 +302,5 @@ SELECT value FROM datalab_check;
 
 Remove test services when the experiment ends. Before keeping one, agree with
 the platform team on its storage, backups, monitoring, maintenance, and deletion.
-Back up the service data separately from the session volume.
+Back up the service data and any application volumes. Use
+[named volumes](volumes.md) for provider-managed PVCs and snapshot schedules.

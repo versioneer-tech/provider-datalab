@@ -187,9 +187,9 @@ RoleBinding and ClusterRoleBinding rules apply.
 
 ## Credential Secrets and machine access
 
-Sandbox clients use the [virtual API and Kubernetes RBAC](sandboxes.md#2-connect-to-the-virtual-cluster).
+Workload clients use the [virtual API and Kubernetes RBAC](vcluster.md#api-access).
 They do not need the runtime OAuth Secret below. See
-[Session access](../security/workspace-sessions.md) for the network boundary.
+[Workload access](../security/workload-access.md) for the network boundary.
 
 | Secret | Namespace | Use |
 | --- | --- | --- |

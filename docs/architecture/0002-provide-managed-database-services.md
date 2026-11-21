@@ -1,6 +1,6 @@
 # ADR-002: Provide Managed Database Services
 
-> Written: 10.12.2025. Revised: 03.11.2026.
+> Written: 10.12.2025. Revised: 21.11.2026.
 
 ## Status
 
@@ -26,7 +26,7 @@ to request these managed services:
 
 Crossplane creates the service resources. The installed database operators
 manage their workloads. Services belong to the Datalab and continue to run
-when an interactive session stops. `status.connections` reports their endpoints
+when an application stops. `status.connections` reports their endpoints
 and credential Secret references.
 
 ### Keep user configuration small
@@ -41,6 +41,11 @@ composition-managed dump job. Redis uses a composition-managed RDB snapshot
 job. A data volume alone is not a backup. The [backup guide](../how-to-guides/usage_concepts.md#backups)
 defines the configuration examples, schedules, and retention.
 
+Named application volumes use `spec.volumes`. Each entry creates a PVC;
+`backup: true` enables scheduled CSI `VolumeSnapshot` resources. These snapshots
+have no backup volume size. Database backup tools remain responsible for
+managed database recovery. See [Volumes](../how-to-guides/volumes.md).
+
 Users configure the Datalab resource. Crossplane owns the generated resources
 and can replace manual changes during reconciliation.
 
@@ -48,7 +53,7 @@ and can replace manual changes during reconciliation.
 
 Users own their application data, schemas, queries, and requested capacity.
 The platform operator owns service deployment, supported configurations,
-maintenance, storage classes, access controls, and operational support. Operator
+upgrades, storage classes, access controls, and operational support. Operator
 settings come from the platform's
 [EnvironmentConfig](../how-to-guides/installation.md#runtime-and-service-defaults).
 
@@ -73,7 +78,7 @@ and backup retention after Datalab deletion need separate operator provisions.
   without a separate database deployment or backup workflow.
 - The platform operator has clear responsibility for operations and the
   guarantees offered to users.
-- Service data is independent of session state. Its retention still depends
+- Service data is independent of application state. Its retention still depends
   on Datalab deletion and storage reclaim rules.
 - Users select from supported service settings. Other database products or
   configurations need a separate platform decision.

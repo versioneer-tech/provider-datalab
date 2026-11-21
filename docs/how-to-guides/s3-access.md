@@ -12,12 +12,12 @@ This adds the S3 endpoint to each Data-enabled Datalab's browser hostname.
 Use a Gateway API controller that supports HTTPRoute header regular
 expressions, such as Contour. Add a ReferenceGrant if its certificate Secret
 is in another namespace. With S3 disabled, Data requests use the browser service.
-The [network policies](../security/sandbox-controls.md#service-policies)
+The [network policies](../security/network-policies.md#service-policies)
 must permit access from the Gateway and access to object storage and IAM.
 
 ## S3 access to s-jane
 
-The [Jane example](https://github.com/versioneer-tech/provider-datalab/blob/legacy/examples/base/003-lab.yaml)
+The [Jane example](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml)
 creates the Datalab `s-jane` and selects `datalab-custom`. With the example
 EnvironmentConfig, its endpoint is `https://s-jane.lab.acme.com` and its issuer
 is `https://identity.acme.com/realms/acme`. Replace these example DNS names
@@ -50,7 +50,7 @@ OAuth clients must emit the same audience and tenant roles. Service-account
 tokens do not need a verified email address.
 
 The following Bash commands use the
-[credential helper](https://github.com/versioneer-tech/provider-datalab/blob/legacy/tests/s3/s3-credentials.py)
+[credential helper](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/s3/s3-credentials.py)
 from the repository root. It uses the client credentials grant with `s-jane`
 as the client ID. At the prompt, enter `clientSecret` from the Secret referenced
 by the client's `status.oauth2[].secretRef`. The commands read bucket

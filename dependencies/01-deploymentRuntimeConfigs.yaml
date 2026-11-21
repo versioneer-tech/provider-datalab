@@ -109,7 +109,7 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
-            # Sandbox bootstrap data is present in desired and observed cluster configuration.
+            # Pipeline requests contain desired and observed virtual cluster configuration.
             args:
             - --max-recv-message-size=64
             - --max-send-message-size=64

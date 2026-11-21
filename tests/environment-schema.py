@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Validate environment names with the Kubernetes schema validator."""
+"""Validate Datalab input with the Kubernetes schema validator."""
 
 import json
 from pathlib import Path
@@ -25,14 +25,29 @@ def main():
     cases += [(False, {"environmentName": value}) for value in invalid]
     for index, (accepted, fields) in enumerate(cases):
         name = f"test-v1-{index}"
-        expected[name] = accepted
+        expected[name] = accepted, "spec.environmentName"
         resources.append({
             "apiVersion": "versioneer.at/v1", "kind": "Datalab",
             "metadata": {"name": name, "namespace": "workspace"},
             "spec": {"users": [], **fields},
         })
     resources.extend(yaml.safe_load(path.read_text()) for path in sorted(Path("examples/base").glob("00*-lab.yaml")))
-    expected.update({item["metadata"]["name"]: True for item in resources if item["metadata"]["name"] not in expected})
+    volume_cases = [
+        (True, {"analysis": {"vcluster": "vc0", "backup": True}}, None),
+        (True, {"recovered-analysis": {"vcluster": "vc0", "restoreFrom": "saved-analysis"}}, None),
+        (False, {"analysis": {"vcluster": "missing"}}, "spec"),
+        (False, {"Uppercase": {"vcluster": "vc0"}}, "spec.volumes"),
+        (False, {"analysis": {"vcluster": "vc0", "backup": "yes"}}, "spec.volumes.analysis.backup"),
+        (False, {"analysis": {"vcluster": "vc0", "namespace": "kube-system"}}, "spec.volumes[analysis].namespace"),
+        (False, {"analysis": {"vcluster": "vc0", "restoreFrom": "invalid/source"}}, "spec.volumes.analysis.restoreFrom"),
+    ]
+    for index, (accepted, volumes, field) in enumerate(volume_cases):
+        name = "test-volumes-" + str(index)
+        expected[name] = accepted, field
+        resources.append({"apiVersion": "versioneer.at/v1", "kind": "Datalab",
+                          "metadata": {"name": name, "namespace": "workspace"},
+                          "spec": {"users": [], "vclusters": {"vc0": {}}, "volumes": volumes}})
+    expected.update({item["metadata"]["name"]: (True, None) for item in resources if item["metadata"]["name"] not in expected})
     with tempfile.TemporaryDirectory(prefix="test-datalab-schema-") as directory:
         path = Path(directory) / "resources.yaml"
         path.write_text(yaml.safe_dump_all(resources))
@@ -47,11 +62,11 @@ def main():
     assert report["summary"]["total"] == len(expected), report
     assert report["summary"]["missingSchemas"] == 0, report
     for item in report["resources"]:
-        accepted = expected[item["name"]]
+        accepted, field = expected[item["name"]]
         assert item["status"] == ("valid" if accepted else "invalid"), item
         if not accepted:
-            assert any(error["field"] == "spec.environmentName" for error in item["errors"]), item
-    print("PASS v1 accepts optional DNS names, rejects invalid values, and validates all examples", flush=True)
+            assert any(error["field"] == field for error in item["errors"]), item
+    print("PASS environment names, volume contracts, and all base examples", flush=True)
 
 
 if __name__ == "__main__":

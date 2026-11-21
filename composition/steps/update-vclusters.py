@@ -49,18 +49,10 @@ def _secret_mappings(connections, bindings):
 def compose(req, rsp):
     xr = _to_dict(req.observed.composite.resource)
     instances = (xr.get("spec") or {}).get("vclusters") or {}
-    sessions = (xr.get("spec") or {}).get("sessions") or []
-    if any(session["vcluster"] not in instances for session in sessions):
-        response.fatal(rsp, "Each session must select a declared virtual cluster.")
+    volumes = (xr.get("spec") or {}).get("volumes") or {}
+    if any(volume["vcluster"] not in instances for volume in volumes.values()):
+        response.fatal(rsp, "Each volume must select a declared virtual cluster.")
         return
-    status = _to_dict(rsp.desired.composite.resource).get("status") or {}
-    status["sessions"] = [
-        {"name": session["name"], "vcluster": session["vcluster"],
-         "namespace": session.get("namespace", "default"),
-         "pvcName": _resource_name("session", session["name"])}
-        for session in sessions
-    ]
-    rsp.desired.composite.resource.update({"status": status})
     if not instances:
         return
     meta = xr["metadata"]
@@ -100,7 +92,6 @@ def _compose_instance(
         "prefix": f"/.{instance}",
     }
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment", {}) or {}
-    images = env.get("images") or {}
     config = env.get("vcluster") or {}
     scheduling = config.get("scheduling") or {}
     if not isinstance(scheduling, dict):
@@ -310,6 +301,20 @@ def _compose_instance(
         resources=resources,
         **template_values,
     )
+    snapshots = config.get("volumeSnapshots", False)
+    if type(snapshots) is not bool:
+        response.fatal(rsp, "data.vcluster.volumeSnapshots must be a boolean.")
+        return
+    configuration["sync"]["fromHost"]["volumeSnapshotClasses"] = {"enabled": snapshots}
+    for resource in ("volumeSnapshots", "volumeSnapshotContents"):
+        configuration["sync"]["toHost"][resource] = {"enabled": snapshots}
+    if snapshots:
+        support = _render_template(
+            req, "vcluster/snapshot-rbac", namespace=namespace, service_account=service_account,
+            snapshot_role=_resource_name(name, instance, "volume-snapshots"),
+        )["resources"]
+        for suffix, manifest in support.items():
+            emit(suffix, manifest)
     embedded = ((config.get("backingStore") or {}).get("database") or {}).get(
         "embedded"
     ) or {}
@@ -354,16 +359,6 @@ def _compose_instance(
             req, "vcluster/storage-policy-binding", namespace=namespace,
             policy_name=policy["metadata"]["name"],
         ))
-    sandbox_manifests = _render_template(
-        req, "vcluster/sandbox-install"
-    )["manifests"]
-    sandbox_controller = _render_template(
-        req, "vcluster/sandbox-controller",
-        controller_image=images.get("sandbox") or "registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.10",
-    )
-    configuration["experimental"]["deploy"]["vcluster"]["manifests"] = (
-        sandbox_manifests + "---\n" + json.dumps(sandbox_controller, sort_keys=True)
-    )
     configuration_json = json.dumps(configuration, sort_keys=True)
     checksum = hashlib.sha256(
         (configuration_json + authentication).encode()
@@ -447,6 +442,11 @@ def _compose_instance(
             ),
         ),
     ):
+        if suffix == "role" and snapshots:
+            manifest["rules"].append({
+                "apiGroups": ["snapshot.storage.k8s.io"], "resources": ["volumesnapshots"],
+                "verbs": ["create", "delete", "patch", "update", "get", "list", "watch"],
+            })
         emit(suffix, manifest)
     source_namespaces = {key.split("/")[0] for key in secret_mappings} - {namespace}
     for source_namespace in sorted(source_namespaces):
@@ -543,50 +543,13 @@ def _compose_instance(
         ] = instance
         rsp.desired.resources[key].resource.update(body)
 
-    virtual(
-        "sandbox-controller",
-        {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {
-            "name": "agent-sandbox-controller", "namespace": "agent-sandbox-system",
-        }},
-        readiness={
-            "policy": "DeriveFromCelQuery",
-            "celQuery": "has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.availableReplicas) && object.status.availableReplicas >= 1",
-        },
-    )
-    controller_key = _resource_name("vcluster", name, instance, "access", "sandbox-controller")
-    rsp.desired.resources[controller_key].resource["spec"]["managementPolicies"] = ["Observe"]
-
-    sessions = [
-        session for session in (_to_dict(req.observed.composite.resource).get("spec") or {}).get("sessions", [])
-        if session["vcluster"] == instance
-    ]
+    volumes = {
+        key: volume
+        for key, volume in ((_to_dict(req.observed.composite.resource).get("spec") or {}).get("volumes") or {}).items()
+        if volume["vcluster"] == instance
+    }
     targets = {"default", *(group["namespace"] for group in groups if group["namespace"] != "*"),
-               *(session.get("namespace", "default") for session in sessions)}
-    sandbox_image = images.get("sandboxd") or (
-        "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandboxd"
-        ":v20261108-v1.0.10-23-g653e16f"
-    )
-    for target in sorted(targets):
-        virtual(
-            f"sandbox-template-{target}",
-            _render_template(req, "vcluster/sandbox-template", target=target, sandbox_image=sandbox_image),
-        )
-        virtual(
-            f"sandbox-pool-{target}",
-            _render_template(req, "vcluster/sandbox-pool", target=target),
-        )
-    for session in sessions:
-        target = session.get("namespace", "default")
-        virtual(
-            f"session-{session['name']}",
-            _render_template(
-                req, "vcluster/session-pvc", target=target,
-                pvc_name=_resource_name("session", session["name"]),
-                storage=session.get("pvcSize") or (env.get("defaults") or {}).get("session", {}).get("pvcSize") or "1Gi",
-                storage_class=default_class,
-            ),
-        )
-
+               *(volume.get("namespace", "default") for volume in volumes.values())}
     for storage_name in storage_classes:
         suffix = hashlib.sha256(storage_name.encode()).hexdigest()[:12]
         emit(

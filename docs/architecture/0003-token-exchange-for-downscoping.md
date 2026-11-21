@@ -133,28 +133,19 @@ resources keep a policy's scope and profile until the policy has been deleted.
 Keycloak 26.8.1 or later is required. Default identity scopes must contain no
 role grants or role mappers.
 
-### Use the virtual API for Sandbox access
+### Use the virtual API for workload access
 
-Sandbox clients authenticate to the virtual Kubernetes API with the existing
-Keycloak token and configured vcluster role. Kubernetes RBAC authorizes Pod
-discovery and `pods/portforward`. A restricted namespace-profile token can
-forward ports where its role permits; it does not need `ws_access`. A
-`ws_api`-only service account still cannot access the virtual cluster.
+Workload clients authenticate to the virtual Kubernetes API with the existing
+Keycloak token and configured vcluster role. Kubernetes RBAC authorizes
+resource operations, Pod discovery, and `pods/portforward`. A namespace-profile
+token can forward ports where its role permits; it does not need `ws_access`.
+A `ws_api`-only service account cannot access the virtual cluster.
 
-Use port-forwarding for sandboxd HTTP and gRPC and for application TCP ports
-in the Sandbox Pod. Do not deploy Sandbox Router or a Sandbox-specific
-oauth2-proxy. Do not require router capabilities or `X-Sandboxd-Token` for this
-model. The runtime OAuth Secret remains for existing Data/S3 proxy consumers;
-Sandbox access does not need a copy.
-
-The external orchestration service keeps its Kubernetes credentials outside
-Sandboxes. It controls Session and Task Sandboxes through the virtual API and
-transfers selected files between their independent workspaces.
-
-Direct authenticated routing, scoped tokens, and browser routing are deferred.
-Keep the existing Keycloak client, role mappings, and token-exchange controls.
-Port-forward access does not change the shared network boundary described in
-[ADR-001](0001-use-the-datalab-crd-as-the-workspace-contract.md#use-datalab-for-team-resources).
+Application owners install their controllers and define their runtime access.
+Keep application credentials separate from the Data and S3 proxy Secrets.
+Port forwarding authenticates the API connection; direct Pod traffic needs the
+application's own controls when required. The shared network boundary is
+described in [ADR-001](0001-use-the-datalab-crd-as-the-workspace-contract.md#use-datalab-for-team-resources).
 
 ## Consequences
 

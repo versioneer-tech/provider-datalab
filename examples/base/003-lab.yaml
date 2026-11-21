@@ -10,11 +10,11 @@ spec:
   environmentName: datalab-custom
   users:
     - jane
-  sessions:
-  - name: analysis
-    vcluster: vc0
-    namespace: demo
-    pvcSize: 2Gi
+  volumes:
+    analysis:
+      vcluster: vc0
+      namespace: demo
+      storage: 2Gi
   databases:
     pg0:
       names:

@@ -8,11 +8,11 @@ metadata:
   namespace: workspace
 spec:
   environmentName: datalab-vcluster-it
-  sessions:
-  - name: analysis
-    vcluster: vc0
-    namespace: demo
-    pvcSize: 1Mi
+  volumes:
+    analysis:
+      vcluster: vc0
+      namespace: demo
+      storage: 1Mi
   users:
   - verify-s3
   - verify-vcluster-member

@@ -17,6 +17,7 @@ changing either file.
 | Script | Use |
 | --- | --- |
 | `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
+| `scripts/volume-snapshot.py` | CSI snapshot creation and retention from a virtual Job. |
 | `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
 Crossplane can cache a function response for its TTL. Set the build defaults in
@@ -68,14 +69,8 @@ A TTL override requires a separate output file. It does not change the
 environment or auto-ready TTLs, `composition/settings.yaml`, or the normal
 deployment artifact. An environment value takes precedence over this default.
 
-`vcluster/sandbox-install.yaml` contains the Agent Sandbox CRDs and supporting
-resources. `vcluster/sandbox-controller.yaml` contains its Deployment, with
-resource limits, health probes, and a non-root security context. Their headers
-record the source release and checksum. Virtual cluster startup applies both
-inside the virtual API. EnvironmentConfig `images.sandbox` selects the controller
-image; `images.sandboxd` selects the runtime image in SandboxTemplates. Check
-controller compatibility when changing its image or CRD schema.
-
-`vcluster/sandbox-template.yaml` and `vcluster/sandbox-pool.yaml` define the
-task runtime and pool. See [ADR-001](../docs/architecture/0001-use-the-datalab-crd-as-the-workspace-contract.md#keep-session-storage-independent-of-workloads)
-for session storage and lifecycle ownership.
+`volumes/pvc.yaml` defines named application storage. The volume
+step creates optional snapshot schedules from `volumes/backup.yaml`.
+`scripts/volume-snapshot.py` uses only the Python standard library. The
+virtual cluster step enables snapshot synchronization only when the operator
+sets `vcluster.volumeSnapshots`. Applications own their runtime installation.

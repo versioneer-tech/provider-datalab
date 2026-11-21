@@ -20,8 +20,8 @@ predictable. Keep their endpoints within the approved team network boundary.
 | --- | --- |
 | Caller roles, public profiles, and virtual RBAC | [Virtual API access](../how-to-guides/vcluster.md#api-access) |
 | Browser sign-in, Datalab roles, and machine tokens | [Authentication](../how-to-guides/authentication.md) |
-| Pod credentials, Kubernetes access, and privileged workloads | [Session access](workspace-sessions.md) |
-| Allowed traffic and generated NetworkPolicies | [Network policies](sandbox-controls.md) |
+| Pod credentials, Kubernetes access, and privileged workloads | [Workload access](workload-access.md) |
+| Allowed traffic and generated NetworkPolicies | [Network policies](network-policies.md) |
 | Files that readers can open without sign-in | [Public sharing](../how-to-guides/usage_concepts.md#sharing-data-with-the-world) |
 
 The platform team also manages node access, DNS, storage classes, quotas,

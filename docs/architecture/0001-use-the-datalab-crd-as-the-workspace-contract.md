@@ -4,160 +4,103 @@
 
 ## Status
 
-Accepted.
-
-Users create a `Datalab` to declare team members, services, virtual clusters,
-and session storage. Workloads use the virtual Kubernetes API. Each virtual
-cluster includes Agent Sandbox CRDs, its controller, and a sandboxd template.
+Proposed. Design approval and runtime validation are pending.
 
 ## Context
 
-A data workspace needs persistent files, credentials, networking, and optional
-services. Exposing every host resource needed for that workspace would give
-users a complicated and fragile API.
-
-We need one stable contract for team resources and platform policy. Users also
-need a Kubernetes API to run and replace their own workloads.
+A team needs persistent files, credentials, networking, virtual Kubernetes
+clusters, and optional services. The platform needs a stable contract for
+these resources. Applications need control of their own installation and
+runtime lifecycle through the virtual Kubernetes API.
 
 ## Decision
 
 ### Use Datalab for team resources
 
-Users and GitOps tools work with the namespaced `versioneer.at/v1` Datalab.
-It describes team membership, named virtual clusters, managed services, and
-session PVCs.
+Users and GitOps tools declare a namespaced `versioneer.at/v1` Datalab. It
+contains team membership, named virtual clusters, managed services, and named
+volumes. The operator-owned EnvironmentConfig sets platform
+identity, network, storage, and security policy.
 
-The Datalab name, namespace, and UID form its identity. The composition creates
-a host service namespace with the Datalab name. Its quota, LimitRange, and
-network policies apply to the team's services and virtual workloads.
+The Datalab name, namespace, and UID form its identity. Crossplane creates a
+host service namespace with the Datalab name. Its quota, LimitRange, and
+network policies apply to services and synced workloads.
 
 The Datalab is the network boundary. Host policies restrict traffic between
-Datalabs and permit shared networking within one Datalab, including across its
-virtual clusters. A virtual cluster is an API boundary, not a separate network
-boundary. Router authorization controls routed requests; it does not isolate
-workloads within a Datalab.
+Datalabs and permit shared networking within one Datalab, including across
+its virtual clusters. A virtual cluster is an API boundary. Separate Datalabs
+are required for separate team trust boundaries.
 
-### Keep generated host resources under provider control
+### Keep infrastructure and applications under separate owners
 
-Crossplane owns the generated namespaces, service resources, identity settings,
-and virtual cluster configuration. Users manage their application workloads
-through a virtual Kubernetes API:
+Crossplane owns the generated host resources, virtual cluster configuration,
+identity settings, and declared storage. Application owners install CRDs,
+controllers, RBAC, templates, pools, and runtime images through the virtual API.
+Their installer needs suitable virtual permissions; it needs no host credentials.
 
-```text
-User or GitOps tool
-  -> Datalab
-     -> Provider Datalab reconciliation
-        -> host service namespace and managed services
-        -> virtual Kubernetes clusters and session PVCs
+Provider Datalab installs no application controller or default runtime. A
+controller failure is an application health concern. Platform capabilities
+such as storage drivers, host runtime classes, and network enforcement remain
+under operator control.
 
-User or workload client
-  -> virtual Kubernetes API
-     -> Sandbox controller
-        -> sandboxd Pod that mounts a session PVC
-```
+### Use named volumes
 
-### Keep user choices separate from operator policy
+`spec.volumes` is a map keyed by volume name, like the named managed
+services. Each volume selects a virtual cluster, namespace, and optional size.
+The provider creates a PVC with a stable name and reports its location in
+`status.volumes`. The virtual PVC also has a volume label for discovery
+without host API access.
 
-The Datalab spec contains choices that a user is allowed to make. The
-operator-owned EnvironmentConfig contains platform settings such as ingress,
-Keycloak realm, storage classes, security defaults, and runtime images.
+Volumes use an allowed StorageClass and count toward the host storage quota.
+The virtual cluster and namespace are fixed after creation. Workloads mount
+the existing claim and must not add ownership that deletes the claim with
+the runtime. Pod replacement and application removal preserve its storage.
+Removing the volume declaration deletes the PVC after its users release it.
 
-Crossplane combines both sets of input to create the team resources.
+Application owners manage start, stop, runtime replacement, tasks, and access.
+These choices do not belong in the storage declaration. Whole-cluster
+hibernation remains under `spec.vclusters.<instance>.hibernated` and preserves
+virtual resource definitions and PVCs.
 
-### Keep session storage independent of workloads
+### Protect volumes with optional CSI snapshots
 
-Each session has a unique name, virtual cluster, namespace, and optional PVC
-size. Provider Datalab creates its PVC and reports the location in
-`status.sessions`. The session entry does not start a workload.
+The operator explicitly enables snapshot synchronization and supplies a
+snapshot class. It requires a snapshot-capable CSI driver and host snapshot
+infrastructure. Ordinary volumes do not require those prerequisites.
 
-An external client or orchestration service creates the named Session Sandbox
-on first use. It mounts the existing PVC at `/workspace` and does not use
-`volumeClaimTemplates` to create another session PVC. The external service
-checks ownership and the PVC binding before it reuses a Sandbox.
+A volume with `backup: true` gets a virtual backup CronJob. Each run waits for
+a new snapshot to be ready before pruning older completed snapshots for the
+same PVC UID. The snapshot class uses deletion policy `Delete` so retention
+can remove underlying snapshots. Disabling the schedule keeps its snapshots.
+Incomplete attempts are removed before a new snapshot is created. Pending
+deletion blocks new attempts. Snapshot Jobs stop during virtual cluster
+hibernation. The operator owns the shared host snapshot role; the provider
+binds it only to syncers with snapshot support enabled.
 
-The external service starts and suspends the Sandbox through its native
-`spec.operatingMode`. Crossplane does not own the Sandbox CR or reset its mode.
-The Agent Sandbox controller stays inside the virtual cluster and manages the
-workload Pod and optional Service. The external service reads readiness and
-operating mode from the Sandbox CR. `status.sessions` reports PVC references
-only.
+`restoreFrom` initializes a new volume from a ready snapshot in the same
+virtual namespace. It cannot change after creation. The recovered PVC has its
+own lifecycle. Application consistency may require a flush or pause coordinated
+by the application owner. Control-plane backup and disaster recovery are
+separate platform responsibilities.
 
-Do not add `operatingMode`, `running`, `suspended`, or equivalent per-Sandbox
-runtime fields to Datalab, including `spec.sessions`. The existing
-`spec.vclusters.<instance>.hibernated` controls the whole virtual cluster.
-Hibernation must preserve Sandbox CRs, their operating modes, and session PVCs.
-After resume, Running Sandboxes can start again; Suspended Sandboxes must stay
-suspended.
+### Keep credentials out of the public API
 
-Pod replacement and Sandbox deletion keep the session PVC. An external client
-can recreate a deleted Sandbox with the same PVC. Removing the session entry
-deletes the PVC, so clients must stop workloads that use it first.
+Credentials are read from referenced Secrets and copied only where needed.
+Values do not belong in Datalab spec, status, logs, or normal client output.
+Connection status reports Secret references. A downloaded virtual profile
+uses caller authentication and virtual RBAC. The private recovery kubeconfig
+stays under operator control.
 
-### Keep task execution under external control
-
-The external orchestration service creates and removes temporary SandboxClaims.
-Claims use `warmPoolRef` to select an approved SandboxWarmPool, which references
-an approved SandboxTemplate. Provision the pool with `replicas: 0` so it does
-not keep spare workloads running. Each task uses separate temporary storage
-and must not mount a persistent session PVC.
-
-Keep orchestration, cleanup, file transfer, and Kubernetes credentials outside
-Session and Task Sandboxes. A Session Sandbox must not orchestrate Task
-Sandboxes. Task definitions do not belong in `spec.sessions`.
-
-### Use Kubernetes port-forwarding and RBAC
-
-Clients connect through the virtual Kubernetes API and use Kubernetes RBAC.
-They port-forward directly to the Sandbox Pod for sandboxd HTTP and gRPC, or
-for application TCP ports in that Pod. A per-Sandbox Service is not required.
-Grant Pod read access and `pods/portforward` access in the required namespace.
-RBAC controls access to the Pod subresource, not individual port numbers.
-The provider supplies the zero-replica task pool; it does not create task
-Claims or session workload Pods.
-
-Do not deploy Sandbox Router or a Sandbox-specific oauth2-proxy. Do not add
-router capabilities, sandboxd tokens, or routing fields to Datalab for this
-model. Keycloak continues to authenticate callers to the virtual API; virtual
-Kubernetes RBAC authorizes their operations. See
-[ADR-003](0003-token-exchange-for-downscoping.md#use-the-virtual-api-for-sandbox-access).
-
-RBAC does not authenticate direct Pod traffic. The default template does not
-enable sandboxd token authentication. Workloads within the same Datalab can
-reach its HTTP and gRPC listeners over the shared network.
-
-Port-forward connections end when their Pod stops or is replaced. Clients must
-discover the current Pod and reconnect after resume or replacement. Keep Pod
-discovery separate from sandboxd calls so a later routing transport can use the
-same Sandbox identity and PVC without changing storage ownership.
-
-Sandbox Router, direct authenticated routes, scoped tokens, and browser routing
-are deferred. No public session URL or per-session access list is added to
-Datalab. Shared networking within a Datalab remains unchanged.
-
-### Keep credentials out of the API
-
-Credentials are read from referenced Kubernetes Secrets and copied only where
-they are needed. Secret values never belong in the Datalab spec, status, logs,
-or normal client output. Status reports connection Secret references.
-
-Membership and host network rules apply to the whole Datalab. Use separate
-Datalabs when workloads need different membership or trust boundaries.
-
-### Add tools through the runtime image
-
-Operators can select a compatible sandboxd image with additional tools in
-EnvironmentConfig. Commands execute in that container. This keeps tool choices
-out of the Datalab API.
+Clients can use virtual Kubernetes port forwarding where RBAC permits it.
+Application owners provide any direct or browser access their software needs.
+Kubernetes API authentication does not authenticate direct Pod traffic.
 
 ## Consequences
 
-- Datalab provides one resource for team membership, services, and storage.
-- Clients use the virtual Kubernetes API to manage workloads.
-- Crossplane owns generated host resources and their cleanup.
-- Session storage can outlive a Sandbox and its Pod.
-- External services own Sandbox operating modes and task orchestration.
-- Workloads within one Datalab share its network; separate Datalabs provide
-  separate team boundaries.
-- Operators must validate Secret references and other policy-sensitive options.
-- Render tests check generated resources; live tests check workload APIs,
-  persistence, authorization, and service access.
+- Datalab provides a stable contract for team infrastructure and storage.
+- Applications can change their controllers and images independently.
+- Persistent volumes can outlive the workloads that mount them.
+- Snapshot prerequisites and additional syncer permissions are optional.
+- Backup status and application health need their own operational checks.
+- Local checks validate generated resources and backup failure behavior.
+  Live checks must qualify storage, authorization, hibernation, and restore.

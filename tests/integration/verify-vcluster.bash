@@ -62,10 +62,9 @@ build_client_image() {
     return
   fi
   require_command docker
-  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{client.Dockerfile,process.proto} | sha256sum | cut -c1-16)"
+  digest="$(sha256sum "${REPO_ROOT}/tests/vcluster/client.Dockerfile" | cut -c1-16)"
   client_image="$(test_image_name "datalab-vcluster-client:${digest}")"
-  mkdir -p "${work_directory}/client-build/tests/vcluster" "${work_directory}/docker"
-  cp "${REPO_ROOT}/tests/vcluster/"{client.Dockerfile,process.proto} "${work_directory}/client-build/tests/vcluster/"
+  mkdir -p "${work_directory}/client-build" "${work_directory}/docker"
   if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${client_image}" >/dev/null 2>&1; then
     DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${client_image}" \
       --file "${REPO_ROOT}/tests/vcluster/client.Dockerfile" "${work_directory}/client-build"
@@ -325,7 +324,6 @@ PVC
   kube create configmap verify-vcluster-client --namespace workspace \
     --from-file="${work_directory}/gateway.crt" --from-file="${work_directory}/issuer.crt" \
     --from-file="${work_directory}/catalog.json" --from-file="${REPO_ROOT}/tests/vcluster/e2e.py" \
-    --from-file="${REPO_ROOT}/docs/examples/start-sandbox.sh" \
     --dry-run=client -o yaml | kube apply -f -
   kube delete pod/verify-vcluster-client --namespace workspace --ignore-not-found --wait=true
   apply_template "${MANIFEST_DIR}/vcluster/client.yaml" \
@@ -352,7 +350,7 @@ PVC
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --revoked
   kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
-  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"replace","path":"/spec/sessions","value":[]},{"op":"remove","path":"/spec/vclusters/vc0"}]'
+  kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"replace","path":"/spec/volumes","value":{}},{"op":"remove","path":"/spec/vclusters/vc0"}]'
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1

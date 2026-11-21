@@ -144,7 +144,7 @@ class FunctionResponseTests(unittest.TestCase):
             "apiVersion": example["apiVersion"],
             "kind": example["kind"],
             "metadata": {"name": "ttl-check", "namespace": "workspace"},
-            "spec": {"users": ["ttl-user"], "sessions": []},
+            "spec": {"users": ["ttl-user"], "volumes": {}},
         }
         environments = list(
             yaml.safe_load_all((ROOT / "tests/environmentconfig.yaml").read_text())

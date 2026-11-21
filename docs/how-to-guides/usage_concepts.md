@@ -1,18 +1,21 @@
 # Use a Datalab
 
-A `Datalab` resource defines the users, sessions, and services for a team.
+A `Datalab` resource defines the users, persistent volumes, and services for a team.
 The operator supplies the shared storage, identity, and network settings.
 Complete [installation](installation.md) before applying these examples.
 
-## Sessions
+## Volumes
 
-A session provides a named workspace PVC in a virtual cluster. It creates
-storage without starting a workload. Several sessions can share the Datalab's
-managed services while using separate PVCs.
+Use `spec.volumes` to declare named PVCs in virtual clusters. Applications
+mount these volumes without giving their runtime controller ownership of the
+storage. Several applications can use the Datalab's managed services while
+keeping separate volumes.
 
-See [Run a sandbox](sandboxes.md) to declare a session, mount its PVC, and
-manage its runtime and storage. Keep datasets in object storage and database
-records in a managed database. Arrange backup and recovery with the operator.
+See [Volumes](volumes.md) to declare, mount, back up, and restore a
+volume. Keep datasets in object storage and database records in managed services.
+
+Set `backup: true` on a volume to request CSI `VolumeSnapshot` backups. Managed
+database services keep their separate `backupStorage` settings and backup tools.
 
 ## Service namespace and storage
 
@@ -41,7 +44,7 @@ spec:
 
 This creates the `pg0` cluster with `dev` and `prod` databases. The PostgreSQL
 operator manages the database Pods, credentials, and configured backups.
-Stopping a Sandbox does not stop the database.
+Stopping an application does not stop the database.
 The `<datalab>-postgres-pg0` connection Secret supplies `host`, `port`,
 `user`, `password`, and `dev_url` or `prod_url`. When the platform enables an
 external TLSRoute, it also supplies `dev_url_external` and `prod_url_external`.
@@ -153,7 +156,7 @@ before you apply these manifests in your claim namespace.
 | [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, PostgreSQL, and the shared registry. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Read-only Data, custom connections, and namespace policy. |
 
-The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/legacy/tests/environmentconfig.yaml)
+The [environment examples](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/environmentconfig.yaml)
 show the two configurations. `datalab-custom` demonstrates read-only Data,
 custom quotas and StorageClasses, Pod security, named virtual clusters,
 Gateway and S3 access, and
@@ -172,7 +175,7 @@ kubectl describe datalab s-jeff -n workspace
 
 `Synced=True` means the composition reconciled. `Ready=True` means its
 resources report ready. Read the conditions and events if either is false.
-Session PVC names and locations are in `status.sessions`.
+Persistent volume names and locations are in `status.volumes`.
 Service connections and public virtual API profiles are in `status.connections`.
 Read each connection through its `secretRef`.
 
