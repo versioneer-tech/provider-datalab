@@ -36,13 +36,15 @@ check_volume_snapshot_settings() {
   done
 }
 
-check_snapshot_provider_access() {
-  local namespace=$1 resource verb
-  # The provider must observe snapshots in the volume namespace.
+check_snapshot_observer_access() {
+  local namespace=$1 resource verb account
+  # Crossplane reads requested snapshots; the provider observes the class.
   for resource in volumesnapshots.snapshot.storage.k8s.io volumesnapshotclasses.snapshot.storage.k8s.io; do
+    account=crossplane
+    if [[ "${resource}" == volumesnapshotclasses.* ]]; then account=provider-kubernetes; fi
     for verb in get list watch; do
-      if [[ "$(kube auth can-i "${verb}" "${resource}" --as system:serviceaccount:crossplane:provider-kubernetes --namespace "${namespace}")" != yes ]]; then
-        printf 'Provider Kubernetes cannot %s %s in %s.\n' "${verb}" "${resource}" "${namespace}" >&2
+      if [[ "$(kube auth can-i "${verb}" "${resource}" --as "system:serviceaccount:crossplane:${account}" --namespace "${namespace}")" != yes ]]; then
+        printf 'Snapshot observer %s cannot %s %s in %s.\n' "${account}" "${verb}" "${resource}" "${namespace}" >&2
         return 2
       fi
     done
@@ -52,7 +54,7 @@ check_snapshot_provider_access() {
 snapshot_tests_available() {
   local reason
   if reason="$(check_volume_snapshot_settings "${1:-verify-volumes}" 2>&1 \
-    && check_snapshot_provider_access "${1:-verify-volumes}" 2>&1)"; then
+    && check_snapshot_observer_access "${1:-verify-volumes}" 2>&1)"; then
     printf 'PASS %s snapshot API, class, and permission checks.\n' "${1:-verify-volumes}"
     return 0
   fi

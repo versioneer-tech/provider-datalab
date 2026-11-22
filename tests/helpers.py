@@ -211,9 +211,17 @@ snapshot_access="$6"
 source "$1"
 kube() {
   if [[ "$1" == auth ]]; then
-    if [[ "$snapshot_access" == denied || ( "$snapshot_access" == provider-denied && "$*" == *--as* ) ]]; then
+    if [[ "$snapshot_access" == denied || ( "$snapshot_access" == observer-denied && "$*" == *--as* ) ]]; then
       printf no; return 1
-    else printf yes; fi
+    fi
+    if [[ "$*" == *--as* ]]; then
+      case "$*" in
+        *'volumesnapshots.snapshot.storage.k8s.io --as system:serviceaccount:crossplane:crossplane '*) ;;
+        *'volumesnapshotclasses.snapshot.storage.k8s.io --as system:serviceaccount:crossplane:provider-kubernetes '*) ;;
+        *) printf no; return 1 ;;
+      esac
+    fi
+    printf yes
     return
   fi
   [[ "$1" == get ]] || { printf 'unexpected mutation'; return 1; }
@@ -226,14 +234,14 @@ kube() {
   else printf 'unexpected mutation'; return 1; fi
 }
 curl() { printf 'unexpected installation'; return 1; }
-check_volume_snapshot_settings && check_snapshot_provider_access verify-volumes
+check_volume_snapshot_settings && check_snapshot_observer_access verify-volumes
 '''
         for mode in ("kind", "existing"):
             for driver, policy, apis, access, accepted in (
                 ("test.csi", "Delete", "ready", "allowed", True), ("other.csi", "Delete", "ready", "allowed", False),
                 ("test.csi", "Retain", "ready", "allowed", False), ("test.csi", "Delete", "missing", "allowed", False),
                 ("test.csi", "Delete", "ready", "denied", False),
-                ("test.csi", "Delete", "ready", "provider-denied", False),
+                ("test.csi", "Delete", "ready", "observer-denied", False),
             ):
                 with self.subTest(mode=mode, driver=driver, policy=policy, apis=apis, access=access):
                     result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"),

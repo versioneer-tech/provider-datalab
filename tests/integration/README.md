@@ -26,7 +26,7 @@ continue. The suite does not change existing network or snapshot infrastructure.
 
 Snapshot checks require a matching StorageClass and VolumeSnapshotClass with
 `Delete` policy, the snapshot APIs, and snapshot management permissions. The
-probe checks both the test identity and Provider Kubernetes. Supply
+probe checks the test identity and both snapshot observers. Supply
 `--snapshot-class` to enable this probe; without it, snapshot tests are skipped.
 After setup, volume tests check the generated backup ServiceAccount's access.
 Other PVCs, Secrets, snapshot contents, class changes, and snapshots in another
