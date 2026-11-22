@@ -14,19 +14,23 @@ not installed or tested.
 
 ## Select a cluster
 
-`all`, `verify-volumes`, and `verify-vcluster` need a snapshot-capable CSI driver,
-its snapshotter sidecar, a snapshot controller, and the three snapshot CRDs. Dedicated Kind
-setup supplies these resources. Existing targets must already provide them.
+Kind setup installs NetworkPolicy enforcement, a snapshot-capable CSI driver,
+its snapshotter sidecar, a snapshot controller, and the three snapshot CRDs.
+The shared Kind config selects Kubernetes 1.37.0 for stable admission policies.
+These capabilities are required in Kind, both locally and in GitHub Actions.
+An unsuccessful Kind capability check fails the run.
 
-The selected StorageClass and VolumeSnapshotClass must use the same CSI driver;
-the snapshot class must use deletion policy `Delete`. These profiles check
-these prerequisites without installing or changing them.
+On other targets, the suite probes each capability. An unavailable capability
+produces a prominent `SKIPPED` message with the reason. The remaining checks
+continue. The suite does not change existing network or snapshot infrastructure.
 
-Snapshot preflight also checks the test identity's snapshot permissions. Both
-volume profiles check the generated backup ServiceAccount's access: the source
-PVC and snapshot class can be read, and snapshots can be managed in the volume's
-namespace. Other PVCs, Secrets, snapshot contents, class changes, and snapshots
-in another namespace must be denied. The same checks run in Kind and vClusters.
+Snapshot checks require a matching StorageClass and VolumeSnapshotClass with
+`Delete` policy, the snapshot APIs, and snapshot management permissions. The
+probe checks both the test identity and Provider Kubernetes. Supply
+`--snapshot-class` to enable this probe; without it, snapshot tests are skipped.
+After setup, volume tests check the generated backup ServiceAccount's access.
+Other PVCs, Secrets, snapshot contents, class changes, and snapshots in another
+namespace must be denied. A failure after a successful probe fails the test.
 
 For an existing cluster, supply its kubeconfig, context, StorageClass, Service
 CIDR, and comma-separated Pod CIDRs. Use values from the selected cluster:
@@ -47,9 +51,11 @@ Existing prerequisite namespaces must have the label
 `datalabs.versioneer.at/integration=true`; otherwise setup stops before it
 changes them. Use namespaces and cluster-wide resources reserved for tests.
 
-NetworkPolicy traffic checks run only in Kind. Existing clusters still run
-resource-default and quota checks. Virtual network policies do not prove
-isolation when all workloads share one physical host namespace.
+The NetworkPolicy probe checks a connection before a deny policy, checks that
+the policy blocks it, then checks that traffic returns after policy removal.
+It uses a temporary namespace and removes it after the probe. Traffic checks
+run only when this probe succeeds. Resource-default and quota checks always run.
+A vCluster without policy enforcement skips traffic checks.
 
 The registry must accept pushes and be reachable from cluster nodes. The
 runner uses an empty Docker config unless you supply `--docker-config <directory>`
@@ -65,17 +71,12 @@ Standalone profile scripts use `PROVIDER_DATALAB_CLUSTER=existing`,
 Set `PROVIDER_DATALAB_STORAGE_CLASS`, `PROVIDER_DATALAB_SERVICE_CIDR`, and
 `PROVIDER_DATALAB_POD_CIDRS` to the same values used by the runner. Set
 `PROVIDER_DATALAB_IMAGE_REGISTRY` when the profile builds remote images.
-For `all`, `verify-volumes`, or `verify-vcluster` on an existing target, also set
-`PROVIDER_DATALAB_SNAPSHOT_CLASS`. Kind uses its setup defaults.
-
-A virtual target must already expose the snapshot APIs and matching classes
-through its platform storage configuration. The runner uses only the selected
-virtual API; it does not change the physical host or virtual cluster sync settings.
-The host syncer also needs snapshot permissions in its namespace, read access to
-snapshot classes and persistent volumes, and access to snapshot contents. The
-platform must supply these grants with snapshot forwarding.
-The virtual cluster profile also needs stable mutating admission policies
-on its selected target (Kubernetes 1.36 or later).
+Set `PROVIDER_DATALAB_SNAPSHOT_CLASS` for snapshot checks on existing targets.
+Kind uses its setup defaults. A virtual target must expose the snapshot APIs
+and matching classes through its platform configuration. The runner uses only
+the selected API and does not change host RBAC or vCluster sync settings.
+The virtual cluster profile needs stable mutating admission policies on its
+selected target (Kubernetes 1.36 or later).
 
 ## Run profiles
 
@@ -89,8 +90,10 @@ tests/integration/run.bash verify-s3
 
 Without an existing target, the runner creates or reuses the dedicated Kind
 cluster. `--kind` selects this mode explicitly. Its
-[`cluster setup`](create-cluster.bash) prepares NFS CSI storage and snapshots on
-new and reused clusters. The default classes are `datalab-nfs` and
+[`cluster setup`](create-cluster.bash) prepares NetworkPolicy enforcement,
+NFS CSI storage, and snapshots on new and reused clusters. It installs the
+[Kubernetes network policy controller](https://kube-network-policies.sigs.k8s.io/docs/quick-start/)
+without replacing Kind's network plugin. The default classes are `datalab-nfs` and
 `datalab-nfs-snapshots`. Use `--storage-class` and `--snapshot-class` to select
 other matching classes.
 
@@ -174,8 +177,8 @@ two ready snapshots.
 
 The profile consumes the selected target's CSI and snapshot infrastructure.
 Kind provisions this during cluster setup. Existing targets use the classes
-passed with `--storage-class` and `--snapshot-class`; missing snapshot capability
-stops the run before platform setup.
+passed with `--storage-class` and `--snapshot-class`. Missing snapshot capability
+skips this profile on existing targets. Kind must provide it.
 
 The profile checks:
 
@@ -220,7 +223,9 @@ Named-volume checks mount a Datalab host PVC through an explicit binding.
 Virtual claim replacement and binding removal must keep file contents, the host
 PVC UID, the backup schedule, and a ready snapshot. Host admission must preserve
 read-only mounts and other Pod volumes. Removing `vc0` with a running bound Pod
-must finish and keep the host volume and its backups.
+must finish and keep the host volume and its backups. If the snapshot probe
+fails on an existing target, these named-volume checks are skipped. The profile
+still checks ordinary application PVCs, authentication, routing, and lifecycle.
 
 Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
 and different custom Secrets for John and Jane. STAC item search must still work

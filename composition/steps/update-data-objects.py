@@ -4,7 +4,6 @@
 import copy as _copy
 import hashlib as _hashlib
 import json as _json
-import shlex as _shlex
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
@@ -133,41 +132,20 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             ]
         )
     )
-    user_commands = "\n".join(
-        " ".join(
-            _shlex.quote(arg)
-            for arg in ["/package-r", "users", "add", user, "", *write_permission_args]
-        )
-        for user in package_r_users
-    )
-
-    public_share_path = _shlex.quote(f"/{xr_name}/public")
-
-    init_script = f"""set -eu
-
-database=/state/package-r.db
-work_database=/state/package-r.db.new
-
-rm -f "$work_database"
-export PACKAGE_R_DATABASE="$work_database"
-
-/package-r config init \
-  --address=0.0.0.0 \
-  --port=8888 \
-  --cors-allowed-origins='*' \
-  --auth.method=proxy \
-  --auth.header=X-Forwarded-Preferred-Username \
-  --auth.mapper=
-
-/package-r users add default ""
-{user_commands}
-/package-r shares add default public {public_share_path} \
-  --password="" \
-  --description="default public share" \
-  --catalog-name=catalog.parquet
-
-mv "$work_database" "$database"
-"""
+    initialization = [
+        ("prepare-database", ["config", "init", "--address=0.0.0.0", "--port=8888",
+                              "--cors-allowed-origins=*", "--auth.method=proxy",
+                              "--auth.header=X-Forwarded-Preferred-Username", "--auth.mapper="]),
+        ("prepare-default-user", ["users", "add", "default", ""]),
+        *((f"prepare-user-{index}", ["users", "add", user, "", *write_permission_args])
+          for index, user in enumerate(package_r_users)),
+        ("prepare-public-share", ["shares", "add", "default", "public", f"/{xr_name}/public",
+                                  "--password=", "--description=default public share", "--catalog-name=catalog.parquet"]),
+    ]
+    init_containers = [
+        _render_template(req, "data/init-container", name=name, args=args, package_r_image=package_r_image)
+        for name, args in initialization
+    ]
 
     deployment = _render_template(
         req,
@@ -175,8 +153,7 @@ mv "$work_database" "$database"
         runtime_namespace=runtime_namespace,
         labels=labels,
         storage_secret_checksum=storage_secret_checksum,
-        package_r_image=package_r_image,
-        init_script=init_script,
+        init_containers=init_containers,
         containers=[
             _render_template(
                 req,

@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 check_volume_snapshot_settings() {
+  local namespace=${1:-verify-volumes} driver verb
   if [[ -z "${PROVIDER_DATALAB_SNAPSHOT_CLASS:-}" ]]; then
-    printf 'Volume integration needs --snapshot-class for the selected CSI StorageClass.\n' >&2
+    printf 'No --snapshot-class was supplied.\n' >&2
     return 2
   fi
   if [[ -z "${PROVIDER_DATALAB_STORAGE_CLASS:-}" ]]; then
@@ -16,7 +17,6 @@ check_volume_snapshot_settings() {
       printf 'The selected cluster must already provide the CSI snapshot APIs and controller.\n' >&2
       return 2
     }
-  local driver
   driver="$(kube get "storageclass/${PROVIDER_DATALAB_STORAGE_CLASS}" -o jsonpath='{.provisioner}')" || return 2
   [[ -n "${driver}" ]] || { printf 'The selected StorageClass has no provisioner.\n' >&2; return 2; }
   kube get "volumesnapshotclass/${PROVIDER_DATALAB_SNAPSHOT_CLASS}" -o json \
@@ -24,13 +24,44 @@ check_volume_snapshot_settings() {
       printf 'The snapshot class must match the test CSI driver and use deletion policy Delete.\n' >&2
       return 2
     }
-  local namespace=${1:-verify-volumes} verb
+  if [[ "$(kube auth can-i get "volumesnapshotclasses.snapshot.storage.k8s.io/${PROVIDER_DATALAB_SNAPSHOT_CLASS}")" != yes ]]; then
+    printf 'The test identity cannot read the selected VolumeSnapshotClass.\n' >&2
+    return 2
+  fi
   for verb in create get list delete; do
     if [[ "$(kube auth can-i "${verb}" volumesnapshots.snapshot.storage.k8s.io --namespace "${namespace}")" != yes ]]; then
       printf 'The test identity cannot %s VolumeSnapshots in %s.\n' "${verb}" "${namespace}" >&2
       return 2
     fi
   done
+}
+
+check_snapshot_provider_access() {
+  local namespace=$1 resource verb
+  # The provider must observe snapshots in the volume namespace.
+  for resource in volumesnapshots.snapshot.storage.k8s.io volumesnapshotclasses.snapshot.storage.k8s.io; do
+    for verb in get list watch; do
+      if [[ "$(kube auth can-i "${verb}" "${resource}" --as system:serviceaccount:crossplane:provider-kubernetes --namespace "${namespace}")" != yes ]]; then
+        printf 'Provider Kubernetes cannot %s %s in %s.\n' "${verb}" "${resource}" "${namespace}" >&2
+        return 2
+      fi
+    done
+  done
+}
+
+snapshot_tests_available() {
+  local reason
+  if reason="$(check_volume_snapshot_settings "${1:-verify-volumes}" 2>&1 \
+    && check_snapshot_provider_access "${1:-verify-volumes}" 2>&1)"; then
+    printf 'PASS %s snapshot API, class, and permission checks.\n' "${1:-verify-volumes}"
+    return 0
+  fi
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    printf 'ERROR: Kind snapshot setup is incomplete: %s\n' "${reason}" >&2
+    exit 1
+  fi
+  printf '\n=== SKIPPED: %s snapshot tests: %s ===\n\n' "${1:-verify-volumes}" "${reason}"
+  return 1
 }
 
 check_volume_backup_access() {
@@ -76,7 +107,6 @@ check_volume_backup_access() {
 }
 
 check_volume_binding_settings() {
-  check_volume_snapshot_settings verify-vcluster || return
   kube get --raw=/apis/admissionregistration.k8s.io/v1 \
     | jq -e '.resources | map(.name) | contains(["mutatingadmissionpolicies", "mutatingadmissionpolicybindings"])' >/dev/null || {
       printf 'Volume bindings need Kubernetes 1.36 or later with stable mutating admission policies.\n' >&2

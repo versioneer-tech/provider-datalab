@@ -61,3 +61,18 @@ status:
         namespace: s-jane
       data:
         token: dGVzdC1hcGkta2V5
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-cc95600fbc
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-cc95600fbc
+status:
+  atProvider:
+    manifest:
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingAdmissionPolicy
+      metadata:
+        uid: test-volume-policy-uid

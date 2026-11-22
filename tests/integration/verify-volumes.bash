@@ -21,7 +21,9 @@ diagnostics() {
 trap diagnostics ERR
 
 require_cluster
-check_volume_snapshot_settings
+if ! snapshot_tests_available; then
+  exit 0
+fi
 kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
 kube rollout status deployment/keycloak --namespace keycloak --timeout=10m
 apply_environment_config "${MANIFEST_DIR}/environment-configs/datalabs.yaml"

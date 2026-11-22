@@ -118,10 +118,12 @@ jobs:
         if: env.RUN_INTEGRATION == 'true'
         uses: helm/kind-action@v1
         with:
+          version: v0.33.0
+          kubectl_version: v1.37.0
           cluster_name: provider-datalab-it
           config: tests/integration/manifests/kind.yaml
 
-      - name: Prepare Kind storage and snapshots
+      - name: Prepare Kind network enforcement, storage, and snapshots
         if: env.RUN_INTEGRATION == 'true'
         run: tests/integration/create-cluster.bash
 

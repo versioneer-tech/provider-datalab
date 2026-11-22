@@ -263,28 +263,133 @@ spec:
                 readOnly: true
             initContainers:
             - args:
-              - |
-                set -eu
-
-                database=/state/package-r.db
-                work_database=/state/package-r.db.new
-
-                rm -f "$work_database"
-                export PACKAGE_R_DATABASE="$work_database"
-
-                /package-r config init   --address=0.0.0.0   --port=8888   --cors-allowed-origins='*'   --auth.method=proxy   --auth.header=X-Forwarded-Preferred-Username   --auth.mapper=
-
-                /package-r users add default ""
-                /package-r users add john ''
-                /package-r shares add default public /s-john/public   --password=""   --description="default public share"   --catalog-name=catalog.parquet
-
-                mv "$work_database" "$database"
+              - config
+              - init
+              - --address=0.0.0.0
+              - --port=8888
+              - --cors-allowed-origins=*
+              - --auth.method=proxy
+              - --auth.header=X-Forwarded-Preferred-Username
+              - --auth.mapper=
               command:
-              - /bin/sh
-              - -ec
+              - /package-r
+              env:
+              - name: HOME
+                value: /tmp
+              - name: PACKAGE_R_DATABASE
+                value: /state/package-r.db
               image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
               imagePullPolicy: IfNotPresent
               name: prepare-database
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 100
+                runAsUser: 1000
+              volumeMounts:
+              - mountPath: /state
+                name: state
+              - mountPath: /tmp
+                name: tmp
+            - args:
+              - users
+              - add
+              - default
+              - ''
+              command:
+              - /package-r
+              env:
+              - name: HOME
+                value: /tmp
+              - name: PACKAGE_R_DATABASE
+                value: /state/package-r.db
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              imagePullPolicy: IfNotPresent
+              name: prepare-default-user
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 100
+                runAsUser: 1000
+              volumeMounts:
+              - mountPath: /state
+                name: state
+              - mountPath: /tmp
+                name: tmp
+            - args:
+              - users
+              - add
+              - john
+              - ''
+              command:
+              - /package-r
+              env:
+              - name: HOME
+                value: /tmp
+              - name: PACKAGE_R_DATABASE
+                value: /state/package-r.db
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              imagePullPolicy: IfNotPresent
+              name: prepare-user-0
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 100
+                runAsUser: 1000
+              volumeMounts:
+              - mountPath: /state
+                name: state
+              - mountPath: /tmp
+                name: tmp
+            - args:
+              - shares
+              - add
+              - default
+              - public
+              - /s-john/public
+              - --password=
+              - --description=default public share
+              - --catalog-name=catalog.parquet
+              command:
+              - /package-r
+              env:
+              - name: HOME
+                value: /tmp
+              - name: PACKAGE_R_DATABASE
+                value: /state/package-r.db
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              imagePullPolicy: IfNotPresent
+              name: prepare-public-share
               resources:
                 limits:
                   cpu: 500m

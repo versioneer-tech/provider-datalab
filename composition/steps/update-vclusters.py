@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from crossplane.function import request, response
+from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 from composition.helpers import (
     _resource_name,
     _to_dict,
@@ -67,19 +68,6 @@ def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
     uid = metadata.get("uid", "") if not metadata.get("deletionTimestamp") else ""
 
     protection = _resource_name("datalab-volume", namespace, instance, volume, target_id, "claim")
-    owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
-             "name": protection, "uid": "", "controller": True, "blockOwnerDeletion": False}
-    # The syncer skips these records. Only host admission maps their Pod mounts.
-    # Background GC removes aliases without holding the virtual API for PVC protection.
-    virtual(suffix + "-pv", {
-        "apiVersion": "v1", "kind": "PersistentVolume",
-        "metadata": {"name": pv_name, "labels": labels, "ownerReferences": [owner]},
-        "spec": {"capacity": {"storage": size}, "accessModes": ["ReadWriteOnce"],
-                 "storageClassName": "", "persistentVolumeReclaimPolicy": "Retain",
-                 "claimRef": {"namespace": target["namespace"], "name": target["name"], "uid": uid},
-                 "csi": {"driver": "host-volume.datalabs.versioneer.at",
-                         "volumeHandle": namespace + "/volume-" + volume}},
-    }, preserve=True)
     virtual(suffix + "-claim-policy", _render_template(
         req, "vcluster/volume-claim-policy", policy_name=protection,
         claim_expression=("request.namespace == " + json.dumps(target["namespace"])
@@ -123,15 +111,6 @@ def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
         "metadata": {"name": policy_name}, "spec": {"policyName": policy_name,
             "matchResources": {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": namespace}}}},
     })
-    virtual(suffix + "-pvc", {
-        "apiVersion": "v1", "kind": "PersistentVolumeClaim",
-        "metadata": {"namespace": target["namespace"], "name": target["name"], "labels": labels, "ownerReferences": [owner]},
-        "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": "", "volumeName": pv_name,
-                 "resources": {"requests": {"storage": size}}},
-    }, preserve=True, readiness={"policy": "DeriveFromCelQuery", "celQuery": "has(object.status) && object.status.phase == 'Bound'"})
-    for ending in ("-pv", "-pvc"):
-        key = _resource_name("vcluster", namespace, instance, "access", suffix + ending)
-        rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/volume-binding"] = volume
     dependencies = [
         _resource_name("vcluster", namespace, instance, suffix + "-mount-policy"),
         _resource_name("vcluster", namespace, instance, suffix + "-mount-policy-binding"),
@@ -141,18 +120,6 @@ def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
           for ending in ("-claim-policy", "-claim-policy-binding")),
     ]
     anchor_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-claim-policy")
-    rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"
-    owner_reference = {
-        "patchesFrom": {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-                        "namespace": claim_namespace, "name": anchor_key,
-                        "fieldPath": "status.atProvider.manifest.metadata.uid"},
-        "toFieldPath": "metadata.ownerReferences[0].uid",
-    }
-    rsp.desired.resources[pvc_key].resource["spec"]["references"] = [
-        *({"dependsOn": {"name": key, "namespace": claim_namespace}} for key in dependencies), owner_reference,
-    ]
-    pv_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-pv")
-    rsp.desired.resources[pv_key].resource["spec"]["references"] = [owner_reference]
     statefulset_key = _resource_name("vcluster", namespace, instance, "statefulset")
     statefulset = rsp.desired.resources[statefulset_key].resource
     references = _to_dict(statefulset).get("spec", {}).get("references", [])
@@ -164,6 +131,44 @@ def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
                    for c in policy.get("status", {}).get("conditions", [])):
             statefulset["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
     statefulset["spec"]["references"] = references
+    if anchor_key not in rsp.desired.resources:
+        return
+    rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"
+    observed_anchor = req.observed.resources.get(anchor_key)
+    anchor_state = _to_dict(observed_anchor.resource).get("status", {}).get("atProvider", {}) if observed_anchor else {}
+    anchor_manifest = anchor_state.get("manifest") or anchor_state.get("raw", {}).get("manifest") or {}
+    anchor_uid = anchor_manifest.get("metadata", {}).get("uid")
+    if not anchor_uid:
+        # Embedded Kubernetes metadata is validated before provider reference patches.
+        rsp.desired.resources[anchor_key].ready = fnv1.READY_FALSE
+        return
+    owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
+             "name": protection, "uid": anchor_uid, "controller": True, "blockOwnerDeletion": False}
+    # The syncer skips these records. Only host admission maps their Pod mounts.
+    # Background GC removes aliases without holding the virtual API for PVC protection.
+    virtual(suffix + "-pv", {
+        "apiVersion": "v1", "kind": "PersistentVolume",
+        "metadata": {"name": pv_name, "labels": labels, "ownerReferences": [owner]},
+        "spec": {"capacity": {"storage": size}, "accessModes": ["ReadWriteOnce"],
+                 "storageClassName": "", "persistentVolumeReclaimPolicy": "Retain",
+                 "claimRef": {"namespace": target["namespace"], "name": target["name"], "uid": uid},
+                 "csi": {"driver": "host-volume.datalabs.versioneer.at",
+                         "volumeHandle": namespace + "/volume-" + volume}},
+    }, preserve=True)
+    virtual(suffix + "-pvc", {
+        "apiVersion": "v1", "kind": "PersistentVolumeClaim",
+        "metadata": {"namespace": target["namespace"], "name": target["name"], "labels": labels, "ownerReferences": [owner]},
+        "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": "", "volumeName": pv_name,
+                 "resources": {"requests": {"storage": size}}},
+    }, preserve=True, readiness={"policy": "DeriveFromCelQuery", "celQuery": "has(object.status) && object.status.phase == 'Bound'"})
+    for ending in ("-pv", "-pvc"):
+        key = _resource_name("vcluster", namespace, instance, "access", suffix + ending)
+        rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/volume-binding"] = volume
+    rsp.desired.resources[pvc_key].resource["spec"]["references"] = [
+        # vCluster creates a placeholder PV if the claim arrives first.
+        {"dependsOn": {"name": key, "namespace": claim_namespace}}
+        for key in [*dependencies, _resource_name("vcluster", namespace, instance, "access", suffix + "-pv")]
+    ]
 
 
 def compose(req, rsp):
@@ -627,7 +632,14 @@ def _compose_instance(
         ),
     )
 
+    provider_key = _resource_name("vcluster", name, instance, "virtual-providerconfig")
+    observed_provider = req.observed.resources.get(provider_key)
+    provider_deleting = bool(observed_provider and _to_dict(observed_provider.resource).get("metadata", {}).get("deletionTimestamp"))
+
     def virtual(suffix, manifest, preserve=False, readiness=None):
+        # Recreated instances must let the old connection release its resource users.
+        if provider_deleting:
+            return
         key = _resource_name("vcluster", name, instance, "access", suffix)
         body = _render_template(
             req,

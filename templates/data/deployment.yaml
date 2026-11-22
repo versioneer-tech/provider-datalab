@@ -30,35 +30,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
-      initContainers:
-      - name: prepare-database
-        image: ${package_r_image}
-        imagePullPolicy: IfNotPresent
-        command:
-        - /bin/sh
-        - -ec
-        args:
-        - ${init_script}
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsUser: 1000
-          runAsGroup: 100
-          capabilities:
-            drop:
-            - ALL
-        resources:
-          requests:
-            cpu: 50m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 256Mi
-        volumeMounts:
-        - name: state
-          mountPath: /state
-        - name: tmp
-          mountPath: /tmp
+      initContainers: ${init_containers}
       containers: ${containers}
       volumes:
       - name: state

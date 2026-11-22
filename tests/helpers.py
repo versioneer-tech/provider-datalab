@@ -211,7 +211,9 @@ snapshot_access="$6"
 source "$1"
 kube() {
   if [[ "$1" == auth ]]; then
-    if [[ "$snapshot_access" == allowed ]]; then printf yes; else printf no; return 1; fi
+    if [[ "$snapshot_access" == denied || ( "$snapshot_access" == provider-denied && "$*" == *--as* ) ]]; then
+      printf no; return 1
+    else printf yes; fi
     return
   fi
   [[ "$1" == get ]] || { printf 'unexpected mutation'; return 1; }
@@ -224,13 +226,14 @@ kube() {
   else printf 'unexpected mutation'; return 1; fi
 }
 curl() { printf 'unexpected installation'; return 1; }
-check_volume_snapshot_settings
+check_volume_snapshot_settings && check_snapshot_provider_access verify-volumes
 '''
         for mode in ("kind", "existing"):
             for driver, policy, apis, access, accepted in (
                 ("test.csi", "Delete", "ready", "allowed", True), ("other.csi", "Delete", "ready", "allowed", False),
                 ("test.csi", "Retain", "ready", "allowed", False), ("test.csi", "Delete", "missing", "allowed", False),
                 ("test.csi", "Delete", "ready", "denied", False),
+                ("test.csi", "Delete", "ready", "provider-denied", False),
             ):
                 with self.subTest(mode=mode, driver=driver, policy=policy, apis=apis, access=access):
                     result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"),
@@ -238,7 +241,7 @@ check_volume_snapshot_settings
                     self.assertEqual(result.returncode == 0, accepted, result.stderr)
                     self.assertNotIn("unexpected", result.stdout)
                     if access == "denied":
-                        self.assertIn("test identity cannot create VolumeSnapshots", result.stderr)
+                        self.assertIn("test identity cannot read the selected VolumeSnapshotClass", result.stderr)
 
     def test_backup_access_rejects_missing_permissions_and_excess_access(self):
         script = '''
@@ -268,25 +271,29 @@ check_volume_backup_access verify-volumes volume-analysis volume-snapshot-analys
                 self.assertEqual(result.returncode == 0, fault == "none", result.stderr)
                 self.assertIn(message, result.stdout + result.stderr)
 
-    def test_existing_volume_runner_requires_a_snapshot_class_before_cluster_access(self):
-        script = '''
+    def test_missing_snapshot_support_skips_existing_targets_but_fails_kind(self):
+        script = """
+set -euo pipefail
+source "$1"
+export PROVIDER_DATALAB_CLUSTER="$2"
 unset PROVIDER_DATALAB_SNAPSHOT_CLASS
-kubectl() { printf 'unexpected Kubernetes access'; return 1; }
-kind() { printf 'unexpected Kind access'; return 1; }
-docker() { printf 'unexpected Docker access'; return 1; }
-export -f kubectl kind docker
-runner="$1"
-shift
-bash "$runner" "$@"
-'''
-        for profile in ("all", "verify-volumes", "verify-vcluster"):
-            with self.subTest(profile=profile):
-                result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/run.bash"),
-                                         profile, "--kubeconfig", "/test/selected.kubeconfig", "--context", "test-virtual"],
+if snapshot_tests_available verify-vcluster; then
+  printf 'unexpected snapshot tests\\n'
+fi
+printf 'remaining tests\\n'
+"""
+        for mode in ("kind", "existing"):
+            with self.subTest(mode=mode):
+                result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/snapshots.bash"), mode],
                                         capture_output=True, text=True)
-                self.assertEqual(result.returncode, 2)
-                self.assertIn("needs --snapshot-class", result.stderr)
+                self.assertEqual(result.returncode, 0 if mode == "existing" else 1, result.stderr)
                 self.assertNotIn("unexpected", result.stdout)
+                self.assertIn("No --snapshot-class", result.stdout + result.stderr)
+                if mode == "existing":
+                    self.assertIn("SKIPPED: verify-vcluster snapshot tests", result.stdout)
+                    self.assertIn("remaining tests", result.stdout)
+                else:
+                    self.assertNotIn("remaining tests", result.stdout)
 
     def test_kind_setup_rejects_other_targets_before_cluster_access(self):
         script = '''
@@ -765,8 +772,48 @@ check_test_namespaces
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("already exists outside this test suite", result.stderr)
 
-    def test_network_traffic_checks_run_only_in_kind(self):
-        script = '''
+    def test_network_policy_probe_requires_blocking_and_recovery(self):
+        script = """
+set -euo pipefail
+source "$1"
+MANIFEST_DIR=/test/manifests
+NETWORK_SERVER_IMAGE=test-server
+NETWORK_CLIENT_IMAGE=test-client
+fault="$2"
+policy=0
+render_template() { printf 'fixture'; }
+sleep() { SECONDS=$((SECONDS + 30)); }
+kube() {
+  case "$*" in
+    'get namespace '*) return 0 ;;
+    'get pod '*) printf '10.0.0.2' ;;
+    'apply -f -')
+      local manifest
+      manifest="$(cat)"
+      if [[ "$manifest" == *NetworkPolicy* ]]; then
+        [[ "$fault" != apply-failed ]] || return 1
+        policy=1
+      fi ;;
+    'exec '*)
+      [[ "$fault" != baseline-failed ]] || return 7
+      if [[ "$policy" == 1 && "$fault" != unenforced ]]; then return 28; fi
+      [[ "$fault" != recovery-failed || "$policy" != 2 ]] || return 28 ;;
+    'delete networkpolicy/'*) policy=2 ;;
+    'delete namespace '*) printf 'probe namespace removed\\n' ;;
+    *) return 0 ;;
+  esac
+}
+probe_network_policy
+"""
+        for fault in ("none", "unenforced", "baseline-failed", "apply-failed", "recovery-failed"):
+            with self.subTest(fault=fault):
+                result = subprocess.run(["bash", "-c", script, "test",
+                                         str(ROOT / "tests/integration/network-policy.bash"), fault],
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode == 0, fault == "none", result.stderr)
+
+    def test_network_traffic_checks_follow_the_probe_on_every_target(self):
+        script = """
 export PROVIDER_DATALAB_CLUSTER="$2"
 export PROVIDER_DATALAB_KUBECONFIG=/test/selected.kubeconfig
 export PROVIDER_DATALAB_CONTEXT=test-virtual
@@ -778,21 +825,24 @@ wait_for_verification_resources() { printf 'network probes\\n'; }
 python3() { printf 'resource limit checks\\n'; }
 run_network_checks() { printf 'network traffic checks\\n'; }
 cleanup_successful_verification() { :; }
+probe_result="$3"
+probe_network_policy() { return "$probe_result"; }
 main
-'''
+"""
         for mode in ("kind", "existing"):
-            with self.subTest(mode=mode):
-                result = subprocess.run(["bash", "-c", script, "test",
-                                         str(ROOT / "tests/integration/verify-network.bash"), mode],
-                                        capture_output=True, text=True, check=True)
-                self.assertIn("resource limit checks", result.stdout)
-                if mode == "kind":
-                    self.assertIn("network traffic checks", result.stdout)
-                    self.assertNotIn("SKIP", result.stdout)
-                else:
-                    self.assertNotIn("network probes", result.stdout)
-                    self.assertNotIn("network traffic checks", result.stdout)
-                    self.assertIn("SKIP NetworkPolicy traffic checks", result.stdout)
+            for enforced in (True, False):
+                with self.subTest(mode=mode, enforced=enforced):
+                    result = subprocess.run(["bash", "-c", script, "test",
+                                             str(ROOT / "tests/integration/verify-network.bash"), mode,
+                                             "0" if enforced else "1"], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0 if enforced or mode == "existing" else 1, result.stderr)
+                    if enforced:
+                        self.assertIn("network traffic checks", result.stdout)
+                        self.assertNotIn("SKIPPED", result.stdout)
+                    elif mode == "existing":
+                        self.assertIn("resource limit checks", result.stdout)
+                        self.assertNotIn("network traffic checks", result.stdout)
+                        self.assertIn("SKIPPED: NetworkPolicy traffic tests", result.stdout)
 
     def test_existing_cluster_requires_an_explicit_context(self):
         script = '''

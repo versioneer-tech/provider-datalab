@@ -50,11 +50,6 @@ if [[ "${profile}" == all ]]; then
 else
   profiles=("$(selected_profile "${profile}" "$0")")
 fi
-if [[ ( "${profile}" == all || "${profile}" == verify-volumes || "${profile}" == verify-vcluster ) \
-  && -z "${PROVIDER_DATALAB_SNAPSHOT_CLASS:-}" ]]; then
-  printf 'Volume integration needs --snapshot-class for the selected CSI StorageClass.\n' >&2
-  exit 2
-fi
 check_test_images "${profile}"
 started=${SECONDS}
 if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind && "${check_only}" == 0 ]]; then
@@ -62,11 +57,10 @@ if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind && "${check_only}" == 0 ]]; then
 fi
 check_cluster_settings
 check_test_namespaces
-if [[ "${profile}" == all || "${profile}" == verify-volumes || "${profile}" == verify-vcluster ]]; then
+if ((check_only)) && [[ "${profile}" == all || "${profile}" == verify-volumes || "${profile}" == verify-vcluster ]]; then
   source "${INTEGRATION_DIR}/snapshots.bash"
-  if [[ "${profile}" == verify-volumes ]]; then
-    check_volume_snapshot_settings
-  else
+  snapshot_tests_available || true
+  if [[ "${profile}" != verify-volumes ]]; then
     check_volume_binding_settings
   fi
 fi
@@ -84,5 +78,5 @@ for profile in "${profiles[@]}"; do
   resource_budget
   "${INTEGRATION_DIR}/${profile}.bash"
   resource_budget
-  printf '\nIntegration profile %s passed in %s seconds.\n' "${profile}" "$((SECONDS - started))"
+  printf '\nIntegration profile %s completed in %s seconds (see PASS and SKIPPED results above).\n' "${profile}" "$((SECONDS - started))"
 done

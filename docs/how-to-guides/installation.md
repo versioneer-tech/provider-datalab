@@ -377,7 +377,7 @@ defaults below.
 
 | Setting | Default image tag | Use |
 | --- | --- | --- |
-| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its database init container. |
+| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its init containers. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
 | `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
 | `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. Its tag sets the operator's database version. |

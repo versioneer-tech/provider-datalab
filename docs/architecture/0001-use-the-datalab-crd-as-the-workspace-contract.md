@@ -72,10 +72,12 @@ while the volume declaration remains. A deleted virtual PVC is recreated and
 rebound while its binding remains. Applications use virtual credentials to
 install and mount their workloads.
 
-The virtual binding policy owns its PV and PVC records. Background garbage
-collection removes those records after unbinding without holding virtual cluster
-removal. The virtual PV binder stays enabled to release storage protection
-after consumers stop, including after the last binding is removed.
+The virtual binding policy owns its PV and PVC records. The composition waits
+for its UID before it creates those records; Kubernetes rejects an empty owner UID.
+The virtual PVC waits for its PV so vCluster cannot create a conflicting placeholder.
+Background garbage collection removes those records after unbinding without
+holding virtual cluster removal. The virtual PV binder stays enabled to release
+storage protection after consumers stop, including after the last binding is removed.
 
 ### Protect volumes with host CSI snapshots
 

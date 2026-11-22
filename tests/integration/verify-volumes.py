@@ -73,14 +73,16 @@ def main():
     def datalab():
         return json.loads(kube("get", "datalab/verify-volumes", "-o", "json", namespace="workspace"))
 
-    def status(count):
+    def status(count, completed=None):
         def current():
             lab = datalab()
             entries = lab.get("status", {}).get("volumes", [])
             entry = next((entry for entry in entries if entry["name"] == "analysis"), {})
             backup = entry.get("backup", {})
-            return entry if backup.get("readySnapshots") == count else None
-        return wait_for(current, "Snapshot count did not reach Datalab status")
+            if backup.get("readySnapshots") == count and (completed is None or backup.get("lastSuccessfulTime") == completed):
+                return entry
+            return None
+        return wait_for(current, "Snapshot count and last successful time did not reach Datalab status")
 
     def probe(name, script):
         pod = create({
@@ -142,7 +144,8 @@ def main():
 
     cronjob = present("cronjob/volume-snapshot-analysis")
 
-    def backup(fail=False):
+    def backup(count, fail=False):
+        previous = {item["metadata"]["uid"] for item in owned()}
         job = deepcopy(cronjob["spec"]["jobTemplate"])
         job.update(apiVersion="batch/v1", kind="Job", metadata={"generateName": "test-volume-backup-"})
         if fail:
@@ -168,9 +171,21 @@ def main():
             diagnose("job/" + name, logs=True)
             raise
         delete("job/" + name)
-        return owned()
+        if fail:
+            return owned()
 
-    first = backup()
+        def retained():
+            values = owned()
+            if (len(values) == count
+                    and all(item.get("status", {}).get("readyToUse") is True
+                            and not item["metadata"].get("deletionTimestamp") for item in values)
+                    and any(item["metadata"]["uid"] not in previous for item in values)):
+                return values
+            return None
+
+        return wait_for(retained, "Snapshot readiness and retention did not converge after Job completion")
+
+    first = backup(1)
     assert len(first) == 1 and first[0]["status"]["readyToUse"] is True
     foreign = create({
         "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
@@ -184,20 +199,20 @@ def main():
         "metadata": {"generateName": "test-incomplete-", "labels": {LABEL: "analysis", SOURCE: uid}},
         "spec": {"volumeSnapshotClassName": "test-missing-snapshot-class", "source": {"persistentVolumeClaimName": "volume-analysis"}},
     })
-    backup(fail=True)
+    backup(1, fail=True)
     assert get("volumesnapshot/" + first[0]["metadata"]["name"])["status"]["readyToUse"] is True
     probe("analysis", "printf second-backup > /data/marker; sync")
-    second = backup()
+    second = backup(2)
     assert len(second) == 2
     wait_for(lambda: get("volumesnapshot/" + incomplete["metadata"]["name"]) is None, "Incomplete snapshot was not removed")
     probe("analysis", "printf snapshot-value > /data/marker; sync")
-    latest = backup()
+    latest = backup(2)
     assert len(latest) == 2 and all(item["status"]["readyToUse"] is True for item in latest)
     wait_for(lambda: get("volumesnapshot/" + first[0]["metadata"]["name"]) is None, "Oldest recovery point was not pruned")
     assert get("volumesnapshot/" + foreign["metadata"]["name"])["metadata"]["uid"] == foreign["metadata"]["uid"]
     recovery = next(item for item in latest if item["metadata"]["uid"] not in {item["metadata"]["uid"] for item in second})
     restore_storage = recovery["status"].get("restoreSize") or source["status"]["capacity"]["storage"]
-    entry = status(2)
+    entry = status(2, recovery["status"]["creationTime"])
     assert entry["pvcRef"] == {"namespace": NAMESPACE, "name": "volume-analysis"}
     assert entry["phase"] == "Bound"
     assert entry["backup"]["lastSuccessfulTime"] == recovery["status"]["creationTime"]

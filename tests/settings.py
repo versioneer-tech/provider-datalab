@@ -79,7 +79,7 @@ def main():
     print("PASS environment security, quota, and read-only Data", flush=True)
 
     deployment = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]
-    assert deployment["initContainers"][0]["image"] == env["data"]["images"]["packageR"]
+    assert all(container["image"] == env["data"]["images"]["packageR"] for container in deployment["initContainers"])
     for key in ("data-deployment-s-joe", "data-s3-deployment-s-joe"):
         containers = manifest(resources, key)["spec"]["template"]["spec"]["containers"]
         assert next(c["image"] for c in containers if c["name"] == "oauth2-proxy") == env["data"]["images"]["oauth2Proxy"]

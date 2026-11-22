@@ -2765,6 +2765,7 @@ spec:
         import json
         import re
         from crossplane.function import request, response
+        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
 
         def _secret_mappings(connections, bindings):
@@ -2816,19 +2817,6 @@ spec:
             uid = metadata.get("uid", "") if not metadata.get("deletionTimestamp") else ""
 
             protection = _resource_name("datalab-volume", namespace, instance, volume, target_id, "claim")
-            owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
-                     "name": protection, "uid": "", "controller": True, "blockOwnerDeletion": False}
-            # The syncer skips these records. Only host admission maps their Pod mounts.
-            # Background GC removes aliases without holding the virtual API for PVC protection.
-            virtual(suffix + "-pv", {
-                "apiVersion": "v1", "kind": "PersistentVolume",
-                "metadata": {"name": pv_name, "labels": labels, "ownerReferences": [owner]},
-                "spec": {"capacity": {"storage": size}, "accessModes": ["ReadWriteOnce"],
-                         "storageClassName": "", "persistentVolumeReclaimPolicy": "Retain",
-                         "claimRef": {"namespace": target["namespace"], "name": target["name"], "uid": uid},
-                         "csi": {"driver": "host-volume.datalabs.versioneer.at",
-                                 "volumeHandle": namespace + "/volume-" + volume}},
-            }, preserve=True)
             virtual(suffix + "-claim-policy", _render_template(
                 req, "vcluster/volume-claim-policy", policy_name=protection,
                 claim_expression=("request.namespace == " + json.dumps(target["namespace"])
@@ -2872,15 +2860,6 @@ spec:
                 "metadata": {"name": policy_name}, "spec": {"policyName": policy_name,
                     "matchResources": {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": namespace}}}},
             })
-            virtual(suffix + "-pvc", {
-                "apiVersion": "v1", "kind": "PersistentVolumeClaim",
-                "metadata": {"namespace": target["namespace"], "name": target["name"], "labels": labels, "ownerReferences": [owner]},
-                "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": "", "volumeName": pv_name,
-                         "resources": {"requests": {"storage": size}}},
-            }, preserve=True, readiness={"policy": "DeriveFromCelQuery", "celQuery": "has(object.status) && object.status.phase == 'Bound'"})
-            for ending in ("-pv", "-pvc"):
-                key = _resource_name("vcluster", namespace, instance, "access", suffix + ending)
-                rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/volume-binding"] = volume
             dependencies = [
                 _resource_name("vcluster", namespace, instance, suffix + "-mount-policy"),
                 _resource_name("vcluster", namespace, instance, suffix + "-mount-policy-binding"),
@@ -2890,18 +2869,6 @@ spec:
                   for ending in ("-claim-policy", "-claim-policy-binding")),
             ]
             anchor_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-claim-policy")
-            rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"
-            owner_reference = {
-                "patchesFrom": {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-                                "namespace": claim_namespace, "name": anchor_key,
-                                "fieldPath": "status.atProvider.manifest.metadata.uid"},
-                "toFieldPath": "metadata.ownerReferences[0].uid",
-            }
-            rsp.desired.resources[pvc_key].resource["spec"]["references"] = [
-                *({"dependsOn": {"name": key, "namespace": claim_namespace}} for key in dependencies), owner_reference,
-            ]
-            pv_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-pv")
-            rsp.desired.resources[pv_key].resource["spec"]["references"] = [owner_reference]
             statefulset_key = _resource_name("vcluster", namespace, instance, "statefulset")
             statefulset = rsp.desired.resources[statefulset_key].resource
             references = _to_dict(statefulset).get("spec", {}).get("references", [])
@@ -2913,6 +2880,44 @@ spec:
                            for c in policy.get("status", {}).get("conditions", [])):
                     statefulset["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
             statefulset["spec"]["references"] = references
+            if anchor_key not in rsp.desired.resources:
+                return
+            rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"
+            observed_anchor = req.observed.resources.get(anchor_key)
+            anchor_state = _to_dict(observed_anchor.resource).get("status", {}).get("atProvider", {}) if observed_anchor else {}
+            anchor_manifest = anchor_state.get("manifest") or anchor_state.get("raw", {}).get("manifest") or {}
+            anchor_uid = anchor_manifest.get("metadata", {}).get("uid")
+            if not anchor_uid:
+                # Embedded Kubernetes metadata is validated before provider reference patches.
+                rsp.desired.resources[anchor_key].ready = fnv1.READY_FALSE
+                return
+            owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
+                     "name": protection, "uid": anchor_uid, "controller": True, "blockOwnerDeletion": False}
+            # The syncer skips these records. Only host admission maps their Pod mounts.
+            # Background GC removes aliases without holding the virtual API for PVC protection.
+            virtual(suffix + "-pv", {
+                "apiVersion": "v1", "kind": "PersistentVolume",
+                "metadata": {"name": pv_name, "labels": labels, "ownerReferences": [owner]},
+                "spec": {"capacity": {"storage": size}, "accessModes": ["ReadWriteOnce"],
+                         "storageClassName": "", "persistentVolumeReclaimPolicy": "Retain",
+                         "claimRef": {"namespace": target["namespace"], "name": target["name"], "uid": uid},
+                         "csi": {"driver": "host-volume.datalabs.versioneer.at",
+                                 "volumeHandle": namespace + "/volume-" + volume}},
+            }, preserve=True)
+            virtual(suffix + "-pvc", {
+                "apiVersion": "v1", "kind": "PersistentVolumeClaim",
+                "metadata": {"namespace": target["namespace"], "name": target["name"], "labels": labels, "ownerReferences": [owner]},
+                "spec": {"accessModes": ["ReadWriteOnce"], "storageClassName": "", "volumeName": pv_name,
+                         "resources": {"requests": {"storage": size}}},
+            }, preserve=True, readiness={"policy": "DeriveFromCelQuery", "celQuery": "has(object.status) && object.status.phase == 'Bound'"})
+            for ending in ("-pv", "-pvc"):
+                key = _resource_name("vcluster", namespace, instance, "access", suffix + ending)
+                rsp.desired.resources[key].resource["metadata"]["labels"]["datalabs.versioneer.at/volume-binding"] = volume
+            rsp.desired.resources[pvc_key].resource["spec"]["references"] = [
+                # vCluster creates a placeholder PV if the claim arrives first.
+                {"dependsOn": {"name": key, "namespace": claim_namespace}}
+                for key in [*dependencies, _resource_name("vcluster", namespace, instance, "access", suffix + "-pv")]
+            ]
 
 
         def compose(req, rsp):
@@ -3378,7 +3383,14 @@ spec:
                 ),
             )
 
+            provider_key = _resource_name("vcluster", name, instance, "virtual-providerconfig")
+            observed_provider = req.observed.resources.get(provider_key)
+            provider_deleting = bool(observed_provider and _to_dict(observed_provider.resource).get("metadata", {}).get("deletionTimestamp"))
+
             def virtual(suffix, manifest, preserve=False, readiness=None):
+                # Recreated instances must let the old connection release its resource users.
+                if provider_deleting:
+                    return
                 key = _resource_name("vcluster", name, instance, "access", suffix)
                 body = _render_template(
                     req,
@@ -6146,7 +6158,6 @@ spec:
         import copy as _copy
         import hashlib as _hashlib
         import json as _json
-        import shlex as _shlex
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
@@ -6268,41 +6279,20 @@ spec:
                     ]
                 )
             )
-            user_commands = "\n".join(
-                " ".join(
-                    _shlex.quote(arg)
-                    for arg in ["/package-r", "users", "add", user, "", *write_permission_args]
-                )
-                for user in package_r_users
-            )
-
-            public_share_path = _shlex.quote(f"/{xr_name}/public")
-
-            init_script = f"""set -eu
-
-        database=/state/package-r.db
-        work_database=/state/package-r.db.new
-
-        rm -f "$work_database"
-        export PACKAGE_R_DATABASE="$work_database"
-
-        /package-r config init \
-          --address=0.0.0.0 \
-          --port=8888 \
-          --cors-allowed-origins='*' \
-          --auth.method=proxy \
-          --auth.header=X-Forwarded-Preferred-Username \
-          --auth.mapper=
-
-        /package-r users add default ""
-        {user_commands}
-        /package-r shares add default public {public_share_path} \
-          --password="" \
-          --description="default public share" \
-          --catalog-name=catalog.parquet
-
-        mv "$work_database" "$database"
-        """
+            initialization = [
+                ("prepare-database", ["config", "init", "--address=0.0.0.0", "--port=8888",
+                                      "--cors-allowed-origins=*", "--auth.method=proxy",
+                                      "--auth.header=X-Forwarded-Preferred-Username", "--auth.mapper="]),
+                ("prepare-default-user", ["users", "add", "default", ""]),
+                *((f"prepare-user-{index}", ["users", "add", user, "", *write_permission_args])
+                  for index, user in enumerate(package_r_users)),
+                ("prepare-public-share", ["shares", "add", "default", "public", f"/{xr_name}/public",
+                                          "--password=", "--description=default public share", "--catalog-name=catalog.parquet"]),
+            ]
+            init_containers = [
+                _render_template(req, "data/init-container", name=name, args=args, package_r_image=package_r_image)
+                for name, args in initialization
+            ]
 
             deployment = _render_template(
                 req,
@@ -6310,8 +6300,7 @@ spec:
                 runtime_namespace=runtime_namespace,
                 labels=labels,
                 storage_secret_checksum=storage_secret_checksum,
-                package_r_image=package_r_image,
-                init_script=init_script,
+                init_containers=init_containers,
                 containers=[
                     _render_template(
                         req,
@@ -6919,35 +6908,7 @@ spec:
                   fsGroupChangePolicy: OnRootMismatch
                   seccompProfile:
                     type: RuntimeDefault
-                initContainers:
-                - name: prepare-database
-                  image: ${package_r_image}
-                  imagePullPolicy: IfNotPresent
-                  command:
-                  - /bin/sh
-                  - -ec
-                  args:
-                  - ${init_script}
-                  securityContext:
-                    allowPrivilegeEscalation: false
-                    readOnlyRootFilesystem: true
-                    runAsUser: 1000
-                    runAsGroup: 100
-                    capabilities:
-                      drop:
-                      - ALL
-                  resources:
-                    requests:
-                      cpu: 50m
-                      memory: 128Mi
-                    limits:
-                      cpu: 500m
-                      memory: 256Mi
-                  volumeMounts:
-                  - name: state
-                    mountPath: /state
-                  - name: tmp
-                    mountPath: /tmp
+                initContainers: ${init_containers}
                 containers: ${containers}
                 volumes:
                 - name: state
@@ -7012,6 +6973,38 @@ spec:
             mountPath: /etc/nginx/nginx.conf
             subPath: nginx.conf
             readOnly: true
+        data/init-container:
+          name: ${name}
+          image: ${package_r_image}
+          imagePullPolicy: IfNotPresent
+          command:
+          - /package-r
+          args: ${args}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 1000
+            runAsGroup: 100
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+          - name: state
+            mountPath: /state
+          - name: tmp
+            mountPath: /tmp
+          env:
+          - name: HOME
+            value: /tmp
+          - name: PACKAGE_R_DATABASE
+            value: /state/package-r.db
         data/network-policy:
           apiVersion: networking.k8s.io/v1
           kind: NetworkPolicy

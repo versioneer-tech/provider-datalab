@@ -61,7 +61,7 @@ omit generated metadata that changes between runs. The other tests check:
 | --- | --- |
 | `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, volume and Secret bindings, and virtual resources. |
 | `volumes.py` | Host PVCs without virtual clusters, automatic backups, restore sources, operator retention, and current snapshot counts. |
-| `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot setup permissions, build failures, and integration runner errors. |
+| `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot capability and permission checks, build failures, and integration runner errors. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
 | `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, service images and database versions, storage, network rules, quotas, and environment settings. |
@@ -73,9 +73,11 @@ The [integration suite](integration/README.md) checks deployed services,
 authorization, routing, and persistence in an existing test cluster or Kind.
 Its volume checks recover file contents from CSI snapshots, check retention
 and failure handling, and verify storage removal. Dedicated Kind setup supplies
-NFS CSI storage and snapshot infrastructure. Existing targets must already
-provide matching storage and snapshot classes, the driver, and snapshot controller.
-Test profiles use these resources without installing them.
+NetworkPolicy enforcement, NFS CSI storage, and snapshot infrastructure.
+Existing targets are probed before traffic and snapshot tests. Missing capability
+produces a prominent `SKIPPED` message; other tests continue. See the
+[integration prerequisites](integration/README.md#select-a-cluster) for the
+required APIs, classes, and permissions.
 Draft pull requests run documentation and unit checks in CI. Kubernetes
 integration steps are deferred until the pull request is ready for review.
 Pushes to the configured target branches and manual runs include integration.

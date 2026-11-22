@@ -89,7 +89,8 @@ uses only the Python standard library. It runs on the host with a scoped
 ServiceAccount. Virtual cluster lifecycle changes do not pause these resources.
 
 Keep the virtual PV binder active to bind and release static volume records.
-Their Object wrappers omit `Delete`; provider references supply the virtual
-binding policy's owner UID. Deleting that policy uses background garbage
-collection so PVC protection cannot hold the control plane during removal.
+Their Object wrappers omit `Delete`. The composition waits for the virtual
+binding policy's observed UID, then creates the PV before its PVC. Deleting
+that policy uses background garbage collection so PVC protection cannot hold
+the control plane during removal.
 These records have no ownership of the host PVC or backups.

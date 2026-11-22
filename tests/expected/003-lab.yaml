@@ -2514,140 +2514,6 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  annotations:
-    crossplane.io/paused: 'true'
-  labels:
-    datalabs.versioneer.at/vcluster: vc0
-    datalabs.versioneer.at/volume-binding: analysis
-  name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fce7b2c745
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        labels:
-          datalabs.versioneer.at/volume: analysis
-          vcluster.loft.sh/controlled-by: datalab-volume
-        name: analysis
-        namespace: demo
-        ownerReferences:
-        - apiVersion: admissionregistration.k8s.io/v1
-          blockOwnerDeletion: false
-          controller: true
-          kind: ValidatingAdmissionPolicy
-          name: datalab-volume-s-jane-vc0-analysis-aa7ce1e073-claim-4dd8c71a6b
-          uid: ''
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 2Gi
-        storageClassName: ''
-        volumeName: datalab-volume-s-jane-vc0-analysis-demo-analysis-5f5da8b0d8
-  managementPolicies:
-  - Observe
-  - Create
-  - Update
-  providerConfigRef:
-    kind: ProviderConfig
-    name: s-jane-vcluster-vc0-25fc5fbd42
-  readiness:
-    celQuery: has(object.status) && object.status.phase == 'Bound'
-    policy: DeriveFromCelQuery
-  references:
-  - dependsOn:
-      name: vcluster-s-jane-vc0-volume-binding-analysis-aa7ce1e0-26338deeac
-      namespace: default
-  - dependsOn:
-      name: vcluster-s-jane-vc0-volume-binding-analysis-aa7ce1e0-4b9a9afd6c
-      namespace: default
-  - dependsOn:
-      name: volume-s-jane-analysis-claim-policy-f0baf58704
-      namespace: default
-  - dependsOn:
-      name: volume-s-jane-analysis-claim-policy-binding-fac674c154
-      namespace: default
-  - dependsOn:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-cc95600fbc
-      namespace: default
-  - dependsOn:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-4d48efb0d7
-      namespace: default
-  - patchesFrom:
-      apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      fieldPath: status.atProvider.manifest.metadata.uid
-      kind: Object
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-cc95600fbc
-      namespace: default
-    toFieldPath: metadata.ownerReferences[0].uid
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  annotations:
-    crossplane.io/paused: 'true'
-  labels:
-    datalabs.versioneer.at/vcluster: vc0
-    datalabs.versioneer.at/volume-binding: analysis
-  name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fe3455228c
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: PersistentVolume
-      metadata:
-        labels:
-          datalabs.versioneer.at/volume: analysis
-          vcluster.loft.sh/controlled-by: datalab-volume
-        name: datalab-volume-s-jane-vc0-analysis-demo-analysis-5f5da8b0d8
-        ownerReferences:
-        - apiVersion: admissionregistration.k8s.io/v1
-          blockOwnerDeletion: false
-          controller: true
-          kind: ValidatingAdmissionPolicy
-          name: datalab-volume-s-jane-vc0-analysis-aa7ce1e073-claim-4dd8c71a6b
-          uid: ''
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        capacity:
-          storage: 2Gi
-        claimRef:
-          name: analysis
-          namespace: demo
-          uid: ''
-        csi:
-          driver: host-volume.datalabs.versioneer.at
-          volumeHandle: s-jane/volume-analysis
-        persistentVolumeReclaimPolicy: Retain
-        storageClassName: ''
-  managementPolicies:
-  - Observe
-  - Create
-  - Update
-  providerConfigRef:
-    kind: ProviderConfig
-    name: s-jane-vcluster-vc0-25fc5fbd42
-  readiness:
-    policy: SuccessfulCreate
-  references:
-  - patchesFrom:
-      apiVersion: kubernetes.m.crossplane.io/v1alpha1
-      fieldPath: status.atProvider.manifest.metadata.uid
-      kind: Object
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-cc95600fbc
-      namespace: default
-    toFieldPath: metadata.ownerReferences[0].uid
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   labels:
     datalabs.versioneer.at/vcluster: vc0
   name: vcluster-s-jane-vc0-authentication-51c647132c
@@ -3870,24 +3736,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: vcluster-usage-vc0-control-54e1c353565a-s-jane-vclus-c908b4282d
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fe3455228c
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: vcluster-usage-vc0-control-6028f3c16415-s-jane-vclus-80bea9b7f1
   namespace: default
 spec:
@@ -3932,24 +3780,6 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-statefulset-7d1c18464a
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: vcluster-usage-vc0-control-842ac06dff37-s-jane-vclus-631a0565d5
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fce7b2c745
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -4068,24 +3898,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: vcluster-usage-vc0-provider-54e1c353565a-s-jane-vclu-422c2d6054
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fe3455228c
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: vcluster-usage-vc0-provider-6028f3c16415-s-jane-vclu-b76ed79fdf
   namespace: default
 spec:
@@ -4130,24 +3942,6 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-access-binding-acc6f9619f55-faa1e14e60
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-virtual-providerconfig-dd1ee93d80
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: vcluster-usage-vc0-provider-842ac06dff37-s-jane-vclu-932bac7afc
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: vcluster-s-jane-vc0-access-volume-binding-analysis-a-fce7b2c745
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object

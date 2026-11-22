@@ -52,7 +52,11 @@ def check_volume_bindings(args, env, source, baseline):
         }
 
     binding_keys = keys(binding["target"])
-    rendered = render(args, env, bound_source, [], include_composite=True)
+    bootstrap = render(args, env, bound_source, [], include_composite=True)
+    assert binding_keys["-pv"] not in bootstrap and binding_keys["-pvc"] not in bootstrap
+    anchor_observation = deepcopy(bootstrap[binding_keys["-claim-policy"]])
+    anchor_observation["status"] = {"atProvider": {"manifest": {"metadata": {"uid": "test-policy-uid"}}}}
+    rendered = render(args, env, bound_source, [anchor_observation], include_composite=True)
     pvc_key = binding_keys["-pvc"]
     pv = manifest(rendered, binding_keys["-pv"])
     pvc = manifest(rendered, pvc_key)
@@ -65,15 +69,10 @@ def check_volume_bindings(args, env, source, baseline):
     assert pv["spec"]["persistentVolumeReclaimPolicy"] == "Retain"
     anchor = manifest(rendered, binding_keys["-claim-policy"])
     owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
-             "name": anchor["metadata"]["name"], "uid": "", "controller": True, "blockOwnerDeletion": False}
+             "name": anchor["metadata"]["name"], "uid": "test-policy-uid", "controller": True, "blockOwnerDeletion": False}
     for ending in ("-pv", "-pvc"):
         assert rendered[binding_keys[ending]]["spec"]["managementPolicies"] == ["Observe", "Create", "Update"]
         assert manifest(rendered, binding_keys[ending])["metadata"]["ownerReferences"] == [owner]
-        patches = [reference for reference in rendered[binding_keys[ending]]["spec"]["references"] if "patchesFrom" in reference]
-        assert patches == [{"patchesFrom": {"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-                                            "name": binding_keys["-claim-policy"], "namespace": "workspace",
-                                            "fieldPath": "status.atProvider.manifest.metadata.uid"},
-                            "toFieldPath": "metadata.ownerReferences[0].uid"}]
     assert rendered[binding_keys["-claim-policy"]]["spec"]["forProvider"]["deletionPropagationPolicy"] == "Background"
     controller_args = configuration(rendered, "vc0")["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"]
     controllers = next(value.removeprefix("--controllers=").split(",") for value in controller_args if value.startswith("--controllers="))
@@ -93,7 +92,7 @@ def check_volume_bindings(args, env, source, baseline):
     host_guard_binding = resource_name("volume", "s-joe", "analysis", "claim-policy-binding")
     protection = [binding_keys["-mount-policy"], binding_keys["-mount-policy-binding"], host_guard, host_guard_binding]
     dependencies = {reference["dependsOn"]["name"] for reference in rendered[pvc_key]["spec"]["references"] if "dependsOn" in reference}
-    assert dependencies == {*protection, binding_keys["-claim-policy"], binding_keys["-claim-policy-binding"]}
+    assert dependencies == {*protection, binding_keys["-claim-policy"], binding_keys["-claim-policy-binding"], binding_keys["-pv"]}
     assert all(reference["dependsOn"]["namespace"] == "workspace"
                for reference in rendered[pvc_key]["spec"]["references"] if "dependsOn" in reference)
     control = resource_name("vcluster", "s-joe", "vc0", "statefulset")
@@ -101,7 +100,7 @@ def check_volume_bindings(args, env, source, baseline):
     assert manifest(rendered, resource_name("vcluster", "s-joe", "vc1", "statefulset"))["spec"]["replicas"] == 1
     assert {reference["dependsOn"]["name"] for reference in rendered[control]["spec"]["references"]} >= set(protection)
 
-    observed = []
+    observed = [anchor_observation]
     for key in protection:
         ready = deepcopy(rendered[key])
         ready["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
@@ -119,12 +118,22 @@ def check_volume_bindings(args, env, source, baseline):
         pvc_observation["status"] = {"atProvider": {"manifest": deepcopy(native)}}
         rebound = render(args, env, bound_source, [*observed, pvc_observation])
         assert manifest(rebound, binding_keys["-pv"])["spec"]["claimRef"]["uid"] == expected
-    print("PASS bindings wait for host protection and can rebind after virtual PVC replacement")
+    print("PASS bindings wait for their PV, owner UID, and host protection, and rebind after virtual PVC replacement")
 
     retargeted = deepcopy(bound_source)
     retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"]["namespace"] = "a" * 63
     moved = render(args, env, retargeted, observed)
     moved_keys = keys(retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"])
+    moved_anchor = deepcopy(moved[moved_keys["-claim-policy"]])
+    moved_anchor["status"] = {"atProvider": {"manifest": {"metadata": {"uid": "test-moved-policy-uid"}}}}
+    ready_control = deepcopy(released[control])
+    ready_control["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+    moved_protection = []
+    for ending in ("-mount-policy", "-mount-policy-binding"):
+        ready = deepcopy(moved[moved_keys[ending]])
+        ready["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+        moved_protection.append(ready)
+    moved = render(args, env, retargeted, [*observed, moved_anchor, ready_control, *moved_protection])
     assert not set(binding_keys.values()) & set(moved)
     for ending in binding_keys:
         old = manifest(rendered, binding_keys[ending])["metadata"]
@@ -136,6 +145,13 @@ def check_volume_bindings(args, env, source, baseline):
     records = [rendered[binding_keys[ending]] for ending in ("-pv", "-pvc")]
     ready_control = deepcopy(released[control])
     ready_control["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+    provider = deepcopy(rendered[resource_name("vcluster", "s-joe", "vc0", "virtual-providerconfig")])
+    provider["metadata"]["deletionTimestamp"] = "2026-11-21T01:00:00Z"
+    waiting = render(args, env, bound_source, [*observed, ready_control, provider, *records])
+    assert not any(item.get("spec", {}).get("providerConfigRef", {}).get("name") == resource_name("s-joe", "vcluster", "vc0")
+                   for item in waiting.values())
+    assert manifest(waiting, control)["spec"]["replicas"] == 1
+    print("PASS rapid instance recreation releases users of the old virtual connection before creating new records")
     cleaned = render(args, env, source, [ready_control, *records])
     assert not set(binding_keys.values()) & set(cleaned)
     removed = deepcopy(bound_source)
