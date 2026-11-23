@@ -56,7 +56,7 @@ The mapping uses the selected connection's `secretRef`. vCluster creates the
 target namespace and copies the whole Secret with its original data keys.
 It applies source updates and deletion to the copy. Only ready, unambiguous
 connections generate mappings; reconciliation removes mappings that are no
-longer ready. Source readiness does not confirm delivery in the virtual cluster.
+longer ready. Check that the target Secret exists before starting the application.
 
 Applications must reload changed files or restart; environment variables do
 not update in a running process. Revoke the backend identity when access must end.

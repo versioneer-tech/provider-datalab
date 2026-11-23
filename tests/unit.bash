@@ -9,7 +9,7 @@ cd "${REPO_ROOT}"
 
 if [[ "${1:-}" == fast ]]; then
   python3 scripts/build-composition.py --check
-  exec python3 tests/helpers.py
+  exec python3 -m unittest discover -s tests -p 'test_*.py'
 fi
 
 examples=(examples/base/00*-lab.yaml)
@@ -26,7 +26,7 @@ for command_name in crossplane dyff docker python3 go; do
 done
 docker info >/dev/null
 python3 scripts/build-composition.py --check
-python3 tests/helpers.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 python3 tests/environment-schema.py
 
 render_dir="$(mktemp -d /tmp/datalab-render.XXXXXX)"

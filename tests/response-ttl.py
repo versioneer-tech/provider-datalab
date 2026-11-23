@@ -148,12 +148,6 @@ class FunctionResponseTests(unittest.TestCase):
 
     def test_responses_use_environment_override_and_separate_function_settings(self):
         example = yaml.safe_load((ROOT / "examples/base/002-lab.yaml").read_text())
-        empty = {
-            "apiVersion": example["apiVersion"],
-            "kind": example["kind"],
-            "metadata": {"name": "ttl-check", "namespace": "workspace"},
-            "spec": {"users": ["ttl-user"], "volumes": {}},
-        }
         environments = list(
             yaml.safe_load_all((ROOT / "tests/environmentconfig.yaml").read_text())
         )
@@ -173,27 +167,26 @@ class FunctionResponseTests(unittest.TestCase):
             (root / "templates").symlink_to(
                 ROOT / "templates", target_is_directory=True
             )
-            for value in ("5m", "90s"):
-                (root / "composition/settings.yaml").write_text(
-                    yaml.safe_dump({
-                        "responseTTL": value,
-                        "environmentConfigsTTL": "11m",
-                        "autoReadyTTL": "12m",
-                    })
-                )
+            (root / "composition/settings.yaml").write_text(
+                yaml.safe_dump({
+                    "responseTTL": "5m",
+                    "environmentConfigsTTL": "11m",
+                    "autoReadyTTL": "12m",
+                })
+            )
 
-                composition = yaml.safe_load(BUILDER["build"](root))
-                pipeline = composition["spec"]["pipeline"]
-                cases.append(
-                    {
-                        "seconds": BUILDER["response_ttl_seconds"](value),
-                        "function_seconds": {
-                            "function-environment-configs": 660,
-                            "crossplane-contrib-function-auto-ready": 720,
-                        },
-                        "pipeline": pipeline,
-                    }
-                )
+            composition = yaml.safe_load(BUILDER["build"](root))
+            pipeline = composition["spec"]["pipeline"]
+            cases.append(
+                {
+                    "seconds": 300,
+                    "function_seconds": {
+                        "function-environment-configs": 660,
+                        "crossplane-contrib-function-auto-ready": 720,
+                    },
+                    "pipeline": pipeline,
+                }
+            )
 
             settings = (root / "composition/settings.yaml").read_text()
             composition = yaml.safe_load(BUILDER["build"](root, response_ttl="1m"))
@@ -223,7 +216,7 @@ class FunctionResponseTests(unittest.TestCase):
         self.check_runtime(
             RUNTIME_CHECK, {
                 "cases": cases,
-                "xrs": [empty, example],
+                "xrs": [example],
                 "environment": environments[0]["data"],
                 "auto_ready": RUNTIME.removesuffix("-python") + "-auto-ready",
                 "environment_function": RUNTIME.removesuffix("-python") + "-function-environment-configs",

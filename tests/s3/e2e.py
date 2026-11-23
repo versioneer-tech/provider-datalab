@@ -41,7 +41,8 @@ def main():
         except urllib.error.HTTPError as exc:
             assert exc.code == expected, (url, exc.code)
             location = exc.headers['Location']
-            assert location.startswith(args.issuer + '/') if expected == 302 else location.startswith(endpoint)
+            redirect_target = args.issuer + '/' if expected == 302 else endpoint
+            assert location.startswith(redirect_target), location
             print(f'GET {url} -> {exc.code}; Location: {location.split("?")[0]}', flush=True)
         else:
             raise AssertionError('Expected redirect: ' + url)

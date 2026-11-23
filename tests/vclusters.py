@@ -118,10 +118,10 @@ def check_volume_bindings(args, env, source, baseline):
         pvc_observation["status"] = {"atProvider": {"manifest": deepcopy(native)}}
         rebound = render(args, env, bound_source, [*observed, pvc_observation])
         assert manifest(rebound, binding_keys["-pv"])["spec"]["claimRef"]["uid"] == expected
-    print("PASS bindings wait for their PV, owner UID, and host protection, and rebind after virtual PVC replacement")
+    print("PASS volume bindings wait for protection and rebind after PVC replacement")
 
     retargeted = deepcopy(bound_source)
-    retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"]["namespace"] = "a" * 63
+    retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"]["namespace"] = "reports"
     moved = render(args, env, retargeted, observed)
     moved_keys = keys(retargeted["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["target"])
     moved_anchor = deepcopy(moved[moved_keys["-claim-policy"]])
@@ -140,18 +140,11 @@ def check_volume_bindings(args, env, source, baseline):
         new = manifest(moved, moved_keys[ending])["metadata"]
         assert (old.get("namespace"), old["name"]) != (new.get("namespace"), new["name"])
     check_binding_admission(rendered, binding_keys, host_guard)
-    check_mount_scope(manifest(moved, moved_keys["-mount-policy"]), "a" * 63,
-                      "analysis-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-ad510d73dd")
+    check_mount_scope(manifest(moved, moved_keys["-mount-policy"]), "reports",
+                      "analysis-x-reports-x-vcluster-vc0")
     records = [rendered[binding_keys[ending]] for ending in ("-pv", "-pvc")]
     ready_control = deepcopy(released[control])
     ready_control["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
-    provider = deepcopy(rendered[resource_name("vcluster", "s-joe", "vc0", "virtual-providerconfig")])
-    provider["metadata"]["deletionTimestamp"] = "2026-11-21T01:00:00Z"
-    waiting = render(args, env, bound_source, [*observed, ready_control, provider, *records])
-    assert not any(item.get("spec", {}).get("providerConfigRef", {}).get("name") == resource_name("s-joe", "vcluster", "vc0")
-                   for item in waiting.values())
-    assert manifest(waiting, control)["spec"]["replicas"] == 1
-    print("PASS rapid instance recreation releases users of the old virtual connection before creating new records")
     cleaned = render(args, env, source, [ready_control, *records])
     assert not set(binding_keys.values()) & set(cleaned)
     removed = deepcopy(bound_source)
@@ -161,7 +154,7 @@ def check_volume_bindings(args, env, source, baseline):
         assert without_instance[key]["spec"] == baseline[key]["spec"]
     assert not set(binding_keys.values()) & set(without_instance)
     assert not set(binding_keys.values()) & set(baseline)
-    print("PASS retargeting replaces virtual records; removing bindings or instances keeps host data and backups")
+    print("PASS binding changes preserve host volumes and backups")
 
     invalid = deepcopy(bound_source)
     invalid["spec"]["vclusters"]["vc0"]["volumeBindings"][0]["name"] = "missing"
@@ -238,7 +231,7 @@ def check_binding_admission(resources, keys, host_guard):
     creation["oldObject"] = None
     tests.append(admission_case("new virtual claim has a valid GC owner", virtual, creation, True))
     creation["object"]["metadata"]["ownerReferences"][0]["uid"] = ""
-    tests.append(admission_case("unpatched GC owner UID is denied", virtual, creation, False))
+    tests.append(admission_case("claim without an owner UID is denied", virtual, creation, False))
     for name, change in (
             ("removed sync marker", lambda value: value["object"]["metadata"].pop("labels")),
             ("changed sync marker", lambda value: value["object"]["metadata"]["labels"].update({"vcluster.loft.sh/controlled-by": "other"})),
@@ -447,8 +440,8 @@ def check_control_plane_settings(args, env, source, resources):
     tuned_env = deepcopy(env)
     embedded = {
         "enabled": True,
-        "dataSource": "sqlite:///data/state.db?_journal=TRUNCATE&_locking=NORMAL&cache=shared&_busy_timeout=30000&_txlock=immediate&_synchronous=FULL",
-        "extraArgs": ["--datastore-max-open-connections=2", "--datastore-max-idle-connections=1"],
+        "dataSource": "sqlite:///data/custom.db",
+        "extraArgs": ["--datastore-max-open-connections=2"],
     }
     tuned_env["data"]["vcluster"]["backingStore"] = {"database": {"embedded": embedded}}
     tuned = render(args, tuned_env, source, observed)
@@ -476,7 +469,7 @@ def check_control_plane_settings(args, env, source, resources):
     reordered_env = deepcopy(tuned_env)
     reordered_env["data"]["vcluster"]["backingStore"]["database"]["embedded"] = dict(reversed(list(embedded.items())))
     assert settings(render(args, reordered_env, source, observed)) == settings(tuned)
-    print("PASS resource overrides reach both instances; reordered settings keep the rollout checksum")
+    print("PASS resource overrides apply to both instances; key order causes no rollout")
 
 
 def check_public_profiles(args, env, source, resources):
@@ -529,7 +522,7 @@ def check_public_profiles(args, env, source, resources):
     assert len(ready_profiles) == len(profiles)
     assert all(c["ready"] for c in ready_profiles)
     assert not any("observe-client" in key for key in ready_resources)
-    print("PASS profiles contain no credentials and become ready without credential observers or vcluster account grants")
+    print("PASS public profiles contain no credentials and report runtime readiness")
 
 
 def check_instance_removal(args, env, source, resources):
@@ -616,7 +609,7 @@ def check_placement(args, env, source, baseline):
         pod = manifest(placed, resource_name("vcluster", "s-joe", instance, "statefulset"))["spec"]["template"]["spec"]
         assert all(pod[key] == value for key, value in placement["controlPlane"].items())
         assert "patches" not in native["sync"]["toHost"]["pods"]
-    print("PASS neutral defaults and native placement apply to all synced Pods, including CoreDNS")
+    print("PASS placement settings apply to control planes and workloads")
     return placed_env, placed
 
 

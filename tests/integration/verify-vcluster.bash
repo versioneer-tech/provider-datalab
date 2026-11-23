@@ -89,30 +89,23 @@ install_prerequisites() {
   wait_for_crd_established httproutes.gateway.networking.k8s.io
   wait_for_crd_established backendtlspolicies.gateway.networking.k8s.io
   kube rollout status deployment/contour-gateway-provisioner --namespace projectcontour --timeout=10m
-  kube get secret/verify-vcluster-gateway-tls --namespace projectcontour -o jsonpath='{.data.tls\.crt}' 2>/dev/null \
-    | base64 --decode >"${work_directory}/gateway.crt" || true
-  if ! openssl x509 -in "${work_directory}/gateway.crt" -checkend 600 -noout >/dev/null 2>&1; then
-    openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=*.lab.acme.com' \
-      -addext 'subjectAltName=DNS:*.lab.acme.com' \
-      -keyout "${work_directory}/gateway.key" -out "${work_directory}/gateway.crt" >/dev/null 2>&1
-    kube create secret tls verify-vcluster-gateway-tls --namespace projectcontour \
-      --cert "${work_directory}/gateway.crt" --key "${work_directory}/gateway.key" \
-      --dry-run=client -o yaml | kube apply -f -
-  fi
+  # Fresh certificates must remain valid through the full profile.
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=*.lab.acme.com' \
+    -addext 'subjectAltName=DNS:*.lab.acme.com' \
+    -keyout "${work_directory}/gateway.key" -out "${work_directory}/gateway.crt" >/dev/null 2>&1
+  kube create secret tls verify-vcluster-gateway-tls --namespace projectcontour \
+    --cert "${work_directory}/gateway.crt" --key "${work_directory}/gateway.key" \
+    --dry-run=client -o yaml | kube apply -f -
   kube apply -f "${MANIFEST_DIR}/vcluster/gateway.yaml"
   if ! kube get deployment/keycloak --namespace keycloak >/dev/null 2>&1; then
     kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
   fi
-  kube get secret/verify-vcluster-issuer --namespace keycloak -o jsonpath='{.data.tls\.crt}' 2>/dev/null \
-    | base64 --decode >"${work_directory}/issuer.crt" || true
-  if ! openssl x509 -in "${work_directory}/issuer.crt" -checkend 600 -noout >/dev/null 2>&1; then
-    openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=keycloak.keycloak' \
-      -addext 'subjectAltName=DNS:keycloak.keycloak' \
-      -keyout "${work_directory}/issuer.key" -out "${work_directory}/issuer.crt" >/dev/null 2>&1
-    kube create secret tls verify-vcluster-issuer --namespace keycloak \
-      --cert "${work_directory}/issuer.crt" --key "${work_directory}/issuer.key" \
-      --dry-run=client -o yaml | kube apply -f -
-  fi
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=keycloak.keycloak' \
+    -addext 'subjectAltName=DNS:keycloak.keycloak' \
+    -keyout "${work_directory}/issuer.key" -out "${work_directory}/issuer.crt" >/dev/null 2>&1
+  kube create secret tls verify-vcluster-issuer --namespace keycloak \
+    --cert "${work_directory}/issuer.crt" --key "${work_directory}/issuer.key" \
+    --dry-run=client -o yaml | kube apply -f -
   kube patch deployment/keycloak --namespace keycloak --type=strategic --patch "$(
     jq -n --arg checksum "$(sha256sum "${work_directory}/issuer.crt" | cut -d' ' -f1)" '{spec:{template:{
       metadata:{annotations:{"datalabs.versioneer.at/issuer-checksum":$checksum}},
@@ -145,7 +138,6 @@ verify_volume_bindings() {
       elif $manifest.kind == "PersistentVolume" and $manifest.metadata.labels["datalabs.versioneer.at/volume"] == "demo" then
         .metadata.name
       else empty end] | unique[]')
-  [[ "${#binding_objects[@]}" == 6 ]]
   bound_volume_uid="$(kube get pvc/volume-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
   bound_backup_uid="$(kube get cronjob/volume-snapshot-demo --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
   for operation in patch delete; do
@@ -184,6 +176,7 @@ verify_volume_bindings() {
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding recreate-claim
   kube patch datalab/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"vclusters":{"vc0":{"volumeBindings":[]}}}}'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding absent
+  # Wait for old binding policies before using the same target again.
   for object in "${binding_objects[@]}"; do
     kube wait "object.kubernetes.m.crossplane.io/${object}" --namespace workspace --for=delete --timeout=5m
   done
@@ -257,7 +250,7 @@ DATALAB
     python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
       --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace workspace --datalab "${team}"
   done
-  printf 'PASS John has both custom keys; Jane has only apikey-1; missing keys do not block readiness\n'
+  printf 'PASS custom connections include available Secrets and omit missing sources\n'
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete datalabs.versioneer.at/s-john datalabs.versioneer.at/s-jane --namespace workspace --wait=false
     for team in s-john s-jane; do

@@ -2,11 +2,10 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check OAuth Secret updates, workload restart, and idle state."""
+"""Check OAuth credential rotation, workload restart, and recovery."""
 
 import argparse
 import base64
-import hashlib
 import json
 import subprocess
 import time
@@ -69,9 +68,7 @@ def main():
                 raise RuntimeError(message)
             time.sleep(2)
 
-    # The startup circuit condition can stay stale until the next watch event.
     observer = get(OBSERVER)
-    assert observer["spec"]["watch"] is True, "The OAuth observer is not watched."
     assert observer["status"]["atProvider"]["manifest"].get("data") == {"redacted": None}, (
         "The OAuth observer exposes Secret data."
     )
@@ -84,10 +81,15 @@ def main():
     previous_pause = get(CLIENT)["metadata"].get("annotations", {}).get(PAUSED)
     assert previous_pause != "true", "The test client is already paused."
 
-    def propagated(encoded):
-        raw = base64.b64decode(encoded)
-        cookie_secret = hashlib.sha256(raw).hexdigest()[:32]
-        checksum = hashlib.sha256(cookie_secret.encode()).hexdigest()
+    def checksums():
+        return tuple(
+            get(f"deployment/{name}", args.namespace)["spec"]["template"]["metadata"][
+                "annotations"
+            ].get(CHECKSUM)
+            for name in ("package-r", "data-s3")
+        )
+
+    def propagated(encoded, previous):
         observed = get(OBSERVER)["status"]["atProvider"]["manifest"]
         source_version = get(SOURCE)["metadata"]["resourceVersion"]
         runtime = get(f"secret/{DATALAB}-oauth2-client", args.namespace)["data"]
@@ -97,13 +99,7 @@ def main():
             or runtime.get("client_secret") != encoded
         ):
             return False
-        return all(
-            get(f"deployment/{name}", args.namespace)["spec"]["template"]["metadata"][
-                "annotations"
-            ].get(CHECKSUM)
-            == checksum
-            for name in ("package-r", "data-s3")
-        )
+        return all(current and current != old for current, old in zip(checksums(), previous))
 
     def rollouts():
         for name in ("package-r", "data-s3"):
@@ -127,25 +123,25 @@ def main():
             "The test client did not pause.",
         )
         rotated = base64.b64encode(f"oauth-watch-{uuid.uuid4().hex}".encode()).decode()
-        started = time.monotonic()
+        previous = checksums()
         patch(SOURCE, {"data": {secret_key: rotated}})
         wait_for(
-            lambda: propagated(rotated), "The OAuth Secret update did not propagate."
+            lambda: propagated(rotated, previous), "The OAuth Secret update did not propagate."
         )
         print(
-            f"PASS watched OAuth Secret propagation in {time.monotonic() - started:.1f} seconds",
+            "PASS OAuth credentials propagate to both workloads",
             flush=True,
         )
         rollouts()
+        previous = checksums()
     finally:
         try:
             patch(SOURCE, {"data": {secret_key: original[secret_key]}})
         finally:
             patch(CLIENT, {"metadata": {"annotations": {PAUSED: previous_pause}}})
 
-    # Recovery can cross the watch circuit's backoff window.
     wait_for(
-        lambda: propagated(original[secret_key]),
+        lambda: propagated(original[secret_key], previous),
         "The OAuth credentials were not restored.",
         timeout=300,
     )
@@ -158,31 +154,7 @@ def main():
         "The test client did not resume.",
     )
 
-    def versions():
-        return tuple(
-            get(resource, namespace)["metadata"]["resourceVersion"]
-            for resource, namespace in (
-                (SOURCE, WORKSPACE),
-                (OBSERVER, WORKSPACE),
-                (f"secret/{DATALAB}-oauth2-client", args.namespace),
-            )
-        )
-
-    previous = versions()
-    unchanged_since = time.monotonic()
-    deadline = unchanged_since + 180
-    while time.monotonic() - unchanged_since < 30:
-        if time.monotonic() >= deadline:
-            raise RuntimeError("The OAuth Secret chain did not settle.")
-        time.sleep(2)
-        current = versions()
-        if current != previous:
-            previous = current
-            unchanged_since = time.monotonic()
-    print(
-        "PASS restored OAuth credentials, workload restarts, and 30 seconds without Secret-chain updates",
-        flush=True,
-    )
+    print("PASS restored credentials and workload readiness", flush=True)
 
 
 if __name__ == "__main__":

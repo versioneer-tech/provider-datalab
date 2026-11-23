@@ -4,9 +4,9 @@
 [![Package version](https://img.shields.io/github/v/tag/versioneer-tech/provider-datalab?include_prereleases&sort=semver&label=package)](https://github.com/versioneer-tech/provider-datalab/pkgs/container/provider-datalab)
 [![License](https://img.shields.io/github/license/versioneer-tech/provider-datalab)](LICENSE)
 
-Provider Datalab gives teams a shared workspace on Kubernetes.
-Declare a team's users, volumes, and services in a `Datalab` resource; Crossplane
-creates them from the platform's identity, network, and storage settings.
+Provider Datalab creates team workspaces on Kubernetes. A `Datalab` resource
+declares users, virtual clusters, persistent volumes, and data services.
+Crossplane creates them with the platform's identity, network, and storage settings.
 
 > [!NOTE]
 > The `main` branch uses `versioneer.at/v1`.
@@ -23,9 +23,10 @@ Complete manifests are in [examples/base](examples/base).
 
 ## Development
 
-See [Manifest templates](templates/README.md) for source and build instructions,
-[Tests](tests/README.md) for required checks, and
-[Integration tests](tests/integration/README.md) for live validation.
+Build from `composition/` and `templates/`; `composition.yaml` is generated.
+See [Manifest templates](templates/README.md) for setup and build commands.
+Run the [required local checks](tests/README.md), then the
+[integration suite](tests/integration/README.md) against a test cluster.
 
 ## Security
 

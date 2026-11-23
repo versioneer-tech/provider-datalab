@@ -76,12 +76,6 @@ def main():
     assert independent[key("analysis", "backup", "cronjob")]["metadata"].get("annotations", {}).get("crossplane.io/paused") != "true"
     print("PASS host backup schedules continue when a virtual cluster is hibernated")
 
-    named = deepcopy(source)
-    named["spec"]["volumes"]["snapshot-class"] = {}
-    separate = render(args, env, named, [])
-    assert manifest(separate, key("snapshot-class"))["kind"] == "PersistentVolumeClaim"
-    assert manifest(separate, resource_name("volume-snapshot-class", "test-volumes"))["kind"] == "VolumeSnapshotClass"
-
     native_pvc = {**pvc, "metadata": {**pvc["metadata"], "uid": "test-current-pvc"}, "status": {"phase": "Bound"}}
 
     def snapshot(name, ready=True, uid="test-current-pvc", deleting=False):

@@ -1,27 +1,28 @@
-# Unit tests
+# Tests
 
-The suite checks generated resources and helper behavior without a Kubernetes
-cluster. Docker runs the composition functions and a disposable Keycloak server.
+The unit suite checks rendered resources and helper behavior. It needs Docker
+for the composition functions and a disposable Keycloak server. The
+[integration suite](integration/README.md) checks deployed services in a test cluster.
 
 ## Select checks
 
-[GitHub Actions](../.github/workflows/pr.yaml) defines the required checks.
-Use the same selection locally, against the target branch or pull request base:
+Use the same check selection as [GitHub Actions](../.github/workflows/pr.yaml):
 
 ```bash
 python3 scripts/ci-checks.py --base origin/main
 ```
 
-Without `--head`, the comparison includes committed, staged, unstaged, and
-untracked changes. CI uses `--head` to compare two commits.
+Use the pull request base or target branch. Without `--head`, the comparison
+includes committed, staged, unstaged, and untracked changes.
 
-- `docs_only=true`: run the documentation checks below. Only Markdown, `docs/`,
-  and `mkdocs.yml` changes qualify.
-- `docs_only=false`: also run the full unit suite and integration profiles.
-  Mixed changes, empty or unavailable comparisons, and manual CI runs use this
-  selection.
+- `docs_only=true`: run the documentation checks below.
+- `docs_only=false`: also run the full unit suite and all integration profiles.
 
-## Documentation changes
+Only Markdown, `docs/`, and `mkdocs.yml` changes qualify as documentation only.
+An empty or unavailable comparison selects all checks. Draft pull requests run
+units but defer cluster tests until the pull request is ready for review.
+
+## Documentation checks
 
 Install `docs/requirements.txt` and `pre-commit`, then run:
 
@@ -32,79 +33,73 @@ pre-commit run --all-files
 git diff --check
 ```
 
-Check changed commands and links. Documentation-only changes do not need Docker
-or cluster tests.
+Check changed commands and links. Documentation-only changes need no Docker
+or Kubernetes cluster.
 
-## Run the suite
+## Unit suite
 
 Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, Go, and `pre-commit`.
-Go runs the admission policy checks. Start Docker and follow the
-[build instructions](../templates/README.md) to install Python dependencies and
-generate `composition.yaml`.
+Start Docker. Follow the [build instructions](../templates/README.md) to install
+Python dependencies and generate `composition.yaml`.
 
 ```bash
 bash tests/unit.bash
 pre-commit run --all-files
+git diff --check
 ```
 
-`bash tests/unit.bash fast` runs helper and harness checks without Docker.
-`bash tests/unit.bash 001` selects one example; the shared behavior checks still
-run. Examples `001`, `002`, and `003` also select Data exposure, backup/store,
-and environment-setting checks, respectively.
+For a quick check without Docker, run `bash tests/unit.bash fast`. This checks
+the generated composition and discovers `test_*.py` with Python's `unittest`.
+To run one of these files:
 
-## What the checks cover
+```bash
+python3 -m unittest discover -s tests -p test_credentials.py -v
+```
 
-Snapshots check resource specs, readiness rules, and connection status. They
-omit generated metadata that changes between runs. The other tests check:
+`bash tests/unit.bash 001` selects one example render. Shared behavior checks
+still run. Examples `001`, `002`, and `003` also select the Data exposure,
+backup/store, and environment-setting checks.
 
-| Tests | Behavior |
+## Test files
+
+| Files | Checks |
 | --- | --- |
-| `vclusters.py`, `admission/` | Virtual cluster isolation, placement, hibernation and resume, permissions, volume and Secret bindings, and virtual resources. |
-| `volumes.py` | Host PVCs without virtual clusters, automatic backups, restore sources, operator retention, and current snapshot counts. |
-| `helpers.py` | Credentials, token caches, host Pod cleanup, volume snapshot retention and failure cleanup, snapshot capability and permission checks, build failures, and integration runner errors. |
-| `token-exchange.py`, `keycloak_policy.py` | Role restrictions, refresh, and token exchange with a disposable Keycloak server. |
-| `oauth2.py`, `s3-connections.py`, `service-connections.py` | Service discovery and credential publication when Secrets change, disappear, or return. |
-| `exposure.py`, `settings.py`, `stores.py`, `registry.py` | Routes, service images and database versions, storage, network rules, quotas, and environment settings. |
-| `backups.py` | Backup enablement, export failures, and invalid Redis snapshots. |
-| `response-ttl.py` | TTL defaults, overrides, invalid values, and readiness checks. |
-| `environment-schema.py`, `environment-selection.py` | Valid environment names, selection labels, merge order, and duplicate matches. |
+| `test_build.py`, `test_composition_helpers.py` | Build input, TTL values, backup sizes, stable service credentials. |
+| `test_credentials.py`, `test_cleanup.py`, `test_snapshots.py` | Login and token handling, Pod cleanup, snapshot retention and access. |
+| `test_harness.py` | Cluster selection, capability probes, and protection of unrelated resources. |
+| `vclusters.py`, `admission/`, `volumes.py` | Virtual cluster access and lifecycle, host volumes, bindings, and admission rules. |
+| `token-exchange.py`, `keycloak_policy.py` | Role restrictions and real Keycloak refresh and exchange. |
+| `oauth2.py`, `s3-connections.py`, `service-connections.py` | Discovery and credentials when sources change, disappear, or return. |
+| `exposure.py`, `settings.py`, `stores.py`, `registry.py`, `backups.py` | Service settings, routes, images, credentials, and backups. |
+| `environment-schema.py`, `environment-selection.py`, `response-ttl.py` | Input validation, environment merging, function TTLs, and readiness. |
 
-The [integration suite](integration/README.md) checks deployed services,
-authorization, routing, and persistence in an existing test cluster or Kind.
-Its volume checks recover file contents from CSI snapshots, check retention
-and failure handling, and verify storage removal. Dedicated Kind setup supplies
-NetworkPolicy enforcement, NFS CSI storage, and snapshot infrastructure.
-Existing targets are probed before traffic and snapshot tests. Missing capability
-produces a prominent `SKIPPED` message; other tests continue. See the
-[integration prerequisites](integration/README.md#select-a-cluster) for the
-required APIs, classes, and permissions.
-Draft pull requests run documentation and unit checks in CI. Kubernetes
-integration steps are deferred until the pull request is ready for review.
-Pushes to the configured target branches and manual runs include integration.
+Use representative inputs. Snapshots check rendered resource specs. Use
+separate assertions for behavior such as credential rotation, data retention,
+or denied access. Avoid repeating snapshot fields or fixing a test to an
+internal hash, message, or call order unless the behavior requires it.
 
 ## Fixtures
 
-Datalab inputs are in [`examples/base/`](../examples/base).
+Inputs are in [`examples/base/`](../examples/base).
 [`environmentconfig.yaml`](environmentconfig.yaml) supplies `datalab` and
-`datalab-custom`. Storage fixtures use different endpoints from the environment
-to check that Secret values take precedence.
+`datalab-custom`. Storage fixtures use different endpoints to check that Secret
+values take precedence over environment settings.
 
 | Example | Environment | Main checks |
 | --- | --- | --- |
-| `001` | `datalab` | Data, default environment, credential rotation |
+| `001` | `datalab` | Data and credential rotation |
 | `002` | `datalab` | Writable Data and managed stores |
-| `003` | `datalab-custom` | Virtual clusters, bound host volume, read-only Data, PostgreSQL |
-| `004` | `datalab-custom` | Services with custom settings |
+| `003` | `datalab-custom` | Virtual clusters, bound volume, read-only Data, PostgreSQL |
+| `004` | `datalab-custom` | Custom service settings |
 
-Renders are written to `/tmp`; expected snapshots are in `tests/expected/`.
-Normalize a new render with `python3 tests/render.py /tmp/rendered.yaml` and
-review the differences before replacing a snapshot. Use an existing example
-when it covers the behavior under test. Add one only for a missing case.
+Renders go to `/tmp`; snapshots are in `tests/expected/`. Normalize a render
+with `python3 tests/render.py /tmp/rendered.yaml`. Review its differences before
+replacing a snapshot. Reuse an example when it covers the behavior under test.
 
 ## STAC example image
 
-Build the image for the [STAC workload example](../examples/vcluster/stac-fastapi.yaml)
-from the repository root and push it to a registry that the host nodes can read:
+Build the image for the [STAC example](../examples/vcluster/stac-fastapi.yaml)
+from the repository root. Push it to a registry that the host nodes can read:
 
 ```bash
 docker build -f tests/vcluster/catalog.Dockerfile -t registry.acme.com/team/catalog:demo .

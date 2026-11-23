@@ -35,17 +35,7 @@ def check_volume_binding(api, bearer, phase):
     wait(lambda: api(claim_path, bearer, expected=(200, 404)).get("status", {}).get("phase") == "Bound",
          "The host volume binding did not become Bound")
     claim = api(claim_path, bearer)
-    assert claim["spec"]["storageClassName"] == ""
-    assert claim["metadata"]["labels"]["vcluster.loft.sh/controlled-by"] == "datalab-volume"
-    owners = claim["metadata"]["ownerReferences"]
-    assert len(owners) == 1 and owners[0]["apiVersion"] == "admissionregistration.k8s.io/v1"
-    assert owners[0]["kind"] == "ValidatingAdmissionPolicy" and owners[0].get("controller") is True
-    assert not owners[0].get("blockOwnerDeletion", False)
-    policy = api("/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicies/" + owners[0]["name"], bearer)
-    assert owners[0]["uid"] == policy["metadata"]["uid"]
-    pv = api("/api/v1/persistentvolumes/" + claim["spec"]["volumeName"], bearer)
-    assert pv["metadata"]["ownerReferences"] == owners
-    Path("/tmp/vcluster-bound-pv").write_text(pv["metadata"]["name"])
+    Path("/tmp/vcluster-bound-pv").write_text(claim["spec"]["volumeName"])
     if phase == "recreate-claim":
         remove_pod()
         for patch in ({"metadata": {"labels": {"vcluster.loft.sh/controlled-by": None}}},

@@ -1,16 +1,13 @@
 # Integration tests
 
-The suite can use an existing test cluster or the `provider-datalab-it` Kind
-cluster. Every Kubernetes and Helm call uses an explicit kubeconfig and context.
-Kind is the default; its context is `kind-provider-datalab-it` and its kubeconfig
-is `/tmp/provider-datalab-it.kubeconfig`.
+Run the [unit suite](../README.md#unit-suite) first. Then use the dedicated
+`provider-datalab-it` Kind cluster or an existing test cluster. Every Kubernetes
+and Helm call uses an explicit kubeconfig and context.
 
-Setup installs Crossplane with [the supplied Helm values](../../deploy/crossplane-values.yaml)
-and dependencies from `dependencies/`. Versions are listed in the
-[installation guide](../../docs/how-to-guides/installation.md#dependency-baseline).
-It applies the current XRD and Composition and waits for the generated Datalab
-CRD schema to match. A disposable MinIO supplies storage; Provider Storage is
-not installed or tested.
+Setup installs Crossplane and dependencies, applies the current XRD and
+Composition, and waits for the Datalab schema. Disposable MinIO supplies object
+storage. See the [Helm values](../../deploy/crossplane-values.yaml) and
+[dependency versions](../../docs/how-to-guides/installation.md#dependency-baseline).
 
 ## Select a cluster
 
@@ -20,14 +17,14 @@ The shared Kind config selects Kubernetes 1.37.0 for stable admission policies.
 These capabilities are required in Kind, both locally and in GitHub Actions.
 An unsuccessful Kind capability check fails the run.
 
-On other targets, the suite probes each capability. An unavailable capability
-produces a prominent `SKIPPED` message with the reason. The remaining checks
-continue. The suite does not change existing network or snapshot infrastructure.
+On existing targets, capability probes determine which checks can run. Missing
+capabilities produce a `SKIPPED` result with a reason. Other checks continue.
 
 Snapshot checks require a matching StorageClass and VolumeSnapshotClass with
 `Delete` policy, the snapshot APIs, and snapshot management permissions. The
-probe checks the test identity and both snapshot observers. Supply
-`--snapshot-class` to enable this probe; without it, snapshot tests are skipped.
+probe checks access for the test identity, Crossplane, and the Kubernetes
+provider. Supply `--snapshot-class` to enable it. Without that option, snapshot
+tests are skipped on existing targets.
 After setup, volume tests check the generated backup ServiceAccount's access.
 Other PVCs, Secrets, snapshot contents, class changes, and snapshots in another
 namespace must be denied. A failure after a successful probe fails the test.
@@ -77,25 +74,30 @@ and matching classes through its platform configuration. The runner uses only
 the selected API and does not change host RBAC or vCluster sync settings.
 The virtual cluster profile needs stable mutating admission policies on its
 selected target (Kubernetes 1.36 or later).
+Use `PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS` when control-plane PVCs need
+a different class from workload and snapshot-test PVCs.
 
 ## Run profiles
 
-Run the [unit suite](../README.md#run-the-suite) first. Then run all profiles
-with one platform setup, or select a profile from the table below:
+Run all profiles with one platform setup, or select one profile:
 
 ```bash
 tests/integration/run.bash all --kind
 tests/integration/run.bash verify-s3
 ```
 
-Without an existing target, the runner creates or reuses the dedicated Kind
-cluster. `--kind` selects this mode explicitly. Its
+Kind is the default. Its context is `kind-provider-datalab-it`; the kubeconfig
+is `/tmp/provider-datalab-it.kubeconfig`. The
 [`cluster setup`](create-cluster.bash) prepares NetworkPolicy enforcement,
 NFS CSI storage, and snapshots on new and reused clusters. It installs the
 [Kubernetes network policy controller](https://kube-network-policies.sigs.k8s.io/docs/quick-start/)
 without replacing Kind's network plugin. The default classes are `datalab-nfs` and
 `datalab-nfs-snapshots`. Use `--storage-class` and `--snapshot-class` to select
 other matching classes.
+
+Kind control-plane PVCs use the local `standard` class for SQLite.
+Workload PVCs and named volumes use `datalab-nfs` for CSI snapshot checks.
+The generated allowlist includes both classes; `datalab-nfs` remains the default.
 
 [`kind-storage.bash`](kind-storage.bash) installs NFS CSI `4.13.6`, snapshot
 CRDs and controllers, and an NFS-Ganesha server in `test-volume-snapshots`.
@@ -138,11 +140,9 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
 | `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |
 
-The fixtures use profile-named prerequisite Secrets and disable services outside
-their checks. Most use `datalab` or `datalab-custom`; the virtual cluster profile
-uses `datalab-vcluster-it`. Network and Data restore the common environment
-settings. Network sets different external-egress policies on the two environments;
-S3 replaces `datalab-custom` with its Gateway and identity settings.
+Fixtures use profile-named Secrets and enable the services they test. Network
+and Data restore shared environment settings; S3 and vCluster set their own
+Gateway and identity settings.
 
 ## Network and service checks
 
@@ -152,14 +152,13 @@ and command errors fail the test. The external target is `https://www.iana.org/`
 A peer outside the team namespaces checks denied ingress. Server-side dry runs
 check host LimitRange defaults and all four CPU and memory quota fields.
 
-Data probes use the runtime Service. The test allows ten minutes for deployment
-creation because watch throttling can delay generated resources.
+Data probes use the runtime Service and check writable and read-only access
+after credential and configuration changes.
 
 S3 installs Contour and Keycloak. Its boto3 client uses `s3-credentials.py` as
 `credential_process`. The test pauses the Keycloak client, changes its source
 Secret, and checks credential propagation, sanitized observer status, and
-workload restart. It restores the Secret, resumes the client, waits for 30 seconds
-without Secret updates, and repeats the S3 checks. The Keycloak credential itself
+workload restart. It restores the Secret, resumes the client, and repeats the S3 checks. The Keycloak credential itself
 is unchanged.
 
 Database probes run in `workspace`, where connection Secrets are published.
@@ -174,11 +173,6 @@ Datalab with named host storage and no virtual cluster. The Datalab must become
 ready after the first PVC mount. Each volume gets a backup schedule. The profile
 runs Jobs from the generated CronJob. The default retention must leave exactly
 two ready snapshots.
-
-The profile consumes the selected target's CSI and snapshot infrastructure.
-Kind provisions this during cluster setup. Existing targets use the classes
-passed with `--storage-class` and `--snapshot-class`. Missing snapshot capability
-skips this profile on existing targets. Kind must provide it.
 
 The profile checks:
 
@@ -201,7 +195,7 @@ physical host API when the selected target is a virtual cluster.
 
 ## Virtual cluster checks
 
-The profile installs PGO, Keycloak, and Contour and uses a disposable certificate
+The profile installs PGO, Keycloak, and Contour and creates a fresh certificate
 for `*.lab.acme.com`. Its CPU limit quota is `20` so two control planes, their
 controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
 
@@ -227,8 +221,8 @@ must finish and keep the host volume and its backups. If the snapshot probe
 fails on an existing target, these named-volume checks are skipped. The profile
 still checks ordinary application PVCs, authentication, routing, and lifecycle.
 
-Other checks cover OAuth2 discovery names, source Secret deletion and recovery,
-and different custom Secrets for John and Jane. STAC item search must still work
+Other checks cover OAuth2 discovery, source Secret deletion and recovery,
+and separate custom Secrets for users. STAC item search must still work
 after both instances hibernate and resume and after a control-plane restart.
 Hibernation must remove their synced Pods, keep the same PVCs, and leave PostgreSQL
 ready. Removing one virtual cluster must leave the
@@ -241,12 +235,10 @@ Each store profile starts its operator and waits for readiness. Cleanup waits fo
 resource deletion before stopping the operator; failures leave it running.
 Crossplane, providers, storage, and identity services stay available.
 
-The runner reports setup and profile durations and CPU requests. Run
-`tests/integration/resource-budget.bash` to inspect active Pod and init-container
-requests, unscheduled requests, and node allocation. The report shows CPU
-reserved for scheduling. Probe and backup Pods have 90 seconds to
-schedule; execution timeouts start after scheduling. Failures report events and
-the resource budget.
+The runner reports durations and CPU requests. Use
+`tests/integration/resource-budget.bash` to inspect scheduled and pending
+requests. Probe and backup execution timeouts start after scheduling.
+Failures report events and the resource budget.
 
 Integration builds a separate Composition artifact with a `1m` Python TTL default.
 Environment overrides and the separate environment and auto-ready TTLs still

@@ -16,6 +16,8 @@ if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
   : "${PROVIDER_DATALAB_KUBECONFIG:=/tmp/provider-datalab-it.kubeconfig}"
   : "${PROVIDER_DATALAB_CONTEXT:=kind-provider-datalab-it}"
   : "${PROVIDER_DATALAB_STORAGE_CLASS:=datalab-nfs}"
+  # Use local storage for SQLite control-plane databases.
+  : "${PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS:=standard}"
   : "${PROVIDER_DATALAB_SNAPSHOT_CLASS:=datalab-nfs-snapshots}"
   : "${PROVIDER_DATALAB_SERVICE_CIDR:=10.96.0.0/16}"
   : "${PROVIDER_DATALAB_POD_CIDRS:=10.244.0.0/16}"
@@ -115,8 +117,10 @@ check_cluster_settings() {
     return 2
   fi
   kube get "storageclass/${PROVIDER_DATALAB_STORAGE_CLASS}" >/dev/null
+  kube get "storageclass/${PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS:-${PROVIDER_DATALAB_STORAGE_CLASS}}" >/dev/null
   python3 "${INTEGRATION_DIR}/environment.py" "${MANIFEST_DIR}/environment-configs/datalabs.yaml" \
     --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" \
+    --control-plane-storage-class "${PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS:-${PROVIDER_DATALAB_STORAGE_CLASS}}" \
     --service-cidr "${PROVIDER_DATALAB_SERVICE_CIDR}" \
     --pod-cidrs "${PROVIDER_DATALAB_POD_CIDRS}" >/dev/null
   printf 'Selected %s cluster context %s.\n' "${PROVIDER_DATALAB_CLUSTER}" "${KUBECTL_CONTEXT}"
@@ -148,6 +152,7 @@ create_test_namespaces() {
 apply_environment_config() {
   python3 "${INTEGRATION_DIR}/environment.py" "$1" \
     --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" \
+    --control-plane-storage-class "${PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS:-${PROVIDER_DATALAB_STORAGE_CLASS}}" \
     --service-cidr "${PROVIDER_DATALAB_SERVICE_CIDR}" \
     --pod-cidrs "${PROVIDER_DATALAB_POD_CIDRS}" | kube apply -f -
 }

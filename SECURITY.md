@@ -55,6 +55,13 @@ The realm must permit the `offline_access` scope and role for CLI device login.
 See [Authentication](docs/how-to-guides/authentication.md) for generated roles,
 scopes, and login flows.
 
+## Login clients
+
+Check OAuth state, use PKCE, and authenticate the confidential client when
+redeeming an authorization code. Request only the scopes the application needs.
+See [Authentication](docs/how-to-guides/authentication.md#oauth-scopes-and-direct-login)
+for request parameters.
+
 ## Token exchange callers
 
 A service that exchanges tokens for users must:

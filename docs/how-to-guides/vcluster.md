@@ -371,8 +371,7 @@ user device login. Request machine tokens separately as shown above.
 ## Secret bindings
 
 Use [connection bindings](connections.md#bind-a-connection) to copy selected
-service or custom credentials into a virtual namespace. That guide contains
-the binding examples, source settings, and update and deletion rules.
+service or custom credentials into a virtual namespace.
 
 ## Volume bindings
 
@@ -438,9 +437,10 @@ boundaries apply to their virtual APIs.
 
 The `vcluster` EnvironmentConfig section supplies defaults for all declared
 instances. `spec.vclusters.<name>.storage` overrides the control-plane PVC size.
-`vcluster.storageClassName` selects its class; otherwise the default class is
-used. Only classes in `volumes.storageClasses.allowed` are exposed to virtual
-workloads. A host admission policy enforces this list for each syncer.
+`vcluster.storageClassName` selects its class from `volumes.storageClasses.allowed`.
+If omitted, it uses the named-volume default class. The allowed classes are
+also exposed to virtual workloads. A host admission policy enforces this list
+for each syncer.
 Control-plane, workload, database, and volume PVCs share the
 `overallQuota.storage` limit. All Pod CPU and memory requests and limits
 count against the same [host namespace quota](installation.md#resource-quotas-and-container-defaults),
@@ -450,23 +450,6 @@ Set `vcluster.resources.requests` and `vcluster.resources.limits` in the
 EnvironmentConfig to change control-plane resources. Both the native vCluster
 configuration and the host StatefulSet use these values. Each supplied field
 overrides its [resource default](installation.md#storage-and-managed-stores).
-
-### SQLite settings
-
-To limit SQLite to two open connections and one idle connection, merge:
-
-```yaml
-data:
-  vcluster:
-    backingStore:
-      database:
-        embedded:
-          enabled: true
-          dataSource: "sqlite:///data/state.db?_journal=TRUNCATE&_locking=NORMAL&cache=shared&_busy_timeout=30000&_txlock=immediate&_synchronous=FULL"
-          extraArgs:
-          - --datastore-max-open-connections=2
-          - --datastore-max-idle-connections=1
-```
 
 ### Placement and hibernation
 
@@ -581,9 +564,8 @@ from the separate PostgreSQL connection. It creates a separate `catalog` login w
 `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
 
 PostgreSQL needs DNS and access to the host Kubernetes API for its controller.
-In a namespace with denied egress, approve these targets for the PostgreSQL
-Pods. Namespace selectors do not match host-network API endpoints on all CNIs.
-The integration has a PostgreSQL-specific policy for this case.
+See [network access](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#network-access)
+when the platform denies external egress.
 
 The example expects `catalog-postgres-admin` and `catalog-postgres` Secrets in
 virtual namespace `demo`. The administrator Secret uses `host`, `port`, `user`, and

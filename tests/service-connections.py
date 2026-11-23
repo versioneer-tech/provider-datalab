@@ -191,7 +191,7 @@ def main():
     assert len({c["secretRef"]["name"] for c in connections(pending)}) == 4
     assert all(encoded({"value": "test-john-credential"})["value"] in body["data"].values()
                for body in copies(separate).values())
-    print("PASS identical service instance names stay distinct across service types and Datalabs")
+    print("PASS connection names are unique across services and Datalabs")
 
     removed = deepcopy(stale)
     removed["spec"].update(databases={}, documentStores={}, cacheStores={})
@@ -199,7 +199,7 @@ def main():
     retired_env["data"]["customSecrets"] = []
     retired = run(removed, retired_env, [*observed, *published.values()])
     assert not copies(retired) and not connections(retired)
-    print("PASS service removal drops publication resources and stale references for Crossplane cleanup")
+    print("PASS removing services clears their connections")
 
 
 if __name__ == "__main__":

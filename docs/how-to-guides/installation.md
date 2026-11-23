@@ -12,8 +12,7 @@ Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
-Install the operators for the managed stores you offer. Provider
-Datalab integration tests use these versions:
+Install the operators for the managed stores you offer. The tests use:
 
 | Datalab field | Operator | Test version | Required resource API |
 | --- | --- | --- | --- |
@@ -21,11 +20,8 @@ Datalab integration tests use these versions:
 | `spec.documentStores` | MongoDB Kubernetes Operator | `1.14.0` | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
 | `spec.cacheStores` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
 
-These are fixed test pins. Other versions need validation before use.
-
-Install each operator's CRDs before its controller. The
-[integration harness](https://github.com/versioneer-tech/provider-datalab/blob/main/tests/integration/README.md) shows the tested
-installation settings. Backup volumes need a StorageClass that supports
+Install each operator's CRDs before its controller. Validate other versions
+before use. Backup volumes need a StorageClass that supports
 `ReadWriteOnce`; see [backup settings](usage_concepts.md#backups).
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
@@ -185,8 +181,7 @@ It merges the data from these EnvironmentConfigs in this order:
 
 Later values override earlier values. Nested maps retain fields that later
 configs do not set. Missing configs and an omitted `spec.environmentName`
-are skipped. For a local render without `compositionRef`, the second lookup
-uses the current Composition's name, `datalab`.
+are skipped.
 
 Each config selected by the last three lookups must have the label
 `datalabs.pkg.internal/name` equal to its own `metadata.name`. Add the

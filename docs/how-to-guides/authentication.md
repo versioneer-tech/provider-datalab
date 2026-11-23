@@ -33,14 +33,12 @@ Role names remain `vcluster_<instance>_<group>`.
 
 ## OAuth scopes and direct login
 
-The Datalab client's dedicated role mapping permits only `ws_api`. It
-appears in a token only if its subject holds that role. Default scopes are
-`basic`, `profile`, and `email`; keep these scopes free of role grants and role
-mappers. Keycloak includes a client's own roles even with Full Scope Allowed
-off. The provider therefore uses Role Name mappers to select held roles for
-each request, then a Realm Roles mapper to write that temporary role set under
-`resource_access.<datalab>.roles`. This creates no realm roles or user grants.
-For the reason and a worked example, see
+Tokens contain `ws_api` when the subject holds that role. Optional scopes
+select additional roles from the subject's grants. The provider writes the
+selected roles under `resource_access.<datalab>.roles`. Default identity
+scopes are `basic`, `profile`, and `email`; see the
+[identity requirements](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#identity-prerequisites).
+For the mapper design and an example, see
 [Token exchange for downscoping](../architecture/0003-token-exchange-for-downscoping.md).
 
 | Optional OAuth scope | Permitted roles |
@@ -65,9 +63,9 @@ Add `http://localhost:8080/callback` to `EnvironmentConfig.data.iam.redirectURIs
 for this example. Set `iam.webOrigins` only for additional browser origins.
 The Data callback is included by default.
 
-Check OAuth state, use PKCE, and authenticate the confidential client when
-redeeming the code. Request only the scopes needed by the application.
-For a namespace-only direct login, omit `s-joe:interactive`.
+For a namespace-only direct login, omit `s-joe:interactive`. Follow the
+[login client requirements](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#login-clients)
+when implementing the flow.
 
 You can also use a separate login client in the same realm. Its scope mappings
 control the roles in its tokens. Before exchanging one of those tokens through
@@ -110,12 +108,10 @@ delegated access is discussed in
 Each Datalab client enables exchange automatically after its scopes, mappers,
 and policy are ready. No extra setting is required.
 
-Standard Token Exchange V2 uses the existing Datalab client credentials. The caller's
-access token remains the subject; exchange does not use the service account's
-permissions. A managed client policy combines the `grant-type` and
-`client-scopes` conditions with `reject-request`. It rejects
-`<datalab>:interactive` during token exchange, including requests that combine
-it with allowed profile scopes. Direct interactive login can still use it.
+Token exchange uses the Datalab client credentials and the caller's access
+token. The result is limited by the caller's roles. Exchange rejects the
+`<datalab>:interactive` scope, including requests that combine it with profile
+scopes. Direct login can still use it.
 
 Post this form to the configured realm's token endpoint and authenticate as
 the confidential `s-joe` client:

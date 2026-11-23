@@ -56,6 +56,9 @@ bash tests/unit.bash
 The build embeds the steps and templates in `composition.yaml`. Deploy this
 file. Unit tests, CI, and pre-commit reject a stale build.
 
+Local renders without `spec.crossplane.compositionRef` use the generated
+Composition's name to select its EnvironmentConfig.
+
 For a source installation, apply the XRD and generated Composition to the
 configured test cluster before creating Datalabs:
 
@@ -73,24 +76,22 @@ The platform must apply `dependencies/rbac.yaml` and EnvironmentConfigs
 separately. Volume bindings need the supplied admission policy permissions
 before the Composition reconciles them.
 
-Integration can build a separate artifact with a Python TTL default:
+To use a different Python TTL for tests, build a separate file:
 
 ```bash
 python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
 ```
 
-A TTL override requires a separate output file. It does not change the
-environment or auto-ready TTLs, `composition/settings.yaml`, or the normal
-deployment artifact. An environment value takes precedence over this default.
+A TTL override requires `--output`. It leaves the source settings and other
+function TTLs unchanged. An environment value takes precedence over this default.
 
 `volumes/pvc.yaml` defines named host storage. The volume step creates
 snapshot schedules from `volumes/backup.yaml`. `scripts/volume-snapshot.py`
 uses only the Python standard library. It runs on the host with a scoped
 ServiceAccount. Virtual cluster lifecycle changes do not pause these resources.
 
-Keep the virtual PV binder active to bind and release static volume records.
-Their Object wrappers omit `Delete`. The composition waits for the virtual
-binding policy's observed UID, then creates the PV before its PVC. Deleting
-that policy uses background garbage collection so PVC protection cannot hold
-the control plane during removal.
-These records have no ownership of the host PVC or backups.
+Virtual PV and PVC records belong to a binding policy. Wait for its observed
+UID before creating the PV, then create the PVC. Keep the virtual PV binder
+active so it can release these records. Their Object wrappers omit `Delete`;
+the policy uses background garbage collection to permit control-plane removal.
+The host PVC and backups have a separate lifecycle.

@@ -147,7 +147,7 @@ def main():
             source["data"] = {"redacted": None}
     secured = render(args, required, observed=sanitized)
     assert secured == outputs[0]
-    print("PASS sanitized storage and OAuth observers preserve credentials, deployment checksums, and service output", flush=True)
+    print("PASS redacted observer status does not change current credentials", flush=True)
 
     pending = render(args, environment(), observed=[oauth_observer("initial-client-secret")])
     assert "oauth2-client-secret-s-joe" in pending
@@ -198,7 +198,7 @@ def main():
                    for rule in manifest(resources, "data-route-s-joe")["spec"]["rules"])
         containers = manifest(resources, "data-deployment-s-joe")["spec"]["template"]["spec"]["containers"]
         assert "--upstream-timeout=0s" in next(c["args"] for c in containers if c["name"] == "oauth2-proxy")
-    print("PASS transfer deadlines apply to browser and S3 routes, inherit request limits, and preserve zero", flush=True)
+    print("PASS route timeouts inherit request limits; zero disables deadlines", flush=True)
 
 
 if __name__ == "__main__":

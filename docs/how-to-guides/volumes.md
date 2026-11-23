@@ -1,8 +1,8 @@
 # Use volumes
 
-Declare named PVCs under `spec.volumes`, as you declare named PostgreSQL and
-Redis services. Each PVC and its backup schedule run in the Datalab host namespace,
-independently of virtual clusters.
+Declare persistent volumes under `spec.volumes`. Each volume has a PVC and
+backup schedule in the Datalab host namespace. Virtual cluster removal does
+not remove these volumes.
 
 ```yaml
 apiVersion: versioneer.at/v1
@@ -48,11 +48,9 @@ status:
 A class with `WaitForFirstConsumer` keeps the claim Pending until a workload
 uses it. Datalab readiness does not require a consumer to bind the claim.
 
-`readySnapshots` counts completed snapshots for the current PVC UID, excluding
-snapshots being deleted. It is the number available now, not the total number
-ever taken. `lastSuccessfulTime` is the creation time of the latest ready
-snapshot and is absent until one is available. Failed or pending snapshots do
-not increase the count or change the last successful time.
+`readySnapshots` counts snapshots available for the current PVC, excluding
+pending, failed, and deleting snapshots. `lastSuccessfulTime` is the creation
+time of the latest ready snapshot. It is absent until one is available.
 
 ## Bind to a virtual cluster
 
@@ -133,12 +131,9 @@ The backup CronJob runs on the host. It continues when virtual clusters are
 hibernated or removed. It does not mount the source volume. The source PVC
 must be Bound before a backup can succeed.
 
-Each run creates a CSI `VolumeSnapshot`, waits for it to become ready, then
-removes older completed snapshots for the same PVC UID. Failed runs preserve
-completed recovery points. Before another attempt, the Job removes incomplete
-snapshots for that UID, including attempts left by an interrupted Job.
-If deletion has not finished, the run fails before allocating another snapshot.
-A later run retries cleanup.
+Each run creates a CSI snapshot and waits for it to become ready before it
+removes older recovery points for the same PVC. Failed runs preserve completed
+backups. Incomplete attempts must be removed before another snapshot starts.
 
 The PVC uses a `StorageClass`; its snapshots use a `VolumeSnapshotClass` with
 the same CSI driver. Snapshots need no second PVC or StorageClass. Their storage
