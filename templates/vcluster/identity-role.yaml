@@ -12,3 +12,6 @@ spec:
     name: ${role_name}
     clientIdRef:
       name: ${xr_name}
+      policy:
+        resolution: Required
+        resolve: Always

@@ -437,6 +437,42 @@ def workspace_account():
     return admin, client, mapping
 
 
+def recreate_workspace_client():
+    admin, previous, _ = workspace_account()
+    identity(previous, token=admin, method="DELETE")
+
+    def recovered():
+        admin = admin_token()
+        clients = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)
+        if len(clients) != 1:
+            return False
+        client = "/admin/realms/integration/clients/" + clients[0]["id"]
+        if client == previous:
+            return False
+        try:
+            scopes = identity(client + "/optional-client-scopes", token=admin)
+            expected = {
+                LAB + ":interactive", "offline_access",
+                LAB + ":vclusters_vc0_namespace-demo", LAB + ":vclusters_vc1_namespace-other",
+            }
+            if {scope["name"] for scope in scopes} != expected:
+                return False
+            secret = next((Path("/oauth") / key).read_text().strip()
+                          for key in ("clientSecret", "client_secret")
+                          if (Path("/oauth") / key).is_file())
+            value = token(LAB, secret)
+        except HTTPError as error:
+            if error.code not in (400, 401, 404):
+                raise
+            return False
+        claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
+        return set(claims.get("resource_access", {}).get(LAB, {}).get("roles", [])) == {"ws_api"}
+
+    wait_until(recovered, "Datalab authentication did not recover after client recreation", seconds=900)
+    verify_member_roles(False, ["vc0", "vc1"])
+    print("PASS recreated Keycloak client recovers scopes, credentials, and member and service-account roles", flush=True)
+
+
 def set_workspace_roles(roles):
     admin, client, mapping = workspace_account()
     assigned = identity(mapping, token=admin)
@@ -513,8 +549,12 @@ def main():
     parser.add_argument("--member-roles", action="store_true")
     parser.add_argument("--member-removed", action="store_true")
     parser.add_argument("--member-instance", action="append")
+    parser.add_argument("--recreate-client", action="store_true")
     parser.add_argument("--volume-binding", choices=("write", "recreate-claim", "check", "absent"))
     args = parser.parse_args()
+    if args.recreate_client:
+        recreate_workspace_client()
+        return
     if args.member_roles or args.member_removed:
         verify_member_roles(args.member_removed, args.member_instance or ["vc0", "vc1"])
         return

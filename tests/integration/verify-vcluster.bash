@@ -414,6 +414,7 @@ PVC
   cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
   kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles
+  kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --recreate-client
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-removed
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":["verify-s3","verify-vcluster-member"]}}'

@@ -13,4 +13,5 @@ spec:
       name: ${xr_name}
       policy:
         resolution: Required
+        resolve: Always
     realmId: ${realm}

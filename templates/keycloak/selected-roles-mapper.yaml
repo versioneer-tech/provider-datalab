@@ -15,6 +15,7 @@ spec:
       name: ${xr_name}
       policy:
         resolution: Required
+        resolve: Always
     protocol: openid-connect
     protocolMapper: oidc-usermodel-realm-role-mapper
     name: workspace-selected-roles

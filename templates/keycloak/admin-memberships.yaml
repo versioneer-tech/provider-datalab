@@ -12,5 +12,6 @@ spec:
       name: ${group_name}
       policy:
         resolution: Required
+        resolve: Always
     realmId: ${realm}
     members: ${admins}

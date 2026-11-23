@@ -275,7 +275,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req, "keycloak/client-scopes", scope_kind=kind,
             scope_binding={
                 "realmId": realm,
-                "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required", "resolve": "Always"}},
                 field: names,
             },
         ))
@@ -371,14 +371,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "keycloak/service-account-role",
             role_binding={
                 "realmId": realm,
-                "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required", "resolve": "Always"}},
                 "roleRef": {
                     "name": f"{xr_name}-ws-api",
-                    "policy": {"resolution": "Required"},
+                    "policy": {"resolution": "Required", "resolve": "Always"},
                 },
                 "serviceAccountUserClientIdRef": {
                     "name": xr_name,
-                    "policy": {"resolution": "Required"},
+                    "policy": {"resolution": "Required", "resolve": "Always"},
                 },
                 **service_account_inputs,
             },

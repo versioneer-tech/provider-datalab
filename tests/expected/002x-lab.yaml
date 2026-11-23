@@ -903,6 +903,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     defaultScopes:
     - basic
     - profile
@@ -971,6 +972,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -1029,6 +1031,9 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      policy:
+        resolution: Required
+        resolve: Always
       matchLabels:
         crossplane.io/claim-name: s-jeff
     fullPath: false
@@ -1051,6 +1056,7 @@ spec:
       name: s-jeff-admin
       policy:
         resolution: Required
+        resolve: Always
     members:
     - jeff
     - jim
@@ -1072,6 +1078,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     members:
     - jeff
     - jim
@@ -1158,6 +1165,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     optionalScopes:
     - s-jeff:interactive
     - offline_access
@@ -1219,6 +1227,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     name: ws_admin
     realmId: acme
   providerConfigRef:
@@ -1238,6 +1247,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     name: ws_api
     realmId: acme
   providerConfigRef:
@@ -1257,11 +1267,13 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdRef:
       name: s-jeff-ws-api
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -1279,6 +1291,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     name: ws_access
     realmId: acme
   providerConfigRef:
@@ -1299,6 +1312,7 @@ spec:
       name: s-jeff-admin
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-jeff-ws-admin
@@ -1327,6 +1341,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-jeff-ws-access
@@ -1429,6 +1444,7 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       claim.name: resource_access.s-jeff.roles
@@ -1458,15 +1474,18 @@ spec:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleRef:
       name: s-jeff-ws-api
       policy:
         resolution: Required
+        resolve: Always
     serviceAccountUserClientIdRef:
       name: s-jeff
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

@@ -271,6 +271,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     defaultScopes:
     - basic
     - profile
@@ -339,6 +340,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -366,6 +368,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -424,6 +427,9 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      policy:
+        resolution: Required
+        resolve: Always
       matchLabels:
         crossplane.io/claim-name: s-john
     fullPath: false
@@ -446,6 +452,7 @@ spec:
       name: s-john-admin
       policy:
         resolution: Required
+        resolve: Always
     members:
     - john
     realmId: acme
@@ -466,6 +473,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     members:
     - john
     realmId: acme
@@ -550,6 +558,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     optionalScopes:
     - s-john:interactive
     - offline_access
@@ -611,6 +620,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     name: ws_admin
     realmId: acme
   providerConfigRef:
@@ -630,6 +640,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     name: ws_api
     realmId: acme
   providerConfigRef:
@@ -649,11 +660,13 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdRef:
       name: s-john-ws-api
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -671,6 +684,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     name: ws_access
     realmId: acme
   providerConfigRef:
@@ -691,6 +705,7 @@ spec:
       name: s-john-admin
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-john-ws-admin
@@ -719,6 +734,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-john-ws-access
@@ -821,6 +837,7 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       claim.name: resource_access.s-john.roles
@@ -850,15 +867,18 @@ spec:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleRef:
       name: s-john-ws-api
       policy:
         resolution: Required
+        resolve: Always
     serviceAccountUserClientIdRef:
       name: s-john
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak

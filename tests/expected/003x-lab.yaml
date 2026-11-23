@@ -2185,6 +2185,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     defaultScopes:
     - basic
     - profile
@@ -2253,6 +2254,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -2280,6 +2282,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -2338,6 +2341,9 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      policy:
+        resolution: Required
+        resolve: Always
       matchLabels:
         crossplane.io/claim-name: s-jane
     fullPath: false
@@ -2360,6 +2366,7 @@ spec:
       name: s-jane-admin
       policy:
         resolution: Required
+        resolve: Always
     members:
     - jane
     realmId: acme
@@ -2380,6 +2387,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     members:
     - jane
     realmId: acme
@@ -2528,6 +2536,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     optionalScopes:
     - s-jane:interactive
     - offline_access
@@ -2590,6 +2599,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     name: ws_admin
     realmId: acme
   providerConfigRef:
@@ -2609,6 +2619,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     name: ws_api
     realmId: acme
   providerConfigRef:
@@ -2628,11 +2639,13 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdRef:
       name: s-jane-ws-api
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -2650,6 +2663,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     name: ws_access
     realmId: acme
   providerConfigRef:
@@ -2670,6 +2684,7 @@ spec:
       name: s-jane-admin
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-jane-ws-admin
@@ -2706,6 +2721,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-jane-ws-access
@@ -2862,6 +2878,7 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       claim.name: resource_access.s-jane.roles
@@ -2891,15 +2908,18 @@ spec:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleRef:
       name: s-jane-ws-api
       policy:
         resolution: Required
+        resolve: Always
     serviceAccountUserClientIdRef:
       name: s-jane
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -3023,6 +3043,9 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
+      policy:
+        resolution: Required
+        resolve: Always
     name: vcluster_vc0_cluster-admin
     realmId: acme
   providerConfigRef:
@@ -3040,6 +3063,9 @@ spec:
   forProvider:
     clientIdRef:
       name: s-jane
+      policy:
+        resolution: Required
+        resolve: Always
     name: vcluster_vc0_namespace-demo
     realmId: acme
   providerConfigRef:

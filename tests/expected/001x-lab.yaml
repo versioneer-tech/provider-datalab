@@ -822,6 +822,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     defaultScopes:
     - basic
     - profile
@@ -890,6 +891,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       id.token.claim: 'false'
@@ -948,6 +950,9 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      policy:
+        resolution: Required
+        resolve: Always
       matchLabels:
         crossplane.io/claim-name: s-joe
     fullPath: false
@@ -970,6 +975,7 @@ spec:
       name: s-joe-admin
       policy:
         resolution: Required
+        resolve: Always
     members:
     - joe
     realmId: acme
@@ -990,6 +996,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     members:
     - joe
     realmId: acme
@@ -1074,6 +1081,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     optionalScopes:
     - s-joe:interactive
     - offline_access
@@ -1135,6 +1143,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     name: ws_admin
     realmId: acme
   providerConfigRef:
@@ -1154,6 +1163,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     name: ws_api
     realmId: acme
   providerConfigRef:
@@ -1173,11 +1183,13 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdRef:
       name: s-joe-ws-api
       policy:
         resolution: Required
+        resolve: Always
   providerConfigRef:
     kind: ProviderConfig
     name: provider-keycloak
@@ -1195,6 +1207,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     name: ws_access
     realmId: acme
   providerConfigRef:
@@ -1215,6 +1228,7 @@ spec:
       name: s-joe-admin
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-joe-ws-admin
@@ -1243,6 +1257,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     roleIdsRefs:
     - name: s-joe-ws-access
@@ -1345,6 +1360,7 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     config:
       access.token.claim: 'true'
       claim.name: resource_access.s-joe.roles
@@ -1375,16 +1391,19 @@ spec:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     realmId: acme
     role: ws_api
     roleRef:
       name: s-joe-ws-api
       policy:
         resolution: Required
+        resolve: Always
     serviceAccountUserClientIdRef:
       name: s-joe
       policy:
         resolution: Required
+        resolve: Always
     serviceAccountUserId: test-service-account-id
   providerConfigRef:
     kind: ProviderConfig

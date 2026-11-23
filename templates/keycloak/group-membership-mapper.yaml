@@ -10,6 +10,9 @@ spec:
   forProvider:
     claimName: groups
     clientIdSelector:
+      policy:
+        resolution: Required
+        resolve: Always
       matchLabels:
         crossplane.io/claim-name: ${xr_name}
     addToAccessToken: false

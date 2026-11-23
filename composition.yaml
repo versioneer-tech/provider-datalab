@@ -1342,7 +1342,7 @@ spec:
                     req, "keycloak/client-scopes", scope_kind=kind,
                     scope_binding={
                         "realmId": realm,
-                        "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                        "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required", "resolve": "Always"}},
                         field: names,
                     },
                 ))
@@ -1438,14 +1438,14 @@ spec:
                     "keycloak/service-account-role",
                     role_binding={
                         "realmId": realm,
-                        "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required"}},
+                        "clientIdRef": {"name": xr_name, "policy": {"resolution": "Required", "resolve": "Always"}},
                         "roleRef": {
                             "name": f"{xr_name}-ws-api",
-                            "policy": {"resolution": "Required"},
+                            "policy": {"resolution": "Required", "resolve": "Always"},
                         },
                         "serviceAccountUserClientIdRef": {
                             "name": xr_name,
-                            "policy": {"resolution": "Required"},
+                            "policy": {"resolution": "Required", "resolve": "Always"},
                         },
                         **service_account_inputs,
                     },
@@ -1533,6 +1533,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               realmId: ${realm}
         keycloak/admin-group-roles:
           apiVersion: group.keycloak.m.crossplane.io/v1alpha1
@@ -1547,6 +1548,7 @@ spec:
                 name: ${group_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               exhaustive: true
               roleIdsRefs: ${role_refs}
         keycloak/admin-memberships:
@@ -1561,6 +1563,7 @@ spec:
                 name: ${group_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               realmId: ${realm}
               members: ${admins}
         keycloak/admin-role:
@@ -1576,6 +1579,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               realmId: ${realm}
         keycloak/admins-group:
           apiVersion: group.keycloak.m.crossplane.io/v1alpha1
@@ -1600,6 +1604,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               realmId: ${realm}
         keycloak/audience-mapper:
           apiVersion: client.keycloak.m.crossplane.io/v1alpha1
@@ -1614,6 +1619,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               protocol: openid-connect
               protocolMapper: oidc-audience-mapper
               name: ${display_name}
@@ -1719,6 +1725,9 @@ spec:
             forProvider:
               claimName: groups
               clientIdSelector:
+                policy:
+                  resolution: Required
+                  resolve: Always
                 matchLabels:
                   crossplane.io/claim-name: ${xr_name}
               addToAccessToken: false
@@ -1774,10 +1783,12 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               roleIdRef:
                 name: ${role_name_override}
                 policy:
                   resolution: Required
+                  resolve: Always
         keycloak/selected-role-mapper:
           apiVersion: client.keycloak.m.crossplane.io/v1alpha1
           kind: ProtocolMapper
@@ -1808,6 +1819,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               protocol: openid-connect
               protocolMapper: oidc-usermodel-realm-role-mapper
               name: workspace-selected-roles
@@ -1841,6 +1853,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               roleIdsRefs: ${role_refs}
         keycloak/user-memberships:
           apiVersion: group.keycloak.m.crossplane.io/v1alpha1
@@ -1854,6 +1867,7 @@ spec:
                 name: ${xr_name}
                 policy:
                   resolution: Required
+                  resolve: Always
               realmId: ${realm}
               members: ${users}
         keycloak/users-group:
@@ -1878,6 +1892,9 @@ spec:
               name: ${role_name}
               clientIdRef:
                 name: ${xr_name}
+                policy:
+                  resolution: Required
+                  resolve: Always
   - step: update-oauth2-proxy-secret
     functionRef:
       name: crossplane-contrib-function-python

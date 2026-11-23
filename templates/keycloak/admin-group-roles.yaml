@@ -13,5 +13,6 @@ spec:
       name: ${group_name}
       policy:
         resolution: Required
+        resolve: Always
     exhaustive: true
     roleIdsRefs: ${role_refs}

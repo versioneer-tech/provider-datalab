@@ -202,6 +202,8 @@ controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
 The `test-login` client uses generated passwords to obtain user tokens.
 Checks cover members, administrators, unauthorized profiles, exact roles and
 audiences, and rejection of interactive scopes during token exchange.
+Deleting the test client in Keycloak must restore credentials, scopes,
+and role grants with a new client ID.
 
 The workspace service account starts with `ws_api` only. The test assigns
 individual vcluster roles and requests their optional scopes. It checks
