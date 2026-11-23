@@ -13,7 +13,14 @@ def check_volume_binding(api, bearer, phase):
 
     def wait(check, message, seconds=300):
         deadline = time.monotonic() + seconds
-        while not check():
+        while True:
+            try:
+                if check():
+                    return
+            except AssertionError as error:
+                # Profile and binding changes can restart the control plane.
+                if getattr(error, "status", None) != 503:
+                    raise
             assert time.monotonic() < deadline, message
             time.sleep(3)
 
@@ -57,6 +64,7 @@ def check_volume_binding(api, bearer, phase):
     read_only = phase != "write"
     command = ("printf 'bound-volume-data' > /data/marker; cat /data/marker"
                if not read_only else "cat /data/marker")
+    command += "; printf '\\n'"
     if phase == "check":
         command += "; sleep 3600"
     api("/api/v1/namespaces/demo/pods", bearer, method="POST", expected=201, body={
@@ -83,5 +91,6 @@ def check_volume_binding(api, bearer, phase):
         return status.get("phase") == ("Running" if phase == "check" else "Succeeded")
 
     wait(finished, "The bound volume probe did not finish", seconds=600)
-    assert api(pod_path + "/log", bearer, raw=True).strip() == "bound-volume-data"
+    wait(lambda: api(pod_path + "/log", bearer, raw=True).strip() == "bound-volume-data",
+         "The bound volume probe did not report the expected data", seconds=60)
     print("PASS host volume data is accessible through the virtual PVC", flush=True)

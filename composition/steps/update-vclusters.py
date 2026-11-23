@@ -122,15 +122,15 @@ def _compose_volume_binding(req, rsp, binding, instance, runtime, namespace,
     anchor_key = _resource_name("vcluster", namespace, instance, "access", suffix + "-claim-policy")
     statefulset_key = _resource_name("vcluster", namespace, instance, "statefulset")
     statefulset = rsp.desired.resources[statefulset_key].resource
-    references = _to_dict(statefulset).get("spec", {}).get("references", [])
+    # The control plane outlives each binding. Its references cannot release
+    # policy finalizers when a binding is removed, so use the replica gate.
     for key in dependencies[:4]:
-        references.append({"dependsOn": {"name": key, "namespace": claim_namespace}})
         observed_policy = req.observed.resources.get(key)
         policy = _to_dict(observed_policy.resource) if observed_policy else {}
-        if not any(c.get("type") == "Ready" and c.get("status") == "True"
-                   for c in policy.get("status", {}).get("conditions", [])):
+        if policy.get("metadata", {}).get("deletionTimestamp") or not any(
+                c.get("type") == "Ready" and c.get("status") == "True"
+                for c in policy.get("status", {}).get("conditions", [])):
             statefulset["spec"]["forProvider"]["manifest"]["spec"]["replicas"] = 0
-    statefulset["spec"]["references"] = references
     if anchor_key not in rsp.desired.resources:
         return
     rsp.desired.resources[anchor_key].resource["spec"]["forProvider"]["deletionPropagationPolicy"] = "Background"

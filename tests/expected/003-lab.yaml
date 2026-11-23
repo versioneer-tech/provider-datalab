@@ -3404,19 +3404,6 @@ spec:
       && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision
       == object.status.updateRevision
     policy: DeriveFromCelQuery
-  references:
-  - dependsOn:
-      name: vcluster-s-jane-vc0-volume-binding-analysis-aa7ce1e0-26338deeac
-      namespace: default
-  - dependsOn:
-      name: vcluster-s-jane-vc0-volume-binding-analysis-aa7ce1e0-4b9a9afd6c
-      namespace: default
-  - dependsOn:
-      name: volume-s-jane-analysis-claim-policy-f0baf58704
-      namespace: default
-  - dependsOn:
-      name: volume-s-jane-analysis-claim-policy-binding-fac674c154
-      namespace: default
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1

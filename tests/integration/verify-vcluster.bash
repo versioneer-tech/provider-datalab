@@ -75,6 +75,47 @@ build_client_image() {
   publish_test_image "${client_image}" "${work_directory}/docker"
 }
 
+install_client_kubectl() {
+  local version script
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+    cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
+    kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
+    return
+  fi
+  version="$(kube version --client -o json | jq -er '.clientVersion.gitVersion')"
+  # Large API copies can time out through nested forwards. Download in the Pod.
+  script="$(cat <<'KUBECTL'
+import hashlib
+from pathlib import Path
+import platform
+import re
+import sys
+from urllib.request import urlopen
+
+version = sys.argv[1]
+assert re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version), "Invalid kubectl version"
+architecture = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
+url = f"https://dl.k8s.io/release/{version}/bin/linux/{architecture}/kubectl"
+with urlopen(url + ".sha256", timeout=60) as response:
+    expected = response.read().decode().strip()
+temporary = Path("/tmp/kubectl.download")
+try:
+    digest = hashlib.sha256()
+    with urlopen(url, timeout=60) as response, temporary.open("wb") as output:
+        while chunk := response.read(1024 * 1024):
+            digest.update(chunk)
+            output.write(chunk)
+    assert digest.hexdigest() == expected, "kubectl checksum mismatch"
+    temporary.chmod(0o755)
+    temporary.replace("/tmp/kubectl")
+finally:
+    temporary.unlink(missing_ok=True)
+print(f"PASS downloaded and verified kubectl {version}", flush=True)
+KUBECTL
+  )"
+  kube --request-timeout=5m exec verify-vcluster-client --namespace workspace -- python3 -c "${script}" "${version}"
+}
+
 install_prerequisites() {
   create_ingress_certificate
   install_pgo
@@ -128,8 +169,9 @@ install_prerequisites() {
 
 
 verify_volume_bindings() {
-  local gateway_ip=$1 deadline operation
+  local gateway_ip=$1 deadline operation control_plane_uid
   local -a binding_objects
+  control_plane_uid="$(kube get statefulset/vcluster-vc0 --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')"
   mapfile -t binding_objects < <(kube get objects.kubernetes.m.crossplane.io --namespace workspace \
     --selector crossplane.io/composite=verify-vcluster,datalabs.versioneer.at/vcluster=vc0 -o json | jq -r '
       [.items[] | .spec.forProvider.manifest as $manifest |
@@ -180,8 +222,18 @@ verify_volume_bindings() {
   for object in "${binding_objects[@]}"; do
     kube wait "object.kubernetes.m.crossplane.io/${object}" --namespace workspace --for=delete --timeout=5m
   done
+  [[ "$(kube get statefulset/vcluster-vc0 --namespace "${VCLUSTER_NAMESPACE}" -o jsonpath='{.metadata.uid}')" == "${control_plane_uid}" ]]
+  printf 'PASS binding policies are deleted while the control plane remains\n'
   kube patch datalab/verify-vcluster --namespace workspace --type=merge \
     --patch '{"spec":{"vclusters":{"vc0":{"volumeBindings":[{"name":"demo","target":{"namespace":"demo","name":"demo"}}]}}}}'
+  deadline=$((SECONDS + 900))
+  until kube get datalab/verify-vcluster --namespace workspace -o json | jq -e '
+    .metadata.generation as $generation |
+    any(.status.conditions[]?; .type == "Ready" and .status == "True" and .observedGeneration == $generation)
+  ' >/dev/null; do
+    ((SECONDS < deadline)) || return 1
+    sleep 3
+  done
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
   deadline=$((SECONDS + 90))
   until kube get pods --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -e '
@@ -411,8 +463,7 @@ PVC
     ADMINISTRATOR_SECRET "${administrator_secret}" EDITOR_SECRET "${editor_secret}" OTHER_SECRET "${other_secret}" \
     CLIENT_IMAGE "${client_image}" IMAGE_PULL_SECRETS "$(test_image_pull_secrets)"
   kube wait pod/verify-vcluster-client --namespace workspace --for=condition=Ready --timeout=5m
-  cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
-  kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
+  install_client_kubectl
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --recreate-client
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge --patch '{"spec":{"users":[]}}'

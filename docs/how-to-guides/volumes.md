@@ -100,6 +100,9 @@ PVC and its backups while `spec.volumes.demo` remains. A deleted virtual PVC is
 recreated and rebound while its binding remains. Stop workloads before removing
 or changing their binding. Removing a binding removes its virtual PV and PVC
 records after consumers release them.
+The control plane waits for the required host policies before it starts.
+Binding policies remain until the virtual claim Object is removed. Wait for
+the old binding policies to be deleted before you use the same target again.
 
 ### Direct host mounts
 

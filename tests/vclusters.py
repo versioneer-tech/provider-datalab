@@ -98,7 +98,7 @@ def check_volume_bindings(args, env, source, baseline):
     control = resource_name("vcluster", "s-joe", "vc0", "statefulset")
     assert manifest(rendered, control)["spec"]["replicas"] == 0
     assert manifest(rendered, resource_name("vcluster", "s-joe", "vc1", "statefulset"))["spec"]["replicas"] == 1
-    assert {reference["dependsOn"]["name"] for reference in rendered[control]["spec"]["references"]} >= set(protection)
+    assert rendered[control]["spec"].get("references", []) == baseline[control]["spec"].get("references", [])
 
     observed = [anchor_observation]
     for key in protection:
@@ -107,6 +107,10 @@ def check_volume_bindings(args, env, source, baseline):
         observed.append(ready)
     released = render(args, env, bound_source, observed)
     assert manifest(released, control)["spec"]["replicas"] == 1
+    deleting_policy = deepcopy(observed)
+    deleting_policy[1]["metadata"]["deletionTimestamp"] = "2026-11-23T01:00:00Z"
+    blocked = render(args, env, bound_source, deleting_policy)
+    assert manifest(blocked, control)["spec"]["replicas"] == 0
     native = deepcopy(pvc)
     pvc_observation = deepcopy(rendered[pvc_key])
     for uid, deleting, expected in (("old-claim", False, "old-claim"),

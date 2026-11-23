@@ -468,7 +468,8 @@ def recreate_workspace_client():
         claims = json.loads(base64.urlsafe_b64decode(value.split(".")[1] + "=="))
         return set(claims.get("resource_access", {}).get(LAB, {}).get("roles", [])) == {"ws_api"}
 
-    wait_until(recovered, "Datalab authentication did not recover after client recreation", seconds=900)
+    # Allow three 10-minute drift polls and credential projection.
+    wait_until(recovered, "Datalab authentication did not recover after client recreation", seconds=2100)
     verify_member_roles(False, ["vc0", "vc1"])
     print("PASS recreated Keycloak client recovers scopes, credentials, and member and service-account roles", flush=True)
 
@@ -598,6 +599,8 @@ def main():
                 result.status,
                 f"{method} {path}: expected {expected}, got {result.status}",
             )
+        if result.status == 404 and not raw:
+            return {"kind": "Status", "code": 404}
         return data.decode() if raw else (json.loads(data) if data else None)
 
     def profile_token(profile, instance="vc0", bearer=None):
