@@ -22,17 +22,16 @@ def main():
     source = {
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "teams", "uid": "test-datalab"},
-        "spec": {"databases": {"prod": {"names": ["app"]}},
-                 "documentStores": {"prod": {"type": "mongo"}},
-                 "cacheStores": {"prod": {"type": "redis"}}},
+        "spec": {"stores": {"prod": {"type": "postgres", "names": ["app"]},
+                            "cache": {"type": "redis", "names": ["sessions", "jobs"]}}},
     }
+    instances = {"postgres": "prod", "redis": "cache"}
     values = {
-        "prod-pguser-postgres": {"host": "prod-primary.s-joe.svc", "port": "5432",
-                                  "user": "postgres", "password": "test-postgres-password",
-                                  "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@prod/app",
+        "prod-superuser": {"host": "prod-rw.s-joe.svc", "port": "5432",
+                                  "username": "postgres", "password": "test-postgres-password",
+                                  "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@prod-rw.s-joe.svc:5432/app",
                                   "jdbc-uri": "jdbc:postgresql://prod/app", "verifier": "test-internal"},
-        "prod-mongodb-auth": {"user": "prod-app", "password": "test-mongo-password", "internal": "test-internal"},
-        "prod-redis-auth": {"user": "default", "password": "test-redis-password", "internal": "test-internal"},
+        "cache-redis-auth": {"user": "default", "password": "test-redis-password", "internal": "test-internal"},
         "apikey": {"token": "test-custom-token", "endpoint": "https://example.invalid"},
     }
 
@@ -55,7 +54,7 @@ def main():
     def scenario(xr):
         name = xr["metadata"]["name"]
         initial = run(xr, env, [])
-        assert len(connections(initial)) == 3 and not any(c["ready"] for c in connections(initial))
+        assert len(connections(initial)) == 2 and not any(c["ready"] for c in connections(initial))
         assert not copies(initial)
         observed = []
         for key, body in initial.items():
@@ -76,15 +75,21 @@ def main():
     observed = scenario(source)
     pending = run(source, env, observed)
     published = copies(pending)
-    assert len(published) == 4 and not any(c["ready"] for c in connections(pending))
+    assert len(published) == 3 and not any(c["ready"] for c in connections(pending))
     expected = {
-        "postgres": encoded({key: value for key, value in values["prod-pguser-postgres"].items() if key not in ("verifier", "jdbc-uri")}),
-        "mongo": encoded({"user": "prod-app", "password": "test-mongo-password"}),
+        "postgres": encoded({("user" if key == "username" else key): value for key, value in values["prod-superuser"].items() if key not in ("verifier", "jdbc-uri")}),
         "redis": encoded({"user": "default", "password": "test-redis-password"}),
         "custom": encoded(values["apikey"]),
     }
+    for kind, instance in instances.items():
+        names = source["spec"]["stores"][instance]["names"]
+        expected[kind].update(encoded({"names": json.dumps(names)}))
+        if kind == "redis":
+            expected[kind].update(encoded({"prefixes": json.dumps({name: name + ":" for name in names})}))
     for connection in connections(pending):
         ref = connection["secretRef"]
+        if connection["type"] in instances:
+            assert connection["names"] == source["spec"]["stores"][connection["name"]]["names"]
         secret = next(body for body in published.values() if body["metadata"]["name"] == ref["name"])
         assert ref["namespace"] == secret["metadata"]["namespace"] == source["metadata"]["namespace"]
         assert secret["data"] == expected[connection["type"]]
@@ -125,8 +130,8 @@ def main():
     secured = run(source, [env, *required_secrets], [*sanitized, *published.values()])
     assert copies(secured) == published
     assert all(c["ready"] for c in connections(secured))
-    for kind in ("postgres", "mongo", "redis"):
-        key = f"connection-s-joe-{kind}-prod"
+    for kind in ("postgres", "redis"):
+        key = f"connection-s-joe-{kind}-{instances[kind]}"
         assert secured[key]["stringData"] == ready[key]["stringData"]
     rotated = deepcopy(observed)
     for body in rotated:
@@ -141,15 +146,15 @@ def main():
     assert set(current) == set(published)
     assert all(current[key]["data"] != published[key]["data"] for key in current)
     assert not any(c["ready"] for c in connections(rotating))
-    for kind in ("postgres", "mongo", "redis"):
-        service_values = rotating[f"connection-s-joe-{kind}-prod"]["stringData"]
+    for kind in ("postgres", "redis"):
+        service_values = rotating[f"connection-s-joe-{kind}-{instances[kind]}"]["stringData"]
         assert service_values["password"] == "test-rotated"
     updated = run(source, [env, *rotated_secrets], [*sanitized, *current.values()])
     assert all(c["ready"] for c in connections(updated))
     missing_secured = run(source, env, [*sanitized, *published.values()])
     assert not copies(missing_secured)
     assert not any(c["ready"] for c in connections(missing_secured))
-    assert all(f"connection-s-joe-{kind}-prod" not in missing_secured for kind in ("postgres", "mongo", "redis"))
+    assert all(f"connection-s-joe-{kind}-{instances[kind]}" not in missing_secured for kind in ("postgres", "redis"))
     print("PASS source Secret rotation updates copies and readiness despite stale, redacted observer data")
 
     unavailable = deepcopy(rotated)
@@ -159,15 +164,14 @@ def main():
     stale["status"] = deepcopy(ready["composite"]["status"])
     lost = run(stale, env, [*unavailable, *current.values()])
     assert not copies(lost)
-    assert len(connections(lost)) == 3 and not any(c["ready"] for c in connections(lost))
+    assert len(connections(lost)) == 2 and not any(c["ready"] for c in connections(lost))
     restored = run(lost["composite"], env, [*rotated, *current.values()])
     assert all(c["ready"] for c in connections(restored))
     print("PASS unavailable sources remove stale copies and readiness; recovery republishes current credentials")
 
     for kind, secret_name, field in (
-        ("postgres", "prod-pguser-postgres", "password"),
-        ("mongo", "prod-mongodb-auth", "user"),
-        ("redis", "prod-redis-auth", "user"),
+        ("postgres", "prod-superuser", "password"),
+        ("redis", "cache-redis-auth", "user"),
     ):
         incomplete = deepcopy(observed)
         credential = next(body for body in incomplete
@@ -175,7 +179,7 @@ def main():
         credential["status"]["atProvider"]["manifest"]["data"].pop(field)
         missing = run(source, env, [*incomplete, *published.values()])
         assert not next(c["ready"] for c in connections(missing) if c["type"] == kind), kind
-        assert len(copies(missing)) == 3, kind
+        assert len(copies(missing)) == 2, kind
     print("PASS incomplete service credentials prevent publication and readiness")
 
     other = deepcopy(source)
@@ -188,13 +192,13 @@ def main():
     separate = run(other, env, other_sources)
     assert {c["secretRef"]["name"] for c in connections(pending)}.isdisjoint(
         c["secretRef"]["name"] for c in connections(separate))
-    assert len({c["secretRef"]["name"] for c in connections(pending)}) == 4
+    assert len({c["secretRef"]["name"] for c in connections(pending)}) == 3
     assert all(encoded({"value": "test-john-credential"})["value"] in body["data"].values()
                for body in copies(separate).values())
     print("PASS connection names are unique across services and Datalabs")
 
     removed = deepcopy(stale)
-    removed["spec"].update(databases={}, documentStores={}, cacheStores={})
+    removed["spec"]["stores"] = {}
     retired_env = deepcopy(env)
     retired_env["data"]["customSecrets"] = []
     retired = run(removed, retired_env, [*observed, *published.values()])

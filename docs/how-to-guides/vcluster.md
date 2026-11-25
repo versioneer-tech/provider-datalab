@@ -549,7 +549,7 @@ runs `stac-fastapi-pgstac` in virtual namespace `demo`. Its PostgreSQL database
 is a Datalab-managed service on the host. Add this request alongside `vclusters`:
 
 ```yaml
-databases:
+stores:
   pg0:
     type: postgres
     names: [catalog]

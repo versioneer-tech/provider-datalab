@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import base64
+import json
 from collections import Counter
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -13,7 +14,9 @@ from composition.helpers import (
     _extract_manifest,
     _secret_manifest,
     _resource_name,
+    _postgres_connection_data,
     _safe_str,
+    _stores,
     _to_dict,
 )
 from composition.render import _render_template
@@ -69,7 +72,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                 ),
             }
-            if kind in ("postgres", "mongo", "redis", "registry", "custom"):
+            if kind in ("postgres", "redis"):
+                connection["names"] = _stores(spec, kind)[instance]["names"]
+            if kind in ("postgres", "redis", "registry", "custom"):
                 connection = publish_connection(connection, key, present)
                 if kind == "custom" and connection is None:
                     return
@@ -109,14 +114,20 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         data = dict(source_manifest.get("data") or {})
         data.update({name: base64.b64encode(value.encode()).decode()
                      for name, value in (source_manifest.get("stringData") or {}).items()})
+        if kind == "postgres":
+            data = _postgres_connection_data(data, instance, xr_name)
         required = {
             "postgres": ("host", "port", "user", "password", "dbname", "uri"),
-            "mongo": ("user", "password"),
             "redis": ("user", "password"),
             "registry": ("user", "password"),
         }.get(kind, ())
         if kind != "custom":
             data = {name: value for name, value in data.items() if name in required}
+        if kind in ("postgres", "redis"):
+            names = connection["names"]
+            data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
+            if kind == "redis":
+                data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
         available = (present and connection["ready"] and bool(data)
                      and all(data.get(name) for name in required))
         if kind == "custom" and not available:
@@ -227,24 +238,23 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             instance=secret_name,
         )
 
-    postgres_clusters = spec.get("databases")
+    postgres_clusters = _stores(spec, "postgres")
     if isinstance(postgres_clusters, dict):
         for name in sorted(postgres_clusters):
             if isinstance(name, str) and name.strip():
                 cluster_name = name.strip()
                 observe(
                     f"observe-database-secret-{xr_name}-{cluster_name}",
-                    f"{cluster_name}-pguser-postgres",
+                    f"{cluster_name}-superuser",
                     runtime_namespace,
                     kind="postgres",
                     instance=cluster_name,
                 )
 
-    for field, backend in (
-        ("documentStores", "mongodb"),
-        ("cacheStores", "redis"),
+    for kind, backend in (
+        ("redis", "redis"),
     ):
-        stores = spec.get(field) or {}
+        stores = _stores(spec, kind)
         if isinstance(stores, dict):
             for name in sorted(stores):
                 if isinstance(name, str) and name.strip():
@@ -253,7 +263,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                         f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                         f"{store_name}-{backend}-auth",
                         runtime_namespace,
-                        kind="mongo" if backend == "mongodb" else "redis",
+                        kind=kind,
                         instance=store_name,
                     )
 

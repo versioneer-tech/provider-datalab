@@ -5,16 +5,23 @@ import base64
 import hashlib
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+from crossplane.function import response
 
 from composition.helpers import (
-    _backup_enabled,
+    _extract_manifest,
+    _resource_name,
     _extract_data,
     _safe_str,
     _string_value,
     _strong_token,
+    _stores,
     _to_dict,
 )
 from composition.render import _render_template
+
+
+BACKUP_SCRIPT = _embedded_script("scripts/redis-snapshot.py")
+SNAPSHOT_SCRIPT = _embedded_script("scripts/volume-snapshot.py")
 
 
 def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -25,7 +32,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     xr_name = metadata.get("name")
     xr_namespace = metadata.get("namespace") or "default"
 
-    cache_stores = spec.get("cacheStores")
+    cache_stores = _stores(spec, "redis")
     if not isinstance(cache_stores, dict) or not cache_stores:
         return
 
@@ -33,10 +40,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     images = environment.get("images") or {}
     redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
-    backup_image = _safe_str(images.get("redisBackup")) or "redis:7.2.17"
+    backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine"
     redis_env = environment.get("cacheStore") or {}
     redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
-    backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
     runtime_namespace = xr_name
 
@@ -51,8 +57,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not redis_storage:
             continue
         store_name = store_key.strip()
-        backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
-        backups_enabled = _backup_enabled(backup_storage)
+        backups_enabled = store_cfg.get("backups") is True
         redis_password = _strong_token(
             f"{xr_name}:{store_name}:redis", suffix="", length=28
         )
@@ -79,7 +84,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         acl = f"user default on >{redis_password} ~* +@all\n"
         if backups_enabled:
             backup_password = _strong_token(f"{xr_name}:{store_name}:redis:backup")
-            acl += f"user backup on >{backup_password} -@all +ping +replconf +sync\n"
+            acl += f"user backup on >{backup_password} -@all +ping +info +bgsave +client|pause +client|unpause\n"
         encoded_acl = base64.b64encode(acl.encode()).decode()
         redis_acl_secret = _render_template(
             req,
@@ -148,47 +153,46 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 redis_user="backup",
                 redis_password=backup_password,
             )
-            backup_vcs = {
-                "accessModes": ["ReadWriteOnce"],
-                "resources": {"requests": {"storage": backup_storage}},
+            snapshot_class = redis_env.get("snapshotClassName") or (environment.get("volumes") or {}).get("snapshotClassName")
+            retention = redis_env.get("maxSnapshots", 4)
+            if not isinstance(snapshot_class, str) or not snapshot_class.strip():
+                response.fatal(rsp, "Redis backups require data.cacheStore.snapshotClassName or data.volumes.snapshotClassName.")
+                return
+            if (isinstance(retention, bool) or not isinstance(retention, (int, float))
+                    or retention != int(retention) or not 1 <= retention <= 100):
+                response.fatal(rsp, "data.cacheStore.maxSnapshots must be an integer from 1 to 100.")
+                return
+            pod = _extract_manifest(req.observed.resources.get(f"redis-pod-{xr_name}-{store_name}"))
+            volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")
+                       for v in (pod.get("spec") or {}).get("volumes", [])}
+            claims = {volumes.get(m["name"]) for c in (pod.get("spec") or {}).get("containers", [])
+                      for m in c.get("volumeMounts", []) if m["mountPath"] == "/data"}
+            claim = next(iter(claims)) if len(claims) == 1 and None not in claims else "unbound"
+            resources = _render_template(
+                req, "redis/backup-cronjob", target=runtime_namespace, pvc_name=claim,
+                volume_name=store_name, backup_name=backup_name,
+                backup_binding=_resource_name(runtime_namespace, backup_name),
+                snapshot_class=snapshot_class, max_snapshots=str(int(retention)),
+                schedule=redis_env.get("schedule") or "0 1 * * *",
+                backup_script=BACKUP_SCRIPT, snapshot_script=SNAPSHOT_SCRIPT,
+                backup_image=backup_image, backup_secret_name=backup_secret_name,
+                pod_name=store_name + "-0", suspended=claim == "unbound",
+            )["resources"]
+            resources["auth-secret"] = backup_secret
+            resources["class"] = {
+                "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
+                "metadata": {"name": snapshot_class},
             }
-            if backup_storage_class:
-                backup_vcs["storageClassName"] = backup_storage_class
-            backup_pvc = _render_template(
-                req,
-                "redis/backup-pvc",
-                backup_name=backup_name,
-                runtime_namespace=runtime_namespace,
-                backup_vcs=backup_vcs,
-            )
-            backup_job = _render_template(
-                req,
-                "redis/backup-cronjob",
-                redis_image=backup_image,
-                backup_name=backup_name,
-                runtime_namespace=runtime_namespace,
-                backup_secret_name=backup_secret_name,
-                backup_host=store_name,
-            )
-            for resource_type, manifest in (
-                ("auth-secret", backup_secret),
-                ("pvc", backup_pvc),
-                ("cronjob", backup_job),
-            ):
+            for resource_type, manifest in resources.items():
                 backup_key = f"redis-backup-{resource_type}-{xr_name}-{store_name}"
+                readiness = ({"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}
+                             if resource_type == "class" else {"policy": "SuccessfulCreate"})
                 backup_body = _render_template(
-                    req,
-                    "common/object",
-                    key=backup_key,
-                    xr_namespace=xr_namespace,
-                    manifest=manifest,
-                    readiness={"policy": "SuccessfulCreate"},
+                    req, "common/object", key=backup_key, xr_namespace=xr_namespace,
+                    manifest=manifest, readiness=readiness,
                 )
-                if resource_type == "pvc":
-                    # Keep completed backups when the schedule is disabled.
-                    backup_body["spec"]["managementPolicies"] = [
-                        "Observe", "Create", "Update", "LateInitialize"
-                    ]
+                if resource_type == "class":
+                    backup_body["spec"]["managementPolicies"] = ["Observe"]
                 rsp.desired.resources[backup_key].resource.update(backup_body)
 
         pod_key = f"redis-pod-{xr_name}-{store_name}"

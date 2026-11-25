@@ -118,7 +118,7 @@ KUBECTL
 
 install_prerequisites() {
   create_ingress_certificate
-  install_pgo
+  install_cnpg
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
   if [[ ! -s "${contour_manifest}" ]]; then
@@ -339,8 +339,8 @@ verify_hibernation() {
   kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
     all(.status.connections[] | select(.type == "vcluster"); .ready == false)
   ' >/dev/null
-  kube get postgrescluster/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
-    | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
+    | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   [[ "$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')" == "${previous_pvcs}" ]]
   kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=5m
   printf 'PASS both instances hibernate without synced Pods and retain their PVCs and PostgreSQL\n'
@@ -362,7 +362,7 @@ verify_hibernation() {
 }
 
 verify_vcluster() {
-  local service gateway_ip deadline administrator_secret editor_secret other_secret
+  local service gateway_ip deadline administrator_secret editor_secret other_secret previous_configuration configuration_path
   if [[ -n "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" ]]; then
     kube patch environmentconfig/datalab-vcluster-it --type=merge --patch "$(
       jq -cn --arg name "${PROVIDER_DATALAB_IMAGE_PULL_SECRET}" \
@@ -392,9 +392,9 @@ DATALAB
     kube wait "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --for=create --timeout=10m
     kube rollout status "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --timeout=15m
   done
-  kube wait postgrescluster/pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
+  kube wait cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
   deadline=$((SECONDS + 900))
-  until kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null; do
+  until kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null; do
     ((SECONDS < deadline)) || return 1
     sleep 5
   done
@@ -480,10 +480,19 @@ PVC
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"replace","path":"/spec/vclusters/vc0/groups/0/role","value":"view"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --read-only
+  configuration_path='{.spec.template.metadata.annotations.datalabs\.versioneer\.at/configuration-checksum}'
+  previous_configuration="$(kube get statefulset/vcluster-vc0 --namespace "${runtime_namespace}" -o "jsonpath=${configuration_path}")"
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --revoked
   kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
+  # Role removal can revoke access before the changed authentication configuration rolls out.
+  deadline=$((SECONDS + 600))
+  until [[ "$(kube get statefulset/vcluster-vc0 --namespace "${runtime_namespace}" -o "jsonpath=${configuration_path}")" != "${previous_configuration}" ]]; do
+    ((SECONDS < deadline)) || { printf 'The virtual cluster authentication configuration did not change.\n' >&2; return 1; }
+    sleep 3
+  done
+  kube rollout status statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --timeout=10m
   if ((snapshots_enabled)); then
     kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
   fi
@@ -491,7 +500,7 @@ PVC
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1
-  kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   if ((snapshots_enabled)); then
     verify_bound_volume_preserved
     printf 'PASS a running bound workload does not block vc0 removal; host volume, backup schedule, and snapshot remain\n'
@@ -515,10 +524,10 @@ value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "name
 result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
 assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
 print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
-for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+for field in ('vclusters', 'stores'):
     for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
         value = deepcopy(source)
-        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'redis', 'storage': '1Gi'}
         value['spec'][field] = {key: config}
         result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
         assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
@@ -541,7 +550,7 @@ main() {
     kube delete datalabs.versioneer.at/verify-vcluster --namespace workspace --wait=false
     kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=delete --timeout=10m
     kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=10m
-    stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
+    stop_unused_operator cnpg-system cnpg clusters.postgresql.cnpg.io
   fi
 }
 main "$@"

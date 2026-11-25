@@ -11,7 +11,7 @@ and decides who can use these resources. The host cluster must enforce network
 policies, admission rules, Pod security, and RBAC. Virtual clusters share its
 nodes and kernel.
 
-Registry, MongoDB, and Redis passwords are derived from resource names and are
+Registry and Redis passwords are derived from resource names and are
 predictable. Keep their endpoints within the approved team network boundary.
 
 | Control | Details |
@@ -36,6 +36,11 @@ Crossplane reads source Secrets directly through its required-resource API.
 
 PostgreSQL connections use the administrative `postgres` account. Create
 application accounts and grants for workloads that need less access.
+CloudNativePG generates the administrative password. Datalab user passwords
+use that private entropy when first created and are stored in separate Secrets.
+Reconciliation and administrative password rotation retain existing user
+passwords. Named-user Secrets grant login access; application setup owns
+database grants and schemas.
 A virtual administrator can read all Secrets in that virtual cluster. A user
 who can create Pods in a namespace can usually mount that namespace's Secrets.
 
@@ -43,6 +48,11 @@ The Datalab OAuth client secret permits service-account token requests. Give it
 only to authorized callers. The service account has `ws_api` by default.
 See [credential Secrets](docs/how-to-guides/authentication.md#credential-secrets-and-machine-access)
 for source and runtime copies.
+
+Managed store names share the credentials of their service instance. Redis key
+prefixes organize data; they do not restrict access. Clients must add the prefix
+to their keys. Use separate service instances when applications need separate
+credentials and data volumes.
 
 ## Identity prerequisites
 
@@ -167,6 +177,25 @@ Stopping a Pod or tightening a network rule does not revoke a leaked
 credential. Rotate or revoke it at its source. Protect the OAuth client Secret
 as described in [Authentication](docs/how-to-guides/authentication.md#credential-secrets-and-machine-access).
 
+## PostgreSQL snapshot access
+
+Install the [cluster snapshot prerequisites](README.md#cluster-prerequisites)
+before enabling PostgreSQL backups. CloudNativePG needs permission to create
+and manage its database snapshots. Crossplane's Kubernetes provider observes
+the selected snapshot class and checks its `Delete` policy.
+
+Each database backup Job has a separate ServiceAccount. It can read its named
+Cluster and snapshot classes, request and remove namespaced CNPG Backups, and
+read the resulting VolumeSnapshots. It cannot read Secrets, delete PVCs, or
+delete snapshots directly. CloudNativePG sets each snapshot's owner to its
+Backup; Kubernetes removes those snapshots when retention removes the Backup.
+
+The Job removes old completed backups only after a new backup and all of its
+snapshots are ready. It limits cleanup to its database name and cluster UID.
+Disabling backups removes the schedule and leaves completed recovery points.
+Namespace deletion removes these resources. Storage retained outside the
+namespace needs a separate platform backup policy.
+
 ## Network policies
 
 Provider Datalab creates ingress and egress policies in the Datalab-named host
@@ -175,6 +204,13 @@ control planes, and synced workload Pods use it regardless of their virtual
 namespace. Virtual clusters in one Datalab share this boundary.
 The cluster CNI must enforce Kubernetes NetworkPolicy for these rules to take
 effect.
+
+PostgreSQL also has a service policy. It permits the CloudNativePG controller
+Pods in `database.operatorNamespace` to reach TCP ports 5432 and 8000. Database
+Pods can reach Kubernetes API ports 443 and 6443 and cluster DNS. The controller
+Pods must have label `app.kubernetes.io/name: cloudnative-pg`.
+The API-port rules have no destination IP selector because API endpoints can
+use host networking. Platform controls can restrict their destination addresses.
 
 NetworkPolicies inside a virtual cluster are not synced to the host. Configure
 team network access through EnvironmentConfig. The generated host policies
@@ -233,7 +269,7 @@ Each virtual API accepts ingress on TCP port 8443 for authenticated Kubernetes
 access through the Gateway. Its workload and DNS policies permit the required
 control-plane traffic. These allowances add to the namespace policies.
 
-Each named volume adds a policy for its host backup Job Pods. It permits DNS
+Each named volume with backups enabled adds a policy for its host backup Job Pods. It permits DNS
 and API traffic on TCP 443 and 6443. No source PVC is mounted in these Pods.
 
 ### Replace or exclude policies
@@ -313,3 +349,11 @@ The host CNI must allow this traffic to the selected API endpoint. The Job uses
 its projected ServiceAccount token, with no external kubeconfig or source-volume
 mount.
 
+Redis snapshot Jobs use the same class role and namespaced snapshot permissions,
+plus permission to patch the verified label after consistency checks.
+Each Job can read its selected Pod and data PVC. Its mounted backup credential
+permits `PING`, `INFO`, `BGSAVE`, `CLIENT PAUSE`, and `CLIENT UNPAUSE`, with no key
+read or write commands. The Job pauses writes for at most 11 minutes, saves an
+RDB file, and captures the PVC. A server replacement or an expired pause rejects
+the capture. The Job releases writes on exit; the timeout also releases them
+after a killed Job. Redis network access includes TCP 6379 in the service namespace.

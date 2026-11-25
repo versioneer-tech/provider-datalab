@@ -7,31 +7,15 @@ set -euo pipefail
 INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
+source "${INTEGRATION_DIR}/snapshots.bash"
 
-: "${MONGODB_OPERATOR_VERSION:=1.14.0}"
 : "${REDIS_OPERATOR_CHART_VERSION:=0.27.0}"
-: "${MONGO_CLIENT_IMAGE:=mongo:8.0.38}"
 : "${REDIS_CLIENT_IMAGE:=redis:7.2.17}"
 : "${KEEP_STORE_RESOURCES:=0}"
 
 readonly store_type="${1:-}"
 
 case "${store_type}" in
-  mongo)
-    DATALAB_NAME=verify-mongo
-    OPERATOR_NAMESPACE=mongodb-operator
-    OPERATOR_RELEASE=mongodb-kubernetes
-    OPERATOR_DEPLOYMENT=mongodb-kubernetes-operator
-    RESOURCE_TYPE=mongodbcommunity.mongodbcommunity.mongodb.com
-    RESOURCE_NAME=mongodb-verify
-    POD_NAME=mongodb-verify-0
-    SERVICE_NAME=mongodb-verify-svc
-    CLIENT_IMAGE="${MONGO_CLIENT_IMAGE}"
-    SECRET_KEYS=(
-      host port database
-      user password uri
-    )
-    ;;
   redis)
     DATALAB_NAME=verify-redis
     OPERATOR_NAMESPACE=redis-operator
@@ -48,7 +32,7 @@ case "${store_type}" in
     )
     ;;
   *)
-    printf 'Usage: %s <mongo|redis>\n' "$0" >&2
+    printf 'Usage: %s <redis>\n' "$0" >&2
     exit 1
     ;;
 esac
@@ -60,30 +44,6 @@ readonly CONNECTION_SECRET="${DATALAB_NAME}-${store_type}-verify"
 readonly PROBE_NAME="${DATALAB_NAME}"
 readonly STORE_NAMESPACE="${DATALAB_NAME}"
 probe_value=""
-
-install_mongo_operator() {
-  if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" "mongodb-kubernetes-${MONGODB_OPERATOR_VERSION}"; then
-    return
-  fi
-  log "Installing MongoDB Kubernetes Operator ${MONGODB_OPERATOR_VERSION}"
-  helm_it repo add mongodb https://mongodb.github.io/helm-charts/ --force-update
-  helm_it repo update mongodb
-  apply_operator_crds mongodb/mongodb-kubernetes "${MONGODB_OPERATOR_VERSION}"
-  helm_it upgrade --install "${OPERATOR_RELEASE}" mongodb/mongodb-kubernetes \
-    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-    --kube-context "${KUBECTL_CONTEXT}" \
-    --namespace "${OPERATOR_NAMESPACE}" \
-    --create-namespace \
-    --version "${MONGODB_OPERATOR_VERSION}" \
-    --set-string 'operator.watchNamespace=*' \
-    --set 'operator.watchedResources={mongodbcommunity}' \
-    --set operator.resources.requests.cpu=100m \
-    --set operator.resources.requests.memory=128Mi \
-    --set operator.resources.limits.cpu=500m \
-    --set operator.resources.limits.memory=512Mi \
-    --wait \
-    --timeout 10m
-}
 
 install_redis_operator() {
   if helm_release_matches "${OPERATOR_RELEASE}" "${OPERATOR_NAMESPACE}" "redis-operator-${REDIS_OPERATOR_CHART_VERSION}"; then
@@ -111,10 +71,7 @@ install_redis_operator() {
 
 install_operator() {
   require_command helm
-  case "${store_type}" in
-    mongo) install_mongo_operator ;;
-    redis) install_redis_operator ;;
-  esac
+  install_redis_operator
   kube set resources "deployment/${OPERATOR_DEPLOYMENT}" --namespace "${OPERATOR_NAMESPACE}" \
     --containers "${OPERATOR_DEPLOYMENT}" \
     --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=512Mi
@@ -160,7 +117,21 @@ wait_for_store() {
   wait_for_connection_secret "${CONNECTION_SECRET}" "${DATALAB_NAME}" 1200 "${SECRET_KEYS[@]}"
 }
 
+redis_prefix=""
+redis_other_prefix=""
+
 run_store_probe() {
+  if [[ "${store_type}" == redis ]]; then
+    local prefixes
+    prefixes="$(kube get "secret/${CONNECTION_SECRET}" --namespace "${WORKSPACE_NAMESPACE}" \
+      -o jsonpath='{.data.prefixes}' | python3 -c '
+import base64, json, sys
+value = json.loads(base64.b64decode(sys.stdin.read()))
+assert value == {"sessions": "sessions:", "jobs": "jobs:"}
+print(value["sessions"], value["jobs"])
+')"
+    read -r redis_prefix redis_other_prefix <<<"${prefixes}"
+  fi
   kube wait networkpolicy/allow-internal-ingress --namespace "${STORE_NAMESPACE}" \
     --for=create --timeout=5m
   log "Running an in-cluster ${store_type} write/read probe"
@@ -170,46 +141,26 @@ run_store_probe() {
     PROBE_NAME "${PROBE_NAME}" \
     PROBE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
     CLIENT_IMAGE "${CLIENT_IMAGE}" \
+    KEY_PREFIX "${redis_prefix}" OTHER_KEY_PREFIX "${redis_other_prefix}" \
     PROBE_VALUE "${probe_value}" \
     CONNECTION_SECRET "${CONNECTION_SECRET}" | kube apply -f -
 
   wait_for_probe "${WORKSPACE_NAMESPACE}" "${PROBE_NAME}"
 }
 
-verify_mongo_backup() {
-  local backup_job=verify-mongo-backup restore_probe=verify-mongo-restore
-  log 'Running the MongoDB backup CronJob and restoring its archive'
-  kube wait cronjob/mongodb-verify-backup --namespace "${STORE_NAMESPACE}" \
-    --for=create --timeout=5m
-  kube delete "job/${backup_job}" "pod/${restore_probe}" --namespace "${STORE_NAMESPACE}" \
-    --ignore-not-found --wait=true
-  kube create job "${backup_job}" --from=cronjob/mongodb-verify-backup \
-    --namespace "${STORE_NAMESPACE}"
-  wait_for_job_scheduling "${STORE_NAMESPACE}" "${backup_job}" || return 1
-  if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
-    --for=condition=Complete --timeout=10m; then
-    kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
-    return 1
-  fi
-  render_template "${MANIFEST_DIR}/mongo/restore.yaml" \
-    PROBE_NAME "${restore_probe}" STORE_NAMESPACE "${STORE_NAMESPACE}" \
-    CLIENT_IMAGE "${CLIENT_IMAGE}" PROBE_VALUE "${probe_value}" | kube apply -f -
-  wait_for_probe "${STORE_NAMESPACE}" "${restore_probe}"
-}
-
-set_redis_backup_storage() {
-  local size="$1" previous_checksum checksum deadline=$((SECONDS + 600))
+set_redis_backups() {
+  local enabled="$1" previous_checksum checksum deadline=$((SECONDS + 600))
   local annotation='{.metadata.annotations.datalabs\.versioneer\.at/redis-acl-checksum}'
   previous_checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
     --namespace "${STORE_NAMESPACE}" -o "jsonpath=${annotation}")" || return 1
   kube patch "datalabs.versioneer.at/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
-    --type=merge --patch "{\"spec\":{\"cacheStores\":{\"verify\":{\"backupStorage\":\"${size}\"}}}}" || return 1
+    --type=merge --patch "{\"spec\":{\"stores\":{\"verify\":{\"backups\":${enabled}}}}}" || return 1
   while true; do
     checksum="$(kube get "${RESOURCE_TYPE}/${RESOURCE_NAME}" \
       --namespace "${STORE_NAMESPACE}" -o "jsonpath=${annotation}")" || return 1
     if [[ -n "${checksum}" && "${checksum}" != "${previous_checksum}" ]]; then break; fi
     if ((SECONDS >= deadline)); then
-      printf 'Redis did not update its ACL after backup storage changed.\n' >&2
+      printf 'Redis did not update its ACL after backup settings changed.\n' >&2
       return 1
     fi
     sleep 5
@@ -221,30 +172,23 @@ set_redis_backup_storage() {
 }
 
 verify_redis_backup() {
-  local backup_job=verify-redis-backup restore_probe=verify-redis-restore
-  set_redis_backup_storage 1Gi || return 1
-  log 'Running the Redis backup CronJob and restoring its snapshot'
+  set_redis_backups true || return 1
   kube wait cronjob/redis-verify-backup --namespace "${STORE_NAMESPACE}" \
     --for=create --timeout=5m
-  kube delete "job/${backup_job}" "pod/${restore_probe}" --namespace "${STORE_NAMESPACE}" \
-    --ignore-not-found --wait=true
-  kube create job "${backup_job}" --from=cronjob/redis-verify-backup \
-    --namespace "${STORE_NAMESPACE}"
-  wait_for_job_scheduling "${STORE_NAMESPACE}" "${backup_job}" || return 1
-  if ! kube wait "job/${backup_job}" --namespace "${STORE_NAMESPACE}" \
-    --for=condition=Complete --timeout=10m; then
-    kube logs "job/${backup_job}" --namespace "${STORE_NAMESPACE}" --all-containers=true
-    return 1
-  fi
-  render_template "${MANIFEST_DIR}/redis/restore.yaml" \
-    PROBE_NAME "${restore_probe}" STORE_NAMESPACE "${STORE_NAMESPACE}" \
-    PROBE_VALUE "${probe_value}" CLIENT_IMAGE "${CLIENT_IMAGE}" | kube apply -f -
-  wait_for_probe "${STORE_NAMESPACE}" "${restore_probe}" || return 1
-  log 'Disabling Redis backups while retaining the snapshot volume'
-  set_redis_backup_storage 0Gi || return 1
-  kube wait cronjob/redis-verify-backup --namespace "${STORE_NAMESPACE}" \
-    --for=delete --timeout=5m || return 1
-  kube get pvc/redis-verify-backup --namespace "${STORE_NAMESPACE}" || return 1
+  local claim
+  claim="$(kube get pod/verify-0 --namespace "${STORE_NAMESPACE}" -o json | python3 -c '
+import json, sys
+pod = json.load(sys.stdin)
+volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName") for v in pod["spec"]["volumes"]}
+claims = {volumes.get(m["name"]) for c in pod["spec"]["containers"] for m in c.get("volumeMounts", []) if m["mountPath"] == "/data"}
+assert len(claims) == 1 and None not in claims
+print(next(iter(claims)))
+')"
+  check_volume_backup_access "${STORE_NAMESPACE}" "${claim}" redis-verify-backup || return 1
+  python3 "${INTEGRATION_DIR}/verify-redis.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" \
+    --image "${CLIENT_IMAGE}" --value "${probe_value}" \
+    --prefix "${redis_prefix}" --other-prefix "${redis_other_prefix}" || return 1
   run_store_probe
 }
 
@@ -286,6 +230,7 @@ cleanup_successful_verification() {
 
 main() {
   require_cluster
+  snapshot_tests_available verify-redis || return 0
   require_command openssl
   probe_value="$(openssl rand -hex 12)"
   install_operator
@@ -302,11 +247,6 @@ main() {
   fi
   python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}"
-  if [[ "${store_type}" == mongo ]] && ! verify_mongo_backup; then
-    show_store_diagnostics
-    printf 'MongoDB backup verification resources were kept for diagnosis.\n' >&2
-    exit 1
-  fi
   if [[ "${store_type}" == redis ]] && ! verify_redis_backup; then
     show_store_diagnostics
     printf 'Redis backup verification resources were kept for diagnosis.\n' >&2

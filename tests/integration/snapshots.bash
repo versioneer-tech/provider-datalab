@@ -58,8 +58,8 @@ snapshot_tests_available() {
     printf 'PASS %s snapshot API, class, and permission checks.\n' "${1:-verify-volumes}"
     return 0
   fi
-  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
-    printf 'ERROR: Kind snapshot setup is incomplete: %s\n' "${reason}" >&2
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind || -n "${PROVIDER_DATALAB_SNAPSHOT_CLASS:-}" ]]; then
+    printf 'ERROR: Required snapshot setup is incomplete: %s\n' "${reason}" >&2
     exit 1
   fi
   printf '\n=== SKIPPED: %s snapshot tests: %s ===\n\n' "${1:-verify-volumes}" "${reason}"

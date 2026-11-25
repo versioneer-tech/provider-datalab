@@ -1,0 +1,14 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: ${database_resource}
+  namespace: ${runtime_namespace}
+spec:
+  name: ${database_name}
+  owner: postgres
+  databaseReclaimPolicy: retain
+  cluster:
+    name: ${cluster_name}

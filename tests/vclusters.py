@@ -372,7 +372,7 @@ def check_membership(args, env, source, resources):
 def check_secret_bindings(args, env, source):
     observed = []
     bound_source, bound_env = deepcopy(source), deepcopy(env)
-    bound_source["spec"]["databases"] = {"pg0": {"names": ["analytics"]}}
+    bound_source["spec"]["stores"] = {"pg0": {"type": "postgres", "names": ["analytics"]}}
     bound_env["data"]["customSecrets"] = [
         {"name": "github-development"}, {"name": "missing"}
     ]
@@ -837,7 +837,7 @@ def main():
         "metadata": {"name": "s-joe", "namespace": "workspace"},
         "spec": {
             "users": ["joe"],
-            "volumes": {"analysis": {"storage": "2Gi"}},
+            "volumes": {"analysis": {"storage": "2Gi", "backups": True}},
             "vclusters": {
                 key: {"groups": [group], "storage": "2Gi"} for key in ("vc0", "vc1")
             },

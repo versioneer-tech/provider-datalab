@@ -345,6 +345,27 @@ spec:
                     return str(value)
             return None
 
+        def _stores(spec, kind):
+            return {name: {**config, "names": config.get("names") or ["default"]}
+                    for name, config in (spec.get("stores") or {}).items()
+                    if isinstance(config, dict) and config.get("type") == kind}
+
+        def _postgres_connection_data(data, cluster, namespace):
+            from urllib.parse import quote
+
+            username = _b64get_any(data, ["username"])
+            password = _b64get_any(data, ["password"])
+            if not username or not password:
+                return {}
+            host = f"{cluster}-rw.{namespace}.svc"
+            port = _b64get_any(data, ["port"]) or "5432"
+            database = _b64get_any(data, ["dbname"]) or "postgres"
+            uri = f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}/{quote(database, safe='')}"
+            return {key: base64.b64encode(value.encode()).decode() for key, value in {
+                "host": host, "port": port, "user": username, "password": password,
+                "dbname": database, "uri": uri,
+            }.items()}
+
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -360,6 +381,7 @@ spec:
         # SPDX-License-Identifier: Apache-2.0
 
         import base64
+        import json
         from collections import Counter
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
@@ -418,7 +440,9 @@ spec:
                             and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                         ),
                     }
-                    if kind in ("postgres", "mongo", "redis", "registry", "custom"):
+                    if kind in ("postgres", "redis"):
+                        connection["names"] = _stores(spec, kind)[instance]["names"]
+                    if kind in ("postgres", "redis", "registry", "custom"):
                         connection = publish_connection(connection, key, present)
                         if kind == "custom" and connection is None:
                             return
@@ -458,14 +482,20 @@ spec:
                 data = dict(source_manifest.get("data") or {})
                 data.update({name: base64.b64encode(value.encode()).decode()
                              for name, value in (source_manifest.get("stringData") or {}).items()})
+                if kind == "postgres":
+                    data = _postgres_connection_data(data, instance, xr_name)
                 required = {
                     "postgres": ("host", "port", "user", "password", "dbname", "uri"),
-                    "mongo": ("user", "password"),
                     "redis": ("user", "password"),
                     "registry": ("user", "password"),
                 }.get(kind, ())
                 if kind != "custom":
                     data = {name: value for name, value in data.items() if name in required}
+                if kind in ("postgres", "redis"):
+                    names = connection["names"]
+                    data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
+                    if kind == "redis":
+                        data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
                 available = (present and connection["ready"] and bool(data)
                              and all(data.get(name) for name in required))
                 if kind == "custom" and not available:
@@ -576,24 +606,23 @@ spec:
                     instance=secret_name,
                 )
 
-            postgres_clusters = spec.get("databases")
+            postgres_clusters = _stores(spec, "postgres")
             if isinstance(postgres_clusters, dict):
                 for name in sorted(postgres_clusters):
                     if isinstance(name, str) and name.strip():
                         cluster_name = name.strip()
                         observe(
                             f"observe-database-secret-{xr_name}-{cluster_name}",
-                            f"{cluster_name}-pguser-postgres",
+                            f"{cluster_name}-superuser",
                             runtime_namespace,
                             kind="postgres",
                             instance=cluster_name,
                         )
 
-            for field, backend in (
-                ("documentStores", "mongodb"),
-                ("cacheStores", "redis"),
+            for kind, backend in (
+                ("redis", "redis"),
             ):
-                stores = spec.get(field) or {}
+                stores = _stores(spec, kind)
                 if isinstance(stores, dict):
                     for name in sorted(stores):
                         if isinstance(name, str) and name.strip():
@@ -602,7 +631,7 @@ spec:
                                 f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
                                 f"{store_name}-{backend}-auth",
                                 runtime_namespace,
-                                kind="mongo" if backend == "mongodb" else "redis",
+                                kind=kind,
                                 instance=store_name,
                             )
 
@@ -765,12 +794,34 @@ spec:
                     return str(value)
             return None
 
+        def _stores(spec, kind):
+            return {name: {**config, "names": config.get("names") or ["default"]}
+                    for name, config in (spec.get("stores") or {}).items()
+                    if isinstance(config, dict) and config.get("type") == kind}
+
+        def _postgres_connection_data(data, cluster, namespace):
+            from urllib.parse import quote
+
+            username = _b64get_any(data, ["username"])
+            password = _b64get_any(data, ["password"])
+            if not username or not password:
+                return {}
+            host = f"{cluster}-rw.{namespace}.svc"
+            port = _b64get_any(data, ["port"]) or "5432"
+            database = _b64get_any(data, ["dbname"]) or "postgres"
+            uri = f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}/{quote(database, safe='')}"
+            return {key: base64.b64encode(value.encode()).decode() for key, value in {
+                "host": host, "port": port, "user": username, "password": password,
+                "dbname": database, "uri": uri,
+            }.items()}
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
+        import json
         import re
-        from urllib.parse import urlsplit, urlunsplit
+        from urllib.parse import quote, urlsplit, urlunsplit
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
 
@@ -817,7 +868,8 @@ spec:
 
 
         def _postgres_values(data, name, store, config, env):
-            host = _b64get_any(data, ["host"]) or f"{store}-primary.{name}.svc"
+            data = _postgres_connection_data(data, store, name)
+            host = f"{store}-rw.{name}.svc"
             values = {
                 "host": host,
                 "port": _b64get_any(data, ["port"]) or "5432",
@@ -832,7 +884,7 @@ spec:
                     f"{store}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}"
                 )
                 values["host_external"] = external
-            uri = _b64get_any(data, ["uri"]) or ""
+            uri = _b64get_any(data, ["fqdn-uri", "uri"]) or ""
             for database in config.get("names") or []:
                 if uri:
                     parts = urlsplit(uri)
@@ -840,7 +892,7 @@ spec:
                         (
                             parts.scheme,
                             parts.netloc,
-                            f"/{database}",
+                            "/" + quote(database, safe=""),
                             parts.query,
                             parts.fragment,
                         )
@@ -903,7 +955,7 @@ spec:
                 env.get("storage") or {},
             )
             publish("s3", storage, bool(storage))
-            for store, config in sorted((spec.get("databases") or {}).items()):
+            for store, config in sorted(_stores(spec, "postgres").items()):
                 values = _postgres_values(
                     _extract_data(req, rsp, f"observe-database-secret-{name}-{store}"),
                     name,
@@ -911,16 +963,17 @@ spec:
                     config,
                     env,
                 )
+                values["names"] = json.dumps(config["names"])
                 publish(
                     f"postgres-{store}",
                     values,
                     bool(values["password"]),
                 )
-            for field, backend, kind in (
-                ("documentStores", "mongodb", "mongo"),
-                ("cacheStores", "redis", "redis"),
+            for backend, kind in (
+                ("redis", "redis"),
             ):
-                for store in sorted(spec.get(field) or {}):
+                for store, config in sorted(_stores(spec, kind).items()):
+                    names = config["names"]
                     password = (
                         _b64get_any(
                             _extract_data(
@@ -930,29 +983,17 @@ spec:
                         )
                         or ""
                     )
-                    if kind == "mongo":
-                        host = f"mongodb-{store}-svc.{name}.svc"
-                        values = {
-                            "host": host,
-                            "port": "27017",
-                            "database": store,
-                            "auth_source": "admin",
-                            "user": f"{store}-app",
-                            "password": password,
-                        }
-                        values["uri"] = (
-                            f"mongodb://{store}-app:{password}@{host}:27017/{store}?authSource=admin"
-                        )
-                    else:
-                        host = f"{store}.{name}.svc"
-                        values = {
-                            "host": host,
-                            "port": "6379",
-                            "database": "0",
-                            "user": "default",
-                            "password": password,
-                            "url": f"redis://default:{password}@{host}:6379/0",
-                        }
+                    host = f"{store}.{name}.svc"
+                    values = {
+                        "host": host,
+                        "port": "6379",
+                        "database": "0",
+                        "user": "default",
+                        "password": password,
+                        "url": f"redis://default:{password}@{host}:6379/0",
+                        "prefixes": json.dumps({name: name + ":" for name in names}),
+                    }
+                    values["names"] = json.dumps(names)
                     publish(f"{kind}-{store}", values, bool(password))
       templates:
         publish-connections/secret:
@@ -5182,7 +5223,7 @@ spec:
         import json
         from crossplane.function import request, response
 
-        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{LABEL}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(LABEL) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    incomplete = [item for item in snapshots if item.get("status", {}).get("readyToUse") is not True]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": "volume-" + volume + "-",\n                     "labels": {LABEL: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
         def compose(req, rsp):
@@ -5196,12 +5237,14 @@ spec:
             status = _to_dict(rsp.desired.composite.resource).get("status") or {}
             references = []
             volumes = (xr.get("spec") or {}).get("volumes") or {}
+            needs_snapshots = any(v.get("backups") is True or v.get("restoreFrom") for v in volumes.values())
             if volumes:
                 try:
                     _, storage_class = _volume_storage_classes(env)
                 except ValueError as error:
                     response.fatal(rsp, str(error))
                     return
+            if needs_snapshots:
                 snapshot_class = config.get("snapshotClassName")
                 if not isinstance(snapshot_class, str) or not snapshot_class.strip():
                     response.fatal(rsp, "Named volumes require data.volumes.snapshotClassName.")
@@ -5220,7 +5263,7 @@ spec:
                 )
                 rsp.desired.resources[key].resource.update(body)
 
-            if volumes:
+            if needs_snapshots:
                 observer_key = _resource_name("volume-snapshot-class", namespace)
                 emit(observer_key, {
                     "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
@@ -5257,19 +5300,20 @@ spec:
                 reference = {"name": name, "pvcRef": {"name": pvc_name, "namespace": namespace},
                              "phase": observed.get("status", {}).get("phase") or "Pending"}
 
-                backup_name = "volume-snapshot-" + name
-                resources = _render_template(
-                    req, "volumes/backup", target=namespace, pvc_name=pvc_name, volume_name=name,
-                    backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
-                    backup_binding=_resource_name(namespace, backup_name),
-                    schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
-                    backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
-                )["resources"]
-                for suffix, manifest in resources.items():
-                    emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
+                if volume.get("backups") is True:
+                    backup_name = "volume-snapshot-" + name
+                    resources = _render_template(
+                        req, "volumes/backup", target=namespace, pvc_name=pvc_name, volume_name=name,
+                        backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
+                        backup_binding=_resource_name(namespace, backup_name),
+                        schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
+                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                    )["resources"]
+                    for suffix, manifest in resources.items():
+                        emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
 
                 backup = {"readySnapshots": 0}
-                if uid:
+                if uid and (needs_snapshots or config.get("snapshotClassName")):
                     snapshot_key = key + "-snapshots"
                     response.require_resources(
                         rsp, name=snapshot_key, api_version="snapshot.storage.k8s.io/v1", kind="VolumeSnapshot",
@@ -7768,9 +7812,13 @@ spec:
 
             return fill(template)
 
-        import re
+        import base64
 
-        from decimal import Decimal
+        import hashlib
+
+        import json
+
+        import re
 
         from crossplane.function import request, response
 
@@ -7807,220 +7855,407 @@ spec:
             )
             return False
 
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _backup_enabled(value):
-            quantity = str(value or "0").strip()
-            match = re.fullmatch(
-                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
-                quantity,
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
             )
-            if not match:
-                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
-            return Decimal(match[1]) > 0
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
+        def _stores(spec, kind):
+            return {name: {**config, "names": config.get("names") or ["default"]}
+                    for name, config in (spec.get("stores") or {}).items()
+                    if isinstance(config, dict) and config.get("type") == kind}
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
 
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
 
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+        import base64
+        import hashlib
+        import hmac
+        import json
+        import re
+
+        from crossplane.function import response
+
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Request a cold PostgreSQL snapshot and retain completed recovery points."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/postgres-backup"\nSOURCE = "datalabs.versioneer.at/source-cluster-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(), method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, cluster_name, snapshot_class, retention, timeout=600):\n    namespace = quote(namespace, safe="")\n    path = "/apis/postgresql.cnpg.io/v1/namespaces/" + namespace\n    cluster_path = path + "/clusters/" + quote(cluster_name, safe="")\n    path += "/backups"\n    snapshot_path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + namespace + "/volumesnapshots/"\n    selected_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if selected_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("PostgreSQL snapshot retention requires deletion policy Delete.")\n    cluster = api.call("GET", cluster_path)\n    settings = cluster.get("spec", {}).get("backup", {}).get("volumeSnapshot", {})\n    if (cluster["metadata"].get("deletionTimestamp") or settings.get("className") != snapshot_class\n            or settings.get("online") is not False or settings.get("snapshotOwnerReference") != "backup"):\n        raise RuntimeError("The cluster must use cold snapshots owned by their Backup resources.")\n    uid = cluster["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{LABEL}={cluster_name},{SOURCE}={uid}"})\n\n    def owned_backups():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(LABEL) == cluster_name\n                and item["metadata"]["labels"].get(SOURCE) == uid\n                and item.get("spec", {}).get("cluster", {}).get("name") == cluster_name\n                and item["spec"].get("method") == "volumeSnapshot"\n                and item["spec"].get("online") is False\n                and not item["metadata"].get("deletionTimestamp")]\n\n    def ready(item):\n        if item.get("status", {}).get("phase") != "completed":\n            return False\n        elements = item["status"].get("snapshotBackupStatus", {}).get("elements") or []\n        if not elements or not any(element.get("type") == "PG_DATA" for element in elements):\n            return False\n        for element in elements:\n            snapshot = api.call("GET", snapshot_path + quote(element["name"], safe=""))\n            if (snapshot["metadata"].get("deletionTimestamp")\n                    or snapshot.get("status", {}).get("readyToUse") is not True\n                    or snapshot.get("status", {}).get("error")\n                    or not any(owner.get("kind") == "Backup" and owner.get("uid") == item["metadata"]["uid"]\n                               for owner in snapshot["metadata"].get("ownerReferences", []))):\n                return False\n        return True\n\n    pending = [item for item in owned_backups() if item.get("status", {}).get("phase") not in ("completed", "failed")]\n    if len(pending) > 1:\n        raise RuntimeError("Multiple pending PostgreSQL backups need operator review.")\n    current = pending[0] if pending else api.call("POST", path, {\n        "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",\n        "metadata": {"generateName": "snapshot-" + cluster_name[:40] + "-",\n                     "labels": {LABEL: cluster_name, SOURCE: uid}},\n        "spec": {"cluster": {"name": cluster_name}, "method": "volumeSnapshot",\n                 "online": False, "target": "primary"},\n    })\n    backup_name = current["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(backup_name, safe=""))\n        if current.get("status", {}).get("phase") == "failed":\n            raise RuntimeError("CloudNativePG reported a failed snapshot backup.")\n        if ready(current):\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The PostgreSQL snapshot did not complete before the deadline.")\n        time.sleep(3)\n    if api.call("GET", cluster_path)["metadata"]["uid"] != uid:\n        raise RuntimeError("The PostgreSQL cluster changed while the backup was being taken.")\n    backups = owned_backups()\n    completed = sorted((item for item in backups if ready(item)),\n                       key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]), reverse=True)\n    expired = completed[retention:]\n    expired += [item for item in backups if item.get("status", {}).get("phase") == "failed"]\n    # Remove old backups only after a new recovery point and its snapshots are ready.\n    for item in expired:\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n    print("PostgreSQL snapshot backup is ready: " + backup_name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("cluster")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    backup(API(), args.namespace, args.cluster, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
+        def compose(req, rsp):
             if not set_response_ttl(req, rsp, 60):
                 return
             xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
+            metadata = xr["metadata"]
+            name, namespace = metadata["name"], metadata.get("namespace") or "default"
+            spec = xr.get("spec") or {}
+            env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
+            config = env.get("database") or {}
+            route_config = config.get("tlsRoute") or {}
+            users = sorted(set(user for user in spec.get("users") or [] if user not in ("postgres", "datalab")))
 
-            xr_name = metadata.get("name")
-            xr_namespace = metadata.get("namespace") or "default"
-
-            db_hosts = spec.get("databases") or {}
-            if not isinstance(db_hosts, dict) or not db_hosts:
-                return
-
-            context = _to_dict(req.context)
-            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-
-            ingress_env = environment.get("ingress") or {}
-            ingress_domain = ingress_env.get("domain", "default")
-
-            db_env = environment.get("database") or {}
-            gateway_env = db_env.get("tlsRoute") or {}
-
-            gateway_parent_name = _string_value(gateway_env.get("parentName") or "")
-            gateway_parent_ns = _string_value(gateway_env.get("parentNamespace") or "")
-            gateway_section = _string_value(gateway_env.get("sectionName") or "")
-            has_gateway_parent = bool(
-                gateway_parent_name and gateway_parent_ns and gateway_section
-            )
-
-            data_sc_default = _string_value(db_env.get("storageClassName") or "")
-            backup_sc_default = _string_value(db_env.get("backupStorageClassName") or "")
-
-            users = list(spec.get("users", []) or [])
-            admin_user = "postgres"
-            other_users = [
-                u for u in users if _string_value(u) and _string_value(u) != admin_user
-            ]
-            users_all = [admin_user] + other_users
-
-            runtime_namespace = xr_name
-
-            def emit_obj(key, manifest, readiness=None, watch=True, management_policies=None):
-                body = _render_template(
-                    req,
-                    "postgres/object",
-                    key=key,
-                    xr_namespace=xr_namespace,
-                    manifest=manifest,
-                    watch=watch,
-                )
-                if readiness is not None:
-                    body["spec"]["readiness"] = readiness
-                if management_policies:
-                    body["spec"]["managementPolicies"] = management_policies
+            def emit(key, manifest, readiness=None, policies=None):
+                body = _render_template(req, "postgres/object", key=key, xr_namespace=namespace,
+                                        manifest=manifest, watch=True)
+                body["spec"]["readiness"] = readiness or {"policy": "SuccessfulCreate"}
+                if policies:
+                    body["spec"]["managementPolicies"] = policies
                 rsp.desired.resources[key].resource.update(body)
 
-            for host_key in sorted(list(db_hosts.keys())):
-                if not isinstance(host_key, str) or not host_key.strip():
+            def component(value):
+                if re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", value):
+                    return value
+                return hashlib.sha256(value.encode()).hexdigest()[:16]
+
+            for cluster, database in sorted(_stores(spec, "postgres").items()):
+                dbnames = database.get("names") or []
+                if not dbnames or not database.get("storage"):
                     continue
-
-                host_cfg = db_hosts.get(host_key) or {}
-                if not isinstance(host_cfg, dict):
-                    continue
-
-                dbnames = list(host_cfg.get("names") or [])
-                dbnames = [_string_value(x) for x in dbnames if _string_value(x)]
-                if not dbnames:
-                    continue
-
-                db_storage = _string_value(host_cfg.get("storage") or "")
-                backup_storage = _string_value(host_cfg.get("backupStorage") or "")
-                if not db_storage:
-                    continue
-                backup_enabled = _backup_enabled(backup_storage)
-
-                db_storage_class = _string_value(
-                    host_cfg.get("storageClassName") or data_sc_default
+                storage = {"size": database["storage"]}
+                storage_class = config.get("storageClassName")
+                if storage_class:
+                    storage["storageClass"] = storage_class
+                manifest = _render_template(
+                    req, "postgres/postgres-cluster", cluster_name=cluster, runtime_namespace=name,
+                    storage=storage, database_name=dbnames[0],
+                    postgres_image=(env.get("images") or {}).get("postgres")
+                    or "ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie",
                 )
-                backup_storage_class = _string_value(
-                    host_cfg.get("backupStorageClassName") or backup_sc_default
-                )
+                source = require_secret(req, rsp, f"postgres-superuser-{name}-{cluster}",
+                                        cluster + "-superuser", name)
+                password = _b64get_any(source.get("data") or {}, ["password"])
+                roles = []
+                for user in users:
+                    user_key = component(user)
+                    secret_name = _resource_name(cluster, "user", user_key)
+                    secret = require_secret(req, rsp, f"postgres-user-{name}-{cluster}-{user}", secret_name, name)
+                    data = secret.get("data") or {}
+                    if not data.get("password") and password:
+                        # Use private operator entropy; names alone must not determine a password.
+                        value = hmac.new(password.encode(), f"{name}:{cluster}:{user}".encode(), hashlib.sha256).digest()
+                        data = {"username": base64.b64encode(user.encode()).decode(),
+                                "password": base64.b64encode(base64.urlsafe_b64encode(value).rstrip(b"=")).decode()}
+                    if data.get("password"):
+                        emit(_resource_name("db-user-secret", name, cluster, user_key), {
+                            "apiVersion": "v1", "kind": "Secret", "type": "kubernetes.io/basic-auth",
+                            "metadata": {"name": secret_name, "namespace": name,
+                                         "labels": {"cnpg.io/reload": "true"}}, "data": data,
+                        })
+                    roles.append({"name": user, "login": True, "passwordSecret": {"name": secret_name}})
+                if roles:
+                    manifest["spec"]["managed"] = {"roles": roles}
+                emit(_resource_name("db-network", name, cluster), _render_template(
+                    req, "postgres/network", cluster_name=cluster, runtime_namespace=name,
+                    operator_namespace=config.get("operatorNamespace") or "cnpg-system",
+                ))
 
-                cluster_name = f"{host_key.strip()}"
-                cm_name = f"{cluster_name}-init-sql"
-                init_sql = "\\set ON_ERROR_STOP on\n\\connect postgres\n"
+                if database.get("backups") is True:
+                    snapshot_class = config.get("snapshotClassName") or (env.get("volumes") or {}).get("snapshotClassName")
+                    count = config.get("maxSnapshots", 4)
+                    if not isinstance(snapshot_class, str) or not snapshot_class.strip():
+                        response.fatal(rsp, "PostgreSQL backups require data.database.snapshotClassName or data.volumes.snapshotClassName.")
+                        return
+                    if isinstance(count, bool) or not isinstance(count, (int, float)) or count != int(count) or not 1 <= count <= 100:
+                        response.fatal(rsp, "data.database.maxSnapshots must be an integer from 1 to 100.")
+                        return
+                    manifest["spec"]["backup"] = {"target": "primary", "volumeSnapshot": {
+                        "className": snapshot_class, "online": False, "snapshotOwnerReference": "backup",
+                    }}
+                    class_key = _resource_name("db-snapshot-class", name, cluster)
+                    emit(class_key, {"apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
+                                     "metadata": {"name": snapshot_class}},
+                         {"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}, ["Observe"])
+                    backup_name = _resource_name("postgres", "snapshot", cluster)
+                    resources = _render_template(
+                        req, "postgres/backup", target=name, cluster_name=cluster, backup_name=backup_name,
+                        backup_binding=_resource_name(name, backup_name), snapshot_class=snapshot_class,
+                        max_snapshots=str(int(count)), schedule=config.get("schedule") or "0 1 * * *",
+                        backup_script=BACKUP_SCRIPT,
+                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                    )["resources"]
+                    for suffix, resource in resources.items():
+                        emit(_resource_name("db-backup", name, cluster, suffix), resource)
 
-                cm = _render_template(
-                    req,
-                    "postgres/init-sql",
-                    cm_name=cm_name,
-                    runtime_namespace=runtime_namespace,
-                    init_sql=init_sql,
-                )
+                query = "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
+                # CNPG can keep Ready true while a cold backup fences the only instance.
+                query += " && (!has(object.metadata.annotations) || !('cnpg.io/fencedInstances' in object.metadata.annotations) || object.metadata.annotations['cnpg.io/fencedInstances'] == '[]')"
+                if users:
+                    query += " && has(object.status.managedRolesStatus) && has(object.status.managedRolesStatus.byStatus) && has(object.status.managedRolesStatus.byStatus.reconciled) && "
+                    query += " && ".join(json.dumps(user) + " in object.status.managedRolesStatus.byStatus.reconciled" for user in users)
+                emit(f"db-cluster-{name}-{cluster}", manifest,
+                     {"policy": "DeriveFromCelQuery", "celQuery": query})
+                for dbname in dbnames:
+                    if dbname in ("postgres", "template0", "template1"):
+                        continue
+                    db_key = component(dbname)
+                    db_resource = _resource_name(cluster, "database", db_key)
+                    emit(_resource_name("db-database", name, cluster, db_key), _render_template(
+                        req, "postgres/database", database_resource=db_resource, database_name=dbname,
+                        runtime_namespace=name, cluster_name=cluster,
+                    ), {"policy": "DeriveFromCelQuery", "celQuery":
+                        "has(object.status) && has(object.status.applied) && object.status.applied == true && has(object.status.observedGeneration) && object.status.observedGeneration == object.metadata.generation"})
 
-                data_vcs = {
-                    "accessModes": ["ReadWriteOnce"],
-                    "resources": {"requests": {"storage": db_storage}},
-                }
-                if db_storage_class:
-                    data_vcs["storageClassName"] = db_storage_class
-
-                pg_cluster = _render_template(
-                    req,
-                    "postgres/postgres-cluster",
-                    cluster_name=cluster_name,
-                    runtime_namespace=runtime_namespace,
-                    cm_name=cm_name,
-                    data_vcs=data_vcs,
-                )
-
-                readiness_query = "has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name == 'primary' && has(i.readyReplicas) && i.readyReplicas >= 1)"
-                if backup_enabled:
-                    repo_vcs = {
-                        "accessModes": ["ReadWriteOnce"],
-                        "resources": {"requests": {"storage": backup_storage}},
-                    }
-                    if backup_storage_class:
-                        repo_vcs["storageClassName"] = backup_storage_class
-                    pg_cluster["spec"]["backups"] = _render_template(
-                        req, "postgres/backups", repo_vcs=repo_vcs
+                if all(route_config.get(key) for key in ("parentName", "parentNamespace", "sectionName")):
+                    route = _render_template(
+                        req, "postgres/route", cluster_name=cluster, runtime_namespace=name,
+                        gateway_parent_name=route_config["parentName"], gateway_parent_ns=route_config["parentNamespace"],
+                        gateway_section=route_config["sectionName"],
+                        hostname=f"{cluster}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}",
+                        backend_service_name=cluster + "-rw",
                     )
-                    readiness_query += " && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost) && object.status.pgbackrest.repoHost.ready == true"
-
-                if users_all:
-                    pg_cluster["spec"]["users"] = [
-                        {"name": admin_user, "databases": dbnames}
-                    ] + [{"name": u} for u in other_users]
-
-                emit_obj(
-                    f"db-configmap-{xr_name}-{cluster_name}",
-                    cm,
-                    readiness={"policy": "SuccessfulCreate"},
-                    watch=True,
-                )
-                emit_obj(
-                    f"db-postgrescluster-{xr_name}-{cluster_name}",
-                    pg_cluster,
-                    readiness={
-                        "policy": "DeriveFromCelQuery",
-                        "celQuery": readiness_query,
-                    },
-                    watch=True,
-                )
-
-                if not has_gateway_parent:
-                    continue
-
-                hostname = f"{cluster_name}-{runtime_namespace}.{ingress_domain}"
-                route = _render_template(
-                    req,
-                    "postgres/route",
-                    cluster_name=cluster_name,
-                    runtime_namespace=runtime_namespace,
-                    gateway_parent_name=gateway_parent_name,
-                    gateway_parent_ns=gateway_parent_ns,
-                    gateway_section=gateway_section,
-                    hostname=hostname,
-                    backend_service_name=f"{cluster_name}-primary",
-                )
-
-                emit_obj(
-                    f"db-tlsroute-{xr_name}-{cluster_name}",
-                    route,
-                    readiness={
-                        "policy": "DeriveFromCelQuery",
-                        "celQuery": "has(object.status) && has(object.status.parents) && object.status.parents.exists(p, has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True'))",
-                    },
-                    watch=True,
-                )
+                    emit(f"db-tlsroute-{name}-{cluster}", route, {"policy": "DeriveFromCelQuery", "celQuery":
+                        "has(object.status) && has(object.status.parents) && object.status.parents.exists(p, has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True'))"})
       templates:
-        postgres/backups:
-          pgbackrest:
-            global:
-              repo1-retention-full-type: count
-              repo1-retention-full: '4'
-              repo1-path: /pgbackrest/repo1
-            repos:
-            - name: repo1
-              schedules:
-                full: 0 1 * * 0
-                differential: 0 1 * * 1-6
-              volume:
-                volumeClaimSpec: ${repo_vcs}
-        postgres/init-sql:
-          apiVersion: v1
-          kind: ConfigMap
+        postgres/backup:
+          resources:
+            account:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              automountServiceAccountToken: false
+            role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              rules:
+              - apiGroups:
+                - postgresql.cnpg.io
+                resources:
+                - clusters
+                resourceNames:
+                - ${cluster_name}
+                verbs:
+                - get
+              - apiGroups:
+                - postgresql.cnpg.io
+                resources:
+                - backups
+                verbs:
+                - create
+                - get
+                - list
+                - delete
+              - apiGroups:
+                - snapshot.storage.k8s.io
+                resources:
+                - volumesnapshots
+                verbs:
+                - get
+            binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: Role
+                name: ${backup_name}
+            script:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              data:
+                backup.py: ${backup_script}
+            network:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              spec:
+                podSelector:
+                  matchLabels:
+                    datalabs.versioneer.at/postgres-backup: ${cluster_name}
+                policyTypes:
+                - Ingress
+                - Egress
+                ingress: []
+                egress:
+                - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 6443
+                    protocol: TCP
+                - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                    podSelector:
+                      matchLabels:
+                        k8s-app: kube-dns
+                  ports:
+                  - port: 53
+                    protocol: TCP
+                  - port: 53
+                    protocol: UDP
+            class-binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: ${backup_binding}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: ClusterRole
+                name: datalab-volume-snapshot-classes
+            cronjob:
+              apiVersion: batch/v1
+              kind: CronJob
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              spec:
+                schedule: ${schedule}
+                timeZone: Etc/UTC
+                concurrencyPolicy: Forbid
+                startingDeadlineSeconds: 3600
+                successfulJobsHistoryLimit: 1
+                failedJobsHistoryLimit: 1
+                jobTemplate:
+                  spec:
+                    backoffLimit: 1
+                    activeDeadlineSeconds: 900
+                    template:
+                      metadata:
+                        labels:
+                          datalabs.versioneer.at/postgres-backup: ${cluster_name}
+                      spec:
+                        restartPolicy: Never
+                        serviceAccountName: ${backup_name}
+                        automountServiceAccountToken: true
+                        securityContext:
+                          runAsNonRoot: true
+                          runAsUser: 65532
+                          runAsGroup: 65532
+                          seccompProfile:
+                            type: RuntimeDefault
+                        containers:
+                        - name: backup
+                          image: ${backup_image}
+                          command:
+                          - python
+                          - -B
+                          - /opt/backup/backup.py
+                          args:
+                          - ${target}
+                          - ${cluster_name}
+                          - ${snapshot_class}
+                          - ${max_snapshots}
+                          resources:
+                            requests:
+                              cpu: 20m
+                              memory: 32Mi
+                            limits:
+                              cpu: 100m
+                              memory: 128Mi
+                          securityContext:
+                            allowPrivilegeEscalation: false
+                            readOnlyRootFilesystem: true
+                            capabilities:
+                              drop:
+                              - ALL
+                          volumeMounts:
+                          - name: script
+                            mountPath: /opt/backup
+                            readOnly: true
+                        volumes:
+                        - name: script
+                          configMap:
+                            name: ${backup_name}
+        postgres/database:
+          apiVersion: postgresql.cnpg.io/v1
+          kind: Database
           metadata:
-            name: ${cm_name}
+            name: ${database_resource}
             namespace: ${runtime_namespace}
-          data:
-            init.sql: ${init_sql}
+          spec:
+            name: ${database_name}
+            owner: postgres
+            databaseReclaimPolicy: retain
+            cluster:
+              name: ${cluster_name}
+        postgres/network:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ${cluster_name}
+            namespace: ${runtime_namespace}
+          spec:
+            podSelector:
+              matchLabels:
+                cnpg.io/cluster: ${cluster_name}
+            policyTypes:
+            - Ingress
+            - Egress
+            ingress:
+            - from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: ${operator_namespace}
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: cloudnative-pg
+              ports:
+              - protocol: TCP
+                port: 5432
+              - protocol: TCP
+                port: 8000
+            egress:
+            - ports:
+              - protocol: TCP
+                port: 443
+              - protocol: TCP
+                port: 6443
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    k8s-app: kube-dns
+              ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
         postgres/object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
@@ -8037,21 +8272,20 @@ spec:
               manifest: ${manifest}
             watch: ${watch}
         postgres/postgres-cluster:
-          apiVersion: postgres-operator.crunchydata.com/v1
-          kind: PostgresCluster
+          apiVersion: postgresql.cnpg.io/v1
+          kind: Cluster
           metadata:
             name: ${cluster_name}
             namespace: ${runtime_namespace}
           spec:
-            postgresVersion: 17
-            postGISVersion: '3.5'
-            databaseInitSQL:
-              name: ${cm_name}
-              key: init.sql
-            instances:
-            - name: primary
-              replicas: 1
-              dataVolumeClaimSpec: ${data_vcs}
+            imageName: ${postgres_image}
+            instances: 1
+            enableSuperuserAccess: true
+            storage: ${storage}
+            bootstrap:
+              initdb:
+                database: ${database_name}
+                owner: datalab
         postgres/route:
           apiVersion: gateway.networking.k8s.io/v1
           kind: TLSRoute
@@ -8069,577 +8303,6 @@ spec:
             - backendRefs:
               - name: ${backend_service_name}
                 port: 5432
-  - step: update-mongodb-objects
-    functionRef:
-      name: crossplane-contrib-function-python
-    input:
-      apiVersion: python.fn.crossplane.io/v1beta1
-      kind: Script
-      script: |
-        import copy as _template_copy
-
-        import re as _template_re
-
-        from google.protobuf import json_format as _template_json
-
-        def _render_template(req, template_name, /, **values):
-            """Fill complete scalar placeholders and preserve each value's type."""
-            template = _template_json.MessageToDict(req.input["templates"][template_name])
-
-            def fill(value):
-                if isinstance(value, str):
-                    match = _template_re.fullmatch(r"\$\{([A-Za-z_][A-Za-z_0-9]*)\}", value)
-                    if match:
-                        return _template_copy.deepcopy(values[match[1]])
-                if isinstance(value, dict):
-                    return {key: fill(item) for key, item in value.items()}
-                if isinstance(value, list):
-                    return [fill(item) for item in value]
-                return value
-
-            return fill(template)
-
-        import base64
-
-        import hashlib
-
-        import re
-
-        from decimal import Decimal
-
-        from crossplane.function import request, response
-
-        from google.protobuf import json_format
-
-        def _to_dict(value):
-            if value is None:
-                return {}
-            if isinstance(value, dict):
-                return value
-            return json_format.MessageToDict(value, preserving_proto_field_name=True)
-
-        def set_response_ttl(req, rsp, default_seconds):
-            rsp.meta.ttl.FromSeconds(default_seconds)
-            environment = (
-                _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            )
-            datalab = environment.get("datalab") or {}
-            if not isinstance(datalab, dict):
-                response.fatal(rsp, "datalab must be a mapping with optional responseTTL.")
-                return False
-            if "responseTTL" not in datalab:
-                return True
-            match = re.fullmatch(r"([1-9][0-9]*)(s|m|h)", str(datalab["responseTTL"]))
-            if match:
-                seconds = int(match[1]) * {"s": 1, "m": 60, "h": 3600}[match[2]]
-                if seconds <= (2**63 - 1) // 1_000_000_000:
-                    rsp.meta.ttl.FromSeconds(seconds)
-                    return True
-            response.fatal(
-                rsp,
-                "datalab.responseTTL must be a positive whole duration, such as 30s, 5m, "
-                "or 1h, within the signed 64-bit nanosecond limit.",
-            )
-            return False
-
-        def _safe_str(value):
-            return str(value).strip() if value is not None else ""
-
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
-        def _backup_enabled(value):
-            quantity = str(value or "0").strip()
-            match = re.fullmatch(
-                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
-                quantity,
-            )
-            if not match:
-                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
-            return Decimal(match[1]) > 0
-
-        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
-            # Keep each service's existing seed and length to prevent credential changes.
-            digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
-            return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
-
-
-        # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-        # SPDX-License-Identifier: Apache-2.0
-
-        import re
-
-        from crossplane.function import response
-        from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-
-
-
-        def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
-            if not set_response_ttl(req, rsp, 60):
-                return
-            xr = _to_dict(req.observed.composite.resource)
-            metadata = xr.get("metadata", {}) or {}
-            spec = xr.get("spec", {}) or {}
-
-            xr_name = metadata.get("name")
-            xr_namespace = metadata.get("namespace") or "default"
-
-            document_stores = spec.get("documentStores")
-            if not isinstance(document_stores, dict) or not document_stores:
-                return
-
-            context = _to_dict(req.context)
-            environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
-            mongo_env = environment.get("documentStore") or {}
-            images = environment.get("images") or {}
-            mongo_image = _safe_str(images.get("mongo")) or "quay.io/mongodb/mongodb-community-server:8.0.38-ubi8"
-            version_tag = re.search(r":([0-9]+\.[0-9]+\.[0-9]+)(?:-[A-Za-z0-9_.-]+)?$", mongo_image)
-            if not version_tag:
-                response.fatal(rsp, "data.images.mongo must use a major.minor.patch tag, with an optional suffix such as -ubi8.")
-                return
-            mongo_version = version_tag[1]
-            backup_image = _safe_str(images.get("mongoBackup")) or f"mongo:{mongo_version}"
-            mongo_storage_class = _string_value(mongo_env.get("storageClassName") or "")
-            backup_storage_class = _string_value(mongo_env.get("backupStorageClassName") or "")
-
-            runtime_namespace = xr_name
-
-            # MongoDB operator expects these namespace-local prerequisites.
-            prereqs = [
-                (
-                    f"mongodb-sa-appdb-{xr_name}",
-                    _render_template(
-                        req,
-                        "mongodb/serviceaccount-mongodb-kubernetes-appdb",
-                        runtime_namespace=runtime_namespace,
-                    ),
-                ),
-                (
-                    f"mongodb-sa-database-pods-{xr_name}",
-                    _render_template(
-                        req,
-                        "mongodb/serviceaccount-mongodb-kubernetes-database-pods",
-                        runtime_namespace=runtime_namespace,
-                    ),
-                ),
-                (
-                    f"mongodb-sa-ops-manager-{xr_name}",
-                    _render_template(
-                        req,
-                        "mongodb/serviceaccount-mongodb-kubernetes-ops-manager",
-                        runtime_namespace=runtime_namespace,
-                    ),
-                ),
-                (
-                    f"mongodb-role-appdb-{xr_name}",
-                    _render_template(
-                        req,
-                        "mongodb/role-mongodb-kubernetes-appdb",
-                        runtime_namespace=runtime_namespace,
-                    ),
-                ),
-                (
-                    f"mongodb-rb-appdb-{xr_name}",
-                    _render_template(
-                        req,
-                        "mongodb/rolebinding-mongodb-kubernetes-appdb",
-                        runtime_namespace=runtime_namespace,
-                    ),
-                ),
-            ]
-            for key, manifest in prereqs:
-                body = _render_template(
-                    req,
-                    "common/object",
-                    key=key,
-                    xr_namespace=xr_namespace,
-                    manifest=manifest,
-                    readiness={"policy": "SuccessfulCreate"},
-                )
-                rsp.desired.resources[key].resource.update(body)
-
-            for store_key in sorted(list(document_stores.keys())):
-                if not isinstance(store_key, str) or not store_key.strip():
-                    continue
-                store_cfg = document_stores.get(store_key) or {}
-                if not isinstance(store_cfg, dict):
-                    continue
-
-                mongo_storage = _string_value(store_cfg.get("storage") or "10Gi")
-                if not mongo_storage:
-                    continue
-                pvc_spec = {
-                    "accessModes": ["ReadWriteOnce"],
-                    "resources": {"requests": {"storage": mongo_storage}},
-                }
-                if mongo_storage_class:
-                    pvc_spec["storageClassName"] = mongo_storage_class
-
-                store_name = store_key.strip()
-                mongo_resource_name = f"mongodb-{store_name}"
-                password_secret_name = f"{store_name}-mongodb-auth"
-                app_username = f"{store_name}-app"
-                mongo_password = _strong_token(f"{xr_name}:{store_name}:mongodb")
-                password_secret = _render_template(
-                    req,
-                    "mongodb/auth-secret",
-                    password_secret_name=password_secret_name,
-                    runtime_namespace=runtime_namespace,
-                    app_username=app_username,
-                    mongo_password=mongo_password,
-                )
-                pwd_key = f"mongodb-auth-secret-{xr_name}-{store_name}"
-                pwd_body = _render_template(
-                    req,
-                    "mongodb/auth-object",
-                    pwd_key=pwd_key,
-                    xr_namespace=xr_namespace,
-                    password_secret=password_secret,
-                )
-                rsp.desired.resources[pwd_key].resource.update(pwd_body)
-
-                mongo = _render_template(
-                    req,
-                    "mongodb/store",
-                    mongo_version=mongo_version,
-                    mongo_image=mongo_image,
-                    mongo_resource_name=mongo_resource_name,
-                    runtime_namespace=runtime_namespace,
-                    app_username=app_username,
-                    password_secret_name=password_secret_name,
-                    store_name=store_name,
-                    scram_secret_name=f"{store_name}-app-scram",
-                    pvc_spec=pvc_spec,
-                )
-                backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
-                if _backup_enabled(backup_storage):
-                    backup_name = f"{mongo_resource_name}-backup"
-                    backup_secret_name = f"{store_name}-mongodb-backup-auth"
-                    backup_username = f"{store_name}-backup"
-                    backup_password = _strong_token(f"{xr_name}:{store_name}:mongodb:backup")
-                    backup_secret = _render_template(
-                        req,
-                        "mongodb/backup-secret",
-                        backup_secret_name=backup_secret_name,
-                        runtime_namespace=runtime_namespace,
-                        backup_password=backup_password,
-                        backup_config=f"password: {backup_password}\n",
-                    )
-                    backup_vcs = {
-                        "accessModes": ["ReadWriteOnce"],
-                        "resources": {"requests": {"storage": backup_storage}},
-                    }
-                    if backup_storage_class:
-                        backup_vcs["storageClassName"] = backup_storage_class
-                    backup_pvc = _render_template(
-                        req,
-                        "mongodb/backup-pvc",
-                        backup_name=backup_name,
-                        runtime_namespace=runtime_namespace,
-                        backup_vcs=backup_vcs,
-                    )
-                    backup_job = _render_template(
-                        req,
-                        "mongodb/backup-cronjob",
-                        backup_name=backup_name,
-                        runtime_namespace=runtime_namespace,
-                        backup_secret_name=backup_secret_name,
-                        backup_username=backup_username,
-                        backup_host=f"{mongo_resource_name}/{mongo_resource_name}-0.{mongo_resource_name}-svc:27017",
-                        mongo_image=backup_image,
-                    )
-                    mongo["spec"]["users"].append(
-                        {
-                            "name": backup_username,
-                            "db": "admin",
-                            "passwordSecretRef": {"name": backup_secret_name, "key": "password"},
-                            "roles": [{"name": "backup", "db": "admin"}],
-                            "scramCredentialsSecretName": f"{store_name}-backup-scram",
-                        }
-                    )
-                    for resource_type, manifest in (
-                        ("auth-secret", backup_secret),
-                        ("pvc", backup_pvc),
-                        ("cronjob", backup_job),
-                    ):
-                        backup_key = f"mongodb-backup-{resource_type}-{xr_name}-{store_name}"
-                        backup_body = _render_template(
-                            req,
-                            "common/object",
-                            key=backup_key,
-                            xr_namespace=xr_namespace,
-                            manifest=manifest,
-                            readiness={"policy": "SuccessfulCreate"},
-                        )
-                        if resource_type == "pvc":
-                            # Keep completed backups when the schedule is disabled.
-                            backup_body["spec"]["managementPolicies"] = [
-                                "Observe", "Create", "Update", "LateInitialize"
-                            ]
-                        rsp.desired.resources[backup_key].resource.update(backup_body)
-
-                key = f"mongodb-community-{xr_name}-{store_name}"
-                body = _render_template(
-                    req,
-                    "mongodb/store-object",
-                    key=key,
-                    xr_namespace=xr_namespace,
-                    mongo=mongo,
-                )
-                rsp.desired.resources[key].resource.update(body)
-      templates:
-        common/object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${manifest}
-            readiness: ${readiness}
-            watch: true
-        mongodb/auth-object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${pwd_key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${pwd_key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${password_secret}
-            readiness:
-              policy: SuccessfulCreate
-            watch: true
-        mongodb/auth-secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${password_secret_name}
-            namespace: ${runtime_namespace}
-          type: Opaque
-          stringData:
-            user: ${app_username}
-            password: ${mongo_password}
-        mongodb/backup-cronjob:
-          apiVersion: batch/v1
-          kind: CronJob
-          metadata:
-            name: ${backup_name}
-            namespace: ${runtime_namespace}
-          spec:
-            schedule: 0 1 * * *
-            timeZone: Etc/UTC
-            concurrencyPolicy: Forbid
-            startingDeadlineSeconds: 3600
-            successfulJobsHistoryLimit: 1
-            failedJobsHistoryLimit: 1
-            jobTemplate:
-              spec:
-                backoffLimit: 2
-                activeDeadlineSeconds: 3600
-                template:
-                  spec:
-                    restartPolicy: Never
-                    automountServiceAccountToken: false
-                    securityContext:
-                      runAsNonRoot: true
-                      runAsUser: 999
-                      runAsGroup: 999
-                      fsGroup: 999
-                      seccompProfile:
-                        type: RuntimeDefault
-                    containers:
-                    - name: backup
-                      image: ${mongo_image}
-                      command:
-                      - /bin/sh
-                      - -ec
-                      args:
-                      - |
-                        umask 077
-                        archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).archive.gz"
-                        partial="/backup/dump.partial"
-                        trap 'rm -f "$partial"' EXIT
-                        mongodump --host="$BACKUP_HOST" --username="$BACKUP_USER" \
-                          --authenticationDatabase=admin --config=/auth/config.yaml \
-                          --oplog --gzip --archive="$partial"
-                        mv "$partial" "$archive"
-                        find /backup -maxdepth 1 -type f -name 'dump-*.archive.gz' -printf '%f\n' \
-                          | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
-                      env:
-                      - name: BACKUP_HOST
-                        value: ${backup_host}
-                      - name: BACKUP_USER
-                        value: ${backup_username}
-                      resources:
-                        requests:
-                          cpu: 100m
-                          memory: 128Mi
-                        limits:
-                          memory: 512Mi
-                      securityContext:
-                        allowPrivilegeEscalation: false
-                        readOnlyRootFilesystem: true
-                        capabilities:
-                          drop:
-                          - ALL
-                      volumeMounts:
-                      - name: backup
-                        mountPath: /backup
-                      - name: auth
-                        mountPath: /auth
-                        readOnly: true
-                    volumes:
-                    - name: backup
-                      persistentVolumeClaim:
-                        claimName: ${backup_name}
-                    - name: auth
-                      secret:
-                        secretName: ${backup_secret_name}
-                        defaultMode: 288
-                        items:
-                        - key: config.yaml
-                          path: config.yaml
-        mongodb/backup-pvc:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: ${backup_name}
-            namespace: ${runtime_namespace}
-          spec: ${backup_vcs}
-        mongodb/backup-secret:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: ${backup_secret_name}
-            namespace: ${runtime_namespace}
-          type: Opaque
-          stringData:
-            password: ${backup_password}
-            config.yaml: ${backup_config}
-        mongodb/role-mongodb-kubernetes-appdb:
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: Role
-          metadata:
-            name: mongodb-kubernetes-appdb
-            namespace: ${runtime_namespace}
-          rules:
-          - apiGroups:
-            - ''
-            resources:
-            - secrets
-            verbs:
-            - get
-          - apiGroups:
-            - ''
-            resources:
-            - pods
-            verbs:
-            - patch
-            - delete
-            - get
-        mongodb/rolebinding-mongodb-kubernetes-appdb:
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: RoleBinding
-          metadata:
-            name: mongodb-kubernetes-appdb
-            namespace: ${runtime_namespace}
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: Role
-            name: mongodb-kubernetes-appdb
-          subjects:
-          - kind: ServiceAccount
-            name: mongodb-kubernetes-appdb
-            namespace: ${runtime_namespace}
-        mongodb/serviceaccount-mongodb-kubernetes-appdb:
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: mongodb-kubernetes-appdb
-            namespace: ${runtime_namespace}
-        mongodb/serviceaccount-mongodb-kubernetes-database-pods:
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: mongodb-kubernetes-database-pods
-            namespace: ${runtime_namespace}
-        mongodb/serviceaccount-mongodb-kubernetes-ops-manager:
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: mongodb-kubernetes-ops-manager
-            namespace: ${runtime_namespace}
-        mongodb/store:
-          apiVersion: mongodbcommunity.mongodb.com/v1
-          kind: MongoDBCommunity
-          metadata:
-            name: ${mongo_resource_name}
-            namespace: ${runtime_namespace}
-          spec:
-            members: 1
-            type: ReplicaSet
-            version: ${mongo_version}
-            security:
-              authentication:
-                modes:
-                - SCRAM
-                ignoreUnknownUsers: true
-            users:
-            - name: ${app_username}
-              db: admin
-              passwordSecretRef:
-                name: ${password_secret_name}
-                key: password
-              roles:
-              - name: readWrite
-                db: ${store_name}
-              - name: dbAdmin
-                db: ${store_name}
-              scramCredentialsSecretName: ${scram_secret_name}
-            statefulSet:
-              spec:
-                template:
-                  spec:
-                    containers:
-                    - name: mongod
-                      image: ${mongo_image}
-                volumeClaimTemplates:
-                - metadata:
-                    name: data-volume
-                  spec: ${pvc_spec}
-        mongodb/store-object:
-          apiVersion: kubernetes.m.crossplane.io/v1alpha1
-          kind: Object
-          metadata:
-            name: ${key}
-            namespace: ${xr_namespace}
-            annotations:
-              crossplane.io/composition-resource-name: ${key}
-          spec:
-            providerConfigRef:
-              name: provider-kubernetes
-              kind: ProviderConfig
-            forProvider:
-              manifest: ${mongo}
-            readiness:
-              policy: DeriveFromCelQuery
-              celQuery: has(object.status) && object.status.phase == 'Running' && has(object.status.currentMongoDBMembers)
-                && object.status.currentMongoDBMembers >= 1 && has(object.status.currentStatefulSetReplicas) &&
-                object.status.currentStatefulSetReplicas >= 1
-            watch: true
   - step: update-redis-objects
     functionRef:
       name: crossplane-contrib-function-python
@@ -8674,9 +8337,9 @@ spec:
 
         import hashlib
 
-        import re
+        import json
 
-        from decimal import Decimal
+        import re
 
         from crossplane.function import request, response
 
@@ -8720,15 +8383,12 @@ spec:
             """Keep the literal string for null values in existing resource settings."""
             return str(value).strip()
 
-        def _backup_enabled(value):
-            quantity = str(value or "0").strip()
-            match = re.fullmatch(
-                r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
-                quantity,
-            )
-            if not match:
-                raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
-            return Decimal(match[1]) > 0
+        def _extract_manifest(observed_resource):
+            if not observed_resource or not getattr(observed_resource, "resource", None):
+                return {}
+            resource = _to_dict(observed_resource.resource)
+            at_provider = (resource.get("status") or {}).get("atProvider") or {}
+            return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
         def require_secret(req, rsp, key, name, namespace):
             response.require_resources(
@@ -8752,10 +8412,25 @@ spec:
             manifest = _secret_manifest(req, rsp, key)
             return manifest.get("data") or manifest.get("stringData") or {}
 
+        def _stores(spec, kind):
+            return {name: {**config, "names": config.get("names") or ["default"]}
+                    for name, config in (spec.get("stores") or {}).items()
+                    if isinstance(config, dict) and config.get("type") == kind}
+
         def _strong_token(seed, *, suffix=":provider-datalab", length=32):
             # Keep each service's existing seed and length to prevent credential changes.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
 
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
@@ -8765,7 +8440,12 @@ spec:
         import hashlib
 
         from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+        from crossplane.function import response
 
+
+
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Save Redis data and capture its PVC during a bounded write pause."""\n\nimport argparse\nfrom contextlib import closing\nfrom pathlib import Path\nimport runpy\nimport socket\nimport time\nfrom urllib.parse import quote\n\nsnapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))\nLABEL = "datalabs.versioneer.at/redis"\nVERIFIED = "datalabs.versioneer.at/redis-snapshot-verified"\n\n\nclass Redis:\n    def __init__(self, host, password):\n        self.socket = socket.create_connection((host, 6379), timeout=60)\n        self.stream = self.socket.makefile("rb")\n        self.command("AUTH", "backup", password)\n\n    def close(self):\n        self.stream.close()\n        self.socket.close()\n\n    def command(self, *arguments):\n        values = [str(value).encode() for value in arguments]\n        self.socket.sendall(b"*%d\\r\\n" % len(values) + b"".join(\n            b"$%d\\r\\n" % len(value) + value + b"\\r\\n" for value in values))\n        line = self.stream.readline()\n        if not line.endswith(b"\\r\\n"):\n            raise RuntimeError("Redis closed the backup connection.")\n        kind, value = line[:1], line[1:-2]\n        if kind == b"+":\n            return value.decode()\n        if kind == b"$" and int(value) >= 0:\n            data = self.stream.read(int(value) + 2)\n            if len(data) != int(value) + 2 or not data.endswith(b"\\r\\n"):\n                raise RuntimeError("Redis returned an incomplete response.")\n            return data[:-2].decode()\n        # Server errors can contain command arguments; do not put them in Job logs.\n        raise RuntimeError("Redis rejected the backup command.")\n\n\ndef capture(api, redis, namespace, store, claim, snapshot_class, retention, timeout=540):\n    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")\n    pause_until = 0\n    identity = {}\n\n    def check_pod():\n        pod = api.call("GET", pod_path)\n        volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")\n                   for v in pod["spec"].get("volumes", [])}\n        claims = {volumes.get(mount["name"]) for container in pod["spec"]["containers"]\n                  for mount in container.get("volumeMounts", []) if mount["mountPath"] == "/data"}\n        if (claims != {claim} or pod["metadata"].get("deletionTimestamp")\n                or not any(c["type"] == "Ready" and c["status"] == "True"\n                           for c in pod.get("status", {}).get("conditions", []))):\n            raise RuntimeError("The Redis Pod must be ready and use the selected data PVC.")\n        return pod["metadata"]["uid"]\n\n    def info(section):\n        return dict(line.split(":", 1) for line in redis.command("INFO", section).splitlines()\n                    if ":" in line and not line.startswith("#"))\n\n    def run_id():\n        fields = info("server")\n        if not fields.get("run_id"):\n            raise RuntimeError("Redis did not report its server identity.")\n        return fields["run_id"]\n\n    def prepare():\n        nonlocal pause_until\n        identity["pod"] = check_pod()\n        identity["server"] = run_id()\n        # Redis also stops eviction and expiry during this pause. It expires after a killed Job.\n        pause_until = time.monotonic() + 660\n        if redis.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":\n            raise RuntimeError("Redis did not pause writes.")\n        if redis.command("BGSAVE") != "Background saving started":\n            raise RuntimeError("Redis did not start its RDB save.")\n        save_deadline = time.monotonic() + 90\n        while True:\n            persistence = info("persistence")\n            if persistence.get("rdb_bgsave_in_progress") == "0":\n                if persistence.get("rdb_last_bgsave_status") != "ok":\n                    raise RuntimeError("Redis failed to save its RDB file.")\n                break\n            if time.monotonic() >= save_deadline:\n                raise RuntimeError("Redis did not finish its RDB save before the deadline.")\n            time.sleep(1)\n        validate()\n\n    def validate():\n        if (check_pod() != identity["pod"] or run_id() != identity["server"]\n                or time.monotonic() >= pause_until):\n            raise RuntimeError("The Redis server changed or its write pause expired during capture.")\n\n    try:\n        snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,\n                            timeout=timeout, label=LABEL, prepare=prepare, validate=validate,\n                            verified_label=VERIFIED)\n    finally:\n        if pause_until:\n            redis.command("CLIENT", "UNPAUSE")\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    for argument in ("namespace", "store", "claim", "snapshot_class"):\n        parser.add_argument(argument)\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    password = Path("/var/run/redis-backup/password").read_text()\n    with closing(Redis(args.store, password)) as redis:\n        capture(snapshots["API"](), redis, args.namespace, args.store, args.claim,\n                args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        SNAPSHOT_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -8778,7 +8458,7 @@ spec:
             xr_name = metadata.get("name")
             xr_namespace = metadata.get("namespace") or "default"
 
-            cache_stores = spec.get("cacheStores")
+            cache_stores = _stores(spec, "redis")
             if not isinstance(cache_stores, dict) or not cache_stores:
                 return
 
@@ -8786,10 +8466,9 @@ spec:
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
             redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
-            backup_image = _safe_str(images.get("redisBackup")) or "redis:7.2.17"
+            backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine"
             redis_env = environment.get("cacheStore") or {}
             redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
-            backup_storage_class = _string_value(redis_env.get("backupStorageClassName") or "")
 
             runtime_namespace = xr_name
 
@@ -8804,8 +8483,7 @@ spec:
                 if not redis_storage:
                     continue
                 store_name = store_key.strip()
-                backup_storage = _string_value(store_cfg.get("backupStorage") or "0")
-                backups_enabled = _backup_enabled(backup_storage)
+                backups_enabled = store_cfg.get("backups") is True
                 redis_password = _strong_token(
                     f"{xr_name}:{store_name}:redis", suffix="", length=28
                 )
@@ -8832,7 +8510,7 @@ spec:
                 acl = f"user default on >{redis_password} ~* +@all\n"
                 if backups_enabled:
                     backup_password = _strong_token(f"{xr_name}:{store_name}:redis:backup")
-                    acl += f"user backup on >{backup_password} -@all +ping +replconf +sync\n"
+                    acl += f"user backup on >{backup_password} -@all +ping +info +bgsave +client|pause +client|unpause\n"
                 encoded_acl = base64.b64encode(acl.encode()).decode()
                 redis_acl_secret = _render_template(
                     req,
@@ -8901,47 +8579,46 @@ spec:
                         redis_user="backup",
                         redis_password=backup_password,
                     )
-                    backup_vcs = {
-                        "accessModes": ["ReadWriteOnce"],
-                        "resources": {"requests": {"storage": backup_storage}},
+                    snapshot_class = redis_env.get("snapshotClassName") or (environment.get("volumes") or {}).get("snapshotClassName")
+                    retention = redis_env.get("maxSnapshots", 4)
+                    if not isinstance(snapshot_class, str) or not snapshot_class.strip():
+                        response.fatal(rsp, "Redis backups require data.cacheStore.snapshotClassName or data.volumes.snapshotClassName.")
+                        return
+                    if (isinstance(retention, bool) or not isinstance(retention, (int, float))
+                            or retention != int(retention) or not 1 <= retention <= 100):
+                        response.fatal(rsp, "data.cacheStore.maxSnapshots must be an integer from 1 to 100.")
+                        return
+                    pod = _extract_manifest(req.observed.resources.get(f"redis-pod-{xr_name}-{store_name}"))
+                    volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")
+                               for v in (pod.get("spec") or {}).get("volumes", [])}
+                    claims = {volumes.get(m["name"]) for c in (pod.get("spec") or {}).get("containers", [])
+                              for m in c.get("volumeMounts", []) if m["mountPath"] == "/data"}
+                    claim = next(iter(claims)) if len(claims) == 1 and None not in claims else "unbound"
+                    resources = _render_template(
+                        req, "redis/backup-cronjob", target=runtime_namespace, pvc_name=claim,
+                        volume_name=store_name, backup_name=backup_name,
+                        backup_binding=_resource_name(runtime_namespace, backup_name),
+                        snapshot_class=snapshot_class, max_snapshots=str(int(retention)),
+                        schedule=redis_env.get("schedule") or "0 1 * * *",
+                        backup_script=BACKUP_SCRIPT, snapshot_script=SNAPSHOT_SCRIPT,
+                        backup_image=backup_image, backup_secret_name=backup_secret_name,
+                        pod_name=store_name + "-0", suspended=claim == "unbound",
+                    )["resources"]
+                    resources["auth-secret"] = backup_secret
+                    resources["class"] = {
+                        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
+                        "metadata": {"name": snapshot_class},
                     }
-                    if backup_storage_class:
-                        backup_vcs["storageClassName"] = backup_storage_class
-                    backup_pvc = _render_template(
-                        req,
-                        "redis/backup-pvc",
-                        backup_name=backup_name,
-                        runtime_namespace=runtime_namespace,
-                        backup_vcs=backup_vcs,
-                    )
-                    backup_job = _render_template(
-                        req,
-                        "redis/backup-cronjob",
-                        redis_image=backup_image,
-                        backup_name=backup_name,
-                        runtime_namespace=runtime_namespace,
-                        backup_secret_name=backup_secret_name,
-                        backup_host=store_name,
-                    )
-                    for resource_type, manifest in (
-                        ("auth-secret", backup_secret),
-                        ("pvc", backup_pvc),
-                        ("cronjob", backup_job),
-                    ):
+                    for resource_type, manifest in resources.items():
                         backup_key = f"redis-backup-{resource_type}-{xr_name}-{store_name}"
+                        readiness = ({"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}
+                                     if resource_type == "class" else {"policy": "SuccessfulCreate"})
                         backup_body = _render_template(
-                            req,
-                            "common/object",
-                            key=backup_key,
-                            xr_namespace=xr_namespace,
-                            manifest=manifest,
-                            readiness={"policy": "SuccessfulCreate"},
+                            req, "common/object", key=backup_key, xr_namespace=xr_namespace,
+                            manifest=manifest, readiness=readiness,
                         )
-                        if resource_type == "pvc":
-                            # Keep completed backups when the schedule is disabled.
-                            backup_body["spec"]["managementPolicies"] = [
-                                "Observe", "Create", "Update", "LateInitialize"
-                            ]
+                        if resource_type == "class":
+                            backup_body["spec"]["managementPolicies"] = ["Observe"]
                         rsp.desired.resources[backup_key].resource.update(backup_body)
 
                 pod_key = f"redis-pod-{xr_name}-{store_name}"
@@ -9051,84 +8728,197 @@ spec:
             user: ${redis_user}
             password: ${redis_password}
         redis/backup-cronjob:
-          apiVersion: batch/v1
-          kind: CronJob
-          metadata:
-            name: ${backup_name}
-            namespace: ${runtime_namespace}
-          spec:
-            schedule: 0 1 * * *
-            timeZone: Etc/UTC
-            concurrencyPolicy: Forbid
-            startingDeadlineSeconds: 3600
-            successfulJobsHistoryLimit: 1
-            failedJobsHistoryLimit: 1
-            jobTemplate:
+          resources:
+            account:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              automountServiceAccountToken: false
+            role:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              rules:
+              - apiGroups:
+                - ''
+                resources:
+                - persistentvolumeclaims
+                resourceNames:
+                - ${pvc_name}
+                verbs:
+                - get
+              - apiGroups:
+                - ''
+                resources:
+                - pods
+                resourceNames:
+                - ${pod_name}
+                verbs:
+                - get
+              - apiGroups:
+                - snapshot.storage.k8s.io
+                resources:
+                - volumesnapshots
+                verbs:
+                - create
+                - get
+                - list
+                - patch
+                - delete
+            binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: Role
+                name: ${backup_name}
+            script:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              data:
+                redis-snapshot.py: ${backup_script}
+                volume-snapshot.py: ${snapshot_script}
+            network:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
               spec:
-                backoffLimit: 2
-                activeDeadlineSeconds: 3600
-                template:
+                podSelector:
+                  matchLabels:
+                    datalabs.versioneer.at/redis-backup: ${volume_name}
+                policyTypes:
+                - Ingress
+                - Egress
+                ingress: []
+                egress:
+                - to:
+                  - podSelector:
+                      matchLabels:
+                        app: ${volume_name}
+                  ports:
+                  - port: 6379
+                    protocol: TCP
+                - ports:
+                  - port: 443
+                    protocol: TCP
+                  - port: 6443
+                    protocol: TCP
+                - to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                    podSelector:
+                      matchLabels:
+                        k8s-app: kube-dns
+                  ports:
+                  - port: 53
+                    protocol: TCP
+                  - port: 53
+                    protocol: UDP
+            class-binding:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: ${backup_binding}
+              subjects:
+              - kind: ServiceAccount
+                name: ${backup_name}
+                namespace: ${target}
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: ClusterRole
+                name: datalab-volume-snapshot-classes
+            cronjob:
+              apiVersion: batch/v1
+              kind: CronJob
+              metadata:
+                name: ${backup_name}
+                namespace: ${target}
+              spec:
+                suspend: ${suspended}
+                schedule: ${schedule}
+                timeZone: Etc/UTC
+                concurrencyPolicy: Forbid
+                startingDeadlineSeconds: 3600
+                successfulJobsHistoryLimit: 1
+                failedJobsHistoryLimit: 1
+                jobTemplate:
                   spec:
-                    restartPolicy: Never
-                    automountServiceAccountToken: false
-                    securityContext:
-                      runAsNonRoot: true
-                      runAsUser: 999
-                      runAsGroup: 999
-                      fsGroup: 999
-                      seccompProfile:
-                        type: RuntimeDefault
-                    containers:
-                    - name: backup
-                      image: ${redis_image}
-                      command:
-                      - /bin/sh
-                      - -ec
-                      args:
-                      - |
-                        umask 077
-                        archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).rdb"
-                        partial="/backup/dump.partial"
-                        trap 'rm -f "$partial"' EXIT
-                        redis-cli -h "$BACKUP_HOST" --user backup --rdb "$partial"
-                        redis-check-rdb "$partial"
-                        mv "$partial" "$archive"
-                        find /backup -maxdepth 1 -type f -name 'dump-*.rdb' -printf '%f\n' \
-                          | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
-                      env:
-                      - name: BACKUP_HOST
-                        value: ${backup_host}
-                      - name: REDISCLI_AUTH
-                        valueFrom:
-                          secretKeyRef:
-                            name: ${backup_secret_name}
-                            key: password
-                      resources:
-                        requests:
-                          cpu: 100m
-                          memory: 128Mi
-                        limits:
-                          memory: 512Mi
-                      securityContext:
-                        allowPrivilegeEscalation: false
-                        readOnlyRootFilesystem: true
-                        capabilities:
-                          drop:
-                          - ALL
-                      volumeMounts:
-                      - name: backup
-                        mountPath: /backup
-                    volumes:
-                    - name: backup
-                      persistentVolumeClaim:
-                        claimName: ${backup_name}
-        redis/backup-pvc:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: ${backup_name}
-            namespace: ${runtime_namespace}
-          spec: ${backup_vcs}
+                    backoffLimit: 1
+                    activeDeadlineSeconds: 900
+                    template:
+                      metadata:
+                        labels:
+                          datalabs.versioneer.at/redis-backup: ${volume_name}
+                      spec:
+                        restartPolicy: Never
+                        serviceAccountName: ${backup_name}
+                        automountServiceAccountToken: true
+                        securityContext:
+                          runAsNonRoot: true
+                          runAsUser: 65532
+                          runAsGroup: 65532
+                          seccompProfile:
+                            type: RuntimeDefault
+                        containers:
+                        - name: backup
+                          image: ${backup_image}
+                          command:
+                          - python
+                          - -B
+                          - /opt/backup/redis-snapshot.py
+                          args:
+                          - ${target}
+                          - ${volume_name}
+                          - ${pvc_name}
+                          - ${snapshot_class}
+                          - ${max_snapshots}
+                          resources:
+                            requests:
+                              cpu: 20m
+                              memory: 32Mi
+                            limits:
+                              cpu: 100m
+                              memory: 128Mi
+                          securityContext:
+                            allowPrivilegeEscalation: false
+                            readOnlyRootFilesystem: true
+                            capabilities:
+                              drop:
+                              - ALL
+                          volumeMounts:
+                          - name: password
+                            mountPath: /var/run/redis-backup
+                            readOnly: true
+                          - name: script
+                            mountPath: /opt/backup
+                            readOnly: true
+                        volumes:
+                        - name: password
+                          secret:
+                            secretName: ${backup_secret_name}
+                            items:
+                            - key: password
+                              path: password
+                        - name: script
+                          configMap:
+                            name: ${backup_name}
         redis/store:
           apiVersion: redis.redis.opstreelabs.in/v1beta2
           kind: Redis

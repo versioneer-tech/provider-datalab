@@ -18,12 +18,14 @@ def compose(req, rsp):
     status = _to_dict(rsp.desired.composite.resource).get("status") or {}
     references = []
     volumes = (xr.get("spec") or {}).get("volumes") or {}
+    needs_snapshots = any(v.get("backups") is True or v.get("restoreFrom") for v in volumes.values())
     if volumes:
         try:
             _, storage_class = _volume_storage_classes(env)
         except ValueError as error:
             response.fatal(rsp, str(error))
             return
+    if needs_snapshots:
         snapshot_class = config.get("snapshotClassName")
         if not isinstance(snapshot_class, str) or not snapshot_class.strip():
             response.fatal(rsp, "Named volumes require data.volumes.snapshotClassName.")
@@ -42,7 +44,7 @@ def compose(req, rsp):
         )
         rsp.desired.resources[key].resource.update(body)
 
-    if volumes:
+    if needs_snapshots:
         observer_key = _resource_name("volume-snapshot-class", namespace)
         emit(observer_key, {
             "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
@@ -79,19 +81,20 @@ def compose(req, rsp):
         reference = {"name": name, "pvcRef": {"name": pvc_name, "namespace": namespace},
                      "phase": observed.get("status", {}).get("phase") or "Pending"}
 
-        backup_name = "volume-snapshot-" + name
-        resources = _render_template(
-            req, "volumes/backup", target=namespace, pvc_name=pvc_name, volume_name=name,
-            backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
-            backup_binding=_resource_name(namespace, backup_name),
-            schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
-            backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
-        )["resources"]
-        for suffix, manifest in resources.items():
-            emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
+        if volume.get("backups") is True:
+            backup_name = "volume-snapshot-" + name
+            resources = _render_template(
+                req, "volumes/backup", target=namespace, pvc_name=pvc_name, volume_name=name,
+                backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
+                backup_binding=_resource_name(namespace, backup_name),
+                schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
+                backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+            )["resources"]
+            for suffix, manifest in resources.items():
+                emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
 
         backup = {"readySnapshots": 0}
-        if uid:
+        if uid and (needs_snapshots or config.get("snapshotClassName")):
             snapshot_key = key + "-snapshots"
             response.require_resources(
                 rsp, name=snapshot_key, api_version="snapshot.storage.k8s.io/v1", kind="VolumeSnapshot",

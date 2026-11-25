@@ -16,13 +16,12 @@ Install the operators for the managed stores you offer. The tests use:
 
 | Datalab field | Operator | Test version | Required resource API |
 | --- | --- | --- | --- |
-| `spec.databases` | Crunchy PostgreSQL Operator (PGO) | `6.0.2` | `PostgresCluster` in `postgres-operator.crunchydata.com/v1` |
-| `spec.documentStores` | MongoDB Kubernetes Operator | `1.14.0` | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
-| `spec.cacheStores` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
+| `spec.stores` with `type: postgres` | CloudNativePG | See [cluster prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites) | `Cluster` and `Database` in `postgresql.cnpg.io/v1` |
+| `spec.stores` with `type: redis` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
 
 Install each operator's CRDs before its controller. Validate other versions
-before use. Backup volumes need a StorageClass that supports
-`ReadWriteOnce`; see [backup settings](usage_concepts.md#backups).
+before use. Enabled backups need the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites);
+see [backup settings](usage_concepts.md#backups).
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
@@ -47,7 +46,7 @@ The supplied dependency manifests use these versions:
 | --- | --- |
 | Crossplane core | 2.4.3 |
 | provider-kubernetes | 1.4.1 |
-| provider-keycloak | 2.24.1 |
+| provider-keycloak | 3.3.0 |
 | function-python | 0.6.0 |
 | function-auto-ready | 0.7.3 |
 | function-environment-configs | 0.9.2 |
@@ -375,10 +374,8 @@ defaults below.
 | `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its init containers. |
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
 | `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
-| `images.mongo` | `quay.io/mongodb/mongodb-community-server:8.0.38-ubi8` | MongoDB server. Its tag sets the operator's database version. |
-| `images.mongoBackup` | `mongo:<server version>` | MongoDB backup tools. |
+| `images.postgres` | `ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie` | CloudNativePG-compatible PostgreSQL 17 image with PostGIS. |
 | `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
-| `images.redisBackup` | `redis:7.2.17` | Redis backup tools. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
 | `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job on the host. |
 | `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
@@ -443,7 +440,7 @@ to containers without the corresponding resource settings.
 | `vcluster.scheduling` | `{}` | Control-plane and workload selectors and tolerations; see [placement and hibernation](vcluster.md#placement-and-hibernation). |
 | `vcluster.backingStore.database.embedded` | `enabled: false`, `extraArgs: []` | Native embedded database options, including `enabled`, `dataSource`, and `extraArgs`. |
 | `volumes.storage` | `1Gi` | Default size of named host PVCs. |
-| `volumes.snapshotClassName` | Required for named volumes | Snapshot class for volume backups. Must use deletion policy `Delete`. |
+| `volumes.snapshotClassName` | Required for volume backups or recovery | Snapshot class for volume backups. Must use deletion policy `Delete`. |
 | `volumes.schedule` | `0 1 * * *` | Backup schedule in UTC. |
 | `volumes.maxSnapshots` | `2` | Completed snapshots retained per PVC UID, from 1 to 100. |
 | `vcluster.storage` | `5Gi` | Default control-plane PVC size for named virtual clusters. |
@@ -455,14 +452,17 @@ to containers without the corresponding resource settings.
 | `vcluster.backendTLS.apiVersion` | `gateway.networking.k8s.io/v1` | BackendTLSPolicy API served by the Gateway. |
 | `ingress.certificateAuthority` | System trust | PEM Gateway CA embedded in profile kubeconfigs. |
 | `database.storageClassName` | Cluster default | PostgreSQL data StorageClass. |
-| `database.backupStorageClassName` | Cluster default | PostgreSQL backup StorageClass. |
+| `database.snapshotClassName` | `volumes.snapshotClassName` | PostgreSQL snapshot class. Requires the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites). |
+| `database.schedule` | `0 1 * * *` | Cold PostgreSQL backup schedule in UTC. |
+| `database.maxSnapshots` | `4` | Completed PostgreSQL backups retained per cluster UID, from 1 to 100. |
+| `database.operatorNamespace` | `cnpg-system` | CloudNativePG controller namespace for service access. |
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
-| `documentStore.storageClassName` | Cluster default | MongoDB data StorageClass. |
-| `documentStore.backupStorageClassName` | Cluster default | MongoDB backup StorageClass. |
 | `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |
-| `cacheStore.backupStorageClassName` | Cluster default | Redis backup StorageClass. |
+| `cacheStore.snapshotClassName` | `volumes.snapshotClassName` | Redis CSI snapshot class with deletion policy `Delete`. |
+| `cacheStore.schedule` | `0 1 * * *` | Redis backup schedule in UTC. |
+| `cacheStore.maxSnapshots` | `4` | Completed snapshots per data PVC UID, from 1 to 100. |
 
 PostgreSQL TLSRoutes are created only when all three
 `database.tlsRoute` settings are present.
@@ -603,8 +603,8 @@ data:
 ```
 
 The PVC's StorageClass and the VolumeSnapshotClass must use the same CSI driver.
-No second PVC or StorageClass is needed for backups. The policy applies to every
-named volume, including restored volumes. See [Backup policy](volumes.md#backup-policy)
+No second PVC or StorageClass is needed for backups. The policy applies to named
+volumes with `backups: true`. See [Backup policy](volumes.md#backup-policy)
 for limits and failure handling.
 
 See [Volume backup access in SECURITY.md](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#volume-backup-access)

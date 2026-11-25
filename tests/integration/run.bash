@@ -46,7 +46,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
 
 if [[ "${profile}" == all ]]; then
-  profiles=(verify-network verify-data verify-s3 verify-postgres verify-mongo verify-redis verify-registry verify-volumes verify-vcluster)
+  profiles=(verify-network verify-data verify-s3 verify-postgres verify-redis verify-registry verify-volumes verify-vcluster)
 else
   profiles=("$(selected_profile "${profile}" "$0")")
 fi

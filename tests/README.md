@@ -64,11 +64,12 @@ backup/store, and environment-setting checks.
 
 | Files | Checks |
 | --- | --- |
-| `test_build.py`, `test_composition_helpers.py` | Build input, TTL values, backup sizes, stable service credentials. |
+| `test_build.py`, `test_composition_helpers.py` | Build input, TTL values and stable service credentials. |
 | `test_credentials.py`, `test_cleanup.py`, `test_snapshots.py` | Login and token handling, Pod cleanup, snapshot retention and access. |
+| `test_postgres.py`, `test_redis.py` | Store snapshot retention, consistency, failure handling, replacement, and PostgreSQL credentials. |
 | `test_harness.py` | Cluster selection, capability probes, and protection of unrelated resources. |
 | `vclusters.py`, `admission/`, `volumes.py` | Virtual cluster access and lifecycle, host volumes, bindings, and admission rules. |
-| `token-exchange.py`, `keycloak_policy.py` | Role restrictions and real Keycloak refresh and exchange. |
+| `token-exchange.py`, `keycloak_policy.py` | Role restrictions and real Keycloak login, refresh, and exchange. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Discovery and credentials when sources change, disappear, or return. |
 | `exposure.py`, `settings.py`, `stores.py`, `registry.py`, `backups.py` | Service settings, routes, images, credentials, and backups. |
 | `environment-schema.py`, `environment-selection.py`, `response-ttl.py` | Input validation, environment merging, function TTLs, and readiness. |
@@ -77,6 +78,13 @@ Use representative inputs. Snapshots check rendered resource specs. Use
 separate assertions for behavior such as credential rotation, data retention,
 or denied access. Avoid repeating snapshot fields or fixing a test to an
 internal hash, message, or call order unless the behavior requires it.
+
+The disposable Keycloak server has five minutes to import its test realm.
+It checks issued tokens for login, offline refresh, and restricted exchange.
+A separate login client omits workspace roles despite group membership.
+With Full Scope Allowed off, explicit role scope mappings restore `ws_access`
+and `ws_api` in a fresh token. Unassigned administrator roles, profile roles,
+and roles from another workspace stay absent.
 
 ## Fixtures
 

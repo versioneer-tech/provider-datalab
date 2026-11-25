@@ -22,28 +22,43 @@ spec:
     command: [/bin/sh, -ec]
     args:
     - |
-      archive="$(find /backup -maxdepth 1 -name 'dump-*.rdb' -type f | sort | tail -n 1)"
-      test -n "$archive"
-      mkdir -p /tmp/db
-      cp "$archive" /tmp/db/dump.rdb
-      redis-server --bind 127.0.0.1 --dir /tmp/db --appendonly no --save '' \
+      redis-check-rdb /data/dump.rdb
+      # Load the saved RDB file, then build a new AOF from the recovered data.
+      rm -rf /data/appendonlydir
+      redis-server --bind 127.0.0.1 --dir /data --appendonly no --save '' \
         --daemonize yes --logfile /tmp/redis.log --pidfile /tmp/redis.pid
       trap 'redis-cli shutdown nosave' EXIT
       for attempt in $(seq 1 30); do
         if redis-cli ping >/dev/null 2>&1; then break; fi
         sleep 1
       done
-      test "$(redis-cli --raw GET provider-datalab:verify)" = '__PROBE_VALUE__'
-      printf 'PASS Redis RDB snapshot restored the probe value\n'
+      test "$(redis-cli --raw GET '__KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__'
+      test "$(redis-cli --raw GET '__OTHER_KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__-other'
+      redis-cli SET recovered-only independent
+      redis-cli CONFIG SET appendonly yes
+      for attempt in $(seq 1 60); do
+        if redis-cli INFO persistence | tr -d '\r' | grep -qx 'aof_rewrite_in_progress:0'; then break; fi
+        sleep 1
+      done
+      redis-cli INFO persistence | tr -d '\r' | grep -qx 'aof_rewrite_in_progress:0'
+      redis-cli shutdown
+      redis-server --bind 127.0.0.1 --dir /data --appendonly yes --save '' \
+        --daemonize yes --logfile /tmp/redis.log --pidfile /tmp/redis.pid
+      for attempt in $(seq 1 30); do
+        if redis-cli ping >/dev/null 2>&1; then break; fi
+        sleep 1
+      done
+      test "$(redis-cli --raw GET recovered-only)" = independent
+      test "$(redis-cli --raw GET '__KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__'
+      printf 'PASS Redis CSI recovery loads both logical stores and persists independent writes after an AOF restart\n'
     securityContext:
       allowPrivilegeEscalation: false
       capabilities:
         drop: [ALL]
     volumeMounts:
-    - name: backup
-      mountPath: /backup
-      readOnly: true
+    - name: data
+      mountPath: /data
   volumes:
-  - name: backup
+  - name: data
     persistentVolumeClaim:
-      claimName: redis-verify-backup
+      claimName: test-redis-recovery

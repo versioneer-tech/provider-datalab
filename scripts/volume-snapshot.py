@@ -28,13 +28,14 @@ class API:
             data=None if body is None else json.dumps(body).encode(),
             method=method,
             headers={"Authorization": "Bearer " + self.token.read_text().strip(),
-                     "Content-Type": "application/json"},
+                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},
         )
         with urlopen(request, context=self.context, timeout=30) as result:
             return json.load(result)
 
 
-def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600):
+def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,
+           label=LABEL, prepare=None, validate=None, verified_label=None):
     core = "/api/v1/namespaces/" + quote(namespace, safe="")
     path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"
     volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))
@@ -44,11 +45,11 @@ def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600
     if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):
         raise RuntimeError("The source PVC must be bound and must not be deleting.")
     uid = pvc["metadata"]["uid"]
-    selector = urlencode({"labelSelector": f"{LABEL}={volume},{SOURCE}={uid}"})
+    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})
 
     def owned_snapshots():
         return [item for item in api.call("GET", path + "?" + selector)["items"]
-                if item["metadata"].get("labels", {}).get(LABEL) == volume
+                if item["metadata"].get("labels", {}).get(label) == volume
                 and item["metadata"].get("labels", {}).get(SOURCE) == uid
                 and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]
 
@@ -61,7 +62,11 @@ def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600
                  {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})
 
     snapshots = owned_snapshots()
-    incomplete = [item for item in snapshots if item.get("status", {}).get("readyToUse") is not True]
+    def verified(item):
+        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"
+
+    incomplete = [item for item in snapshots
+                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]
     for item in incomplete:
         if not item["metadata"].get("deletionTimestamp"):
             remove(item)
@@ -69,13 +74,15 @@ def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600
         snapshots = owned_snapshots()
     # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.
     if any(item["metadata"].get("deletionTimestamp")
-           or item.get("status", {}).get("readyToUse") is not True for item in snapshots):
+           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):
         raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")
 
+    if prepare:
+        prepare()
     created = api.call("POST", path, {
         "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
-        "metadata": {"generateName": "volume-" + volume + "-",
-                     "labels": {LABEL: volume, SOURCE: uid}},
+        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",
+                     "labels": {label: volume, SOURCE: uid}},
         "spec": {"volumeSnapshotClassName": snapshot_class,
                  "source": {"persistentVolumeClaimName": claim}},
     })
@@ -96,9 +103,25 @@ def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600
     if source["metadata"]["uid"] != uid:
         raise RuntimeError("The source PVC changed while the snapshot was being taken.")
 
+    if validate:
+        try:
+            validate()
+        except Exception:
+            # Do not retain a capture made after the write pause expired or the server changed.
+            remove(current)
+            raise
+
+    if verified_label:
+        metadata = current["metadata"]
+        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {
+            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],
+            "labels": {verified_label: "true"},
+        }})
+
     completed = sorted(
         (item for item in owned_snapshots()
          if item.get("status", {}).get("readyToUse") is True
+         and verified(item)
          and not item["metadata"].get("deletionTimestamp")),
         key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),
         reverse=True,

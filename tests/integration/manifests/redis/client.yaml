@@ -16,6 +16,10 @@ spec:
       image: __CLIENT_IMAGE__
       imagePullPolicy: IfNotPresent
       env:
+        - name: REDIS_PREFIX
+          value: "__KEY_PREFIX__"
+        - name: REDIS_OTHER_PREFIX
+          value: "__OTHER_KEY_PREFIX__"
         - name: REDIS_HOST
           valueFrom:
             secretKeyRef:
@@ -48,11 +52,20 @@ spec:
             fi
             sleep 2
           done
+          test -z "$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw GET recovered-only)"
           REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
             -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
-            SET provider-datalab:verify "${expected}" >/dev/null
+            SET "${REDIS_PREFIX}provider-datalab:verify" "${expected}" >/dev/null
+          REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
+            SET "${REDIS_OTHER_PREFIX}provider-datalab:verify" "${expected}-other" >/dev/null
           actual="$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
             -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw \
-            GET provider-datalab:verify)"
+            GET "${REDIS_PREFIX}provider-datalab:verify")"
           test "${actual}" = "${expected}"
-          printf 'PASS Datalab Redis internal write/read verification\n'
+          actual="$(REDISCLI_AUTH="${REDIS_PASSWORD}" redis-cli \
+            -h "${REDIS_HOST}" -p "${REDIS_PORT}" --raw \
+            GET "${REDIS_OTHER_PREFIX}provider-datalab:verify")"
+          test "${actual}" = "${expected}-other"
+          printf 'PASS Datalab Redis write/read through both published key prefixes\n'

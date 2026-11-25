@@ -1,9 +1,0 @@
-# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
-# SPDX-License-Identifier: Apache-2.0
-
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ${backup_name}
-  namespace: ${runtime_namespace}
-spec: ${backup_vcs}

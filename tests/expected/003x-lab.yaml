@@ -7,13 +7,14 @@ kind: Datalab
 metadata:
   name: s-jane
 spec:
-  databases:
+  environmentName: datalab-custom
+  stores:
     pg0:
-      backupStorage: 3Gi
+      backups: true
       names:
       - analytics
       storage: 1Gi
-  environmentName: datalab-custom
+      type: postgres
   users:
   - jane
   vclusters:
@@ -41,6 +42,7 @@ spec:
           namespace: demo
   volumes:
     analysis:
+      backups: true
       storage: 2Gi
 status:
   connections:
@@ -51,6 +53,8 @@ status:
       namespace: default
     type: custom
   - name: pg0
+    names:
+    - analytics
     ready: false
     secretRef:
       name: s-jane-postgres-pg0-connection-b9fb7286b4
@@ -1350,6 +1354,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-5c533de17ccc-s-jane-namespace-s-jane-d-64aeedd2e0
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jane-pg0-role-864350ecbb
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-5fae13f7536f-s-jane-namespace-s-jane-v-679f1d68b3
   namespace: default
 spec:
@@ -1376,24 +1398,6 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-rolebinding-6dafdca14b
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jane
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-66742b3bdf1f-s-jane-namespace-s-jane-d-bdaa6cf261
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-configmap-s-jane-pg0
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1476,14 +1480,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-8829a930d761-s-jane-namespace-s-jane-d-068846ccf4
+  name: datalab-usage-8aaafedce53a-s-jane-namespace-s-jane-d-192ca77f67
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: db-postgrescluster-s-jane-pg0
+      name: db-backup-s-jane-pg0-account-4161b90441
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1566,6 +1570,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-9a2fc5208b6a-s-jane-namespace-s-jane-d-fb49b0540e
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jane-pg0-cronjob-bd1cc2749a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-a1b5a676d922-s-jane-namespace-s-jane-n-9f056c4b63
   namespace: default
 spec:
@@ -1592,6 +1614,24 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-backend-tls-85ddc6b9ff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-a345591f5a61-s-jane-namespace-s-jane-d-48b309cf0d
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-network-s-jane-pg0-6b827a6bde
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1682,6 +1722,24 @@ spec:
     kind: Object
     resourceRef:
       name: data-s3-config-s-jane
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-b5065c902bba-s-jane-namespace-s-jane-d-f7231c2628
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-cluster-s-jane-pg0
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1818,6 +1876,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-cbcc6ac8dfa7-s-jane-namespace-s-jane-d-916e6550ad
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jane-pg0-binding-061cb8f22d
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-d7b0db972e32-s-jane-namespace-s-jane-v-0b7b32618a
   namespace: default
 spec:
@@ -1826,6 +1902,24 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-statefulset-7d1c18464a
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-dbb6558c5e8e-s-jane-namespace-s-jane-d-341642409b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-database-s-jane-pg0-analytics-17e51ffe50
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1862,6 +1956,24 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-jane-deny-ingress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-decbe7c9486b-s-jane-namespace-s-jane-d-f13abcd1e2
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jane-pg0-script-cb37c6846d
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -1916,6 +2028,24 @@ spec:
     kind: Object
     resourceRef:
       name: vcluster-s-jane-vc0-control-plane-networkpolicy-a5f99e08ce
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jane
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-e86a1e1aa8c6-s-jane-namespace-s-jane-d-f3fa84a67e
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jane-pg0-network-984fbe8da7
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -2016,19 +2146,16 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-configmap-s-jane-pg0
+  name: db-backup-s-jane-pg0-account-4161b90441
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
-      data:
-        init.sql: |
-          \set ON_ERROR_STOP on
-          \connect postgres
-      kind: ConfigMap
+      automountServiceAccountToken: false
+      kind: ServiceAccount
       metadata:
-        name: pg0-init-sql
+        name: postgres-snapshot-pg0
         namespace: s-jane
   providerConfigRef:
     kind: ProviderConfig
@@ -2040,63 +2167,529 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-postgrescluster-s-jane-pg0
+  name: db-backup-s-jane-pg0-binding-061cb8f22d
   namespace: default
 spec:
   forProvider:
     manifest:
-      apiVersion: postgres-operator.crunchydata.com/v1
-      kind: PostgresCluster
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
       metadata:
-        name: pg0
+        name: postgres-snapshot-pg0
         namespace: s-jane
-      spec:
-        backups:
-          pgbackrest:
-            global:
-              repo1-path: /pgbackrest/repo1
-              repo1-retention-full: '4'
-              repo1-retention-full-type: count
-            repos:
-            - name: repo1
-              schedules:
-                differential: 0 1 * * 1-6
-                full: 0 1 * * 0
-              volume:
-                volumeClaimSpec:
-                  accessModes:
-                  - ReadWriteOnce
-                  resources:
-                    requests:
-                      storage: 3Gi
-                  storageClassName: sbs-default-retain
-        databaseInitSQL:
-          key: init.sql
-          name: pg0-init-sql
-        instances:
-        - dataVolumeClaimSpec:
-            accessModes:
-            - ReadWriteOnce
-            resources:
-              requests:
-                storage: 1Gi
-            storageClassName: sbs-default-retain
-          name: primary
-          replicas: 1
-        postGISVersion: '3.5'
-        postgresVersion: 17
-        users:
-        - databases:
-          - analytics
-          name: postgres
-        - name: jane
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: postgres-snapshot-pg0
+      subjects:
+      - kind: ServiceAccount
+        name: postgres-snapshot-pg0
+        namespace: s-jane
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: has(object.status) && has(object.status.instances) && object.status.instances.exists(i, i.name ==
-      'primary' && has(i.readyReplicas) && i.readyReplicas >= 1) && has(object.status.pgbackrest) && has(object.status.pgbackrest.repoHost)
-      && object.status.pgbackrest.repoHost.ready == true
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-backup-s-jane-pg0-class-binding-54ca691977
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: s-jane-postgres-snapshot-pg0-ebec472d7f
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: datalab-volume-snapshot-classes
+      subjects:
+      - kind: ServiceAccount
+        name: postgres-snapshot-pg0
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-backup-s-jane-pg0-cronjob-bd1cc2749a
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: postgres-snapshot-pg0
+        namespace: s-jane
+      spec:
+        concurrencyPolicy: Forbid
+        failedJobsHistoryLimit: 1
+        jobTemplate:
+          spec:
+            activeDeadlineSeconds: 900
+            backoffLimit: 1
+            template:
+              metadata:
+                labels:
+                  datalabs.versioneer.at/postgres-backup: pg0
+              spec:
+                automountServiceAccountToken: true
+                containers:
+                - args:
+                  - s-jane
+                  - pg0
+                  - workspace-snapshots
+                  - '4'
+                  command:
+                  - python
+                  - -B
+                  - /opt/backup/backup.py
+                  image: python:3.13-alpine
+                  name: backup
+                  resources:
+                    limits:
+                      cpu: 100m
+                      memory: 128Mi
+                    requests:
+                      cpu: 20m
+                      memory: 32Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                      - ALL
+                    readOnlyRootFilesystem: true
+                  volumeMounts:
+                  - mountPath: /opt/backup
+                    name: script
+                    readOnly: true
+                restartPolicy: Never
+                securityContext:
+                  runAsGroup: 65532
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: postgres-snapshot-pg0
+                volumes:
+                - configMap:
+                    name: postgres-snapshot-pg0
+                  name: script
+        schedule: 0 1 * * *
+        startingDeadlineSeconds: 3600
+        successfulJobsHistoryLimit: 1
+        timeZone: Etc/UTC
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-backup-s-jane-pg0-network-984fbe8da7
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: postgres-snapshot-pg0
+        namespace: s-jane
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 6443
+            protocol: TCP
+        - ports:
+          - port: 53
+            protocol: TCP
+          - port: 53
+            protocol: UDP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        ingress: []
+        podSelector:
+          matchLabels:
+            datalabs.versioneer.at/postgres-backup: pg0
+        policyTypes:
+        - Ingress
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-backup-s-jane-pg0-role-864350ecbb
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: postgres-snapshot-pg0
+        namespace: s-jane
+      rules:
+      - apiGroups:
+        - postgresql.cnpg.io
+        resourceNames:
+        - pg0
+        resources:
+        - clusters
+        verbs:
+        - get
+      - apiGroups:
+        - postgresql.cnpg.io
+        resources:
+        - backups
+        verbs:
+        - create
+        - get
+        - list
+        - delete
+      - apiGroups:
+        - snapshot.storage.k8s.io
+        resources:
+        - volumesnapshots
+        verbs:
+        - get
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-backup-s-jane-pg0-script-cb37c6846d
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        backup.py: |
+          #!/usr/bin/env python3
+
+          """Request a cold PostgreSQL snapshot and retain completed recovery points."""
+
+          import argparse
+          import json
+          from pathlib import Path
+          import ssl
+          import time
+          from urllib.parse import quote, urlencode
+          from urllib.request import Request, urlopen
+
+          LABEL = "datalabs.versioneer.at/postgres-backup"
+          SOURCE = "datalabs.versioneer.at/source-cluster-uid"
+
+
+          class API:
+              def __init__(self):
+                  account = Path("/var/run/secrets/kubernetes.io/serviceaccount")
+                  self.token = account / "token"
+                  self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))
+
+              def call(self, method, path, body=None):
+                  request = Request(
+                      "https://kubernetes.default.svc" + path,
+                      data=None if body is None else json.dumps(body).encode(), method=method,
+                      headers={"Authorization": "Bearer " + self.token.read_text().strip(),
+                               "Content-Type": "application/json"},
+                  )
+                  with urlopen(request, context=self.context, timeout=30) as result:
+                      return json.load(result)
+
+
+          def backup(api, namespace, cluster_name, snapshot_class, retention, timeout=600):
+              namespace = quote(namespace, safe="")
+              path = "/apis/postgresql.cnpg.io/v1/namespaces/" + namespace
+              cluster_path = path + "/clusters/" + quote(cluster_name, safe="")
+              path += "/backups"
+              snapshot_path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + namespace + "/volumesnapshots/"
+              selected_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))
+              if selected_class.get("deletionPolicy") != "Delete":
+                  raise RuntimeError("PostgreSQL snapshot retention requires deletion policy Delete.")
+              cluster = api.call("GET", cluster_path)
+              settings = cluster.get("spec", {}).get("backup", {}).get("volumeSnapshot", {})
+              if (cluster["metadata"].get("deletionTimestamp") or settings.get("className") != snapshot_class
+                      or settings.get("online") is not False or settings.get("snapshotOwnerReference") != "backup"):
+                  raise RuntimeError("The cluster must use cold snapshots owned by their Backup resources.")
+              uid = cluster["metadata"]["uid"]
+              selector = urlencode({"labelSelector": f"{LABEL}={cluster_name},{SOURCE}={uid}"})
+
+              def owned_backups():
+                  return [item for item in api.call("GET", path + "?" + selector)["items"]
+                          if item["metadata"].get("labels", {}).get(LABEL) == cluster_name
+                          and item["metadata"]["labels"].get(SOURCE) == uid
+                          and item.get("spec", {}).get("cluster", {}).get("name") == cluster_name
+                          and item["spec"].get("method") == "volumeSnapshot"
+                          and item["spec"].get("online") is False
+                          and not item["metadata"].get("deletionTimestamp")]
+
+              def ready(item):
+                  if item.get("status", {}).get("phase") != "completed":
+                      return False
+                  elements = item["status"].get("snapshotBackupStatus", {}).get("elements") or []
+                  if not elements or not any(element.get("type") == "PG_DATA" for element in elements):
+                      return False
+                  for element in elements:
+                      snapshot = api.call("GET", snapshot_path + quote(element["name"], safe=""))
+                      if (snapshot["metadata"].get("deletionTimestamp")
+                              or snapshot.get("status", {}).get("readyToUse") is not True
+                              or snapshot.get("status", {}).get("error")
+                              or not any(owner.get("kind") == "Backup" and owner.get("uid") == item["metadata"]["uid"]
+                                         for owner in snapshot["metadata"].get("ownerReferences", []))):
+                          return False
+                  return True
+
+              pending = [item for item in owned_backups() if item.get("status", {}).get("phase") not in ("completed", "failed")]
+              if len(pending) > 1:
+                  raise RuntimeError("Multiple pending PostgreSQL backups need operator review.")
+              current = pending[0] if pending else api.call("POST", path, {
+                  "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",
+                  "metadata": {"generateName": "snapshot-" + cluster_name[:40] + "-",
+                               "labels": {LABEL: cluster_name, SOURCE: uid}},
+                  "spec": {"cluster": {"name": cluster_name}, "method": "volumeSnapshot",
+                           "online": False, "target": "primary"},
+              })
+              backup_name = current["metadata"]["name"]
+              deadline = time.monotonic() + timeout
+              while True:
+                  current = api.call("GET", path + "/" + quote(backup_name, safe=""))
+                  if current.get("status", {}).get("phase") == "failed":
+                      raise RuntimeError("CloudNativePG reported a failed snapshot backup.")
+                  if ready(current):
+                      break
+                  if time.monotonic() >= deadline:
+                      raise RuntimeError("The PostgreSQL snapshot did not complete before the deadline.")
+                  time.sleep(3)
+              if api.call("GET", cluster_path)["metadata"]["uid"] != uid:
+                  raise RuntimeError("The PostgreSQL cluster changed while the backup was being taken.")
+              backups = owned_backups()
+              completed = sorted((item for item in backups if ready(item)),
+                                 key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]), reverse=True)
+              expired = completed[retention:]
+              expired += [item for item in backups if item.get("status", {}).get("phase") == "failed"]
+              # Remove old backups only after a new recovery point and its snapshots are ready.
+              for item in expired:
+                  metadata = item["metadata"]
+                  preconditions = {"uid": metadata["uid"]}
+                  if metadata.get("resourceVersion"):
+                      preconditions["resourceVersion"] = metadata["resourceVersion"]
+                  api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),
+                           {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})
+              print("PostgreSQL snapshot backup is ready: " + backup_name, flush=True)
+
+
+          def main():
+              parser = argparse.ArgumentParser(description=__doc__)
+              parser.add_argument("namespace")
+              parser.add_argument("cluster")
+              parser.add_argument("snapshot_class")
+              parser.add_argument("retention", type=int)
+              args = parser.parse_args()
+              if not 1 <= args.retention <= 100:
+                  parser.error("retention must be from 1 to 100")
+              backup(API(), args.namespace, args.cluster, args.snapshot_class, args.retention)
+
+
+          if __name__ == "__main__":
+              main()
+      kind: ConfigMap
+      metadata:
+        name: postgres-snapshot-pg0
+        namespace: s-jane
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-cluster-s-jane-pg0
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: pg0
+        namespace: s-jane
+      spec:
+        backup:
+          target: primary
+          volumeSnapshot:
+            className: workspace-snapshots
+            online: false
+            snapshotOwnerReference: backup
+        bootstrap:
+          initdb:
+            database: analytics
+            owner: datalab
+        enableSuperuserAccess: true
+        imageName: ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie
+        instances: 1
+        managed:
+          roles:
+          - login: true
+            name: jane
+            passwordSecret:
+              name: pg0-user-jane
+        storage:
+          size: 1Gi
+          storageClass: sbs-default-retain
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type ==
+      'Ready' && c.status == 'True') && (!has(object.metadata.annotations) || !('cnpg.io/fencedInstances' in object.metadata.annotations)
+      || object.metadata.annotations['cnpg.io/fencedInstances'] == '[]') && has(object.status.managedRolesStatus)
+      && has(object.status.managedRolesStatus.byStatus) && has(object.status.managedRolesStatus.byStatus.reconciled)
+      && "jane" in object.status.managedRolesStatus.byStatus.reconciled
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-database-s-jane-pg0-analytics-17e51ffe50
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Database
+      metadata:
+        name: pg0-database-analytics
+        namespace: s-jane
+      spec:
+        cluster:
+          name: pg0
+        databaseReclaimPolicy: retain
+        name: analytics
+        owner: postgres
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.applied) && object.status.applied == true && has(object.status.observedGeneration)
+      && object.status.observedGeneration == object.metadata.generation
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-network-s-jane-pg0-6b827a6bde
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: pg0
+        namespace: s-jane
+      spec:
+        egress:
+        - ports:
+          - port: 443
+            protocol: TCP
+          - port: 6443
+            protocol: TCP
+        - ports:
+          - port: 53
+            protocol: TCP
+          - port: 53
+            protocol: UDP
+          to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: cnpg-system
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: cloudnative-pg
+          ports:
+          - port: 5432
+            protocol: TCP
+          - port: 8000
+            protocol: TCP
+        podSelector:
+          matchLabels:
+            cnpg.io/cluster: pg0
+        policyTypes:
+        - Ingress
+        - Egress
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: db-snapshot-class-s-jane-pg0-67718fa863
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: snapshot.storage.k8s.io/v1
+      kind: VolumeSnapshotClass
+      metadata:
+        name: workspace-snapshots
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: object.deletionPolicy == 'Delete'
     policy: DeriveFromCelQuery
   watch: true
 ---
@@ -2122,7 +2715,7 @@ spec:
           sectionName: postgres-passthrough
         rules:
         - backendRefs:
-          - name: pg0-primary
+          - name: pg0-rw
             port: 5432
   providerConfigRef:
     kind: ProviderConfig
@@ -2341,11 +2934,11 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: s-jane
       policy:
         resolution: Required
         resolve: Always
-      matchLabels:
-        crossplane.io/claim-name: s-jane
     fullPath: false
     name: s-jane
     realmId: acme
@@ -3453,7 +4046,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: pg0-pguser-postgres
+        name: pg0-superuser
         namespace: s-jane
   managementPolicies:
   - Observe
@@ -5889,13 +6482,14 @@ spec:
                       data=None if body is None else json.dumps(body).encode(),
                       method=method,
                       headers={"Authorization": "Bearer " + self.token.read_text().strip(),
-                               "Content-Type": "application/json"},
+                               "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},
                   )
                   with urlopen(request, context=self.context, timeout=30) as result:
                       return json.load(result)
 
 
-          def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600):
+          def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,
+                     label=LABEL, prepare=None, validate=None, verified_label=None):
               core = "/api/v1/namespaces/" + quote(namespace, safe="")
               path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"
               volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))
@@ -5905,11 +6499,11 @@ spec:
               if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):
                   raise RuntimeError("The source PVC must be bound and must not be deleting.")
               uid = pvc["metadata"]["uid"]
-              selector = urlencode({"labelSelector": f"{LABEL}={volume},{SOURCE}={uid}"})
+              selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})
 
               def owned_snapshots():
                   return [item for item in api.call("GET", path + "?" + selector)["items"]
-                          if item["metadata"].get("labels", {}).get(LABEL) == volume
+                          if item["metadata"].get("labels", {}).get(label) == volume
                           and item["metadata"].get("labels", {}).get(SOURCE) == uid
                           and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]
 
@@ -5922,7 +6516,11 @@ spec:
                            {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})
 
               snapshots = owned_snapshots()
-              incomplete = [item for item in snapshots if item.get("status", {}).get("readyToUse") is not True]
+              def verified(item):
+                  return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"
+
+              incomplete = [item for item in snapshots
+                            if item.get("status", {}).get("readyToUse") is not True or not verified(item)]
               for item in incomplete:
                   if not item["metadata"].get("deletionTimestamp"):
                       remove(item)
@@ -5930,13 +6528,15 @@ spec:
                   snapshots = owned_snapshots()
               # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.
               if any(item["metadata"].get("deletionTimestamp")
-                     or item.get("status", {}).get("readyToUse") is not True for item in snapshots):
+                     or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):
                   raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")
 
+              if prepare:
+                  prepare()
               created = api.call("POST", path, {
                   "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
-                  "metadata": {"generateName": "volume-" + volume + "-",
-                               "labels": {LABEL: volume, SOURCE: uid}},
+                  "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",
+                               "labels": {label: volume, SOURCE: uid}},
                   "spec": {"volumeSnapshotClassName": snapshot_class,
                            "source": {"persistentVolumeClaimName": claim}},
               })
@@ -5957,9 +6557,25 @@ spec:
               if source["metadata"]["uid"] != uid:
                   raise RuntimeError("The source PVC changed while the snapshot was being taken.")
 
+              if validate:
+                  try:
+                      validate()
+                  except Exception:
+                      # Do not retain a capture made after the write pause expired or the server changed.
+                      remove(current)
+                      raise
+
+              if verified_label:
+                  metadata = current["metadata"]
+                  api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {
+                      "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],
+                      "labels": {verified_label: "true"},
+                  }})
+
               completed = sorted(
                   (item for item in owned_snapshots()
                    if item.get("status", {}).get("readyToUse") is True
+                   and verified(item)
                    and not item["metadata"].get("deletionTimestamp")),
                   key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),
                   reverse=True,

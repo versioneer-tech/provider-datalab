@@ -35,6 +35,7 @@ def environment():
         "metadata": {"name": "datalab",
                      "labels": {"datalabs.pkg.internal/name": "datalab"}},
         "data": {
+            "database": {"snapshotClassName": "test-snapshots"},
             "iam": {"realm": "acme", "issuerURL": "https://identity.acme.com/realms/acme",
                     "internalURL": "http://keycloak.keycloak:8080/realms/acme"},
             "storage": {"secretNamespace": "datalab"},

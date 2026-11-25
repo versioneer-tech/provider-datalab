@@ -6,7 +6,7 @@ create Pods, Deployments, Services, and PVCs in the target virtual namespace.
 Use port forwarding to open a workload's web interface.
 
 Use the [Datalab service fields](usage_concepts.md#postgresql) for managed
-PostgreSQL, MongoDB, and Redis stores. The environment also supplies
+PostgreSQL and Redis stores. The environment also supplies
 a [shared OCI registry](usage_concepts.md#oci-registry).
 
 The MLflow and psql examples below use virtual namespace `demo` and these

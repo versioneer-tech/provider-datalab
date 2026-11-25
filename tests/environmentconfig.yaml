@@ -12,10 +12,7 @@ data:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
-    mongoBackup: mongo:8.0.38
     redis: quay.io/opstree/redis:v7.2.17
-    redisBackup: redis:7.2.17
     oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   iam:
     realm: acme
@@ -72,13 +69,15 @@ data:
   security:
     policy: baseline
     externalEgress: true
+  cacheStore:
+    snapshotClassName: workspace-snapshots
   database:
     tlsRoute:
       parentName: default
       parentNamespace: projectcontour
       sectionName: postgres-passthrough
     storageClassName: ""
-    backupStorageClassName: ""
+    snapshotClassName: workspace-snapshots
 ---
 apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
@@ -91,10 +90,7 @@ data:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
-    mongoBackup: mongo:8.0.38
     redis: quay.io/opstree/redis:v7.2.17
-    redisBackup: redis:7.2.17
     oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   customSecrets:
   - name: apikey-1
@@ -187,14 +183,13 @@ data:
     externalEgress: true
   registry:
     enabled: true
+  cacheStore:
+    snapshotClassName: workspace-snapshots
+    storageClassName: sbs-default-retain
   database:
     tlsRoute:
       parentName: default
       parentNamespace: projectcontour
       sectionName: postgres-passthrough
     storageClassName: sbs-default-retain
-    backupStorageClassName: sbs-default-retain
-  documentStore:
-    storageClassName: sbs-default-retain
-  cacheStore:
-    storageClassName: sbs-default-retain
+    snapshotClassName: workspace-snapshots

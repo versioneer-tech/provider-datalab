@@ -9,7 +9,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      postgres-operator.crunchydata.com/cluster: pg0
+      cnpg.io/cluster: pg0
   policyTypes: [Egress]
   egress:
   # Host-network API endpoints do not always match namespace selectors.

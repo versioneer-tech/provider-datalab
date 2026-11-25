@@ -6,7 +6,7 @@ Complete [installation](installation.md) before applying these examples.
 
 ## Volumes
 
-Use `spec.volumes` for named PVCs with automatic CSI snapshots in the Datalab
+Use `spec.volumes` for named PVCs with optional CSI snapshots in the Datalab
 host namespace. They remain when a virtual cluster stops or is removed.
 Add `volumeBindings` to a virtual cluster to expose a named volume as a PVC in
 one virtual namespace. Applications use the virtual API to mount it. See
@@ -27,17 +27,18 @@ registry use a separate storage-only Secret in the service namespace.
 
 ## PostgreSQL
 
-Use `spec.databases` to request a PostgreSQL cluster and its logical databases:
+Use `spec.stores` with `type: postgres` to request a PostgreSQL instance and its logical databases:
 
 ```yaml
 spec:
-  databases:
+  stores:
     pg0:
+      type: postgres
       names:
       - dev
       - prod
       storage: 1Gi
-      backupStorage: 3Gi
+      backups: true
 ```
 
 This creates the `pg0` cluster with `dev` and `prod` databases. The PostgreSQL
@@ -58,25 +59,32 @@ before giving applications database credentials.
 See [Additional services](additional_services.md#postgresql-with-psql) for a
 psql example.
 
-## MongoDB and Redis
+## Redis
 
-Use these fields to request MongoDB and Redis stores:
+Use the same `stores` map for Redis:
 
 ```yaml
 spec:
-  documentStores:
-    prod:
+  stores:
+    cache:
+      type: redis
+      names: [sessions, jobs]
       storage: 1Gi
-      backupStorage: 3Gi
-  cacheStores:
-    prod:
-      storage: 1Gi
-      backupStorage: 3Gi
+      backups: true
 ```
 
-Each store needs its operator installed in the cluster. For the name `prod`,
-read `uri` from `<datalab>-mongo-prod` or `url` from `<datalab>-redis-prod`.
-The connection Secrets also contain host and credential fields.
+Each outer name identifies one service instance and its status connection.
+The service type cannot change for an existing instance.
+The `type` field uses the same value as `status.connections[].type`.
+`names` defaults to `[default]`. PostgreSQL uses database names.
+Redis uses key prefixes with a final colon: `sessions:` and `jobs:` in this
+example. Clients must add the selected prefix to each key. The names share
+instance credentials; prefixes do not restrict access.
+
+Each type needs its operator installed in the cluster. Read `url` from
+`<datalab>-redis-cache`.
+The connection Secrets contain host and credential fields, a JSON `names`
+array and, for Redis, a JSON `prefixes` map.
 
 The composition watches the operator authentication Secrets and updates each
 service connection separately. Clients must reload changed values. See
@@ -85,19 +93,48 @@ credential delivery into virtual namespaces.
 
 ## Backups
 
-Set `backupStorage` to a positive Kubernetes storage quantity, such as `10Gi`,
-to create a separate backup PVC. Zero or an omitted value disables backups
-without stopping the store.
+Set `backups: true` on a `spec.stores` or `spec.volumes` entry to enable CSI
+snapshots. The default is `false`. No backup PVC or backup size is required.
+The platform must meet the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites).
 
-| Store | Backup schedule | Retention |
+| Resource | Capture | Default retention |
 | --- | --- | --- |
-| PostgreSQL | pgBackRest: full on Sunday, differential on other days, at 01:00 in the operator's time zone. | Four full backups and their dependent backups; the volume also holds WAL. |
-| MongoDB | Full `mongodump --oplog --gzip` archive daily at 01:00 UTC. | Four completed archives. |
-| Redis | Full `redis-cli --rdb` snapshot daily at 01:00 UTC, checked with `redis-check-rdb`. | Four completed snapshots. |
+| PostgreSQL | CloudNativePG cold snapshot. The single instance stops reads and writes during capture. | Four completed backups per cluster UID. |
+| Redis | Pause writes, wait for `BGSAVE`, then snapshot the data PVC. Writes pause for at most 11 minutes, including time to save and capture. | Four completed snapshots per data PVC UID. |
+| Named volume | Snapshot the bound PVC. The application must flush or pause writes when needed. | Two completed snapshots per PVC UID. |
 
-Size the volume for retained backups and the next full export. Monitor failed
-Jobs and free space. Failed MongoDB or Redis jobs preserve completed backups.
-Enabling or disabling Redis backups restarts its Pod.
+The default schedule is daily at 01:00 UTC. EnvironmentConfig sets each
+schedule, snapshot class, and retention count. A failed Job preserves completed
+recovery points. Retention removes older points only after a new capture is
+ready and passes its consistency checks. These backups have no continuous WAL
+archive or point-in-time recovery.
+
+Set `backups: false` to remove the schedule and keep completed recovery points.
+Enabling or disabling Redis backups restarts its Pod to change the backup ACL.
+Namespace deletion can remove snapshots and their stored data. The platform
+must monitor failed Jobs and snapshot readiness, test restores, and arrange an
+independent recovery copy.
+
+### Restore a managed store
+
+Ask the platform operator to restore into a separate service and check its data
+before use. PostgreSQL recovery uses the completed CNPG Backup and its snapshots.
+Keep the required Kubernetes metadata and credentials in a separate backup.
+
+For Redis, select a ready snapshot with label
+`datalabs.versioneer.at/redis-snapshot-verified: "true"`. The Job sets this label
+after checking that the server stayed unchanged and writes stayed paused.
+An interrupted capture without this label is removed by the next run.
+Create a new PVC from that snapshot. Validate `/data/dump.rdb`
+with `redis-check-rdb`. Start an isolated Redis process with that PVC mounted at
+`/data`, `--dir /data`, and `--appendonly no` to load the saved RDB. Redis normally
+prefers AOF files, which can represent a different recovery boundary. On the
+restored PVC, remove the old `appendonlydir`, then use `CONFIG SET appendonly yes`
+to build a new AOF. Wait for the rewrite to finish and verify a restart with
+AOF enabled. Never change the source PVC during recovery. See
+[Redis persistence](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/).
+
+For named volumes, see [volume recovery](volumes.md#restore-into-a-new-volume).
 
 ## Data and sharing
 
@@ -150,7 +187,7 @@ before you apply these manifests in your claim namespace.
 | Manifest | Environment | Use |
 | --- | --- | --- |
 | [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data and storage access. |
-| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL, MongoDB, and Redis stores; Jim has the Datalab admin role. |
+| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL and Redis stores; Jim has the Datalab admin role. |
 | [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, a bound host volume, PostgreSQL, and the shared registry. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Read-only Data, custom connections, and namespace policy. |
 

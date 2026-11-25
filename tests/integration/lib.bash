@@ -130,7 +130,7 @@ check_test_namespaces() {
   local namespace marker
   [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]] || return 0
   for namespace in crossplane workspace minio keycloak projectcontour \
-    postgres-operator mongodb-operator redis-operator; do
+    cnpg-system redis-operator; do
     marker="$(kube get namespace "${namespace}" --ignore-not-found \
       -o 'jsonpath={.metadata.name}{" "}{.metadata.labels.datalabs\.versioneer\.at/integration}')"
     if [[ -n "${marker}" && "${marker}" != "${namespace} true" ]]; then
@@ -143,7 +143,7 @@ check_test_namespaces() {
 create_test_namespaces() {
   local namespace
   for namespace in crossplane workspace minio keycloak projectcontour \
-    postgres-operator mongodb-operator redis-operator; do
+    cnpg-system redis-operator; do
     kube create namespace "${namespace}" --dry-run=client -o yaml | kube apply -f -
     kube label namespace "${namespace}" datalabs.versioneer.at/integration=true --overwrite
   done
@@ -153,6 +153,7 @@ apply_environment_config() {
   python3 "${INTEGRATION_DIR}/environment.py" "$1" \
     --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" \
     --control-plane-storage-class "${PROVIDER_DATALAB_CONTROL_PLANE_STORAGE_CLASS:-${PROVIDER_DATALAB_STORAGE_CLASS}}" \
+    --snapshot-class "${PROVIDER_DATALAB_SNAPSHOT_CLASS:-}" \
     --service-cidr "${PROVIDER_DATALAB_SERVICE_CIDR}" \
     --pod-cidrs "${PROVIDER_DATALAB_POD_CIDRS}" | kube apply -f -
 }
@@ -282,8 +283,7 @@ park_unused_operators() {
       stop_unused_operator "${namespace}" "${deployment}" "${resource_type}"
     fi
   done <<'OPERATORS'
-postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
-mongodb-operator mongodb-kubernetes-operator mongodbcommunity.mongodbcommunity.mongodb.com
+cnpg-system cnpg clusters.postgresql.cnpg.io
 redis-operator redis-operator redis.redis.redis.opstreelabs.in
 OPERATORS
 }
@@ -307,11 +307,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-volumes|verify-vcluster)
+    verify-network|verify-data|verify-s3|verify-postgres|verify-redis|verify-registry|verify-volumes|verify-vcluster)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-mongo|verify-redis|verify-registry|verify-volumes|verify-vcluster>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-redis|verify-registry|verify-volumes|verify-vcluster>\n' "$2" >&2
       exit 1
       ;;
   esac

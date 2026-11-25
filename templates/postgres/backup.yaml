@@ -1,0 +1,172 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+resources:
+  account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    automountServiceAccountToken: false
+  role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    rules:
+    - apiGroups:
+      - postgresql.cnpg.io
+      resources:
+      - clusters
+      resourceNames:
+      - ${cluster_name}
+      verbs:
+      - get
+    - apiGroups:
+      - postgresql.cnpg.io
+      resources:
+      - backups
+      verbs:
+      - create
+      - get
+      - list
+      - delete
+    - apiGroups:
+      - snapshot.storage.k8s.io
+      resources:
+      - volumesnapshots
+      verbs:
+      - get
+  binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ${backup_name}
+  script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    data:
+      backup.py: ${backup_script}
+  network:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    spec:
+      podSelector:
+        matchLabels:
+          datalabs.versioneer.at/postgres-backup: ${cluster_name}
+      policyTypes:
+      - Ingress
+      - Egress
+      ingress: []
+      egress:
+      - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        ports:
+        - port: 53
+          protocol: TCP
+        - port: 53
+          protocol: UDP
+  class-binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: ${backup_binding}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: datalab-volume-snapshot-classes
+  cronjob:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    spec:
+      schedule: ${schedule}
+      timeZone: Etc/UTC
+      concurrencyPolicy: Forbid
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 1
+      jobTemplate:
+        spec:
+          backoffLimit: 1
+          activeDeadlineSeconds: 900
+          template:
+            metadata:
+              labels:
+                datalabs.versioneer.at/postgres-backup: ${cluster_name}
+            spec:
+              restartPolicy: Never
+              serviceAccountName: ${backup_name}
+              automountServiceAccountToken: true
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65532
+                runAsGroup: 65532
+                seccompProfile:
+                  type: RuntimeDefault
+              containers:
+              - name: backup
+                image: ${backup_image}
+                command:
+                - python
+                - -B
+                - /opt/backup/backup.py
+                args:
+                - ${target}
+                - ${cluster_name}
+                - ${snapshot_class}
+                - ${max_snapshots}
+                resources:
+                  requests:
+                    cpu: 20m
+                    memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
+                volumeMounts:
+                - name: script
+                  mountPath: /opt/backup
+                  readOnly: true
+              volumes:
+              - name: script
+                configMap:
+                  name: ${backup_name}

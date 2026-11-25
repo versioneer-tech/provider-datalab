@@ -164,12 +164,6 @@ jobs:
           tests/integration/verify-postgres.bash
           tests/integration/resource-budget.bash
 
-      - name: Verify Datalab MongoDB
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-mongo.bash
-          tests/integration/resource-budget.bash
-
       - name: Verify Datalab Redis
         if: env.RUN_INTEGRATION == 'true'
         run: |

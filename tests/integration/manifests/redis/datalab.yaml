@@ -9,7 +9,9 @@ metadata:
 spec:
   environmentName: datalab
   users: []
-  cacheStores:
+  stores:
     verify:
+      type: redis
+      names: [sessions, jobs]
       storage: 1Gi
-      backupStorage: 0Gi
+      backups: false

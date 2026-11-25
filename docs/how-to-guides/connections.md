@@ -6,12 +6,16 @@ remain in the referenced Secrets.
 | Type | Name | Secret contents |
 | --- | --- | --- |
 | `s3` | `primary` | Storage source Secret; AWS keys and optional session token |
-| `postgres` | Store name | `host`, `port`, `user`, `password`, `dbname`, and `uri` |
-| `mongo` | Store name | `user` and `password` |
-| `redis` | Store name | `user` and `password` |
+| `postgres` | Store name | `host`, `port`, `user`, `password`, `dbname`, `uri`, and JSON `names` |
+| `redis` | Store name | `user`, `password`, JSON `names`, and JSON `prefixes` |
 | `registry` | `primary` | `user` and `password` |
 | `custom` | Configured Secret name | Source data and usable Secret type |
 | `vcluster` | Instance and profile | Public `kubeconfig`, `client-id`, and `issuer-url` |
+
+Each `spec.stores.<name>` entry creates one connection with the same `type`
+and name. Its `names` field lists the logical databases or Redis key prefixes.
+Names share the service credentials. Redis clients must add the selected prefix;
+the provider does not enforce prefix access.
 
 Read the Secret name and namespace from `status.connections[].secretRef`.
 Managed service and custom connections wait until their published copy matches
@@ -20,7 +24,7 @@ profiles require ready runtime, routing, RBAC, and identity resources.
 Connection readiness does not confirm Secret delivery into a virtual cluster.
 
 The service examples use additional Secrets in the Datalab namespace:
-`<datalab>-s3`, `<datalab>-postgres-<store>`, `<datalab>-mongo-<store>`, and
+`<datalab>-s3`, `<datalab>-postgres-<store>`, and
 `<datalab>-redis-<store>`. They supply host, URI, and storage fields.
 For bindings, use the Secret reference in status.
 
@@ -33,13 +37,14 @@ credentials. Database outputs are generated independently of storage access.
 
 Select a ready `status.connections` entry by `type` and `name`. Add it to
 `spec.vclusters.<instance>.secretBindings` with a target namespace and Secret
-name. Available service types are `s3`, `postgres`, `mongo`, `redis`, and
+name. Available service types are `s3`, `postgres`, `redis`, and
 `registry`. Only declared service instances can be selected.
 
 ```yaml
 spec:
-  databases:
+  stores:
     pg0:
+      type: postgres
       names: [analytics]
       storage: 5Gi
   vclusters:

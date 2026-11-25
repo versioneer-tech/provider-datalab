@@ -37,42 +37,23 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: pg0-pguser-postgres
+        name: pg0-superuser
         namespace: s-jeff
       data:
         uri: cG9zdGdyZXNxbDovL3Bvc3RncmVzOnBnLXNlY3JldEBwZzAtcHJpbWFyeS5zLWplZmYuc3ZjOjU0MzIvcG9zdGdyZXM=
         dbname: cG9zdGdyZXM=
         host: cGcwLXByaW1hcnkucy1qZWZmLnN2Yw==
         port: NTQzMg==
-        user: cG9zdGdyZXM=
+        username: cG9zdGdyZXM=
         password: cGctc2VjcmV0
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: observe-mongodb-auth-secret-s-jeff-prod
+  name: observe-redis-auth-secret-s-jeff-cache
   namespace: default
   annotations:
-    crossplane.io/composition-resource-name: observe-mongodb-auth-secret-s-jeff-prod
-status:
-  atProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: prod-mongodb-auth
-        namespace: s-jeff
-      data:
-        user: cHJvZC1hcHA=
-        password: NGhxNVdxN3pWeXdBRUkwaEM3SVAtaXlMWGlMWkVsUVc=
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: observe-redis-auth-secret-s-jeff-prod
-  namespace: default
-  annotations:
-    crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-prod
+    crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-cache
 status:
   conditions:
     - type: Ready
@@ -82,7 +63,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: prod-redis-auth
+        name: cache-redis-auth
         namespace: s-jeff
       data:
         user: ZGVmYXVsdA==

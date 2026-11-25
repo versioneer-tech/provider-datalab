@@ -216,7 +216,7 @@ def main():
     print("PASS backup retention preserves current recovery points and unrelated snapshots", flush=True)
 
     probe("analysis", "printf after-backup > /data/marker; sync")
-    volumes({"recovered": {"storage": restore_storage, "restoreFrom": recovery["metadata"]["name"]}})
+    volumes({"recovered": {"storage": restore_storage, "backups": True, "restoreFrom": recovery["metadata"]["name"]}})
     present("pvc/volume-recovered")
     present("cronjob/volume-snapshot-recovered")
     assert probe("recovered", "cat /data/marker") == "snapshot-value"
@@ -231,12 +231,22 @@ def main():
     assert status(2)["backup"] == entry["backup"]
     print("PASS restored data and backup schedules are independent of the source", flush=True)
 
+    points = {item["metadata"]["uid"] for item in snapshots()}
+    volumes({"analysis": {"backups": False}})
+    wait_for(lambda: get("cronjob/volume-snapshot-analysis") is None,
+             "Disabling backups did not remove the schedule")
+    assert get("pvc/volume-analysis")["metadata"]["uid"] == uid
+    assert {item["metadata"]["uid"] for item in snapshots()} == points
+    assert status(2)["backup"] == entry["backup"]
+    assert probe("analysis", "cat /data/marker") == "after-backup"
+    print("PASS disabling volume backups keeps the PVC and completed recovery points", flush=True)
+
     retained = {item["metadata"]["uid"] for item in snapshots()}
     volumes({"analysis": None})
     wait_for(lambda: get("pvc/volume-analysis") is None and get("cronjob/volume-snapshot-analysis") is None
              and get("serviceaccount/volume-snapshot-analysis") is None, "Source volume removal did not finish")
     assert {item["metadata"]["uid"] for item in snapshots()} == retained
-    volumes({"recovered": {"storage": restore_storage, "restoreFrom": recovery["metadata"]["name"]}})
+    volumes({"recovered": {"storage": restore_storage, "backups": True, "restoreFrom": recovery["metadata"]["name"]}})
     present("pvc/volume-recovered")
     assert probe("recovered", "cat /data/marker") == "snapshot-value"
     volumes({"recovered": None})

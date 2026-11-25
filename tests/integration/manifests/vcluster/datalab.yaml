@@ -13,13 +13,8 @@ spec:
   - verify-vcluster-member
   volumes:
     demo:
+      backups: true
       storage: 1Gi
-  databases:
-    pg0:
-      type: postgres
-      storage: 1Gi
-      names:
-      - catalog
   vclusters:
     vc0:
       storage: 1Gi
@@ -44,3 +39,9 @@ spec:
       - name: namespace-other
         namespace: other
         role: view
+  stores:
+    pg0:
+      type: postgres
+      storage: 1Gi
+      names:
+      - catalog

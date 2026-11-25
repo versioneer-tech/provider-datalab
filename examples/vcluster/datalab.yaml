@@ -10,12 +10,8 @@ spec:
   users: [joe]
   volumes:
     demo:
+      backups: true
       storage: 1Gi
-  databases:
-    pg0:
-      type: postgres
-      names: [catalog]
-      storage: 5Gi
   vclusters:
     vc0:
       storage: 5Gi
@@ -31,3 +27,8 @@ spec:
       - name: cluster-admin
         namespace: "*"
         role: cluster-admin
+  stores:
+    pg0:
+      type: postgres
+      names: [catalog]
+      storage: 5Gi

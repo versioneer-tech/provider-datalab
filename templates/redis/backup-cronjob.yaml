@@ -1,71 +1,163 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: ${backup_name}
-  namespace: ${runtime_namespace}
-spec:
-  schedule: 0 1 * * *
-  timeZone: Etc/UTC
-  concurrencyPolicy: Forbid
-  startingDeadlineSeconds: 3600
-  successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 1
-  jobTemplate:
+resources:
+  account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    automountServiceAccountToken: false
+  role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    rules:
+    - apiGroups: ['']
+      resources: [persistentvolumeclaims]
+      resourceNames: ['${pvc_name}']
+      verbs: [get]
+    - apiGroups: ['']
+      resources: [pods]
+      resourceNames: ['${pod_name}']
+      verbs: [get]
+    - apiGroups: [snapshot.storage.k8s.io]
+      resources: [volumesnapshots]
+      verbs: [create, get, list, patch, delete]
+  binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ${backup_name}
+  script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    data:
+      redis-snapshot.py: ${backup_script}
+      volume-snapshot.py: ${snapshot_script}
+  network:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
     spec:
-      backoffLimit: 2
-      activeDeadlineSeconds: 3600
-      template:
+      podSelector:
+        matchLabels:
+          datalabs.versioneer.at/redis-backup: ${volume_name}
+      policyTypes: [Ingress, Egress]
+      ingress: []
+      egress:
+      - to:
+        - podSelector:
+            matchLabels:
+              app: ${volume_name}
+        ports:
+        - {port: 6379, protocol: TCP}
+      - ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+  class-binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: ${backup_binding}
+    subjects:
+    - kind: ServiceAccount
+      name: ${backup_name}
+      namespace: ${target}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: datalab-volume-snapshot-classes
+  cronjob:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: ${backup_name}
+      namespace: ${target}
+    spec:
+      suspend: ${suspended}
+      schedule: ${schedule}
+      timeZone: Etc/UTC
+      concurrencyPolicy: Forbid
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 1
+      jobTemplate:
         spec:
-          restartPolicy: Never
-          automountServiceAccountToken: false
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 999
-            runAsGroup: 999
-            fsGroup: 999
-            seccompProfile:
-              type: RuntimeDefault
-          containers:
-          - name: backup
-            image: ${redis_image}
-            command: [/bin/sh, -ec]
-            args:
-            - |
-              umask 077
-              archive="/backup/dump-$(date -u +%Y%m%dT%H%M%SZ).rdb"
-              partial="/backup/dump.partial"
-              trap 'rm -f "$partial"' EXIT
-              redis-cli -h "$BACKUP_HOST" --user backup --rdb "$partial"
-              redis-check-rdb "$partial"
-              mv "$partial" "$archive"
-              find /backup -maxdepth 1 -type f -name 'dump-*.rdb' -printf '%f\n' \
-                | sort -r | tail -n +5 | while IFS= read -r old; do rm "/backup/$old"; done
-            env:
-            - name: BACKUP_HOST
-              value: ${backup_host}
-            - name: REDISCLI_AUTH
-              valueFrom:
-                secretKeyRef:
-                  name: ${backup_secret_name}
-                  key: password
-            resources:
-              requests:
-                cpu: 100m
-                memory: 128Mi
-              limits:
-                memory: 512Mi
-            securityContext:
-              allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: true
-              capabilities:
-                drop: [ALL]
-            volumeMounts:
-            - name: backup
-              mountPath: /backup
-          volumes:
-          - name: backup
-            persistentVolumeClaim:
-              claimName: ${backup_name}
+          backoffLimit: 1
+          activeDeadlineSeconds: 900
+          template:
+            metadata:
+              labels:
+                datalabs.versioneer.at/redis-backup: ${volume_name}
+            spec:
+              restartPolicy: Never
+              serviceAccountName: ${backup_name}
+              automountServiceAccountToken: true
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65532
+                runAsGroup: 65532
+                seccompProfile:
+                  type: RuntimeDefault
+              containers:
+              - name: backup
+                image: ${backup_image}
+                command: [python, -B, /opt/backup/redis-snapshot.py]
+                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${max_snapshots}']
+                resources:
+                  requests:
+                    cpu: 20m
+                    memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: [ALL]
+                volumeMounts:
+                - name: password
+                  mountPath: /var/run/redis-backup
+                  readOnly: true
+                - name: script
+                  mountPath: /opt/backup
+                  readOnly: true
+              volumes:
+              - name: password
+                secret:
+                  secretName: ${backup_secret_name}
+                  items:
+                  - key: password
+                    path: password
+              - name: script
+                configMap:
+                  name: ${backup_name}

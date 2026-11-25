@@ -12,13 +12,8 @@ spec:
     - jane
   volumes:
     analysis:
+      backups: true
       storage: 2Gi
-  databases:
-    pg0:
-      names:
-      - analytics
-      storage: 1Gi
-      backupStorage: 3Gi
   vclusters:
     vc0:
       storage: 1Gi
@@ -42,3 +37,10 @@ spec:
       - name: namespace-demo
         namespace: demo
         role: edit
+  stores:
+    pg0:
+      type: postgres
+      names:
+      - analytics
+      storage: 1Gi
+      backups: true

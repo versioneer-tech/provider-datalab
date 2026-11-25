@@ -84,7 +84,8 @@ storage protection after consumers stop, including after the last binding is rem
 The operator supplies a snapshot-capable CSI driver, the host snapshot
 infrastructure, and a snapshot class.
 
-Every named volume gets a host backup CronJob. The operator sets the
+Each named volume with `backups: true` gets a host backup CronJob. The default
+is `false`. Disabling backups keeps the PVC and completed snapshots. The operator sets the
 schedule and `maxSnapshots` in EnvironmentConfig. Defaults are daily at 01:00 UTC
 and two completed snapshots per PVC UID. The snapshot limit is not a per-volume field.
 

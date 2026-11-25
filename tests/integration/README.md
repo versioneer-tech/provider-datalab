@@ -24,7 +24,8 @@ Snapshot checks require a matching StorageClass and VolumeSnapshotClass with
 `Delete` policy, the snapshot APIs, and snapshot management permissions. The
 probe checks access for the test identity, Crossplane, and the Kubernetes
 provider. Supply `--snapshot-class` to enable it. Without that option, snapshot
-tests are skipped on existing targets.
+checks are skipped on existing targets. With that option, failed snapshot
+prerequisites stop the run.
 After setup, volume tests check the generated backup ServiceAccount's access.
 Other PVCs, Secrets, snapshot contents, class changes, and snapshots in another
 namespace must be denied. A failure after a successful probe fails the test.
@@ -53,6 +54,10 @@ the policy blocks it, then checks that traffic returns after policy removal.
 It uses a temporary namespace and removes it after the probe. Traffic checks
 run only when this probe succeeds. Resource-default and quota checks always run.
 A vCluster without policy enforcement skips traffic checks.
+For a virtual target known to lack enforcement, set
+`PROVIDER_DATALAB_SKIP_NETWORK_POLICY=1` to skip the capability traffic probe as
+well. Kind still requires its policy checks. Resource-default and quota checks
+continue on the virtual target.
 
 The registry must accept pushes and be reachable from cluster nodes. The
 runner uses an empty Docker config unless you supply `--docker-config <directory>`
@@ -122,7 +127,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | S3 | `KEEP_S3_RESOURCES` |
 | Registry | `KEEP_REGISTRY_RESOURCES` |
 | PostgreSQL | `KEEP_POSTGRES_RESOURCES` |
-| MongoDB or Redis | `KEEP_STORE_RESOURCES` |
+| Redis | `KEEP_STORE_RESOURCES` |
 | Volumes | `KEEP_VOLUME_RESOURCES` |
 | Virtual clusters | `KEEP_VCLUSTER_RESOURCES` |
 
@@ -134,9 +139,8 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-registry` | [Registry](manifests/registry/datalab.yaml) | Authenticate with the published Secret, then write and read a blob in S3-backed storage. |
 | `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
 | `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
-| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL write/read through connection Secrets; backup configuration enabled on `pg0` and absent on `pg1`. |
-| `verify-mongo` | [MongoDB](manifests/mongo/datalab.yaml) | Document write/read; back up and restore the probe document with oplog replay in a separate MongoDB process. |
-| `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Key write/read; restore a backup in a separate Redis process, then disable backups and retain the backup PVC. |
+| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL over TLS, named-user login, password rotation, logical-name retention, store type admission, PostGIS, cold snapshot recovery, retention, failure handling, and backup disable. `pg1` has no backups. |
+| `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Published key prefixes; CSI capture, failed backup preservation, retention, RDB recovery in a new PVC, AOF restart, and disable without loss of recovery points. |
 | `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
 | `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |
 
@@ -162,15 +166,17 @@ workload restart. It restores the Secret, resumes the client, and repeats the S3
 is unchanged.
 
 Database probes run in `workspace`, where connection Secrets are published.
-The test policies allow labeled service probes on PostgreSQL, MongoDB, and Redis
-ports and block other outside clients. Operators and CRDs use the versions in
-the [installation guide](../../docs/how-to-guides/installation.md#prerequisites).
+The test policies allow labeled service probes on PostgreSQL and Redis
+ports and block other outside clients. Operators and CRDs use the documented versions. PostgreSQL uses the
+[cluster prerequisites](../../README.md#cluster-prerequisites), including its
+snapshot controller, CSI driver, matching classes, and access permissions. Redis
+and named volume snapshots need the same infrastructure.
 
 ## Volume checks
 
 `verify-volumes` prepares the shared Keycloak test realm, then declares a
 Datalab with named host storage and no virtual cluster. The Datalab must become
-ready after the first PVC mount. Each volume gets a backup schedule. The profile
+ready after the first PVC mount. Each volume with `backups: true` gets a backup schedule. The profile
 runs Jobs from the generated CronJob. The default retention must leave exactly
 two ready snapshots.
 
@@ -185,6 +191,7 @@ The profile checks:
   another namespace.
 - The observed PVC reference and phase, ready-snapshot count, and last successful
   time in Datalab status.
+- Disabling backups preserves the data PVC and completed snapshots.
 - Independent backup schedules for source and restored volumes; volume removal
   removes its schedule and preserves the other volume.
 - Recovery from a snapshot after the source volume declaration and PVC are removed.
@@ -195,7 +202,7 @@ physical host API when the selected target is a virtual cluster.
 
 ## Virtual cluster checks
 
-The profile installs PGO, Keycloak, and Contour and creates a fresh certificate
+The profile installs CloudNativePG, Keycloak, and Contour and creates a fresh certificate
 for `*.lab.acme.com`. Its CPU limit quota is `20` so two control planes, their
 controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
 
