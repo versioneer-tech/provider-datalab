@@ -17,13 +17,13 @@ Datalabs. Follow the [runtime installation guide](https://docs.educates.dev/en/s
 The runtime ingress class, domain, and TLS Secret must match the settings
 below.
 
-Install the operators for the managed stores you plan to offer. Provider
-Datalab integration tests use these versions:
+Install the operators for the managed stores you plan to offer. The integration
+suite pins these versions:
 
 | Datalab field | Operator | Test version | Required resource API |
 | --- | --- | --- | --- |
-| `spec.databases` | Crunchy PostgreSQL Operator (PGO) | `6.0.2` | `PostgresCluster` in `postgres-operator.crunchydata.com/v1` |
-| `spec.documentStores` | MongoDB Kubernetes Operator | `1.14.0` | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
+| `spec.databases` | Crunchy PostgreSQL Operator (PGO) | `6.0.3` | `PostgresCluster` in `postgres-operator.crunchydata.com/v1` |
+| `spec.documentStores` | MongoDB Kubernetes Operator | `1.15.0` | `MongoDBCommunity` in `mongodbcommunity.mongodb.com/v1` |
 | `spec.cacheStores` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
 
 These are fixed test pins. Other versions need validation before use.
@@ -45,14 +45,13 @@ ValidatingAdmissionPolicy and BackendTLSPolicy support. See
 ### Dependency baseline
 
 The package requires Crossplane 2.4.3 or later in the v2 series.
-The supplied manifests use the shared
-[EOEPCA Crossplane baseline](https://github.com/EOEPCA/eoepca-plus/tree/deploy-develop/argocd/infra/crossplane/parts):
+The supplied manifests pin these provider and function versions:
 
 | Component | Version |
 | --- | --- |
 | Crossplane core | 2.4.3 |
 | provider-kubernetes | 1.4.1 |
-| provider-keycloak | 2.24.1 |
+| provider-keycloak | 3.3.0 |
 | function-python | 0.6.0 |
 | function-auto-ready | 0.7.3 |
 | function-environment-configs | 0.9.2 |

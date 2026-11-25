@@ -48,7 +48,7 @@ The service connection checks cover direct Secret reads, sanitized Object
 status, source Secret rotation, and source loss. Environment checks cover
 schema validation, selection order, nested maps, and absent configs or fields.
 The disposable Keycloak server uses an in-memory database. It has five minutes
-to build and import its test realm before the refresh and exchange checks start.
+to build and import its test realm before the login, refresh, and exchange checks start.
 
 Install the [build dependencies and generate the composition](../templates/README.md)
 before running the suite. It rejects a generated composition that differs
@@ -110,10 +110,15 @@ than a snapshot comparison:
 
 Render tests cannot prove live authorization, routing, persistence, or timing.
 `token-exchange.py` checks rendered authorization boundaries and exchange
-enablement after scope reconciliation. It does not simulate token issuance.
+enablement after scope reconciliation.
 It rejects broad client-role mappers and checks role selection per scope.
 It also checks policy deletion dependencies.
-The [Kind integration suite](integration/README.md) checks those outcomes.
+Its local Keycloak server checks issued tokens for login, offline refresh, and
+restricted exchange. A separate login client omits workspace roles despite group
+membership. With Full Scope Allowed off, explicit role scope mappings restore
+`ws_access` and `ws_api` in a fresh token. Unassigned administrator roles, profile
+roles, and roles from an unrelated workspace stay absent.
+The [Kind integration suite](integration/README.md) checks the deployed services.
 Its `verify-vcluster` profile also checks OAuth2 name uniqueness through
 Kubernetes admission and rejects API access without a vcluster role.
 

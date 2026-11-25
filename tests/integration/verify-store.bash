@@ -8,7 +8,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${MONGODB_OPERATOR_VERSION:=1.14.0}"
+: "${MONGODB_OPERATOR_VERSION:=1.15.0}"
 : "${REDIS_OPERATOR_CHART_VERSION:=0.27.0}"
 : "${MONGO_CLIENT_IMAGE:=mongo:8.0.12}"
 : "${REDIS_CLIENT_IMAGE:=redis:7.0.15}"

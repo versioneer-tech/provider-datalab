@@ -103,7 +103,7 @@ It then repeats the S3 checks. This tests Secret propagation; it does not
 rotate credentials in Keycloak itself.
 Set `KEEP_S3_RESOURCES=1` to retain successful resources.
 
-The PostgreSQL profile installs Crunchy PGO `6.0.2`.
+The PostgreSQL profile installs Crunchy PGO `6.0.3`.
 Set `KEEP_POSTGRES_RESOURCES=1` to retain successful
 resources. PGO remains installed after the profile finishes. Successful cleanup scales
 its Deployment to zero. The next profile scales it to one before use.
@@ -111,7 +111,7 @@ its Deployment to zero. The next profile scales it to one before use.
 The managed-store profiles use these fixed operator releases to check the
 resources emitted by the composition:
 
-- MongoDB Kubernetes Operator `1.14.0` (Helm chart `1.14.0`) serves
+- MongoDB Kubernetes Operator `1.15.0` (Helm chart `1.15.0`) serves
   `mongodbcommunity.mongodb.com/v1`.
 - Opstree Redis Operator `0.27.0` (Helm chart `0.27.0`) serves
   `redis.redis.opstreelabs.in/v1beta2`.

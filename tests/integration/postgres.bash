@@ -2,7 +2,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-: "${PGO_VERSION:=6.0.2}"
+: "${PGO_VERSION:=6.0.3}"
 
 install_pgo() {
   local namespace=postgres-operator
