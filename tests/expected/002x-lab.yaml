@@ -208,7 +208,7 @@ spec:
     policy: DeriveFromCelQuery
   watch: true
 ---
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha3
 kind: Client
 metadata:
   annotations:

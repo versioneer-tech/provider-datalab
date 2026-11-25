@@ -7,13 +7,15 @@ from copy import deepcopy
 import base64
 import json
 
+import yaml
+
 from helpers import load_helpers
 
 NAMING = load_helpers("_resource_name", "_vcluster_profile")
 resource_name = NAMING["_resource_name"]
 profile_name = NAMING["_vcluster_profile"]
 
-from render import arguments, environment, manifest, render
+from render import ROOT, arguments, environment, manifest, render
 
 
 def main():
@@ -275,6 +277,37 @@ def main():
 
     clients = [body for body in resources.values() if body.get("kind") == "Client"]
     assert len(clients) == 1 and clients[0]["spec"]["forProvider"]["clientId"] == "s-joe"
+    assert clients[0]["apiVersion"] == "openidclient.keycloak.m.crossplane.io/v1alpha3"
+    activated = next(
+        policy["spec"]["activate"]
+        for policy in yaml.safe_load_all((ROOT / "dependencies/00-mrap.yaml").read_text())
+        if policy["metadata"]["name"] == "provider-keycloak"
+    )
+    resource_names = {
+        "Client": "clients", "ClientScope": "clientscopes",
+        "ClientDefaultScopes": "clientdefaultscopes", "ClientOptionalScopes": "clientoptionalscopes",
+        "ClientServiceAccountRole": "clientserviceaccountroles",
+        "Group": "groups", "Memberships": "memberships", "Roles": "roles", "Role": "roles",
+        "GroupMembershipProtocolMapper": "groupmembershipprotocolmappers",
+        "RoleMapper": "rolemappers", "ProtocolMapper": "protocolmappers",
+        "ClientPolicyProfile": "clientpolicyprofiles", "ClientPolicyProfilePolicy": "clientpolicyprofilepolicies",
+    }
+    for body in resources.values():
+        if ".keycloak.m.crossplane.io/" not in body["apiVersion"]:
+            continue
+        api_group, version = body["apiVersion"].split("/", 1)
+        assert version == ("v1alpha3" if body["kind"] == "Client" else "v1alpha1")
+        assert resource_names[body["kind"]] + "." + api_group in activated, body["kind"] + " is not activated"
+    client_usages = [body["spec"] for body in resources.values()
+                     if body.get("kind") == "Usage" and body["spec"]["of"]["kind"] == "Client"]
+    assert {usage["by"]["resourceRef"]["name"] for usage in client_usages} == {
+        profile_name("s-joe", instance, group)
+        for instance in ("vc0", "vc1") for group in ("demo", "cluster-admin")
+    }
+    assert all(usage["of"] == {
+        "apiVersion": clients[0]["apiVersion"], "kind": "Client", "resourceRef": {"name": "s-joe"},
+    } and usage["replayDeletion"] for usage in client_usages)
+    print("PASS current Keycloak APIs, MRAP coverage, and Client deletion protection for every vcluster role")
     assignments = [body for body in resources.values() if body.get("kind") == "ClientServiceAccountRole"]
     assert len(assignments) == 1
     assert assignments[0]["spec"]["forProvider"]["roleRef"]["name"] == "s-joe-ws-api"

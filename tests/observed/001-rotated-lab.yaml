@@ -64,7 +64,7 @@ status:
         AWS_ENDPOINT_URL: aHR0cHM6Ly9zMy5jdXN0b20uYWNtZS5jb20=
         AWS_REGION: Y3VzdG9tLWFjbWU=
 ---
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha3
 kind: Client
 metadata:
   name: s-joe

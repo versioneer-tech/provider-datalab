@@ -1136,7 +1136,7 @@ spec:
     policy: DeriveFromCelQuery
   watch: true
 ---
-apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha3
 kind: Client
 metadata:
   annotations:
@@ -1929,7 +1929,7 @@ spec:
     resourceRef:
       name: s-jane-vcluster-vc0-namespace-demo-6eaa08d412
   of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha3
     kind: Client
     resourceRef:
       name: s-jane
@@ -1965,7 +1965,7 @@ spec:
     resourceRef:
       name: s-jane-vcluster-vc0-cluster-admin-03a1ba3651
   of:
-    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha1
+    apiVersion: openidclient.keycloak.m.crossplane.io/v1alpha3
     kind: Client
     resourceRef:
       name: s-jane

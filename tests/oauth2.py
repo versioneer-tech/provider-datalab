@@ -33,7 +33,7 @@ def main():
     }]
     conditions = [{"type": "Ready", "status": "True"}, {"type": "Synced", "status": "True"}]
     client = {
-        "apiVersion": "openidclient.keycloak.m.crossplane.io/v1alpha1", "kind": "Client",
+        "apiVersion": "openidclient.keycloak.m.crossplane.io/v1alpha3", "kind": "Client",
         "metadata": {"name": "s-joe", "namespace": "workspace", "annotations": {
             "crossplane.io/composition-resource-name": "keycloak-client-s-joe",
         }},

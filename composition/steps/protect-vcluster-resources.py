@@ -148,9 +148,9 @@ def compose(req, rsp):
                 )
 
     identity_refs = {
-        "clientId": ("openidclient.keycloak.m.crossplane.io/v1alpha1", "Client"),
+        "clientId": ("openidclient.keycloak.m.crossplane.io/v1alpha3", "Client"),
         "serviceAccountUserClientId": (
-            "openidclient.keycloak.m.crossplane.io/v1alpha1",
+            "openidclient.keycloak.m.crossplane.io/v1alpha3",
             "Client",
         ),
         "roleId": ("role.keycloak.m.crossplane.io/v1alpha1", "Role"),
