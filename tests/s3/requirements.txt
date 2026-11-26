@@ -1,10 +1,10 @@
-boto3==1.42.0 \
-    --hash=sha256:9c67729a6112b7dced521ea70b0369fba138e89852b029a7876041cd1460c084 \
-    --hash=sha256:af32b7f61dd6293cad728ec205bcb3611ab1bf7b7dbccfd0f2bd7b9c9af96039
-    # via -r tests/s3/requirements.in
-botocore==1.41.6 \
-    --hash=sha256:08fe47e9b306f4436f5eaf6a02cb6d55c7745d13d2d093ce5d917d3ef3d3df75 \
-    --hash=sha256:963cc946e885acb941c96e7d343cb6507b479812ca22566ceb3e9410d0588de0
+boto3==1.44.9 \
+    --hash=sha256:aff889e8ca6f6006f0b5658b712941471d21e4675d6d48421974a20a5a17a918 \
+    --hash=sha256:da4199076833547445a7181e38e833f476808142df95084b2b46c8b2a107aa66
+    # via -r requirements.in
+botocore==1.44.12 \
+    --hash=sha256:5806bb66bf167fa3172f4ddf78b088db9b22653702537b19969d02d2c3301ee5 \
+    --hash=sha256:d5df4cf868f2c4050999a0e6bc94e0a039017e719f4e27b2a8e87053856787b9
     # via
     #   boto3
     #   s3transfer
@@ -18,9 +18,9 @@ python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
     --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
     # via botocore
-s3transfer==0.16.1 \
-    --hash=sha256:61bcd00ccb83b21a0fe7e91a553fff9729d46c83b4e0106e7c314a733891f7c2 \
-    --hash=sha256:8e424355754b9ccb32467bdc568edf55be82692ef2002d934b1311dbb3b9e524
+s3transfer==0.19.3 \
+    --hash=sha256:24eb7535804306355e31c952a90022bf5b2f9d760f9a11062c7493a217c08553 \
+    --hash=sha256:8326acc3d056d7f7b8a37110c7d2aea41f67e83f6ae79cd3b5fbcca34c726406
     # via boto3
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
