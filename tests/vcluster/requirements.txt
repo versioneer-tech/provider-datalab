@@ -611,11 +611,11 @@ plpygis==0.6.1 \
     --hash=sha256:30a119b3d5a60e285a7a66ee95b65a5efcc0d569b2d02d3183e736bbad7f748b \
     --hash=sha256:79bccb916ab6768d15af505ec9d2a2f894735c5c8eef18ba7dc9fa46a697ec08
     # via pypgstac
-psycopg==3.3.9 \
+psycopg[binary,pool]==3.3.9 \
     --hash=sha256:87c1d85c3e0e88e811d3c0b3808f947bd967c6faf34af6cd86fd021f77793d6c \
     --hash=sha256:d2d7d04a1ce6dab4f5b27316bea3b52585cafa2f2d631e5b09dd69823f5c26f6
     # via
-    #   -r tests/vcluster/requirements.in
+    #   -r requirements.in
     #   pypgstac
 psycopg-binary==3.3.9 \
     --hash=sha256:0793764fac48b5f0bf4d7154e38c60def4fa0cce16caa60b737f770bd29016ac \
@@ -849,10 +849,10 @@ pydantic-settings==2.16.3 \
     # via
     #   stac-fastapi-pgstac
     #   stac-fastapi-types
-pypgstac==0.10.0 \
-    --hash=sha256:ab93c2b3b94830c4056b437e0471f54dcb503f706b83390eb7115208a4705bcb \
-    --hash=sha256:b4040194b5e181031d82a2eadba092e910f31648971dc482a9d70dbabec34966
-    # via -r tests/vcluster/requirements.in
+pypgstac[psycopg]==0.10.2 \
+    --hash=sha256:660506c700c990456f6f67a3210292ed99de21e8e8ff0b9fa059d3b33344e856 \
+    --hash=sha256:787a137eaae5e2ee23dde6c2e508b016b4e2a7c4d84f62bcac031a71d118dd06
+    # via -r requirements.in
 python-dateutil==4.0.0 \
     --hash=sha256:a5e246f79eb80475e691bf93862cead98decd8a498cf53ba0516fcdc0f50dc1c \
     --hash=sha256:d7295ff14fdc0f92f662100bfb6c551d160ca090f2939f1ec5b9794265c03f06
@@ -954,10 +954,10 @@ stac-fastapi-extensions==7.1.1 \
     --hash=sha256:4d4d0b48bc9dd93e2c1a797dd58f0748f1e93cba27504926a4a9195463fc7932 \
     --hash=sha256:af3f8c571579130e673a10d820824bdbed4af583885e5aaf5ef5935a7bcde02b
     # via stac-fastapi-pgstac
-stac-fastapi-pgstac==7.2.1 \
-    --hash=sha256:74604c652da4f2087c2e35c66e4ed04ad9ab1239f80fb0d65abf4d1bcd5e7e13 \
-    --hash=sha256:ad1228c9b6466ca1430ef47370150a7538497633f20a27fc12761befd5e6ca0f
-    # via -r tests/vcluster/requirements.in
+stac-fastapi-pgstac[server]==7.3.0 \
+    --hash=sha256:10627853782272506fc5bc66705eb8cf6fa1d969f91da88028c16fdd079fea9a \
+    --hash=sha256:96a299cf9557655c0e154052df40b5b873cb901a0af94363196e2ba86b21a4d4
+    # via -r requirements.in
 stac-fastapi-types==7.1.1 \
     --hash=sha256:41ebd28d16e3cae48bfb98c8be4ea1c4df4027f194f4ffda1684f249c72b37cc \
     --hash=sha256:46bd731ae54c7f91b1284a7a73bb937b44f70e5c3fa27f5dd6cfb2280df58826
@@ -1007,7 +1007,7 @@ tzdata==2026.6 \
     --hash=sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec \
     --hash=sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d
     # via python-dateutil
-uvicorn==0.38.0 \
+uvicorn[standard]==0.38.0 \
     --hash=sha256:48c0afd214ceb59340075b4a052ea1ee91c16fbc2a9b1469cca0e54566977b02 \
     --hash=sha256:fd97093bdd120a2609fc0d3afe931d4d4ad688b6e75f0f929fde1bc36fe0e91d
     # via stac-fastapi-pgstac
