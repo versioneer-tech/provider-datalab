@@ -18,16 +18,23 @@ includes committed, staged, unstaged, and untracked changes.
 - `docs_only=true`: run the documentation checks below.
 - `docs_only=false`: also run the full unit suite and all integration profiles.
 
-Only Markdown, `docs/`, and `mkdocs.yml` changes qualify as documentation only.
+Only Markdown, documentation images under `docs/imgs/`, and `mkdocs.yml`
+changes qualify as documentation only. Dependency files and unknown files
+select the full suite, including files under `docs/`.
 An empty or unavailable comparison selects all checks. Draft pull requests run
 units but defer cluster tests until the pull request is ready for review.
 
 ## Documentation checks
 
-Install `docs/requirements.txt` and `pre-commit`, then run:
+Install the locked requirements as described in the root
+[README](../README.md#development), then run:
 
 ```bash
 python3 tests/ci-checks.py
+python3 -m unittest discover -s tests -p test_security.py -v
+python3 scripts/install-tools.py actionlint gitleaks
+build/tools/actionlint -shellcheck=
+python3 scripts/security.py files --reports build/file-security
 mkdocs build --strict --site-dir /tmp/provider-datalab-docs
 pre-commit run --all-files
 git diff --check
@@ -81,12 +88,16 @@ separate assertions for behavior such as credential rotation, data retention,
 or denied access. Avoid repeating snapshot fields or fixing a test to an
 internal hash, message, or call order unless the behavior requires it.
 
-The disposable Keycloak server has five minutes to import its test realm.
+The disposable unit-test Keycloak server has five minutes to import its test realm.
 It checks issued tokens for login, offline refresh, and restricted exchange.
 A separate login client omits workspace roles despite group membership.
 With Full Scope Allowed off, explicit role scope mappings restore `ws_access`
 and `ws_api` in a fresh token. Unassigned administrator roles, profile roles,
 and roles from another workspace stay absent.
+
+The TLS integration fixture allows ten minutes for startup and fifteen minutes
+for deployment rollout. Its first start builds configuration and creates the
+database schema.
 
 ## Fixtures
 

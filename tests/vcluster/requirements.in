@@ -1,0 +1,3 @@
+stac-fastapi-pgstac[server]==7.2.1
+pypgstac[psycopg]==0.10.0
+psycopg[binary,pool]

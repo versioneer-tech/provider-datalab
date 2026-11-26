@@ -124,7 +124,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-john-storage
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -284,7 +284,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-database
               resources:
@@ -319,7 +319,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-default-user
               resources:
@@ -354,7 +354,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-user-0
               resources:
@@ -393,7 +393,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-public-share
               resources:
@@ -909,7 +909,7 @@ spec:
               - daemon off;
               command:
               - nginx
-              image: nginxinc/nginx-unprivileged:1.28-alpine
+              image: nginx/nginx-unprivileged:1.30.8-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
               livenessProbe:
                 httpGet:
                   path: /_live

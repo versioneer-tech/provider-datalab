@@ -72,8 +72,9 @@ def requirements(environment, observed):
 
 
 def render(args, environment, source="examples/base/001-lab.yaml",
-           observed="tests/observed/001-lab.yaml", error=None, include_composite=False):
-    environment = requirements(environment, observed)
+           observed="tests/observed/001-lab.yaml", error=None, include_composite=False,
+           required_resources=None):
+    environment = requirements(environment, observed) if required_resources is None else required_resources
     with tempfile.TemporaryDirectory(prefix="test-render-") as directory:
         work = Path(directory)
         paths = []

@@ -1,0 +1,50 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+name: Check image updates
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-updates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image_updates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOCKER_CONFIG: ${{ github.workspace }}/build/image-update-registry
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install update tools
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt
+          python3 scripts/install-tools.py crane
+      - name: Check runtime, test, and Crossplane package images
+        run: python3 scripts/check-image-updates.py
+      - name: Report available updates
+        if: always()
+        run: |
+          if [[ -f build/image-updates/summary.md ]]; then
+            cat build/image-updates/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain update report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-updates-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/image-updates/
+          retention-days: 90
+          if-no-files-found: error

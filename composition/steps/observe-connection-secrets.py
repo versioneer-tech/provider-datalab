@@ -179,8 +179,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     client_body = _to_dict(client.resource) if client else {}
     oauth_source = observed.get(f"observe-oauth-client-secret-{xr_name}")
     oauth_body = _to_dict(oauth_source.resource) if oauth_source else {}
-    oauth_meta = _extract_manifest(oauth_source).get("metadata") or {}
-    oauth_data = _extract_data(req, rsp, f"observe-oauth-client-secret-{xr_name}")
+    # Observer status can retain the manifest of a deleted Secret.
+    oauth_secret = _secret_manifest(req, rsp, f"observe-oauth-client-secret-{xr_name}")
+    oauth_meta = oauth_secret.get("metadata") or {}
+    oauth_data = oauth_secret.get("data") or oauth_secret.get("stringData") or {}
     credential_id = _b64get_any(oauth_data, ["clientID", "client_id", "attribute.client_id"])
     client_id = _safe_str(
         (client_body.get("status", {}).get("atProvider") or {}).get("clientId")

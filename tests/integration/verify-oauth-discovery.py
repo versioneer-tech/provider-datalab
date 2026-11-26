@@ -62,7 +62,8 @@ def main():
                  "The OAuth2 test client did not pause.")
         kube("delete", source, json_output=False)
         deleted = True
-        wait_for(lambda: get(datalab)["status"].get("oauth2") == [],
+        # Crossplane can omit an empty status list after it removes its entries.
+        wait_for(lambda: not get(datalab)["status"].get("oauth2"),
                  "OAuth2 discovery retained a removed credential Secret.")
         print("PASS removed credential Secret clears OAuth2 discovery despite cached observer data", flush=True)
     finally:

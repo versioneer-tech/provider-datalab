@@ -1,0 +1,57 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    commit-message:
+      prefix: ci
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: [minor, patch]
+  - package-ecosystem: pip
+    directories: [/docs, /scripts, /tools, /tests/s3, /tests/vcluster]
+    commit-message:
+      prefix: chore
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directory: /tests/admission
+    commit-message:
+      prefix: chore
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directories: [/tests/s3, /tests/vcluster, '/templates/**', '/tests/integration/manifests/**']
+    commit-message:
+      prefix: chore
+    schedule:
+      interval: cron
+      cronjob: '0 5 * * *'
+    # The daily report lists majors for separate manual update pull requests.
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+    groups:
+      python-base:
+        applies-to: version-updates
+        patterns: [python]
+      runtime-images:
+        applies-to: version-updates
+        patterns: ['*']
+        exclude-patterns: [python]

@@ -3,6 +3,8 @@
 
 controller:
   runOnControlPlane: true
+  # The Go snapshot extractor does not restore the PostgreSQL file owner.
+  useTarCommandInSnapshot: true
   resources:
     nfs:
       limits:

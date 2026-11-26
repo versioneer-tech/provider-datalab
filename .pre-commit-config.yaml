@@ -11,9 +11,8 @@ repos:
     hooks:
       - id: composition-current
         name: Generated composition is current
-        entry: python scripts/build-composition.py --check
-        language: python
-        additional_dependencies: [PyYAML==6.0.3]
+        entry: python3 scripts/build-composition.py --check
+        language: system
         pass_filenames: false
         files: ^(composition/|templates/|scripts/vcluster-credentials.py|scripts/vcluster-cleanup.py|scripts/volume-snapshot.py|scripts/postgres-snapshot.py|scripts/valkey-snapshot.py|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
       - id: copyright-header

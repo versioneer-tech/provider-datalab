@@ -49,7 +49,7 @@ After a source change, build the composition and run the unit tests:
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install -r scripts/requirements.txt
+python3 -m pip install --only-binary=:all: --require-hashes -r scripts/requirements.txt
 python3 scripts/build-composition.py
 bash tests/unit.bash
 ```

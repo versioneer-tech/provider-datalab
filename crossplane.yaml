@@ -12,7 +12,6 @@ metadata:
     meta.crossplane.io/description: "Crossplane configuration to provision a datalab."
     meta.crossplane.io/readme: "github.com/versioneer-tech/provider-datalab/blob/main/README.md"
 spec:
-  # Intentionally no 'dependsOn' since GitOps based management of providers/functions is recommended
-  skipDependencyResolution: true
+  # The platform installs providers and functions separately.
   crossplane:
     version: ">=v2.4.3 <v3.0.0-0"

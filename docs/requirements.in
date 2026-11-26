@@ -1,0 +1,6 @@
+-c ../scripts/requirements.in
+mkdocs>=1.6,<2
+mkdocs-material>=9.5,<10
+mike>=2,<3
+pymdown-extensions>=13.1.2,<14
+pre-commit>=4,<5

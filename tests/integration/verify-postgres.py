@@ -207,11 +207,11 @@ def main():
                         'bootstrap': {'recovery': {'database': 'verify', 'owner': 'datalab',
                             'volumeSnapshots': {'storage': {'name': snapshot, 'kind': 'VolumeSnapshot',
                                                            'apiGroup': 'snapshot.storage.k8s.io'}}}}}}
+    # Recovery also needs the managed cluster's operator health access.
     network = {'apiVersion': 'networking.k8s.io/v1', 'kind': 'NetworkPolicy',
                'metadata': {'name': 'test-pg-recovery', 'namespace': NAMESPACE},
-               'spec': {'podSelector': {'matchLabels': {'cnpg.io/cluster': 'test-pg-recovery'}},
-                        'policyTypes': ['Egress'], 'egress': [{'ports': [{'protocol': 'TCP', 'port': p} for p in (443, 6443)]},
-                                                           {'ports': [{'protocol': proto, 'port': 53} for proto in ('TCP', 'UDP')]}]}}
+               'spec': deepcopy(get('networkpolicy/pg0')['spec'])}
+    network['spec']['podSelector'] = {'matchLabels': {'cnpg.io/cluster': 'test-pg-recovery'}}
     kube('apply', '-f', '-', body=network)
     kube('apply', '-f', '-', body=restore)
     wait_for(lambda: cluster_ready('test-pg-recovery'), 'Snapshot restore cluster did not become Ready')

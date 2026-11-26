@@ -74,13 +74,13 @@ build_client() {
     return
   fi
   require_command docker
-  digest="$(cat "${REPO_ROOT}/tests/s3/"{Dockerfile,s3-credentials.py,e2e.py} | sha256sum | cut -c1-16)"
+  digest="$(cat "${REPO_ROOT}/tests/s3/"{Dockerfile,s3-credentials.py,e2e.py,requirements.txt} | sha256sum | cut -c1-16)"
   client_image="$(test_image_name "verify-s3-client:${digest}")"
   mkdir -p "${work_directory}/docker"
   if ! DOCKER_CONFIG="${work_directory}/docker" docker image inspect "${client_image}" >/dev/null 2>&1; then
     log 'Building the S3 SDK test client'
     mkdir -p "${work_directory}/build/tests/s3"
-    cp "${REPO_ROOT}/tests/s3/"{s3-credentials.py,e2e.py} "${work_directory}/build/tests/s3/"
+    cp "${REPO_ROOT}/tests/s3/"{s3-credentials.py,e2e.py,requirements.txt} "${work_directory}/build/tests/s3/"
     DOCKER_CONFIG="${work_directory}/docker" docker build --provenance=false --tag "${client_image}" \
       --file "${REPO_ROOT}/tests/s3/Dockerfile" "${work_directory}/build"
   fi

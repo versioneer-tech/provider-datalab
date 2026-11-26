@@ -9,7 +9,7 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     valkey: valkey/valkey:9.2.0-alpine
@@ -87,7 +87,7 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
     valkey: valkey/valkey:9.2.0-alpine

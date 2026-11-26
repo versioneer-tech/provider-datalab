@@ -167,6 +167,56 @@ See [Manifest templates](templates/README.md) for setup and build commands.
 Run the [required local checks](tests/README.md), then the
 [integration suite](tests/integration/README.md) against a test cluster.
 
+Install the locked Python dependencies with Python 3.13:
+
+```bash
+python3 -m pip install --only-binary=:all: --require-hashes \
+  -r scripts/requirements.txt -r docs/requirements.txt -r tools/requirements.txt
+```
+
+These files contain pinned transitive dependencies and hashes. Their `.in`
+files contain the direct requirements. Regenerate the locks together with
+`uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url`.
+Review changed packages, their install behavior, and hashes before installation.
+Build, documentation, audit, and S3 client installs accept wheels only.
+The STAC test image has one reviewed source build, described in
+[Security](SECURITY.md#dependency-updates-and-tool-installation).
+
+The shared tool installer supports Linux AMD64. It installs under `build/tools`:
+
+```bash
+python3 scripts/install-tools.py crossplane dyff crane trivy gitleaks govulncheck actionlint
+```
+
+Use `build/tools` on the command search path for local checks. Build the Go
+tools with Go 1.27.4. For a local candidate from an uncommitted worktree:
+
+```bash
+python3 scripts/ci-checks.py --base origin/main
+build/tools/actionlint -shellcheck=
+python3 scripts/security.py files --reports build/file-security
+python3 scripts/security.py prepare --version 0.0.0-rc.1 \
+  --commit "$(git rev-parse HEAD)" --allow-dirty
+python3 scripts/security.py scan --allow-dirty
+```
+
+Each report/candidate directory must be new. Keep prior results until reviewed;
+use `--candidate` and `--reports` to select other directories for another run.
+Only local checks accept `--allow-dirty`. Publication rejects these candidates.
+Scans use public registries; use an empty task-specific Docker configuration
+when no registry credentials are needed.
+
+To check runtime and test image updates without changing source, run
+`python3 scripts/check-image-updates.py`. The daily workflow runs the same
+check. Review its report, scan proposed replacements, and run the required
+tests before adopting an update. See the
+[dependency update policy](SECURITY.md#dependency-updates-and-tool-installation)
+for Dependabot coverage and inputs that need manual updates.
+
+The [security policy](SECURITY.md#build-and-release-checks) describes scan
+coverage, publication, retention, and checks that still need hosted validation.
+See [Contribute](CONTRIBUTING.md) for pull request guidance.
+
 ## Security
 
 See [Security](SECURITY.md) for access controls, network setup, and backup permissions.
