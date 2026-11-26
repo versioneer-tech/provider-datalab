@@ -18,7 +18,7 @@ def main():
     env = environment()
     refs = {"parentName": "default", "parentNamespace": "contour", "sectionName": "postgres-passthrough"}
     env["data"]["database"] = {"tlsRoute": refs, "snapshotClassName": "test-snapshots"}
-    stores = {"cacheStore": "redis-cache-s-jeff-cache"}
+    stores = {"cacheStore": "valkey-cache-s-jeff-cache"}
     for setting in stores:
         env["data"][setting] = {"storageClassName": f"test-{setting}", "snapshotClassName": "test-snapshots"}
     observed = list(yaml.safe_load_all(Path("tests/observed/002-lab.yaml").read_text()))
@@ -27,12 +27,26 @@ def main():
     assert route["kind"] == "TLSRoute"
     assert route["spec"]["parentRefs"] == [dict(name=refs["parentName"], namespace=refs["parentNamespace"],
                                                 sectionName=refs["sectionName"])]
-    redis_pvc = manifest(resources, stores["cacheStore"])["spec"]["storage"]["volumeClaimTemplate"]
-    assert redis_pvc["spec"]["storageClassName"] == "test-cacheStore"
+    valkey_pvc = manifest(resources, "valkey-data-s-jeff-cache")
+    assert valkey_pvc["spec"]["storageClassName"] == "test-cacheStore"
+    workload = manifest(resources, stores["cacheStore"])
+    container = workload["spec"]["template"]["spec"]["containers"][0]
+    assert workload["kind"] == "StatefulSet"
+    assert container["env"][0]["name"] == "VALKEYCLI_AUTH"
+    for kind in ("startupProbe", "readinessProbe", "livenessProbe"):
+        assert 'valkey-cli' in container[kind]["exec"]["command"][-1]
+    assert "everysec" in container["args"] and "--aclfile" in container["args"]
+    assert {volume["persistentVolumeClaim"]["claimName"] for volume in workload["spec"]["template"]["spec"]["volumes"]
+            if "persistentVolumeClaim" in volume} == {valkey_pvc["metadata"]["name"]}
+    resized = load("examples/base/002-lab.yaml")
+    resized["spec"]["stores"]["cache"]["storage"] = "2Gi"
+    expanded = render(args, env, resized, observed)
+    assert manifest(expanded, "valkey-data-s-jeff-cache")["spec"]["resources"]["requests"]["storage"] == "2Gi"
+    assert manifest(expanded, stores["cacheStore"]) == workload
     for name in ("observe-database-secret-s-jeff-pg0", "db-cluster-s-jeff-pg0"):
         assert manifest(resources, name)["metadata"]["namespace"] == "s-jeff"
-    redis = manifest(resources, "redis-auth-secret-s-jeff-cache")
-    assert base64.b64decode(redis["data"]["user"]).decode() == "default"
+    valkey = manifest(resources, "valkey-auth-secret-s-jeff-cache")
+    assert base64.b64decode(valkey["data"]["user"]).decode() == "default"
 
     user_secrets = [body["spec"]["forProvider"]["manifest"] for body in resources.values()
                     if body.get("kind") == "Object"
@@ -62,32 +76,32 @@ def main():
     assert base64.b64decode(account_secrets[0]["data"]["username"]).decode() == "person@example.test"
     print("PASS PostgreSQL keeps SQL names separate from Kubernetes resource names", flush=True)
 
-    print("PASS Redis credentials, store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
+    print("PASS Valkey credentials, store StorageClasses, PostgreSQL route, and runtime namespace", flush=True)
     grouped = load("examples/base/002-lab.yaml")
     grouped["spec"]["stores"]["cache"]["names"] = ["sessions", "jobs"]
-    grouped["spec"]["stores"]["queue"] = {"type": "redis", "storage": "1Gi"}
+    grouped["spec"]["stores"]["queue"] = {"type": "valkey", "storage": "1Gi"}
     grouped["spec"]["stores"]["pg0"].pop("names")
     grouped_resources = render(args, env, grouped, observed, include_composite=True)
     logical = {(item["type"], item["name"]): item.get("names")
                for item in grouped_resources["composite"]["status"]["connections"]}
-    assert logical[("postgres", "pg0")] == logical[("redis", "queue")] == ["default"]
-    assert logical[("redis", "cache")] == ["sessions", "jobs"]
-    redis_instances = [body["spec"]["forProvider"]["manifest"] for body in grouped_resources.values()
-                       if body.get("kind") == "Object" and body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "Redis"]
-    assert {item["metadata"]["name"] for item in redis_instances} == {"cache", "queue"}
-    assert json.loads(grouped_resources["connection-s-jeff-redis-cache"]["stringData"]["prefixes"]) == {
+    assert logical[("postgres", "pg0")] == logical[("valkey", "queue")] == ["default"]
+    assert logical[("valkey", "cache")] == ["sessions", "jobs"]
+    valkey_instances = [body["spec"]["forProvider"]["manifest"] for body in grouped_resources.values()
+                       if body.get("kind") == "Object" and body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "StatefulSet"]
+    assert {item["metadata"]["name"] for item in valkey_instances} == {"cache", "queue"}
+    assert json.loads(grouped_resources["connection-s-jeff-valkey-cache"]["stringData"]["prefixes"]) == {
         "sessions": "sessions:", "jobs": "jobs:"}
     database_names = [body["spec"]["forProvider"]["manifest"]["spec"]["name"] for body in grouped_resources.values()
                       if body.get("kind") == "Object" and body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "Database"]
     assert database_names == ["default"]
-    print("PASS typed store instances share logical names, publish Redis prefixes, and default to one name", flush=True)
-    env["data"]["images"] = {"redis": "test-images/redis:custom", "volumeSnapshot": "test-images/snapshot:custom"}
+    print("PASS typed store instances share logical names, publish Valkey prefixes, and default to one name", flush=True)
+    env["data"]["images"] = {"valkey": "test-images/valkey:custom", "volumeSnapshot": "test-images/snapshot:custom"}
     resources = render(args, env, "examples/base/002-lab.yaml", observed)
-    redis_store = manifest(resources, stores["cacheStore"])["spec"]
-    assert redis_store["kubernetesConfig"]["image"] == redis_store["initContainer"]["image"] == env["data"]["images"]["redis"]
-    job = manifest(resources, "redis-backup-cronjob-s-jeff-cache")
+    valkey_store = manifest(resources, stores["cacheStore"])["spec"]
+    assert valkey_store["template"]["spec"]["containers"][0]["image"] == env["data"]["images"]["valkey"]
+    job = manifest(resources, "valkey-backup-cronjob-s-jeff-cache")
     assert job["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"] == env["data"]["images"]["volumeSnapshot"]
-    print("PASS Redis server, init, and snapshot image overrides", flush=True)
+    print("PASS Valkey server and snapshot image overrides", flush=True)
 
 
 if __name__ == "__main__":

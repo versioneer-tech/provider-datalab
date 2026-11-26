@@ -21,21 +21,21 @@ to request these managed services:
 | Capability | Service | Datalab field |
 | --- | --- | --- |
 | Relational database with SQL and transactions | PostgreSQL | `spec.stores` with `type: postgres` |
-| Key-value store and cache | Redis | `spec.stores` with `type: redis` |
+| Key-value store and cache | Valkey | `spec.stores` with `type: valkey` |
 
-Crossplane creates the service resources. The installed database operators
-manage their workloads. Services belong to the Datalab and continue to run
+Crossplane creates the service resources. CloudNativePG manages PostgreSQL;
+Kubernetes manages the single-instance Valkey StatefulSet. Services belong to the Datalab and continue to run
 when an application stops. `status.connections` reports their endpoints
 and credential Secret references.
 
 ### Keep user configuration small
 
 Users select a service type, name its instance and logical databases or key
-prefixes, and set the data storage size. PostgreSQL, Redis, and named volumes
+prefixes, and set the data storage size. PostgreSQL, Valkey, and named volumes
 use `backups: true` to enable CSI snapshots. Backups default to disabled and
 need no backup volume size.
 
-CloudNativePG coordinates cold PostgreSQL snapshots. Redis pauses writes and
+CloudNativePG coordinates cold PostgreSQL snapshots. Valkey pauses writes and
 saves its RDB file before snapshot capture. Named volumes use CSI snapshots;
 applications must arrange any required flush or write pause. The
 [backup guide](../how-to-guides/usage_concepts.md#backups) defines schedules,

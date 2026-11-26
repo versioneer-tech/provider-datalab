@@ -12,15 +12,16 @@ Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
-Install the operators for the managed stores you offer. The tests use:
+PostgreSQL requires CloudNativePG. Valkey uses standard Kubernetes resources.
+The current baseline is:
 
-| Datalab field | Operator | Test version | Required resource API |
+| Datalab field | Runtime | Version | Required resource API |
 | --- | --- | --- | --- |
 | `spec.stores` with `type: postgres` | CloudNativePG | See [cluster prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites) | `Cluster` and `Database` in `postgresql.cnpg.io/v1` |
-| `spec.stores` with `type: redis` | Opstree Redis Operator | `0.27.0` (Helm chart `0.27.0`) | `Redis` in `redis.redis.opstreelabs.in/v1beta2` |
+| `spec.stores` with `type: valkey` | Native StatefulSet | `valkey/valkey:9.2.0-alpine` | Kubernetes `apps/v1`; no store operator or CRDs |
 
-Install each operator's CRDs before its controller. Validate other versions
-before use. Enabled backups need the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites);
+Install CloudNativePG's CRDs and controller before requesting PostgreSQL.
+Validate other versions before use. Enabled backups need the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites);
 see [backup settings](usage_concepts.md#backups).
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
@@ -60,11 +61,14 @@ helm install crossplane crossplane-stable/crossplane \
   --version 2.4.3 \
   --namespace crossplane \
   --create-namespace \
-  --values deploy/crossplane-values.yaml
+  --values deploy/crossplane-values.yaml \
+  --post-renderer scripts/crossplane-probes.py
 ```
 
 The Helm values disable default managed resource activation and run Crossplane
 and its RBAC manager as non-root users with read-only root filesystems.
+The post-renderer needs Python with PyYAML. It adds startup, readiness, and
+liveness probes to both Deployments because the pinned chart has none.
 The dependency manifests supply selective activation, runtime security, and
 provider reconciliation settings. Keep their `runtimeConfigRef` settings.
 
@@ -375,7 +379,7 @@ defaults below.
 | `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
 | `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
 | `images.postgres` | `ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie` | CloudNativePG-compatible PostgreSQL 17 image with PostGIS. |
-| `images.redis` | `quay.io/opstree/redis:v7.2.17` | Redis server and its init container. |
+| `images.valkey` | `valkey/valkey:9.2.0-alpine` | Valkey server with AOF persistence and authenticated health probes. |
 | `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
 | `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job on the host. |
 | `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
@@ -459,9 +463,9 @@ to containers without the corresponding resource settings.
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
 | `database.tlsRoute.sectionName` | Not set | PostgreSQL TLS listener. |
-| `cacheStore.storageClassName` | Cluster default | Redis data StorageClass. |
-| `cacheStore.snapshotClassName` | `volumes.snapshotClassName` | Redis CSI snapshot class with deletion policy `Delete`. |
-| `cacheStore.schedule` | `0 1 * * *` | Redis backup schedule in UTC. |
+| `cacheStore.storageClassName` | Cluster default | Valkey data StorageClass. |
+| `cacheStore.snapshotClassName` | `volumes.snapshotClassName` | Valkey CSI snapshot class with deletion policy `Delete`. |
+| `cacheStore.schedule` | `0 1 * * *` | Valkey backup schedule in UTC. |
 | `cacheStore.maxSnapshots` | `4` | Completed snapshots per data PVC UID, from 1 to 100. |
 
 PostgreSQL TLSRoutes are created only when all three

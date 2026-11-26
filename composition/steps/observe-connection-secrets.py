@@ -72,9 +72,9 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                 ),
             }
-            if kind in ("postgres", "redis"):
+            if kind in ("postgres", "valkey"):
                 connection["names"] = _stores(spec, kind)[instance]["names"]
-            if kind in ("postgres", "redis", "registry", "custom"):
+            if kind in ("postgres", "valkey", "registry", "custom"):
                 connection = publish_connection(connection, key, present)
                 if kind == "custom" and connection is None:
                     return
@@ -118,15 +118,15 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             data = _postgres_connection_data(data, instance, xr_name)
         required = {
             "postgres": ("host", "port", "user", "password", "dbname", "uri"),
-            "redis": ("user", "password"),
+            "valkey": ("user", "password"),
             "registry": ("user", "password"),
         }.get(kind, ())
         if kind != "custom":
             data = {name: value for name, value in data.items() if name in required}
-        if kind in ("postgres", "redis"):
+        if kind in ("postgres", "valkey"):
             names = connection["names"]
             data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
-            if kind == "redis":
+            if kind == "valkey":
                 data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
         available = (present and connection["ready"] and bool(data)
                      and all(data.get(name) for name in required))
@@ -252,7 +252,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 )
 
     for kind, backend in (
-        ("redis", "redis"),
+        ("valkey", "valkey"),
     ):
         stores = _stores(spec, kind)
         if isinstance(stores, dict):

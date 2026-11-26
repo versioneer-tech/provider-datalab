@@ -48,7 +48,7 @@ resources:
       name: ${backup_name}
       namespace: ${target}
     data:
-      redis-snapshot.py: ${backup_script}
+      valkey-snapshot.py: ${backup_script}
       volume-snapshot.py: ${snapshot_script}
   network:
     apiVersion: networking.k8s.io/v1
@@ -59,14 +59,15 @@ resources:
     spec:
       podSelector:
         matchLabels:
-          datalabs.versioneer.at/redis-backup: ${volume_name}
+          datalabs.versioneer.at/valkey-backup: ${volume_name}
       policyTypes: [Ingress, Egress]
       ingress: []
       egress:
       - to:
         - podSelector:
             matchLabels:
-              app: ${volume_name}
+              app.kubernetes.io/name: valkey
+              app.kubernetes.io/instance: ${volume_name}
         ports:
         - {port: 6379, protocol: TCP}
       - ports:
@@ -116,7 +117,7 @@ resources:
           template:
             metadata:
               labels:
-                datalabs.versioneer.at/redis-backup: ${volume_name}
+                datalabs.versioneer.at/valkey-backup: ${volume_name}
             spec:
               restartPolicy: Never
               serviceAccountName: ${backup_name}
@@ -130,7 +131,7 @@ resources:
               containers:
               - name: backup
                 image: ${backup_image}
-                command: [python, -B, /opt/backup/redis-snapshot.py]
+                command: [python, -B, /opt/backup/valkey-snapshot.py]
                 args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${max_snapshots}']
                 resources:
                   requests:
@@ -146,7 +147,7 @@ resources:
                     drop: [ALL]
                 volumeMounts:
                 - name: password
-                  mountPath: /var/run/redis-backup
+                  mountPath: /var/run/valkey-backup
                   readOnly: true
                 - name: script
                   mountPath: /opt/backup

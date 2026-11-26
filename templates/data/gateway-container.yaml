@@ -28,6 +28,18 @@ readinessProbe:
   httpGet:
     path: /_ready
     port: s3-gateway
+startupProbe:
+  httpGet:
+    path: /_live
+    port: s3-gateway
+  periodSeconds: 5
+  failureThreshold: 30
+livenessProbe:
+  httpGet:
+    path: /_live
+    port: s3-gateway
+  periodSeconds: 20
+  timeoutSeconds: 3
 volumeMounts:
 - name: tmp
   mountPath: /tmp

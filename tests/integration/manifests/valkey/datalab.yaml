@@ -11,7 +11,7 @@ spec:
   users: []
   stores:
     verify:
-      type: redis
+      type: valkey
       names: [sessions, jobs]
       storage: 1Gi
       backups: false

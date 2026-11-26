@@ -13,9 +13,9 @@ class HelperTests(unittest.TestCase):
         token = load_helpers("_strong_token")["_strong_token"]
         registry = token("test-team:registry")
         self.assertEqual(registry, token("test-team:registry"))
-        self.assertNotEqual(registry, token("test-team:redis"))
+        self.assertNotEqual(registry, token("test-team:valkey"))
         self.assertNotEqual(registry, token("test-other-team:registry"))
-        self.assertEqual(len(token("test-team:redis", suffix="", length=28)), 28)
+        self.assertEqual(len(token("test-team:valkey", suffix="", length=28)), 28)
 
 
 if __name__ == "__main__":

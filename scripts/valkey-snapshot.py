@@ -2,7 +2,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Save Redis data and capture its PVC during a bounded write pause."""
+"""Save Valkey data and capture its PVC during a bounded write pause."""
 
 import argparse
 from contextlib import closing
@@ -13,11 +13,11 @@ import time
 from urllib.parse import quote
 
 snapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))
-LABEL = "datalabs.versioneer.at/redis"
-VERIFIED = "datalabs.versioneer.at/redis-snapshot-verified"
+LABEL = "datalabs.versioneer.at/valkey"
+VERIFIED = "datalabs.versioneer.at/valkey-snapshot-verified"
 
 
-class Redis:
+class Valkey:
     def __init__(self, host, password):
         self.socket = socket.create_connection((host, 6379), timeout=60)
         self.stream = self.socket.makefile("rb")
@@ -33,20 +33,20 @@ class Redis:
             b"$%d\r\n" % len(value) + value + b"\r\n" for value in values))
         line = self.stream.readline()
         if not line.endswith(b"\r\n"):
-            raise RuntimeError("Redis closed the backup connection.")
+            raise RuntimeError("Valkey closed the backup connection.")
         kind, value = line[:1], line[1:-2]
         if kind == b"+":
             return value.decode()
         if kind == b"$" and int(value) >= 0:
             data = self.stream.read(int(value) + 2)
             if len(data) != int(value) + 2 or not data.endswith(b"\r\n"):
-                raise RuntimeError("Redis returned an incomplete response.")
+                raise RuntimeError("Valkey returned an incomplete response.")
             return data[:-2].decode()
         # Server errors can contain command arguments; do not put them in Job logs.
-        raise RuntimeError("Redis rejected the backup command.")
+        raise RuntimeError("Valkey rejected the backup command.")
 
 
-def capture(api, redis, namespace, store, claim, snapshot_class, retention, timeout=540):
+def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):
     pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")
     pause_until = 0
     identity = {}
@@ -60,45 +60,45 @@ def capture(api, redis, namespace, store, claim, snapshot_class, retention, time
         if (claims != {claim} or pod["metadata"].get("deletionTimestamp")
                 or not any(c["type"] == "Ready" and c["status"] == "True"
                            for c in pod.get("status", {}).get("conditions", []))):
-            raise RuntimeError("The Redis Pod must be ready and use the selected data PVC.")
+            raise RuntimeError("The Valkey Pod must be ready and use the selected data PVC.")
         return pod["metadata"]["uid"]
 
     def info(section):
-        return dict(line.split(":", 1) for line in redis.command("INFO", section).splitlines()
+        return dict(line.split(":", 1) for line in valkey.command("INFO", section).splitlines()
                     if ":" in line and not line.startswith("#"))
 
     def run_id():
         fields = info("server")
         if not fields.get("run_id"):
-            raise RuntimeError("Redis did not report its server identity.")
+            raise RuntimeError("Valkey did not report its server identity.")
         return fields["run_id"]
 
     def prepare():
         nonlocal pause_until
         identity["pod"] = check_pod()
         identity["server"] = run_id()
-        # Redis also stops eviction and expiry during this pause. It expires after a killed Job.
+        # Valkey also stops eviction and expiry during this pause. It expires after a killed Job.
         pause_until = time.monotonic() + 660
-        if redis.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":
-            raise RuntimeError("Redis did not pause writes.")
-        if redis.command("BGSAVE") != "Background saving started":
-            raise RuntimeError("Redis did not start its RDB save.")
+        if valkey.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":
+            raise RuntimeError("Valkey did not pause writes.")
+        if valkey.command("BGSAVE") != "Background saving started":
+            raise RuntimeError("Valkey did not start its RDB save.")
         save_deadline = time.monotonic() + 90
         while True:
             persistence = info("persistence")
             if persistence.get("rdb_bgsave_in_progress") == "0":
                 if persistence.get("rdb_last_bgsave_status") != "ok":
-                    raise RuntimeError("Redis failed to save its RDB file.")
+                    raise RuntimeError("Valkey failed to save its RDB file.")
                 break
             if time.monotonic() >= save_deadline:
-                raise RuntimeError("Redis did not finish its RDB save before the deadline.")
+                raise RuntimeError("Valkey did not finish its RDB save before the deadline.")
             time.sleep(1)
         validate()
 
     def validate():
         if (check_pod() != identity["pod"] or run_id() != identity["server"]
                 or time.monotonic() >= pause_until):
-            raise RuntimeError("The Redis server changed or its write pause expired during capture.")
+            raise RuntimeError("The Valkey server changed or its write pause expired during capture.")
 
     try:
         snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,
@@ -106,7 +106,7 @@ def capture(api, redis, namespace, store, claim, snapshot_class, retention, time
                             verified_label=VERIFIED)
     finally:
         if pause_until:
-            redis.command("CLIENT", "UNPAUSE")
+            valkey.command("CLIENT", "UNPAUSE")
 
 
 def main():
@@ -117,9 +117,9 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.retention <= 100:
         parser.error("retention must be from 1 to 100")
-    password = Path("/var/run/redis-backup/password").read_text()
-    with closing(Redis(args.store, password)) as redis:
-        capture(snapshots["API"](), redis, args.namespace, args.store, args.claim,
+    password = Path("/var/run/valkey-backup/password").read_text()
+    with closing(Valkey(args.store, password)) as valkey:
+        capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,
                 args.snapshot_class, args.retention)
 
 

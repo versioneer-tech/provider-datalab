@@ -440,9 +440,9 @@ spec:
                             and not any(c.get("type") == "Synced" and c.get("status") == "False" for c in conditions)
                         ),
                     }
-                    if kind in ("postgres", "redis"):
+                    if kind in ("postgres", "valkey"):
                         connection["names"] = _stores(spec, kind)[instance]["names"]
-                    if kind in ("postgres", "redis", "registry", "custom"):
+                    if kind in ("postgres", "valkey", "registry", "custom"):
                         connection = publish_connection(connection, key, present)
                         if kind == "custom" and connection is None:
                             return
@@ -486,15 +486,15 @@ spec:
                     data = _postgres_connection_data(data, instance, xr_name)
                 required = {
                     "postgres": ("host", "port", "user", "password", "dbname", "uri"),
-                    "redis": ("user", "password"),
+                    "valkey": ("user", "password"),
                     "registry": ("user", "password"),
                 }.get(kind, ())
                 if kind != "custom":
                     data = {name: value for name, value in data.items() if name in required}
-                if kind in ("postgres", "redis"):
+                if kind in ("postgres", "valkey"):
                     names = connection["names"]
                     data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
-                    if kind == "redis":
+                    if kind == "valkey":
                         data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
                 available = (present and connection["ready"] and bool(data)
                              and all(data.get(name) for name in required))
@@ -620,7 +620,7 @@ spec:
                         )
 
             for kind, backend in (
-                ("redis", "redis"),
+                ("valkey", "valkey"),
             ):
                 stores = _stores(spec, kind)
                 if isinstance(stores, dict):
@@ -970,7 +970,7 @@ spec:
                     bool(values["password"]),
                 )
             for backend, kind in (
-                ("redis", "redis"),
+                ("valkey", "valkey"),
             ):
                 for store, config in sorted(_stores(spec, kind).items()):
                     names = config["names"]
@@ -5223,7 +5223,7 @@ spec:
         import json
         from crossplane.function import request, response
 
-        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
         def compose(req, rsp):
@@ -6683,8 +6683,11 @@ spec:
                     "--request-logging=false",
                     "--auth-logging=false",
                 ]
-                for key in ("readinessProbe", "livenessProbe", "ports"):
-                    auth_proxy.pop(key, None)
+                for key in ("startupProbe", "readinessProbe", "livenessProbe"):
+                    # The proxy binds to loopback; kubelet HTTP probes use the Pod IP.
+                    path = auth_proxy[key]["httpGet"]["path"]
+                    auth_proxy[key]["httpGet"] = {"path": "/_auth" + path, "port": 8080}
+                auth_proxy.pop("ports", None)
                 # Keep both original SigV4 headers and the token unchanged for rclone.
                 gateway_config = "\n".join(
                     [
@@ -6701,7 +6704,10 @@ spec:
                         "  }",
                         "  server {",
                         "    listen 8080;",
+                        "    location = /_live { return 200; }",
                         "    location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }",
+                        "    location = /_auth/ping { proxy_pass http://127.0.0.1:4180/ping; }",
+                        "    location = /_auth/ready { proxy_pass http://127.0.0.1:4180/ready; }",
                         "    location / {",
                         "      if ($tenant_valid = 0) { return 403; }",
                         '      if ($http_x_amz_security_token = "") { return 403; }',
@@ -7027,6 +7033,18 @@ spec:
             httpGet:
               path: /_ready
               port: s3-gateway
+          startupProbe:
+            httpGet:
+              path: /_live
+              port: s3-gateway
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /_live
+              port: s3-gateway
+            periodSeconds: 20
+            timeoutSeconds: 3
           volumeMounts:
           - name: tmp
             mountPath: /tmp
@@ -7110,6 +7128,12 @@ spec:
               path: /ready
               port: auth-proxy
             periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: auth-proxy
+            periodSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /ping
@@ -7280,6 +7304,27 @@ spec:
                     limits:
                       cpu: 500m
                       memory: 512Mi
+                  startupProbe:
+                    exec:
+                      command:
+                      - sh
+                      - -ec
+                      - |
+                        response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                        case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                    periodSeconds: 5
+                    timeoutSeconds: 3
+                    failureThreshold: 60
+                  livenessProbe:
+                    exec:
+                      command:
+                      - sh
+                      - -ec
+                      - |
+                        response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                        case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                    periodSeconds: 20
+                    timeoutSeconds: 3
                   readinessProbe:
                     exec:
                       command:
@@ -7717,15 +7762,18 @@ spec:
                       port: health
                     periodSeconds: 5
                     failureThreshold: 30
+                    timeoutSeconds: 3
                   readinessProbe:
                     httpGet:
                       path: /debug/health
                       port: health
                     periodSeconds: 10
+                    timeoutSeconds: 3
                   livenessProbe:
                     tcpSocket:
                       port: registry
                     periodSeconds: 20
+                    timeoutSeconds: 3
                   securityContext:
                     allowPrivilegeEscalation: false
                     readOnlyRootFilesystem: true
@@ -8303,7 +8351,7 @@ spec:
             - backendRefs:
               - name: ${backend_service_name}
                 port: 5432
-  - step: update-redis-objects
+  - step: update-valkey-objects
     functionRef:
       name: crossplane-contrib-function-python
     input:
@@ -8390,28 +8438,6 @@ spec:
             at_provider = (resource.get("status") or {}).get("atProvider") or {}
             return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
-        def require_secret(req, rsp, key, name, namespace):
-            response.require_resources(
-                rsp, name=key, api_version="v1", kind="Secret",
-                namespace=namespace, match_name=name,
-            )
-            secret = request.get_required_resource(req, key) or {}
-            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
-
-        def _secret_manifest(req, rsp, key):
-            # The Object supplies the target reference and watches, not credential data.
-            desired = rsp.desired.resources.get(key)
-            body = _to_dict(desired.resource) if desired else {}
-            metadata = (body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("metadata") or {})
-            name, namespace = metadata.get("name"), metadata.get("namespace")
-            if not name or not namespace:
-                return {}
-            return require_secret(req, rsp, "source-" + key, name, namespace)
-
-        def _extract_data(req, rsp, key):
-            manifest = _secret_manifest(req, rsp, key)
-            return manifest.get("data") or manifest.get("stringData") or {}
-
         def _stores(spec, kind):
             return {name: {**config, "names": config.get("names") or ["default"]}
                     for name, config in (spec.get("stores") or {}).items()
@@ -8444,8 +8470,8 @@ spec:
 
 
 
-        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Save Redis data and capture its PVC during a bounded write pause."""\n\nimport argparse\nfrom contextlib import closing\nfrom pathlib import Path\nimport runpy\nimport socket\nimport time\nfrom urllib.parse import quote\n\nsnapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))\nLABEL = "datalabs.versioneer.at/redis"\nVERIFIED = "datalabs.versioneer.at/redis-snapshot-verified"\n\n\nclass Redis:\n    def __init__(self, host, password):\n        self.socket = socket.create_connection((host, 6379), timeout=60)\n        self.stream = self.socket.makefile("rb")\n        self.command("AUTH", "backup", password)\n\n    def close(self):\n        self.stream.close()\n        self.socket.close()\n\n    def command(self, *arguments):\n        values = [str(value).encode() for value in arguments]\n        self.socket.sendall(b"*%d\\r\\n" % len(values) + b"".join(\n            b"$%d\\r\\n" % len(value) + value + b"\\r\\n" for value in values))\n        line = self.stream.readline()\n        if not line.endswith(b"\\r\\n"):\n            raise RuntimeError("Redis closed the backup connection.")\n        kind, value = line[:1], line[1:-2]\n        if kind == b"+":\n            return value.decode()\n        if kind == b"$" and int(value) >= 0:\n            data = self.stream.read(int(value) + 2)\n            if len(data) != int(value) + 2 or not data.endswith(b"\\r\\n"):\n                raise RuntimeError("Redis returned an incomplete response.")\n            return data[:-2].decode()\n        # Server errors can contain command arguments; do not put them in Job logs.\n        raise RuntimeError("Redis rejected the backup command.")\n\n\ndef capture(api, redis, namespace, store, claim, snapshot_class, retention, timeout=540):\n    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")\n    pause_until = 0\n    identity = {}\n\n    def check_pod():\n        pod = api.call("GET", pod_path)\n        volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")\n                   for v in pod["spec"].get("volumes", [])}\n        claims = {volumes.get(mount["name"]) for container in pod["spec"]["containers"]\n                  for mount in container.get("volumeMounts", []) if mount["mountPath"] == "/data"}\n        if (claims != {claim} or pod["metadata"].get("deletionTimestamp")\n                or not any(c["type"] == "Ready" and c["status"] == "True"\n                           for c in pod.get("status", {}).get("conditions", []))):\n            raise RuntimeError("The Redis Pod must be ready and use the selected data PVC.")\n        return pod["metadata"]["uid"]\n\n    def info(section):\n        return dict(line.split(":", 1) for line in redis.command("INFO", section).splitlines()\n                    if ":" in line and not line.startswith("#"))\n\n    def run_id():\n        fields = info("server")\n        if not fields.get("run_id"):\n            raise RuntimeError("Redis did not report its server identity.")\n        return fields["run_id"]\n\n    def prepare():\n        nonlocal pause_until\n        identity["pod"] = check_pod()\n        identity["server"] = run_id()\n        # Redis also stops eviction and expiry during this pause. It expires after a killed Job.\n        pause_until = time.monotonic() + 660\n        if redis.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":\n            raise RuntimeError("Redis did not pause writes.")\n        if redis.command("BGSAVE") != "Background saving started":\n            raise RuntimeError("Redis did not start its RDB save.")\n        save_deadline = time.monotonic() + 90\n        while True:\n            persistence = info("persistence")\n            if persistence.get("rdb_bgsave_in_progress") == "0":\n                if persistence.get("rdb_last_bgsave_status") != "ok":\n                    raise RuntimeError("Redis failed to save its RDB file.")\n                break\n            if time.monotonic() >= save_deadline:\n                raise RuntimeError("Redis did not finish its RDB save before the deadline.")\n            time.sleep(1)\n        validate()\n\n    def validate():\n        if (check_pod() != identity["pod"] or run_id() != identity["server"]\n                or time.monotonic() >= pause_until):\n            raise RuntimeError("The Redis server changed or its write pause expired during capture.")\n\n    try:\n        snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,\n                            timeout=timeout, label=LABEL, prepare=prepare, validate=validate,\n                            verified_label=VERIFIED)\n    finally:\n        if pause_until:\n            redis.command("CLIENT", "UNPAUSE")\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    for argument in ("namespace", "store", "claim", "snapshot_class"):\n        parser.add_argument(argument)\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    password = Path("/var/run/redis-backup/password").read_text()\n    with closing(Redis(args.store, password)) as redis:\n        capture(snapshots["API"](), redis, args.namespace, args.store, args.claim,\n                args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
-        SNAPSHOT_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Save Valkey data and capture its PVC during a bounded write pause."""\n\nimport argparse\nfrom contextlib import closing\nfrom pathlib import Path\nimport runpy\nimport socket\nimport time\nfrom urllib.parse import quote\n\nsnapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))\nLABEL = "datalabs.versioneer.at/valkey"\nVERIFIED = "datalabs.versioneer.at/valkey-snapshot-verified"\n\n\nclass Valkey:\n    def __init__(self, host, password):\n        self.socket = socket.create_connection((host, 6379), timeout=60)\n        self.stream = self.socket.makefile("rb")\n        self.command("AUTH", "backup", password)\n\n    def close(self):\n        self.stream.close()\n        self.socket.close()\n\n    def command(self, *arguments):\n        values = [str(value).encode() for value in arguments]\n        self.socket.sendall(b"*%d\\r\\n" % len(values) + b"".join(\n            b"$%d\\r\\n" % len(value) + value + b"\\r\\n" for value in values))\n        line = self.stream.readline()\n        if not line.endswith(b"\\r\\n"):\n            raise RuntimeError("Valkey closed the backup connection.")\n        kind, value = line[:1], line[1:-2]\n        if kind == b"+":\n            return value.decode()\n        if kind == b"$" and int(value) >= 0:\n            data = self.stream.read(int(value) + 2)\n            if len(data) != int(value) + 2 or not data.endswith(b"\\r\\n"):\n                raise RuntimeError("Valkey returned an incomplete response.")\n            return data[:-2].decode()\n        # Server errors can contain command arguments; do not put them in Job logs.\n        raise RuntimeError("Valkey rejected the backup command.")\n\n\ndef capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):\n    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")\n    pause_until = 0\n    identity = {}\n\n    def check_pod():\n        pod = api.call("GET", pod_path)\n        volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")\n                   for v in pod["spec"].get("volumes", [])}\n        claims = {volumes.get(mount["name"]) for container in pod["spec"]["containers"]\n                  for mount in container.get("volumeMounts", []) if mount["mountPath"] == "/data"}\n        if (claims != {claim} or pod["metadata"].get("deletionTimestamp")\n                or not any(c["type"] == "Ready" and c["status"] == "True"\n                           for c in pod.get("status", {}).get("conditions", []))):\n            raise RuntimeError("The Valkey Pod must be ready and use the selected data PVC.")\n        return pod["metadata"]["uid"]\n\n    def info(section):\n        return dict(line.split(":", 1) for line in valkey.command("INFO", section).splitlines()\n                    if ":" in line and not line.startswith("#"))\n\n    def run_id():\n        fields = info("server")\n        if not fields.get("run_id"):\n            raise RuntimeError("Valkey did not report its server identity.")\n        return fields["run_id"]\n\n    def prepare():\n        nonlocal pause_until\n        identity["pod"] = check_pod()\n        identity["server"] = run_id()\n        # Valkey also stops eviction and expiry during this pause. It expires after a killed Job.\n        pause_until = time.monotonic() + 660\n        if valkey.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":\n            raise RuntimeError("Valkey did not pause writes.")\n        if valkey.command("BGSAVE") != "Background saving started":\n            raise RuntimeError("Valkey did not start its RDB save.")\n        save_deadline = time.monotonic() + 90\n        while True:\n            persistence = info("persistence")\n            if persistence.get("rdb_bgsave_in_progress") == "0":\n                if persistence.get("rdb_last_bgsave_status") != "ok":\n                    raise RuntimeError("Valkey failed to save its RDB file.")\n                break\n            if time.monotonic() >= save_deadline:\n                raise RuntimeError("Valkey did not finish its RDB save before the deadline.")\n            time.sleep(1)\n        validate()\n\n    def validate():\n        if (check_pod() != identity["pod"] or run_id() != identity["server"]\n                or time.monotonic() >= pause_until):\n            raise RuntimeError("The Valkey server changed or its write pause expired during capture.")\n\n    try:\n        snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,\n                            timeout=timeout, label=LABEL, prepare=prepare, validate=validate,\n                            verified_label=VERIFIED)\n    finally:\n        if pause_until:\n            valkey.command("CLIENT", "UNPAUSE")\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    for argument in ("namespace", "store", "claim", "snapshot_class"):\n        parser.add_argument(argument)\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    password = Path("/var/run/valkey-backup/password").read_text()\n    with closing(Valkey(args.store, password)) as valkey:\n        capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,\n                args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        SNAPSHOT_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
         def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
@@ -8458,17 +8484,17 @@ spec:
             xr_name = metadata.get("name")
             xr_namespace = metadata.get("namespace") or "default"
 
-            cache_stores = _stores(spec, "redis")
+            cache_stores = _stores(spec, "valkey")
             if not isinstance(cache_stores, dict) or not cache_stores:
                 return
 
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            redis_image = _safe_str(images.get("redis")) or "quay.io/opstree/redis:v7.2.17"
+            valkey_image = _safe_str(images.get("valkey")) or "valkey/valkey:9.2.0-alpine"
             backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine"
-            redis_env = environment.get("cacheStore") or {}
-            redis_storage_class = _string_value(redis_env.get("storageClassName") or "")
+            valkey_env = environment.get("cacheStore") or {}
+            valkey_storage_class = _string_value(valkey_env.get("storageClassName") or "")
 
             runtime_namespace = xr_name
 
@@ -8479,127 +8505,137 @@ spec:
                 if not isinstance(store_cfg, dict):
                     continue
 
-                redis_storage = _string_value(store_cfg.get("storage") or "1Gi")
-                if not redis_storage:
+                valkey_storage = _string_value(store_cfg.get("storage") or "1Gi")
+                if not valkey_storage:
                     continue
                 store_name = store_key.strip()
                 backups_enabled = store_cfg.get("backups") is True
-                redis_password = _strong_token(
-                    f"{xr_name}:{store_name}:redis", suffix="", length=28
+                valkey_password = _strong_token(
+                    f"{xr_name}:{store_name}:valkey", suffix="", length=28
                 )
-                redis_auth_secret_name = f"{store_name}-redis-auth"
-                redis_auth_secret = _render_template(
+                valkey_auth_secret_name = f"{store_name}-valkey-auth"
+                valkey_auth_secret = _render_template(
                     req,
-                    "redis/auth-secret",
-                    redis_auth_secret_name=redis_auth_secret_name,
+                    "valkey/auth-secret",
+                    valkey_auth_secret_name=valkey_auth_secret_name,
                     runtime_namespace=runtime_namespace,
-                    redis_user="default",
-                    redis_password=redis_password,
+                    valkey_user="default",
+                    valkey_password=valkey_password,
                 )
-                auth_key = f"redis-auth-secret-{xr_name}-{store_name}"
+                auth_key = f"valkey-auth-secret-{xr_name}-{store_name}"
                 auth_body = _render_template(
                     req,
-                    "redis/auth-object",
+                    "valkey/auth-object",
                     auth_key=auth_key,
                     xr_namespace=xr_namespace,
-                    redis_auth_secret=redis_auth_secret,
+                    valkey_auth_secret=valkey_auth_secret,
                 )
                 rsp.desired.resources[auth_key].resource.update(auth_body)
 
-                redis_acl_secret_name = f"{store_name}-redis-acl"
-                acl = f"user default on >{redis_password} ~* +@all\n"
+                valkey_acl_secret_name = f"{store_name}-valkey-acl"
+                acl = f"user default on >{valkey_password} ~* +@all\n"
                 if backups_enabled:
-                    backup_password = _strong_token(f"{xr_name}:{store_name}:redis:backup")
+                    backup_password = _strong_token(f"{xr_name}:{store_name}:valkey:backup")
                     acl += f"user backup on >{backup_password} -@all +ping +info +bgsave +client|pause +client|unpause\n"
                 encoded_acl = base64.b64encode(acl.encode()).decode()
-                redis_acl_secret = _render_template(
+                valkey_acl_secret = _render_template(
                     req,
-                    "redis/acl-secret",
-                    redis_acl_secret_name=redis_acl_secret_name,
+                    "valkey/acl-secret",
+                    valkey_acl_secret_name=valkey_acl_secret_name,
                     runtime_namespace=runtime_namespace,
                     data_user_acl=encoded_acl,
                 )
-                acl_key = f"redis-acl-secret-{xr_name}-{store_name}"
+                acl_key = f"valkey-acl-secret-{xr_name}-{store_name}"
                 acl_body = _render_template(
                     req,
-                    "redis/acl-object",
+                    "valkey/acl-object",
                     acl_key=acl_key,
                     xr_namespace=xr_namespace,
-                    redis_acl_secret=redis_acl_secret,
+                    valkey_acl_secret=valkey_acl_secret,
                 )
                 rsp.desired.resources[acl_key].resource.update(acl_body)
-                # The operator mounts the ACL file with subPath, so changes need a restart.
-                observed_acl = _extract_data(req, rsp, acl_key).get("user.acl") or encoded_acl
-                acl_checksum = hashlib.sha256(observed_acl.encode()).hexdigest()
+                acl_checksum = hashlib.sha256(encoded_acl.encode()).hexdigest()
 
                 pvc_spec = {
                     "accessModes": ["ReadWriteOnce"],
-                    "resources": {"requests": {"storage": redis_storage}},
+                    "resources": {"requests": {"storage": valkey_storage}},
                 }
-                if redis_storage_class:
-                    pvc_spec["storageClassName"] = redis_storage_class
+                if valkey_storage_class:
+                    pvc_spec["storageClassName"] = valkey_storage_class
+                pvc_name = _resource_name("valkey", store_name, "data")
+                pvc_key = f"valkey-data-{xr_name}-{store_name}"
+                rsp.desired.resources[pvc_key].resource.update(_render_template(
+                    req, "common/object", key=pvc_key, xr_namespace=xr_namespace,
+                    manifest={"apiVersion": "v1", "kind": "PersistentVolumeClaim",
+                              "metadata": {"name": pvc_name, "namespace": runtime_namespace}, "spec": pvc_spec},
+                    readiness={"policy": "DeriveFromCelQuery", "celQuery":
+                               "has(object.status) && has(object.status.phase) && object.status.phase == 'Bound'"},
+                ))
 
-                storage = {
-                    "volumeClaimTemplate": {
-                        "metadata": {},
-                        "spec": pvc_spec,
-                    },
-                    "volumeMount": {},
-                }
-                redis_manifest = _render_template(
+                service_key = f"valkey-service-{xr_name}-{store_name}"
+                rsp.desired.resources[service_key].resource.update(_render_template(
+                    req, "common/object", key=service_key, xr_namespace=xr_namespace,
+                    manifest={"apiVersion": "v1", "kind": "Service",
+                              "metadata": {"name": store_name, "namespace": runtime_namespace},
+                              "spec": {"selector": {"app.kubernetes.io/name": "valkey",
+                                                    "app.kubernetes.io/instance": store_name},
+                                       "ports": [{"name": "valkey", "port": 6379, "targetPort": "valkey"}]}},
+                    readiness={"policy": "SuccessfulCreate"},
+                ))
+                valkey_manifest = _render_template(
                     req,
-                    "redis/store",
-                    redis_image=redis_image,
+                    "valkey/store",
+                    valkey_image=valkey_image,
                     store_name=store_name,
                     runtime_namespace=runtime_namespace,
-                    redis_auth_secret_name=redis_auth_secret_name,
-                    redis_acl_secret_name=redis_acl_secret_name,
-                    redis_acl_checksum=acl_checksum,
-                    storage=storage,
+                    valkey_auth_secret_name=valkey_auth_secret_name,
+                    valkey_acl_secret_name=valkey_acl_secret_name,
+                    valkey_acl_checksum=acl_checksum,
+                    pvc_name=pvc_name,
                 )
 
-                key = f"redis-cache-{xr_name}-{store_name}"
+                key = f"valkey-cache-{xr_name}-{store_name}"
                 body = _render_template(
                     req,
-                    "redis/store-object",
+                    "valkey/store-object",
                     key=key,
                     xr_namespace=xr_namespace,
-                    redis_manifest=redis_manifest,
+                    valkey_manifest=valkey_manifest,
                 )
                 rsp.desired.resources[key].resource.update(body)
 
                 if backups_enabled:
-                    backup_name = f"redis-{store_name}-backup"
-                    backup_secret_name = f"{store_name}-redis-backup-auth"
+                    backup_name = f"valkey-{store_name}-backup"
+                    backup_secret_name = f"{store_name}-valkey-backup-auth"
                     backup_secret = _render_template(
                         req,
-                        "redis/auth-secret",
-                        redis_auth_secret_name=backup_secret_name,
+                        "valkey/auth-secret",
+                        valkey_auth_secret_name=backup_secret_name,
                         runtime_namespace=runtime_namespace,
-                        redis_user="backup",
-                        redis_password=backup_password,
+                        valkey_user="backup",
+                        valkey_password=backup_password,
                     )
-                    snapshot_class = redis_env.get("snapshotClassName") or (environment.get("volumes") or {}).get("snapshotClassName")
-                    retention = redis_env.get("maxSnapshots", 4)
+                    snapshot_class = valkey_env.get("snapshotClassName") or (environment.get("volumes") or {}).get("snapshotClassName")
+                    retention = valkey_env.get("maxSnapshots", 4)
                     if not isinstance(snapshot_class, str) or not snapshot_class.strip():
-                        response.fatal(rsp, "Redis backups require data.cacheStore.snapshotClassName or data.volumes.snapshotClassName.")
+                        response.fatal(rsp, "Valkey backups require data.cacheStore.snapshotClassName or data.volumes.snapshotClassName.")
                         return
                     if (isinstance(retention, bool) or not isinstance(retention, (int, float))
                             or retention != int(retention) or not 1 <= retention <= 100):
                         response.fatal(rsp, "data.cacheStore.maxSnapshots must be an integer from 1 to 100.")
                         return
-                    pod = _extract_manifest(req.observed.resources.get(f"redis-pod-{xr_name}-{store_name}"))
+                    pod = _extract_manifest(req.observed.resources.get(f"valkey-pod-{xr_name}-{store_name}"))
                     volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")
                                for v in (pod.get("spec") or {}).get("volumes", [])}
                     claims = {volumes.get(m["name"]) for c in (pod.get("spec") or {}).get("containers", [])
                               for m in c.get("volumeMounts", []) if m["mountPath"] == "/data"}
                     claim = next(iter(claims)) if len(claims) == 1 and None not in claims else "unbound"
                     resources = _render_template(
-                        req, "redis/backup-cronjob", target=runtime_namespace, pvc_name=claim,
+                        req, "valkey/backup-cronjob", target=runtime_namespace, pvc_name=claim,
                         volume_name=store_name, backup_name=backup_name,
                         backup_binding=_resource_name(runtime_namespace, backup_name),
                         snapshot_class=snapshot_class, max_snapshots=str(int(retention)),
-                        schedule=redis_env.get("schedule") or "0 1 * * *",
+                        schedule=valkey_env.get("schedule") or "0 1 * * *",
                         backup_script=BACKUP_SCRIPT, snapshot_script=SNAPSHOT_SCRIPT,
                         backup_image=backup_image, backup_secret_name=backup_secret_name,
                         pod_name=store_name + "-0", suspended=claim == "unbound",
@@ -8610,7 +8646,7 @@ spec:
                         "metadata": {"name": snapshot_class},
                     }
                     for resource_type, manifest in resources.items():
-                        backup_key = f"redis-backup-{resource_type}-{xr_name}-{store_name}"
+                        backup_key = f"valkey-backup-{resource_type}-{xr_name}-{store_name}"
                         readiness = ({"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}
                                      if resource_type == "class" else {"policy": "SuccessfulCreate"})
                         backup_body = _render_template(
@@ -8621,7 +8657,7 @@ spec:
                             backup_body["spec"]["managementPolicies"] = ["Observe"]
                         rsp.desired.resources[backup_key].resource.update(backup_body)
 
-                pod_key = f"redis-pod-{xr_name}-{store_name}"
+                pod_key = f"valkey-pod-{xr_name}-{store_name}"
                 pod_body = _render_template(
                     req,
                     "common/pod-observer",
@@ -8674,7 +8710,7 @@ spec:
               celQuery: has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c,
                 c.type == 'Ready' && c.status == 'True')
             watch: true
-        redis/acl-object:
+        valkey/acl-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           metadata:
@@ -8687,20 +8723,20 @@ spec:
               name: provider-kubernetes
               kind: ProviderConfig
             forProvider:
-              manifest: ${redis_acl_secret}
+              manifest: ${valkey_acl_secret}
             readiness:
               policy: SuccessfulCreate
             watch: true
-        redis/acl-secret:
+        valkey/acl-secret:
           apiVersion: v1
           kind: Secret
           metadata:
-            name: ${redis_acl_secret_name}
+            name: ${valkey_acl_secret_name}
             namespace: ${runtime_namespace}
           type: Opaque
           data:
             user.acl: ${data_user_acl}
-        redis/auth-object:
+        valkey/auth-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           metadata:
@@ -8713,21 +8749,21 @@ spec:
               name: provider-kubernetes
               kind: ProviderConfig
             forProvider:
-              manifest: ${redis_auth_secret}
+              manifest: ${valkey_auth_secret}
             readiness:
               policy: SuccessfulCreate
             watch: true
-        redis/auth-secret:
+        valkey/auth-secret:
           apiVersion: v1
           kind: Secret
           metadata:
-            name: ${redis_auth_secret_name}
+            name: ${valkey_auth_secret_name}
             namespace: ${runtime_namespace}
           type: Opaque
           stringData:
-            user: ${redis_user}
-            password: ${redis_password}
-        redis/backup-cronjob:
+            user: ${valkey_user}
+            password: ${valkey_password}
+        valkey/backup-cronjob:
           resources:
             account:
               apiVersion: v1
@@ -8790,7 +8826,7 @@ spec:
                 name: ${backup_name}
                 namespace: ${target}
               data:
-                redis-snapshot.py: ${backup_script}
+                valkey-snapshot.py: ${backup_script}
                 volume-snapshot.py: ${snapshot_script}
             network:
               apiVersion: networking.k8s.io/v1
@@ -8801,7 +8837,7 @@ spec:
               spec:
                 podSelector:
                   matchLabels:
-                    datalabs.versioneer.at/redis-backup: ${volume_name}
+                    datalabs.versioneer.at/valkey-backup: ${volume_name}
                 policyTypes:
                 - Ingress
                 - Egress
@@ -8810,7 +8846,8 @@ spec:
                 - to:
                   - podSelector:
                       matchLabels:
-                        app: ${volume_name}
+                        app.kubernetes.io/name: valkey
+                        app.kubernetes.io/instance: ${volume_name}
                   ports:
                   - port: 6379
                     protocol: TCP
@@ -8865,7 +8902,7 @@ spec:
                     template:
                       metadata:
                         labels:
-                          datalabs.versioneer.at/redis-backup: ${volume_name}
+                          datalabs.versioneer.at/valkey-backup: ${volume_name}
                       spec:
                         restartPolicy: Never
                         serviceAccountName: ${backup_name}
@@ -8882,7 +8919,7 @@ spec:
                           command:
                           - python
                           - -B
-                          - /opt/backup/redis-snapshot.py
+                          - /opt/backup/valkey-snapshot.py
                           args:
                           - ${target}
                           - ${volume_name}
@@ -8904,7 +8941,7 @@ spec:
                               - ALL
                           volumeMounts:
                           - name: password
-                            mountPath: /var/run/redis-backup
+                            mountPath: /var/run/valkey-backup
                             readOnly: true
                           - name: script
                             mountPath: /opt/backup
@@ -8919,38 +8956,118 @@ spec:
                         - name: script
                           configMap:
                             name: ${backup_name}
-        redis/store:
-          apiVersion: redis.redis.opstreelabs.in/v1beta2
-          kind: Redis
+        valkey/store:
+          apiVersion: apps/v1
+          kind: StatefulSet
           metadata:
             name: ${store_name}
             namespace: ${runtime_namespace}
-            annotations:
-              datalabs.versioneer.at/redis-acl-checksum: ${redis_acl_checksum}
           spec:
-            initContainer:
-              enabled: true
-              image: ${redis_image}
-              imagePullPolicy: IfNotPresent
-              command:
-              - sh
-              - -c
-              args:
-              - mkdir -p /data/appendonlydir && chmod 0777 /data /data/appendonlydir
-              securityContext:
-                runAsUser: 0
-            kubernetesConfig:
-              image: ${redis_image}
-              imagePullPolicy: IfNotPresent
-              redisSecret:
-                name: ${redis_auth_secret_name}
-                key: password
-              updateStrategy: {}
-            acl:
-              secret:
-                secretName: ${redis_acl_secret_name}
-            storage: ${storage}
-        redis/store-object:
+            replicas: 1
+            serviceName: ${store_name}
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: valkey
+                app.kubernetes.io/instance: ${store_name}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: valkey
+                  app.kubernetes.io/instance: ${store_name}
+                annotations:
+                  datalabs.versioneer.at/valkey-acl-checksum: ${valkey_acl_checksum}
+              spec:
+                automountServiceAccountToken: false
+                terminationGracePeriodSeconds: 60
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  fsGroupChangePolicy: OnRootMismatch
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                - name: valkey
+                  image: ${valkey_image}
+                  args:
+                  - valkey-server
+                  - --bind
+                  - 0.0.0.0
+                  - --protected-mode
+                  - 'yes'
+                  - --dir
+                  - /data
+                  - --appendonly
+                  - 'yes'
+                  - --appendfsync
+                  - everysec
+                  - --save
+                  - ''
+                  - --aclfile
+                  - /etc/valkey/user.acl
+                  env:
+                  - name: VALKEYCLI_AUTH
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${valkey_auth_secret_name}
+                        key: password
+                  ports:
+                  - name: valkey
+                    containerPort: 6379
+                  startupProbe:
+                    exec:
+                      command:
+                      - sh
+                      - -ec
+                      - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                    periodSeconds: 5
+                    timeoutSeconds: 3
+                    failureThreshold: 120
+                  readinessProbe:
+                    exec:
+                      command:
+                      - sh
+                      - -ec
+                      - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                    periodSeconds: 5
+                    timeoutSeconds: 3
+                  livenessProbe:
+                    exec:
+                      command:
+                      - sh
+                      - -ec
+                      - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                    periodSeconds: 10
+                    timeoutSeconds: 3
+                    failureThreshold: 6
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: '1'
+                      memory: 512Mi
+                  volumeMounts:
+                  - name: data
+                    mountPath: /data
+                  - name: acl
+                    mountPath: /etc/valkey
+                    readOnly: true
+                volumes:
+                - name: data
+                  persistentVolumeClaim:
+                    claimName: ${pvc_name}
+                - name: acl
+                  secret:
+                    secretName: ${valkey_acl_secret_name}
+        valkey/store-object:
           apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           metadata:
@@ -8963,10 +9080,13 @@ spec:
               name: provider-kubernetes
               kind: ProviderConfig
             forProvider:
-              manifest: ${redis_manifest}
+              manifest: ${valkey_manifest}
             readiness:
               policy: DeriveFromCelQuery
-              celQuery: '!has(object.metadata.deletionTimestamp)'
+              celQuery: '!has(object.metadata.deletionTimestamp) && has(object.status) && has(object.status.observedGeneration)
+                && object.status.observedGeneration >= object.metadata.generation && has(object.status.readyReplicas)
+                && object.status.readyReplicas == 1 && has(object.status.currentRevision) && has(object.status.updateRevision)
+                && object.status.currentRevision == object.status.updateRevision'
             watch: true
   - step: publish-vcluster-connections
     functionRef:

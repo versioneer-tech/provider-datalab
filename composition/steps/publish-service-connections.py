@@ -152,7 +152,7 @@ def compose(req, rsp):
             bool(values["password"]),
         )
     for backend, kind in (
-        ("redis", "redis"),
+        ("valkey", "valkey"),
     ):
         for store, config in sorted(_stores(spec, kind).items()):
             names = config["names"]

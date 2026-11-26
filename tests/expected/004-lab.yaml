@@ -427,11 +427,11 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: s-john
       policy:
         resolution: Required
         resolve: Always
-      matchLabels:
-        crossplane.io/claim-name: s-john
     fullPath: false
     name: s-john
     realmId: acme

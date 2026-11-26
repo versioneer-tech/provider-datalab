@@ -13,8 +13,8 @@ spec:
     name: provider-kubernetes
     kind: ProviderConfig
   forProvider:
-    manifest: ${redis_manifest}
+    manifest: ${valkey_manifest}
   readiness:
     policy: DeriveFromCelQuery
-    celQuery: '!has(object.metadata.deletionTimestamp)'
+    celQuery: '!has(object.metadata.deletionTimestamp) && has(object.status) && has(object.status.observedGeneration) && object.status.observedGeneration >= object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas == 1 && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision == object.status.updateRevision'
   watch: true

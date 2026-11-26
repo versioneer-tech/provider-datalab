@@ -23,15 +23,15 @@ def main():
         "apiVersion": "versioneer.at/v1", "kind": "Datalab",
         "metadata": {"name": "s-joe", "namespace": "teams", "uid": "test-datalab"},
         "spec": {"stores": {"prod": {"type": "postgres", "names": ["app"]},
-                            "cache": {"type": "redis", "names": ["sessions", "jobs"]}}},
+                            "cache": {"type": "valkey", "names": ["sessions", "jobs"]}}},
     }
-    instances = {"postgres": "prod", "redis": "cache"}
+    instances = {"postgres": "prod", "valkey": "cache"}
     values = {
         "prod-superuser": {"host": "prod-rw.s-joe.svc", "port": "5432",
                                   "username": "postgres", "password": "test-postgres-password",
                                   "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@prod-rw.s-joe.svc:5432/app",
                                   "jdbc-uri": "jdbc:postgresql://prod/app", "verifier": "test-internal"},
-        "cache-redis-auth": {"user": "default", "password": "test-redis-password", "internal": "test-internal"},
+        "cache-valkey-auth": {"user": "default", "password": "test-valkey-password", "internal": "test-internal"},
         "apikey": {"token": "test-custom-token", "endpoint": "https://example.invalid"},
     }
 
@@ -78,13 +78,13 @@ def main():
     assert len(published) == 3 and not any(c["ready"] for c in connections(pending))
     expected = {
         "postgres": encoded({("user" if key == "username" else key): value for key, value in values["prod-superuser"].items() if key not in ("verifier", "jdbc-uri")}),
-        "redis": encoded({"user": "default", "password": "test-redis-password"}),
+        "valkey": encoded({"user": "default", "password": "test-valkey-password"}),
         "custom": encoded(values["apikey"]),
     }
     for kind, instance in instances.items():
         names = source["spec"]["stores"][instance]["names"]
         expected[kind].update(encoded({"names": json.dumps(names)}))
-        if kind == "redis":
+        if kind == "valkey":
             expected[kind].update(encoded({"prefixes": json.dumps({name: name + ":" for name in names})}))
     for connection in connections(pending):
         ref = connection["secretRef"]
@@ -130,7 +130,7 @@ def main():
     secured = run(source, [env, *required_secrets], [*sanitized, *published.values()])
     assert copies(secured) == published
     assert all(c["ready"] for c in connections(secured))
-    for kind in ("postgres", "redis"):
+    for kind in ("postgres", "valkey"):
         key = f"connection-s-joe-{kind}-{instances[kind]}"
         assert secured[key]["stringData"] == ready[key]["stringData"]
     rotated = deepcopy(observed)
@@ -146,7 +146,7 @@ def main():
     assert set(current) == set(published)
     assert all(current[key]["data"] != published[key]["data"] for key in current)
     assert not any(c["ready"] for c in connections(rotating))
-    for kind in ("postgres", "redis"):
+    for kind in ("postgres", "valkey"):
         service_values = rotating[f"connection-s-joe-{kind}-{instances[kind]}"]["stringData"]
         assert service_values["password"] == "test-rotated"
     updated = run(source, [env, *rotated_secrets], [*sanitized, *current.values()])
@@ -154,7 +154,7 @@ def main():
     missing_secured = run(source, env, [*sanitized, *published.values()])
     assert not copies(missing_secured)
     assert not any(c["ready"] for c in connections(missing_secured))
-    assert all(f"connection-s-joe-{kind}-{instances[kind]}" not in missing_secured for kind in ("postgres", "redis"))
+    assert all(f"connection-s-joe-{kind}-{instances[kind]}" not in missing_secured for kind in ("postgres", "valkey"))
     print("PASS source Secret rotation updates copies and readiness despite stale, redacted observer data")
 
     unavailable = deepcopy(rotated)
@@ -171,7 +171,7 @@ def main():
 
     for kind, secret_name, field in (
         ("postgres", "prod-superuser", "password"),
-        ("redis", "cache-redis-auth", "user"),
+        ("valkey", "cache-valkey-auth", "user"),
     ):
         incomplete = deepcopy(observed)
         credential = next(body for body in incomplete

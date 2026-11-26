@@ -475,8 +475,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "--request-logging=false",
             "--auth-logging=false",
         ]
-        for key in ("readinessProbe", "livenessProbe", "ports"):
-            auth_proxy.pop(key, None)
+        for key in ("startupProbe", "readinessProbe", "livenessProbe"):
+            # The proxy binds to loopback; kubelet HTTP probes use the Pod IP.
+            path = auth_proxy[key]["httpGet"]["path"]
+            auth_proxy[key]["httpGet"] = {"path": "/_auth" + path, "port": 8080}
+        auth_proxy.pop("ports", None)
         # Keep both original SigV4 headers and the token unchanged for rclone.
         gateway_config = "\n".join(
             [
@@ -493,7 +496,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 "  }",
                 "  server {",
                 "    listen 8080;",
+                "    location = /_live { return 200; }",
                 "    location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }",
+                "    location = /_auth/ping { proxy_pass http://127.0.0.1:4180/ping; }",
+                "    location = /_auth/ready { proxy_pass http://127.0.0.1:4180/ready; }",
                 "    location / {",
                 "      if ($tenant_valid = 0) { return 403; }",
                 '      if ($http_x_amz_security_token = "") { return 403; }',

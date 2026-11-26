@@ -26,6 +26,27 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            # This provider exposes metrics but has no separate health listener.
+            startupProbe:
+              httpGet:
+                path: /metrics
+                port: 8080
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 60
+            readinessProbe:
+              httpGet:
+                path: /metrics
+                port: 8080
+              periodSeconds: 10
+              timeoutSeconds: 3
+            livenessProbe:
+              httpGet:
+                path: /metrics
+                port: 8080
+              periodSeconds: 20
+              timeoutSeconds: 3
+              failureThreshold: 3
             args:
             - --max-reconcile-rate=3
             - --max-concurrent-reconciles=1
@@ -67,6 +88,26 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            startupProbe:
+              httpGet:
+                path: /healthz
+                port: 8081
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 60
+            readinessProbe:
+              httpGet:
+                path: /readyz
+                port: 8081
+              periodSeconds: 10
+              timeoutSeconds: 3
+            livenessProbe:
+              httpGet:
+                path: /healthz
+                port: 8081
+              periodSeconds: 20
+              timeoutSeconds: 3
+              failureThreshold: 3
             args:
             - --enable-watches
             - --poll=5m
@@ -109,6 +150,24 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            # The function listener requires TLS; native gRPC probes cannot use it.
+            startupProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 60
+            readinessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 10
+              timeoutSeconds: 3
+            livenessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 20
+              timeoutSeconds: 3
+              failureThreshold: 3
             # Pipeline requests contain desired and observed virtual cluster configuration.
             args:
             - --max-recv-message-size=64
@@ -143,6 +202,24 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            # The function listener requires TLS; native gRPC probes cannot use it.
+            startupProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 60
+            readinessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 10
+              timeoutSeconds: 3
+            livenessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 20
+              timeoutSeconds: 3
+              failureThreshold: 3
             args:
             - --max-recv-message-size=64
             securityContext:
@@ -175,6 +252,24 @@ spec:
               type: RuntimeDefault
           containers:
           - name: package-runtime
+            # The function listener requires TLS; native gRPC probes cannot use it.
+            startupProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 60
+            readinessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 10
+              timeoutSeconds: 3
+            livenessProbe:
+              tcpSocket:
+                port: 9443
+              periodSeconds: 20
+              timeoutSeconds: 3
+              failureThreshold: 3
             args:
             - --max-recv-message-size=64
             securityContext:

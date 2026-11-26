@@ -38,6 +38,7 @@ wait_for_registry() {
   registry_runtime_namespace="$(wait_for_runtime_namespace "${DATALAB_NAME}")"
   kube wait deployment/registry --namespace "${registry_runtime_namespace}" --for=create --timeout=10m
   kube rollout status deployment/registry --namespace "${registry_runtime_namespace}" --timeout=10m
+  verify_workload_probes "${registry_runtime_namespace}"
 }
 
 find_registry_service() {

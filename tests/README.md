@@ -57,7 +57,9 @@ python3 -m unittest discover -s tests -p test_credentials.py -v
 ```
 
 `bash tests/unit.bash 001` selects one example render. Shared behavior checks
-still run. Examples `001`, `002`, and `003` also select the Data exposure,
+still run. The full suite uses two workers for behavior suites after the shared
+function containers start. It keeps each suite's output together and reports
+its duration. YAML parsing uses LibYAML when available; no checks are skipped. Examples `001`, `002`, and `003` also select the Data exposure,
 backup/store, and environment-setting checks.
 
 ## Test files
@@ -66,8 +68,8 @@ backup/store, and environment-setting checks.
 | --- | --- |
 | `test_build.py`, `test_composition_helpers.py` | Build input, TTL values and stable service credentials. |
 | `test_credentials.py`, `test_cleanup.py`, `test_snapshots.py` | Login and token handling, Pod cleanup, snapshot retention and access. |
-| `test_postgres.py`, `test_redis.py` | Store snapshot retention, consistency, failure handling, replacement, and PostgreSQL credentials. |
-| `test_harness.py` | Cluster selection, capability probes, and protection of unrelated resources. |
+| `test_postgres.py`, `test_valkey.py` | Store snapshot retention, consistency, failure handling, replacement, and PostgreSQL credentials. |
+| `test_harness.py`, `test_probes.py` | Cluster selection, capability probes, workload health checks, and protection of unrelated resources. |
 | `vclusters.py`, `admission/`, `volumes.py` | Virtual cluster access and lifecycle, host volumes, bindings, and admission rules. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions and real Keycloak login, refresh, and exchange. |
 | `oauth2.py`, `s3-connections.py`, `service-connections.py` | Discovery and credentials when sources change, disappear, or return. |

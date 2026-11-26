@@ -13,7 +13,7 @@ spec:
       names:
       - prod
       storage: 1Gi
-      type: redis
+      type: valkey
     pg0:
       backups: true
       names:
@@ -45,9 +45,9 @@ status:
     - prod
     ready: false
     secretRef:
-      name: s-jeff-redis-cache-connection-2b3afba838
+      name: s-jeff-valkey-cache-connection-f93fe2a7e0
       namespace: default
-    type: redis
+    type: valkey
   - endpoint: http://registry.s-jeff.svc:5000/v2/
     name: primary
     ready: false
@@ -97,24 +97,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-04384e25b03f-s-jeff-namespace-s-jeff-r-04afd50019
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-auth-secret-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-0852b5f26864-s-jeff-namespace-s-jeff-r-e87964f190
   namespace: default
 spec:
@@ -133,14 +115,50 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-13174d23c3a0-s-jeff-namespace-s-jeff-r-ebc2488401
+  name: datalab-usage-1100669f6979-s-jeff-namespace-s-jeff-v-030a0d233a
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: redis-backup-account-s-jeff-cache
+      name: valkey-backup-role-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-13b4061e291e-s-jeff-namespace-s-jeff-v-b3b8bdf049
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-account-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-16ff1940dd69-s-jeff-namespace-s-jeff-v-9e06a81e30
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-network-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -241,60 +259,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-2df1338b600b-s-jeff-namespace-s-jeff-r-033dd51c1a
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-pod-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-2f3443617c89-s-jeff-namespace-s-jeff-r-bd693771a7
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-backup-script-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-48874b0d79c0-s-jeff-namespace-s-jeff-r-9486f4726a
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-acl-secret-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-4fbf2d469c72-s-jeff-namespace-s-jeff-d-e659c01bf3
   namespace: default
 spec:
@@ -321,6 +285,42 @@ spec:
     kind: Object
     resourceRef:
       name: db-database-s-jeff-pg0-prod-0870205ead
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-53c454c29f2c-s-jeff-namespace-s-jeff-v-13b141c5ce
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-service-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-5ece938bccf3-s-jeff-namespace-s-jeff-v-d8512f7899
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-acl-secret-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -367,6 +367,42 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-761977181d63-s-jeff-namespace-s-jeff-v-8c13a648a6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-script-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-76b5fe023036-s-jeff-namespace-s-jeff-v-3106b00f4b
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-auth-secret-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-76d499f3f187-s-jeff-namespace-s-jeff-n-9890616f1f
   namespace: default
 spec:
@@ -375,6 +411,42 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-jeff-allow-external-egress
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-83589f6b6c82-s-jeff-namespace-s-jeff-v-93fe2fe3de
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-cronjob-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-85c795f172a4-s-jeff-namespace-s-jeff-v-480a299365
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-auth-secret-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -439,14 +511,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-ab5569d0d4a4-s-jeff-namespace-s-jeff-r-5b34b47315
+  name: datalab-usage-a19e057683f8-s-jeff-namespace-s-jeff-v-29d64161bb
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: redis-cache-s-jeff-cache
+      name: valkey-cache-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -465,24 +537,6 @@ spec:
     kind: Object
     resourceRef:
       name: resourcequota-s-jeff-overall-storage
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-b46b19f91298-s-jeff-namespace-s-jeff-r-6bec293d93
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-backup-network-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -547,14 +601,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-c5e8e8fbb370-s-jeff-namespace-s-jeff-r-305af62b3c
+  name: datalab-usage-cabaf3ce52f5-s-jeff-namespace-s-jeff-v-5fb8035849
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: redis-backup-auth-secret-s-jeff-cache
+      name: valkey-pod-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -565,50 +619,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-c779c48bf3f9-s-jeff-namespace-s-jeff-r-4c08d04091
+  name: datalab-usage-e41bb8dbdca1-s-jeff-namespace-s-jeff-v-12131d20cc
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: redis-backup-binding-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-dcd07991fcbe-s-jeff-namespace-s-jeff-r-4b71e2b431
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-backup-role-s-jeff-cache
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-e431459759d9-s-jeff-namespace-s-jeff-r-fb19935d1a
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: redis-backup-cronjob-s-jeff-cache
+      name: valkey-data-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -627,6 +645,24 @@ spec:
     kind: Object
     resourceRef:
       name: db-backup-s-jeff-pg0-cronjob-cffd960282
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-ffa9d11b8717-s-jeff-namespace-s-jeff-v-571604c5ec
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: valkey-backup-binding-s-jeff-cache
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -2257,26 +2293,6 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: observe-redis-auth-secret-s-jeff-cache
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: cache-redis-auth
-        namespace: s-jeff
-  managementPolicies:
-  - Observe
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
   name: observe-registry-auth-secret-s-jeff
   namespace: default
 spec:
@@ -2337,17 +2353,39 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-acl-secret-s-jeff-cache
+  name: observe-valkey-auth-secret-s-jeff-cache
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: cache-valkey-auth
+        namespace: s-jeff
+  managementPolicies:
+  - Observe
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: registry-auth-secret-s-jeff
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        user.acl: dXNlciBkZWZhdWx0IG9uID5EblRUVnIyaHFhYkw1eWUzMXlMZm5GRUh2Y3g2IH4qICtAYWxsCnVzZXIgYmFja3VwIG9uID5YSS1ySEFIUmVPbjBvWGVRUTFQVkNMak55RDhLbXdubiAtQGFsbCArcGluZyAraW5mbyArYmdzYXZlICtjbGllbnR8cGF1c2UgK2NsaWVudHx1bnBhdXNlCg==
+        http-secret: U0xxMVdaLWo2bUpxdkgxVFU5N3RWZWxLUThyQUpaQkc=
+        password: ZUExN3B0MlpGRHJIOTVicnFZa3g5YWRuWDZwXw==
+        user: cy1qZWZm
       kind: Secret
       metadata:
-        name: cache-redis-acl
+        name: registry-auth
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2360,18 +2398,68 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-auth-secret-s-jeff-cache
+  name: resourcequota-s-jeff-overall-storage
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: overall-storage
+        namespace: s-jeff
+      spec:
+        hard:
+          limits.cpu: '16'
+          limits.memory: 32Gi
+          requests.cpu: '4'
+          requests.memory: 8Gi
+          requests.storage: 100Gi
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: valkey-acl-secret-s-jeff-cache
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        password: RG5UVFZyMmhxYWJMNXllMzF5TGZuRkVIdmN4Ng==
+        user.acl: dXNlciBkZWZhdWx0IG9uID52UGx2YUtvZlJCZGhHbkVqX1ZmLV82NGtfMlUtIH4qICtAYWxsCnVzZXIgYmFja3VwIG9uID5VeU02TjhmNUJVMmk4ZjZ5VGlUT0tLQWJiU3JqWDVobSAtQGFsbCArcGluZyAraW5mbyArYmdzYXZlICtjbGllbnR8cGF1c2UgK2NsaWVudHx1bnBhdXNlCg==
+      kind: Secret
+      metadata:
+        name: cache-valkey-acl
+        namespace: s-jeff
+      type: Opaque
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    policy: SuccessfulCreate
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: valkey-auth-secret-s-jeff-cache
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      data:
+        password: dlBsdmFLb2ZSQmRoR25Fal9WZi1fNjRrXzJVLQ==
         user: ZGVmYXVsdA==
       kind: Secret
       metadata:
-        name: cache-redis-auth
+        name: cache-valkey-auth
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2384,7 +2472,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-account-s-jeff-cache
+  name: valkey-backup-account-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2393,7 +2481,7 @@ spec:
       automountServiceAccountToken: false
       kind: ServiceAccount
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
   providerConfigRef:
     kind: ProviderConfig
@@ -2405,18 +2493,18 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-auth-secret-s-jeff-cache
+  name: valkey-backup-auth-secret-s-jeff-cache
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        password: WEktckhBSFJlT24wb1hlUVExUFZDTGpOeUQ4S213bm4=
+        password: VXlNNk44ZjVCVTJpOGY2eVRpVE9LS0FiYlNyalg1aG0=
         user: YmFja3Vw
       kind: Secret
       metadata:
-        name: cache-redis-backup-auth
+        name: cache-valkey-backup-auth
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2429,7 +2517,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-binding-s-jeff-cache
+  name: valkey-backup-binding-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2437,15 +2525,15 @@ spec:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
       roleRef:
         apiGroup: rbac.authorization.k8s.io
         kind: Role
-        name: redis-cache-backup
+        name: valkey-cache-backup
       subjects:
       - kind: ServiceAccount
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
   providerConfigRef:
     kind: ProviderConfig
@@ -2457,7 +2545,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-class-binding-s-jeff-cache
+  name: valkey-backup-class-binding-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2465,14 +2553,14 @@ spec:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
-        name: s-jeff-redis-cache-backup-bd6ebf02a1
+        name: s-jeff-valkey-cache-backup-83a3fcf163
       roleRef:
         apiGroup: rbac.authorization.k8s.io
         kind: ClusterRole
         name: datalab-volume-snapshot-classes
       subjects:
       - kind: ServiceAccount
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
   providerConfigRef:
     kind: ProviderConfig
@@ -2484,7 +2572,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-class-s-jeff-cache
+  name: valkey-backup-class-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2506,7 +2594,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-cronjob-s-jeff-cache
+  name: valkey-backup-cronjob-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2514,7 +2602,7 @@ spec:
       apiVersion: batch/v1
       kind: CronJob
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
       spec:
         concurrencyPolicy: Forbid
@@ -2526,7 +2614,7 @@ spec:
             template:
               metadata:
                 labels:
-                  datalabs.versioneer.at/redis-backup: cache
+                  datalabs.versioneer.at/valkey-backup: cache
               spec:
                 automountServiceAccountToken: true
                 containers:
@@ -2539,7 +2627,7 @@ spec:
                   command:
                   - python
                   - -B
-                  - /opt/backup/redis-snapshot.py
+                  - /opt/backup/valkey-snapshot.py
                   image: python:3.13-alpine
                   name: backup
                   resources:
@@ -2556,7 +2644,7 @@ spec:
                       - ALL
                     readOnlyRootFilesystem: true
                   volumeMounts:
-                  - mountPath: /var/run/redis-backup
+                  - mountPath: /var/run/valkey-backup
                     name: password
                     readOnly: true
                   - mountPath: /opt/backup
@@ -2569,16 +2657,16 @@ spec:
                   runAsUser: 65532
                   seccompProfile:
                     type: RuntimeDefault
-                serviceAccountName: redis-cache-backup
+                serviceAccountName: valkey-cache-backup
                 volumes:
                 - name: password
                   secret:
                     items:
                     - key: password
                       path: password
-                    secretName: cache-redis-backup-auth
+                    secretName: cache-valkey-backup-auth
                 - configMap:
-                    name: redis-cache-backup
+                    name: valkey-cache-backup
                   name: script
         schedule: 0 1 * * *
         startingDeadlineSeconds: 3600
@@ -2595,7 +2683,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-network-s-jeff-cache
+  name: valkey-backup-network-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2603,7 +2691,7 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
       spec:
         egress:
@@ -2613,7 +2701,8 @@ spec:
           to:
           - podSelector:
               matchLabels:
-                app: cache
+                app.kubernetes.io/instance: cache
+                app.kubernetes.io/name: valkey
         - ports:
           - port: 443
             protocol: TCP
@@ -2634,7 +2723,7 @@ spec:
         ingress: []
         podSelector:
           matchLabels:
-            datalabs.versioneer.at/redis-backup: cache
+            datalabs.versioneer.at/valkey-backup: cache
         policyTypes:
         - Ingress
         - Egress
@@ -2648,7 +2737,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-role-s-jeff-cache
+  name: valkey-backup-role-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -2656,7 +2745,7 @@ spec:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
       rules:
       - apiGroups:
@@ -2695,17 +2784,17 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-backup-script-s-jeff-cache
+  name: valkey-backup-script-s-jeff-cache
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        redis-snapshot.py: |
+        valkey-snapshot.py: |
           #!/usr/bin/env python3
 
-          """Save Redis data and capture its PVC during a bounded write pause."""
+          """Save Valkey data and capture its PVC during a bounded write pause."""
 
           import argparse
           from contextlib import closing
@@ -2716,11 +2805,11 @@ spec:
           from urllib.parse import quote
 
           snapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))
-          LABEL = "datalabs.versioneer.at/redis"
-          VERIFIED = "datalabs.versioneer.at/redis-snapshot-verified"
+          LABEL = "datalabs.versioneer.at/valkey"
+          VERIFIED = "datalabs.versioneer.at/valkey-snapshot-verified"
 
 
-          class Redis:
+          class Valkey:
               def __init__(self, host, password):
                   self.socket = socket.create_connection((host, 6379), timeout=60)
                   self.stream = self.socket.makefile("rb")
@@ -2736,20 +2825,20 @@ spec:
                       b"$%d\r\n" % len(value) + value + b"\r\n" for value in values))
                   line = self.stream.readline()
                   if not line.endswith(b"\r\n"):
-                      raise RuntimeError("Redis closed the backup connection.")
+                      raise RuntimeError("Valkey closed the backup connection.")
                   kind, value = line[:1], line[1:-2]
                   if kind == b"+":
                       return value.decode()
                   if kind == b"$" and int(value) >= 0:
                       data = self.stream.read(int(value) + 2)
                       if len(data) != int(value) + 2 or not data.endswith(b"\r\n"):
-                          raise RuntimeError("Redis returned an incomplete response.")
+                          raise RuntimeError("Valkey returned an incomplete response.")
                       return data[:-2].decode()
                   # Server errors can contain command arguments; do not put them in Job logs.
-                  raise RuntimeError("Redis rejected the backup command.")
+                  raise RuntimeError("Valkey rejected the backup command.")
 
 
-          def capture(api, redis, namespace, store, claim, snapshot_class, retention, timeout=540):
+          def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):
               pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")
               pause_until = 0
               identity = {}
@@ -2763,45 +2852,45 @@ spec:
                   if (claims != {claim} or pod["metadata"].get("deletionTimestamp")
                           or not any(c["type"] == "Ready" and c["status"] == "True"
                                      for c in pod.get("status", {}).get("conditions", []))):
-                      raise RuntimeError("The Redis Pod must be ready and use the selected data PVC.")
+                      raise RuntimeError("The Valkey Pod must be ready and use the selected data PVC.")
                   return pod["metadata"]["uid"]
 
               def info(section):
-                  return dict(line.split(":", 1) for line in redis.command("INFO", section).splitlines()
+                  return dict(line.split(":", 1) for line in valkey.command("INFO", section).splitlines()
                               if ":" in line and not line.startswith("#"))
 
               def run_id():
                   fields = info("server")
                   if not fields.get("run_id"):
-                      raise RuntimeError("Redis did not report its server identity.")
+                      raise RuntimeError("Valkey did not report its server identity.")
                   return fields["run_id"]
 
               def prepare():
                   nonlocal pause_until
                   identity["pod"] = check_pod()
                   identity["server"] = run_id()
-                  # Redis also stops eviction and expiry during this pause. It expires after a killed Job.
+                  # Valkey also stops eviction and expiry during this pause. It expires after a killed Job.
                   pause_until = time.monotonic() + 660
-                  if redis.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":
-                      raise RuntimeError("Redis did not pause writes.")
-                  if redis.command("BGSAVE") != "Background saving started":
-                      raise RuntimeError("Redis did not start its RDB save.")
+                  if valkey.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":
+                      raise RuntimeError("Valkey did not pause writes.")
+                  if valkey.command("BGSAVE") != "Background saving started":
+                      raise RuntimeError("Valkey did not start its RDB save.")
                   save_deadline = time.monotonic() + 90
                   while True:
                       persistence = info("persistence")
                       if persistence.get("rdb_bgsave_in_progress") == "0":
                           if persistence.get("rdb_last_bgsave_status") != "ok":
-                              raise RuntimeError("Redis failed to save its RDB file.")
+                              raise RuntimeError("Valkey failed to save its RDB file.")
                           break
                       if time.monotonic() >= save_deadline:
-                          raise RuntimeError("Redis did not finish its RDB save before the deadline.")
+                          raise RuntimeError("Valkey did not finish its RDB save before the deadline.")
                       time.sleep(1)
                   validate()
 
               def validate():
                   if (check_pod() != identity["pod"] or run_id() != identity["server"]
                           or time.monotonic() >= pause_until):
-                      raise RuntimeError("The Redis server changed or its write pause expired during capture.")
+                      raise RuntimeError("The Valkey server changed or its write pause expired during capture.")
 
               try:
                   snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,
@@ -2809,7 +2898,7 @@ spec:
                                       verified_label=VERIFIED)
               finally:
                   if pause_until:
-                      redis.command("CLIENT", "UNPAUSE")
+                      valkey.command("CLIENT", "UNPAUSE")
 
 
           def main():
@@ -2820,9 +2909,9 @@ spec:
               args = parser.parse_args()
               if not 1 <= args.retention <= 100:
                   parser.error("retention must be from 1 to 100")
-              password = Path("/var/run/redis-backup/password").read_text()
-              with closing(Redis(args.store, password)) as redis:
-                  capture(snapshots["API"](), redis, args.namespace, args.store, args.claim,
+              password = Path("/var/run/valkey-backup/password").read_text()
+              with closing(Valkey(args.store, password)) as valkey:
+                  capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,
                           args.snapshot_class, args.retention)
 
 
@@ -2910,7 +2999,7 @@ spec:
                   prepare()
               created = api.call("POST", path, {
                   "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
-                  "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",
+                  "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",
                                "labels": {label: volume, SOURCE: uid}},
                   "spec": {"volumeSnapshotClassName": snapshot_class,
                            "source": {"persistentVolumeClaimName": claim}},
@@ -2978,7 +3067,7 @@ spec:
               main()
       kind: ConfigMap
       metadata:
-        name: redis-cache-backup
+        name: valkey-cache-backup
         namespace: s-jeff
   providerConfigRef:
     kind: ProviderConfig
@@ -2990,62 +3079,163 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-cache-s-jeff-cache
+  name: valkey-cache-s-jeff-cache
   namespace: default
 spec:
   forProvider:
     manifest:
-      apiVersion: redis.redis.opstreelabs.in/v1beta2
-      kind: Redis
+      apiVersion: apps/v1
+      kind: StatefulSet
       metadata:
-        annotations:
-          datalabs.versioneer.at/redis-acl-checksum: 5c1e2e3d2c440b3bc4c62a2ba5e313e0834cdc2b5d586f8a52f5da07b5ee69ae
         name: cache
         namespace: s-jeff
       spec:
-        acl:
-          secret:
-            secretName: cache-redis-acl
-        initContainer:
-          args:
-          - mkdir -p /data/appendonlydir && chmod 0777 /data /data/appendonlydir
-          command:
-          - sh
-          - -c
-          enabled: true
-          image: quay.io/opstree/redis:v7.2.17
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 0
-        kubernetesConfig:
-          image: quay.io/opstree/redis:v7.2.17
-          imagePullPolicy: IfNotPresent
-          redisSecret:
-            key: password
-            name: cache-redis-auth
-          updateStrategy: {}
-        storage:
-          volumeClaimTemplate:
-            metadata: {}
-            spec:
-              accessModes:
-              - ReadWriteOnce
+        replicas: 1
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: cache
+            app.kubernetes.io/name: valkey
+        serviceName: cache
+        template:
+          metadata:
+            annotations:
+              datalabs.versioneer.at/valkey-acl-checksum: 29b713768461030e66ba1bb6991fc8174a084fcffb51015839eabe5e9c97698d
+            labels:
+              app.kubernetes.io/instance: cache
+              app.kubernetes.io/name: valkey
+          spec:
+            automountServiceAccountToken: false
+            containers:
+            - args:
+              - valkey-server
+              - --bind
+              - 0.0.0.0
+              - --protected-mode
+              - 'yes'
+              - --dir
+              - /data
+              - --appendonly
+              - 'yes'
+              - --appendfsync
+              - everysec
+              - --save
+              - ''
+              - --aclfile
+              - /etc/valkey/user.acl
+              env:
+              - name: VALKEYCLI_AUTH
+                valueFrom:
+                  secretKeyRef:
+                    key: password
+                    name: cache-valkey-auth
+              image: valkey/valkey:9.2.0-alpine
+              livenessProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                failureThreshold: 6
+                periodSeconds: 10
+                timeoutSeconds: 3
+              name: valkey
+              ports:
+              - containerPort: 6379
+                name: valkey
+              readinessProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                periodSeconds: 5
+                timeoutSeconds: 3
               resources:
+                limits:
+                  cpu: '1'
+                  memory: 512Mi
                 requests:
-                  storage: 1Gi
-          volumeMount: {}
+                  cpu: 100m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              startupProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - test "$(valkey-cli -h 127.0.0.1 ping)" = PONG
+                failureThreshold: 120
+                periodSeconds: 5
+                timeoutSeconds: 3
+              volumeMounts:
+              - mountPath: /data
+                name: data
+              - mountPath: /etc/valkey
+                name: acl
+                readOnly: true
+            securityContext:
+              fsGroup: 1000
+              fsGroupChangePolicy: OnRootMismatch
+              runAsGroup: 1000
+              runAsNonRoot: true
+              runAsUser: 1000
+              seccompProfile:
+                type: RuntimeDefault
+            terminationGracePeriodSeconds: 60
+            volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: valkey-cache-data
+            - name: acl
+              secret:
+                secretName: cache-valkey-acl
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    celQuery: '!has(object.metadata.deletionTimestamp)'
+    celQuery: '!has(object.metadata.deletionTimestamp) && has(object.status) && has(object.status.observedGeneration)
+      && object.status.observedGeneration >= object.metadata.generation && has(object.status.readyReplicas) && object.status.readyReplicas
+      == 1 && has(object.status.currentRevision) && has(object.status.updateRevision) && object.status.currentRevision
+      == object.status.updateRevision'
     policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: redis-pod-s-jeff-cache
+  name: valkey-data-s-jeff-cache
+  namespace: default
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: valkey-cache-data
+        namespace: s-jeff
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+  providerConfigRef:
+    kind: ProviderConfig
+    name: provider-kubernetes
+  readiness:
+    celQuery: has(object.status) && has(object.status.phase) && object.status.phase == 'Bound'
+    policy: DeriveFromCelQuery
+  watch: true
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: valkey-pod-s-jeff-cache
   namespace: default
 spec:
   forProvider:
@@ -3069,48 +3259,24 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: registry-auth-secret-s-jeff
+  name: valkey-service-s-jeff-cache
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
-      data:
-        http-secret: U0xxMVdaLWo2bUpxdkgxVFU5N3RWZWxLUThyQUpaQkc=
-        password: ZUExN3B0MlpGRHJIOTVicnFZa3g5YWRuWDZwXw==
-        user: cy1qZWZm
-      kind: Secret
+      kind: Service
       metadata:
-        name: registry-auth
-        namespace: s-jeff
-      type: Opaque
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: resourcequota-s-jeff-overall-storage
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      kind: ResourceQuota
-      metadata:
-        name: overall-storage
+        name: cache
         namespace: s-jeff
       spec:
-        hard:
-          limits.cpu: '16'
-          limits.memory: 32Gi
-          requests.cpu: '4'
-          requests.memory: 8Gi
-          requests.storage: 100Gi
+        ports:
+        - name: valkey
+          port: 6379
+          targetPort: valkey
+        selector:
+          app.kubernetes.io/instance: cache
+          app.kubernetes.io/name: valkey
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes

@@ -76,7 +76,7 @@ def main():
         sources = kube("get", "objects.kubernetes.m.crossplane.io", "--namespace", args.namespace,
                        "--selector", "crossplane.io/composite=" + args.datalab, "-o", "json")["items"]
         connections = [c for c in xr["status"].get("connections", [])
-                       if c["type"] in ("postgres", "redis", "custom")]
+                       if c["type"] in ("postgres", "valkey", "custom")]
         assert connections and all(c["ready"] for c in connections), "Service publication is not ready"
         for connection in connections:
             kind, name, ref = connection["type"], connection["name"], connection["secretRef"]
@@ -87,9 +87,9 @@ def main():
                 "uid": xr["metadata"]["uid"], "controller": True, "blockOwnerDeletion": True,
             }]
             source_name = {"postgres": f"{name}-superuser",
-                           "redis": f"{name}-redis-auth", "custom": name}[kind]
+                           "valkey": f"{name}-valkey-auth", "custom": name}[kind]
             prefix = {"postgres": "observe-database-secret-",
-                      "redis": "observe-redis-auth-secret-", "custom": "observe-custom-secret-"}[kind]
+                      "valkey": "observe-valkey-auth-secret-", "custom": "observe-custom-secret-"}[kind]
             matches = [o["spec"]["forProvider"]["manifest"]["metadata"] for o in sources
                        if o["metadata"].get("labels", {}).get("crossplane.io/composite") == args.datalab
                        and o["metadata"].get("annotations", {}).get("crossplane.io/composition-resource-name", "").startswith(prefix)
@@ -113,7 +113,7 @@ def main():
                 names = xr["spec"]["stores"][name].get("names") or ["default"]
                 assert connection["names"] == names
                 data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
-                if kind == "redis":
+                if kind == "valkey":
                     data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
             assert secret.get("data") == data, "Published credentials differ from the current source"
             if matches[0]["namespace"] != args.namespace:

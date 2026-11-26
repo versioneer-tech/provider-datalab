@@ -15,6 +15,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DUMPER = runpy.run_path(str(ROOT / "scripts/build-composition.py"))["Dumper"]
+LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+INPUT_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 
 
 def arguments():
@@ -25,7 +27,7 @@ def arguments():
 
 
 def load(path):
-    return yaml.safe_load(Path(path).read_text())
+    return yaml.load(Path(path).read_text(), Loader=LOADER)
 
 
 def environment():
@@ -50,7 +52,7 @@ def environment():
 def requirements(environment, observed):
     def documents(value):
         if isinstance(value, (str, Path)):
-            return list(yaml.safe_load_all(Path(value).read_text()))
+            return list(yaml.load_all(Path(value).read_text(), Loader=LOADER))
         return value if isinstance(value, list) else [value]
 
     required = deepcopy(documents(environment))
@@ -80,7 +82,7 @@ def render(args, environment, source="examples/base/001-lab.yaml",
                 paths.append(str(value))
             else:
                 path = work / f"{name}.yaml"
-                path.write_text(yaml.safe_dump_all(value if isinstance(value, list) else [value]))
+                path.write_text(yaml.dump_all(value if isinstance(value, list) else [value], Dumper=INPUT_DUMPER))
                 paths.append(str(path))
         result = subprocess.run(
             ["crossplane", "render", paths[0], "composition.yaml", args.functions,
@@ -94,7 +96,7 @@ def render(args, environment, source="examples/base/001-lab.yaml",
         return {}
     assert result.returncode == 0, result.stderr
     resources = {}
-    for item in yaml.safe_load_all(result.stdout):
+    for item in yaml.load_all(result.stdout, Loader=LOADER):
         if item["kind"] == "Datalab":
             if include_composite:
                 resources["composite"] = item
@@ -110,7 +112,7 @@ def manifest(resources, name):
 
 
 def snapshot(path):
-    resources = list(yaml.safe_load_all(Path(path).read_text()))
+    resources = list(yaml.load_all(Path(path).read_text(), Loader=LOADER))
     for item in resources:
         if item["kind"] == "Datalab":
             # Resource references repeat the composed resources below.

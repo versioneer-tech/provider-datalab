@@ -399,6 +399,7 @@ DATALAB
     sleep 5
   done
   wait_for_connection_secret verify-vcluster-postgres-pg0 verify-vcluster 600 password host
+  verify_workload_probes "${runtime_namespace}"
   connection_secret() {
     kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -er --arg instance "$1" --arg group "$2" \
       '.status.connections[] | select(.type == "vcluster" and .instance == $instance and .group == $group) | .secretRef.name'
@@ -527,7 +528,7 @@ print('PASS Kubernetes admission accepts implicit admin profiles and rejects a r
 for field in ('vclusters', 'stores'):
     for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
         value = deepcopy(source)
-        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'redis', 'storage': '1Gi'}
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'valkey', 'storage': '1Gi'}
         value['spec'][field] = {key: config}
         result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
         assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr

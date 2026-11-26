@@ -1,0 +1,64 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __STORE_NAMESPACE__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: restore
+    image: __CLIENT_IMAGE__
+    command: [/bin/sh, -ec]
+    args:
+    - |
+      valkey-check-rdb /data/dump.rdb
+      # Load the saved RDB file, then build a new AOF from the recovered data.
+      rm -rf /data/appendonlydir
+      valkey-server --bind 127.0.0.1 --dir /data --appendonly no --save '' \
+        --daemonize yes --logfile /tmp/valkey.log --pidfile /tmp/valkey.pid
+      trap 'valkey-cli shutdown nosave' EXIT
+      for attempt in $(seq 1 30); do
+        if valkey-cli ping >/dev/null 2>&1; then break; fi
+        sleep 1
+      done
+      test "$(valkey-cli --raw GET '__KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__'
+      test "$(valkey-cli --raw GET '__OTHER_KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__-other'
+      valkey-cli SET recovered-only independent
+      valkey-cli CONFIG SET appendonly yes
+      for attempt in $(seq 1 60); do
+        if valkey-cli INFO persistence | tr -d '\r' | grep -qx 'aof_rewrite_in_progress:0'; then break; fi
+        sleep 1
+      done
+      valkey-cli INFO persistence | tr -d '\r' | grep -qx 'aof_rewrite_in_progress:0'
+      valkey-cli shutdown
+      valkey-server --bind 127.0.0.1 --dir /data --appendonly yes --save '' \
+        --daemonize yes --logfile /tmp/valkey.log --pidfile /tmp/valkey.pid
+      for attempt in $(seq 1 30); do
+        if valkey-cli ping >/dev/null 2>&1; then break; fi
+        sleep 1
+      done
+      test "$(valkey-cli --raw GET recovered-only)" = independent
+      test "$(valkey-cli --raw GET '__KEY_PREFIX__provider-datalab:verify')" = '__PROBE_VALUE__'
+      printf 'PASS Valkey CSI recovery loads both logical stores and persists independent writes after an AOF restart\n'
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: test-valkey-recovery

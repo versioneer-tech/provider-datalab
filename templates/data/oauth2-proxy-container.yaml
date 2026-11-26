@@ -29,6 +29,12 @@ readinessProbe:
     path: /ready
     port: auth-proxy
   periodSeconds: 10
+startupProbe:
+  httpGet:
+    path: /ping
+    port: auth-proxy
+  periodSeconds: 5
+  failureThreshold: 60
 livenessProbe:
   httpGet:
     path: /ping

@@ -23,7 +23,7 @@ spec:
       storage: 1Gi
       backups: true
     cache:
-      type: redis
+      type: valkey
       names: [prod]
       storage: 1Gi
       backups: true

@@ -59,34 +59,40 @@ before giving applications database credentials.
 See [Additional services](additional_services.md#postgresql-with-psql) for a
 psql example.
 
-## Redis
+## Valkey
 
-Use the same `stores` map for Redis:
+Use the same `stores` map for Valkey:
 
 ```yaml
 spec:
   stores:
     cache:
-      type: redis
+      type: valkey
       names: [sessions, jobs]
       storage: 1Gi
       backups: true
 ```
 
 Each outer name identifies one service instance and its status connection.
+Use separate entries for independent Valkey instances; adding `names` only
+adds prefixes within the same instance.
 The service type cannot change for an existing instance.
 The `type` field uses the same value as `status.connections[].type`.
 `names` defaults to `[default]`. PostgreSQL uses database names.
-Redis uses key prefixes with a final colon: `sessions:` and `jobs:` in this
+Valkey uses key prefixes with a final colon: `sessions:` and `jobs:` in this
 example. Clients must add the selected prefix to each key. The names share
 instance credentials; prefixes do not restrict access.
 
-Each type needs its operator installed in the cluster. Read `url` from
-`<datalab>-redis-cache`.
+Valkey runs as one StatefulSet with persistent storage. Its AOF log is flushed
+every second. A crash can lose recent writes that have not reached durable storage.
+The data PVC is managed separately from the StatefulSet. Increase `storage`
+when its StorageClass supports volume expansion. Shrinking a PVC is not supported.
+Valkey needs no separate database operator. Read `url` from `<datalab>-valkey-cache`;
+its `redis://` scheme works with Redis-compatible clients.
 The connection Secrets contain host and credential fields, a JSON `names`
-array and, for Redis, a JSON `prefixes` map.
+array and, for Valkey, a JSON `prefixes` map.
 
-The composition watches the operator authentication Secrets and updates each
+The composition watches the authentication Secrets and updates each
 service connection separately. Clients must reload changed values. See
 [connections and Secret bindings](connections.md) for discovery and selected
 credential delivery into virtual namespaces.
@@ -100,7 +106,7 @@ The platform must meet the [cluster snapshot prerequisites](https://github.com/v
 | Resource | Capture | Default retention |
 | --- | --- | --- |
 | PostgreSQL | CloudNativePG cold snapshot. The single instance stops reads and writes during capture. | Four completed backups per cluster UID. |
-| Redis | Pause writes, wait for `BGSAVE`, then snapshot the data PVC. Writes pause for at most 11 minutes, including time to save and capture. | Four completed snapshots per data PVC UID. |
+| Valkey | Pause writes, wait for `BGSAVE`, then snapshot the data PVC. Writes pause for at most 11 minutes, including time to save and capture. | Four completed snapshots per data PVC UID. |
 | Named volume | Snapshot the bound PVC. The application must flush or pause writes when needed. | Two completed snapshots per PVC UID. |
 
 The default schedule is daily at 01:00 UTC. EnvironmentConfig sets each
@@ -110,10 +116,19 @@ ready and passes its consistency checks. These backups have no continuous WAL
 archive or point-in-time recovery.
 
 Set `backups: false` to remove the schedule and keep completed recovery points.
-Enabling or disabling Redis backups restarts its Pod to change the backup ACL.
+Enabling or disabling Valkey backups restarts its Pod to change the backup ACL.
 Namespace deletion can remove snapshots and their stored data. The platform
 must monitor failed Jobs and snapshot readiness, test restores, and arrange an
 independent recovery copy.
+
+### Store removal
+
+Removing a store entry removes its managed resources. For Valkey, this also
+deletes the data PVC. Removing only a PostgreSQL database name removes its
+managed declaration; it does not delete
+the SQL database or its tables. Valkey prefixes are client settings, so removing
+a prefix does not delete matching keys. Check that applications no longer use
+an entry before removing it.
 
 ### Restore a managed store
 
@@ -121,18 +136,18 @@ Ask the platform operator to restore into a separate service and check its data
 before use. PostgreSQL recovery uses the completed CNPG Backup and its snapshots.
 Keep the required Kubernetes metadata and credentials in a separate backup.
 
-For Redis, select a ready snapshot with label
-`datalabs.versioneer.at/redis-snapshot-verified: "true"`. The Job sets this label
+For Valkey, select a ready snapshot with label
+`datalabs.versioneer.at/valkey-snapshot-verified: "true"`. The Job sets this label
 after checking that the server stayed unchanged and writes stayed paused.
 An interrupted capture without this label is removed by the next run.
 Create a new PVC from that snapshot. Validate `/data/dump.rdb`
-with `redis-check-rdb`. Start an isolated Redis process with that PVC mounted at
-`/data`, `--dir /data`, and `--appendonly no` to load the saved RDB. Redis normally
+with `valkey-check-rdb`. Start an isolated Valkey process with that PVC mounted at
+`/data`, `--dir /data`, and `--appendonly no` to load the saved RDB. Valkey normally
 prefers AOF files, which can represent a different recovery boundary. On the
 restored PVC, remove the old `appendonlydir`, then use `CONFIG SET appendonly yes`
 to build a new AOF. Wait for the rewrite to finish and verify a restart with
 AOF enabled. Never change the source PVC during recovery. See
-[Redis persistence](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/).
+[Valkey persistence](https://valkey.io/topics/persistence/).
 
 For named volumes, see [volume recovery](volumes.md#restore-into-a-new-volume).
 
@@ -187,7 +202,7 @@ before you apply these manifests in your claim namespace.
 | Manifest | Environment | Use |
 | --- | --- | --- |
 | [Joe](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/001-lab.yaml) | `datalab` | Data and storage access. |
-| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL and Redis stores; Jim has the Datalab admin role. |
+| [Jeff, Jim, and Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/002-lab.yaml) | `datalab` | Shared PostgreSQL and Valkey stores; Jim has the Datalab admin role. |
 | [Jane](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/003-lab.yaml) | `datalab-custom` | A virtual cluster with service Secret bindings, a bound host volume, PostgreSQL, and the shared registry. |
 | [John](https://github.com/versioneer-tech/provider-datalab/blob/main/examples/base/004-lab.yaml) | `datalab-custom` | Read-only Data, custom connections, and namespace policy. |
 

@@ -60,7 +60,7 @@ def main():
                           "metadata": {"name": name, "namespace": "workspace"},
                           "spec": {"users": [], "volumes": {"analysis": {}},
                                    "vclusters": {"vc0": {"volumeBindings": [binding]}}}})
-    for service in ("postgres", "redis", "volume"):
+    for service in ("postgres", "valkey", "volume"):
         for index, value in enumerate((True, False, "true", 1, {})):
             name = f"test-{service}-backups-{index}"
             field = "volumes" if service == "volume" else "stores"
@@ -73,11 +73,11 @@ def main():
                               "spec": {"users": [], field: {"analysis": config}}})
     store_cases = [
         (True, {"type": "postgres", "storage": "1Gi"}, None),
-        (True, {"type": "redis", "storage": "1Gi", "names": ["sessions", "jobs"]}, None),
+        (True, {"type": "valkey", "storage": "1Gi", "names": ["sessions", "jobs"]}, None),
         (False, {"storage": "1Gi"}, "spec.stores.main.type"),
         (False, {"type": "unknown", "storage": "1Gi"}, "spec.stores.main.type"),
         (False, {"type": "postgres", "storage": "1Gi", "names": []}, "spec.stores.main.names"),
-        (True, {"type": "redis", "storage": "1Gi", "backups": True}, None),
+        (True, {"type": "valkey", "storage": "1Gi", "backups": True}, None),
     ]
     for index, (accepted, store, field) in enumerate(store_cases):
         name = f"test-store-contract-{index}"

@@ -4,16 +4,16 @@
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: ${auth_key}
+  name: ${acl_key}
   namespace: ${xr_namespace}
   annotations:
-    crossplane.io/composition-resource-name: ${auth_key}
+    crossplane.io/composition-resource-name: ${acl_key}
 spec:
   providerConfigRef:
     name: provider-kubernetes
     kind: ProviderConfig
   forProvider:
-    manifest: ${redis_auth_secret}
+    manifest: ${valkey_acl_secret}
   readiness:
     policy: SuccessfulCreate
   watch: true

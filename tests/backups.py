@@ -2,7 +2,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check snapshot enablement and Redis backup settings."""
+"""Check snapshot enablement and Valkey backup settings."""
 
 import base64
 from copy import deepcopy
@@ -36,36 +36,41 @@ def main():
                      if body.get("kind") == "Object"
                      and body["spec"]["forProvider"]["manifest"].get("kind") == "CronJob"]
         assert any(job["metadata"]["name"] == "postgres-snapshot-pg0" for job in schedules) == active
-        acl = base64.b64decode(manifest(resources, "redis-acl-secret-s-jeff-cache")["data"]["user.acl"]).decode()
+        acl = base64.b64decode(manifest(resources, "valkey-acl-secret-s-jeff-cache")["data"]["user.acl"]).decode()
         assert ("user backup " in acl) == active
-        assert ("redis-backup-cronjob-s-jeff-cache" in resources) == active
-        assert not any(body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "PersistentVolumeClaim"
-                       for body in resources.values())
+        assert ("valkey-backup-cronjob-s-jeff-cache" in resources) == active
+        claims = [body["spec"]["forProvider"]["manifest"]["metadata"]["name"] for body in resources.values()
+                  if body.get("spec", {}).get("forProvider", {}).get("manifest", {}).get("kind") == "PersistentVolumeClaim"]
+        assert claims == [manifest(resources, "valkey-data-s-jeff-cache")["metadata"]["name"]]
         if active:
             assert "-@all +ping +info +bgsave +client|pause +client|unpause" in acl
-            job = manifest(resources, "redis-backup-cronjob-s-jeff-cache")
+            job = manifest(resources, "valkey-backup-cronjob-s-jeff-cache")
             assert job["spec"]["suspend"] is True, "Wait for the data PVC before scheduling"
             pod = job["spec"]["jobTemplate"]["spec"]["template"]["spec"]
             assert not any("persistentVolumeClaim" in volume for volume in pod["volumes"])
-        print(f"PASS PostgreSQL and Redis backups={enabled}: CSI schedules need no backup PVC", flush=True)
+        print(f"PASS PostgreSQL and Valkey backups={enabled}: CSI schedules need no backup PVC", flush=True)
 
     observed = list(yaml.safe_load_all(Path("tests/observed/002-lab.yaml").read_text()))
     observed.append({"apiVersion": "kubernetes.m.crossplane.io/v1alpha1", "kind": "Object",
-                     "metadata": {"name": "redis-pod-s-jeff-cache",
-                                  "annotations": {"crossplane.io/composition-resource-name": "redis-pod-s-jeff-cache"}},
+                     "metadata": {"name": "valkey-pod-s-jeff-cache",
+                                  "annotations": {"crossplane.io/composition-resource-name": "valkey-pod-s-jeff-cache"}},
                      "status": {"atProvider": {"manifest": {
                          "apiVersion": "v1", "kind": "Pod", "metadata": {"name": "cache-0", "namespace": "s-jeff"},
                          "spec": {"volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "data-cache-0"}}],
                                   "containers": [{"volumeMounts": [{"name": "data", "mountPath": "/data"}]}]},
                      }}}})
     ready = render(args, environment, original, observed)
-    assert manifest(ready, "redis-backup-cronjob-s-jeff-cache")["spec"]["suspend"] is False
-    rules = manifest(ready, "redis-backup-role-s-jeff-cache")["rules"]
+    assert manifest(ready, "valkey-backup-cronjob-s-jeff-cache")["spec"]["suspend"] is False
+    policy = manifest(ready, "valkey-backup-network-s-jeff-cache")["spec"]
+    selector = policy["egress"][0]["to"][0]["podSelector"]["matchLabels"]
+    labels = manifest(ready, "valkey-cache-s-jeff-cache")["spec"]["template"]["metadata"]["labels"]
+    assert selector and all(labels.get(key) == value for key, value in selector.items())
+    rules = manifest(ready, "valkey-backup-role-s-jeff-cache")["rules"]
     assert rules[:2] == [
         {"apiGroups": [""], "resources": ["persistentvolumeclaims"], "resourceNames": ["data-cache-0"], "verbs": ["get"]},
         {"apiGroups": [""], "resources": ["pods"], "resourceNames": ["cache-0"], "verbs": ["get"]},
     ]
-    print("PASS Redis schedules use the observed data PVC and restrict Pod and PVC reads by name", flush=True)
+    print("PASS Valkey schedules use the observed data PVC and restrict Pod and PVC reads by name", flush=True)
 
     for value in (0, 101, True, 1.5, "2"):
         invalid = deepcopy(environment)
@@ -75,10 +80,10 @@ def main():
     invalid["data"].pop("volumes", None)
     invalid["data"]["database"].pop("snapshotClassName", None)
     invalid["data"]["cacheStore"].pop("snapshotClassName", None)
-    redis_only = deepcopy(original)
-    redis_only["spec"]["stores"]["pg0"]["backups"] = False
-    render(args, invalid, redis_only, "tests/observed/002-lab.yaml", error="Redis backups require")
-    print("PASS Redis rejects invalid retention and missing snapshot configuration", flush=True)
+    valkey_only = deepcopy(original)
+    valkey_only["spec"]["stores"]["pg0"]["backups"] = False
+    render(args, invalid, valkey_only, "tests/observed/002-lab.yaml", error="Valkey backups require")
+    print("PASS Valkey rejects invalid retention and missing snapshot configuration", flush=True)
 
 
 if __name__ == "__main__":

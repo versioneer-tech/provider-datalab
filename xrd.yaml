@@ -156,7 +156,7 @@ spec:
                           properties:
                             type:
                               type: string
-                              enum: [s3, postgres, redis, registry, custom]
+                              enum: [s3, postgres, valkey, registry, custom]
                               description: Datalab connection type.
                             name:
                               type: string
@@ -214,7 +214,7 @@ spec:
                   type: object
                   default: {}
                   maxProperties: 100
-                  description: Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Redis key prefixes.
+                  description: Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Valkey key prefixes.
                   x-kubernetes-validations:
                   - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
                     message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
@@ -225,7 +225,7 @@ spec:
                     properties:
                       type:
                         type: string
-                        enum: [postgres, redis]
+                        enum: [postgres, valkey]
                         description: Service type, also used in status.connections.
                         x-kubernetes-validations:
                         - rule: self == oldSelf
@@ -239,7 +239,7 @@ spec:
                         items:
                           type: string
                           minLength: 1
-                        description: PostgreSQL database names, or Redis key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Redis prefixes are not an access boundary.
+                        description: PostgreSQL database names, or Valkey key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Valkey prefixes are not an access boundary.
                       storage:
                         type: string
                         pattern: '^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?$'
@@ -247,7 +247,7 @@ spec:
                       backups:
                         type: boolean
                         default: false
-                        description: Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Redis pauses writes and saves an RDB file. There is no point-in-time recovery.
+                        description: Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Valkey pauses writes and saves an RDB file. There is no point-in-time recovery.
             status:
               type: object
               description: Current observed state of the datalab.
@@ -350,12 +350,12 @@ spec:
                         type: string
                       type:
                         type: string
-                        enum: [s3, postgres, redis, registry, custom, vcluster]
+                        enum: [s3, postgres, valkey, registry, custom, vcluster]
                       names:
                         type: array
                         items:
                           type: string
-                        description: Logical database names or Redis key prefixes for a managed store instance.
+                        description: Logical database names or Valkey key prefixes for a managed store instance.
                       instance:
                         type: string
                       group:

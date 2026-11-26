@@ -49,6 +49,7 @@ wait_for_postgres() {
     --for=condition=Ready --timeout=5m
   kube get cluster.postgresql.cnpg.io/pg1 --namespace "${POSTGRES_NAMESPACE}" -o json \
     | jq -e '(.spec | has("backup") | not)' >/dev/null
+  verify_workload_probes "${POSTGRES_NAMESPACE}"
   printf 'PASS PostgreSQL without backups is ready\n'
 }
 
@@ -123,7 +124,7 @@ main() {
   fi
   local type_check
   if type_check="$(kube patch datalabs.versioneer.at/verify-postgres --namespace workspace \
-    --dry-run=server --type=merge --patch '{"spec":{"stores":{"pg1":{"type":"redis"}}}}' 2>&1)"; then
+    --dry-run=server --type=merge --patch '{"spec":{"stores":{"pg1":{"type":"valkey"}}}}' 2>&1)"; then
     printf 'A store type change was accepted.\n' >&2
     exit 1
   fi

@@ -11,7 +11,7 @@ and decides who can use these resources. The host cluster must enforce network
 policies, admission rules, Pod security, and RBAC. Virtual clusters share its
 nodes and kernel.
 
-Registry and Redis passwords are derived from resource names and are
+Registry and Valkey passwords are derived from resource names and are
 predictable. Keep their endpoints within the approved team network boundary.
 
 | Control | Details |
@@ -49,7 +49,7 @@ only to authorized callers. The service account has `ws_api` by default.
 See [credential Secrets](docs/how-to-guides/authentication.md#credential-secrets-and-machine-access)
 for source and runtime copies.
 
-Managed store names share the credentials of their service instance. Redis key
+Managed store names share the credentials of their service instance. Valkey key
 prefixes organize data; they do not restrict access. Clients must add the prefix
 to their keys. Use separate service instances when applications need separate
 credentials and data volumes.
@@ -349,11 +349,11 @@ The host CNI must allow this traffic to the selected API endpoint. The Job uses
 its projected ServiceAccount token, with no external kubeconfig or source-volume
 mount.
 
-Redis snapshot Jobs use the same class role and namespaced snapshot permissions,
+Valkey snapshot Jobs use the same class role and namespaced snapshot permissions,
 plus permission to patch the verified label after consistency checks.
 Each Job can read its selected Pod and data PVC. Its mounted backup credential
 permits `PING`, `INFO`, `BGSAVE`, `CLIENT PAUSE`, and `CLIENT UNPAUSE`, with no key
 read or write commands. The Job pauses writes for at most 11 minutes, saves an
 RDB file, and captures the PVC. A server replacement or an expired pause rejects
 the capture. The Job releases writes on exit; the timeout also releases them
-after a killed Job. Redis network access includes TCP 6379 in the service namespace.
+after a killed Job. Valkey network access includes TCP 6379 in the service namespace.

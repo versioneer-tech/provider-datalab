@@ -344,6 +344,12 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsGroup: 65532
                 runAsUser: 65532
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /ping
+                  port: auth-proxy
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -744,7 +750,10 @@ spec:
             }
             server {
               listen 8080;
+              location = /_live { return 200; }
               location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }
+              location = /_auth/ping { proxy_pass http://127.0.0.1:4180/ping; }
+              location = /_auth/ready { proxy_pass http://127.0.0.1:4180/ready; }
               location / {
                 if ($tenant_valid = 0) { return 403; }
                 if ($http_x_amz_security_token = "") { return 403; }
@@ -800,7 +809,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.versioneer.at/gateway-config-checksum: f3dfa9dcc1780a24879ff2dac7d6dbbee902ccf12b03b76331a37fab7f2eb768
+              datalabs.versioneer.at/gateway-config-checksum: be43353aa844ae4b3d3d6537ecd582024f5a6e380614435e4d19d67073560b1f
               datalabs.versioneer.at/oauth2-cookie-checksum: 0a54310cd42983aaa9388e08066b195548cb42c3e474db950ec352c9c839a63f
               datalabs.versioneer.at/storage-secret-checksum: 800e67d2821909a1bf41c8ad32f56395b41288df4801433c909a164e56f863df
             labels:
@@ -842,6 +851,16 @@ spec:
                     name: s-jane-storage
               image: rclone/rclone:1.76.0
               imagePullPolicy: IfNotPresent
+              livenessProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - |
+                    response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                    case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                periodSeconds: 20
+                timeoutSeconds: 3
               name: s3
               readinessProbe:
                 exec:
@@ -870,6 +889,17 @@ spec:
                   drop:
                   - ALL
                 readOnlyRootFilesystem: true
+              startupProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - |
+                    response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                    case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                failureThreshold: 60
+                periodSeconds: 5
+                timeoutSeconds: 3
               volumeMounts:
               - mountPath: /cache
                 name: cache
@@ -926,7 +956,17 @@ spec:
               - --auth-logging=false
               image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
               imagePullPolicy: IfNotPresent
+              livenessProbe:
+                httpGet:
+                  path: /_auth/ping
+                  port: 8080
+                periodSeconds: 20
               name: oauth2-proxy
+              readinessProbe:
+                httpGet:
+                  path: /_auth/ready
+                  port: 8080
+                periodSeconds: 10
               resources:
                 limits:
                   cpu: 250m
@@ -942,6 +982,12 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsGroup: 65532
                 runAsUser: 65532
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /_auth/ping
+                  port: 8080
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -954,6 +1000,12 @@ spec:
               command:
               - nginx
               image: nginxinc/nginx-unprivileged:1.28-alpine
+              livenessProbe:
+                httpGet:
+                  path: /_live
+                  port: s3-gateway
+                periodSeconds: 20
+                timeoutSeconds: 3
               name: gateway
               ports:
               - containerPort: 8080
@@ -975,6 +1027,12 @@ spec:
                   drop:
                   - ALL
                 readOnlyRootFilesystem: true
+              startupProbe:
+                failureThreshold: 30
+                httpGet:
+                  path: /_live
+                  port: s3-gateway
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -6535,7 +6593,7 @@ spec:
                   prepare()
               created = api.call("POST", path, {
                   "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
-                  "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",
+                  "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",
                                "labels": {label: volume, SOURCE: uid}},
                   "spec": {"volumeSnapshotClassName": snapshot_class,
                            "source": {"persistentVolumeClaimName": claim}},

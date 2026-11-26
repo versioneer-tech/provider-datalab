@@ -130,7 +130,7 @@ check_test_namespaces() {
   local namespace marker
   [[ "${PROVIDER_DATALAB_CLUSTER}" == existing ]] || return 0
   for namespace in crossplane workspace minio keycloak projectcontour \
-    cnpg-system redis-operator; do
+    cnpg-system; do
     marker="$(kube get namespace "${namespace}" --ignore-not-found \
       -o 'jsonpath={.metadata.name}{" "}{.metadata.labels.datalabs\.versioneer\.at/integration}')"
     if [[ -n "${marker}" && "${marker}" != "${namespace} true" ]]; then
@@ -143,7 +143,7 @@ check_test_namespaces() {
 create_test_namespaces() {
   local namespace
   for namespace in crossplane workspace minio keycloak projectcontour \
-    cnpg-system redis-operator; do
+    cnpg-system; do
     kube create namespace "${namespace}" --dry-run=client -o yaml | kube apply -f -
     kube label namespace "${namespace}" datalabs.versioneer.at/integration=true --overwrite
   done
@@ -284,7 +284,6 @@ park_unused_operators() {
     fi
   done <<'OPERATORS'
 cnpg-system cnpg clusters.postgresql.cnpg.io
-redis-operator redis-operator redis.redis.redis.opstreelabs.in
 OPERATORS
 }
 
@@ -307,11 +306,11 @@ wait_for_crd_established() {
 selected_profile() {
   local value="${1:-}"
   case "${value}" in
-    verify-network|verify-data|verify-s3|verify-postgres|verify-redis|verify-registry|verify-volumes|verify-vcluster)
+    verify-network|verify-data|verify-s3|verify-postgres|verify-valkey|verify-registry|verify-volumes|verify-vcluster)
       printf '%s\n' "${value}"
       ;;
     *)
-      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-redis|verify-registry|verify-volumes|verify-vcluster>\n' "$2" >&2
+      printf 'Usage: %s <all|verify-network|verify-data|verify-s3|verify-postgres|verify-valkey|verify-registry|verify-volumes|verify-vcluster>\n' "$2" >&2
       exit 1
       ;;
   esac
@@ -342,6 +341,11 @@ wait_for_connection_secret() {
     fi
     sleep 2
   done
+}
+
+verify_workload_probes() {
+  python3 "${INTEGRATION_DIR}/verify-probes.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "$1"
 }
 
 wait_for_probe() {

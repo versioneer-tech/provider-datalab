@@ -81,7 +81,7 @@ def backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600
         prepare()
     created = api.call("POST", path, {
         "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",
-        "metadata": {"generateName": ("volume-" if label == LABEL else "redis-") + volume + "-",
+        "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",
                      "labels": {label: volume, SOURCE: uid}},
         "spec": {"volumeSnapshotClassName": snapshot_class,
                  "source": {"persistentVolumeClaimName": claim}},

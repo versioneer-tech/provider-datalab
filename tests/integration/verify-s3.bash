@@ -98,6 +98,8 @@ verify_s3() {
   kube rollout status deployment/package-r --namespace "${runtime_namespace}" --timeout=10m
   kube wait datalabs.versioneer.at/verify-s3 --namespace workspace --for=condition=Ready --timeout=10m
 
+  verify_workload_probes "${runtime_namespace}"
+
   gateway_service="$(kube get services --namespace projectcontour \
     --selector gateway.networking.k8s.io/gateway-name=verify-s3 -o json | \
     jq -er '[.items[] | select(any(.spec.ports[]; .port == 443)) | .metadata.name] |

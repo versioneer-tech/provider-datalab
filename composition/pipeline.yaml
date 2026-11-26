@@ -148,13 +148,13 @@ spec:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
       scriptFile: steps/update-postgres-objects.py
-  - step: update-redis-objects
+  - step: update-valkey-objects
     functionRef:
       name: crossplane-contrib-function-python
     input:
       apiVersion: python.fn.crossplane.io/v1beta1
       kind: Script
-      scriptFile: steps/update-redis-objects.py
+      scriptFile: steps/update-valkey-objects.py
   - step: publish-vcluster-connections
     functionRef:
       name: crossplane-contrib-function-python

@@ -103,7 +103,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecstoreskey">stores</a></b></td>
         <td>map[string]object</td>
         <td>
-          Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Redis key prefixes.<br/>
+          Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Valkey key prefixes.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
             <i>Default</i>: map[]<br/>
@@ -173,14 +173,14 @@ Desired configuration of the datalab.
           Service type, also used in status.connections.<br/>
           <br/>
             <i>Validations</i>:<li>self == oldSelf: Store type cannot change. Use a new instance name for another service type.</li>
-            <i>Enum</i>: postgres, redis<br/>
+            <i>Enum</i>: postgres, valkey<br/>
         </td>
         <td>true</td>
       </tr><tr>
         <td><b>backups</b></td>
         <td>boolean</td>
         <td>
-          Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Redis pauses writes and saves an RDB file. There is no point-in-time recovery.<br/>
+          Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Valkey pauses writes and saves an RDB file. There is no point-in-time recovery.<br/>
           <br/>
             <i>Default</i>: false<br/>
         </td>
@@ -189,7 +189,7 @@ Desired configuration of the datalab.
         <td><b>names</b></td>
         <td>[]string</td>
         <td>
-          PostgreSQL database names, or Redis key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Redis prefixes are not an access boundary.<br/>
+          PostgreSQL database names, or Valkey key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Valkey prefixes are not an access boundary.<br/>
           <br/>
             <i>Default</i>: [default]<br/>
         </td>
@@ -379,7 +379,7 @@ Virtual Kubernetes clusters keyed by instance name.
         <td>
           Datalab connection type.<br/>
           <br/>
-            <i>Enum</i>: s3, postgres, redis, registry, custom<br/>
+            <i>Enum</i>: s3, postgres, valkey, registry, custom<br/>
         </td>
         <td>true</td>
       </tr></tbody>
@@ -624,7 +624,7 @@ Current observed state of the datalab.
         <td>
           <br/>
           <br/>
-            <i>Enum</i>: s3, postgres, redis, registry, custom, vcluster<br/>
+            <i>Enum</i>: s3, postgres, valkey, registry, custom, vcluster<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -652,7 +652,7 @@ Current observed state of the datalab.
         <td><b>names</b></td>
         <td>[]string</td>
         <td>
-          Logical database names or Redis key prefixes for a managed store instance.<br/>
+          Logical database names or Valkey key prefixes for a managed store instance.<br/>
         </td>
         <td>false</td>
       </tr><tr>

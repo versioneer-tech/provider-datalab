@@ -50,10 +50,10 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: observe-redis-auth-secret-s-jeff-cache
+  name: observe-valkey-auth-secret-s-jeff-cache
   namespace: default
   annotations:
-    crossplane.io/composition-resource-name: observe-redis-auth-secret-s-jeff-cache
+    crossplane.io/composition-resource-name: observe-valkey-auth-secret-s-jeff-cache
 status:
   conditions:
     - type: Ready
@@ -63,7 +63,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: cache-redis-auth
+        name: cache-valkey-auth
         namespace: s-jeff
       data:
         user: ZGVmYXVsdA==

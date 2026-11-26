@@ -44,7 +44,7 @@ tests/integration/run.bash all \
 
 Add `--check` to check access and settings without installing resources. An
 existing cluster needs permission for CRDs, admission policies, and service
-account impersonation. The suite installs Crossplane and database operators.
+account impersonation. The suite installs Crossplane and CloudNativePG. Valkey uses a native StatefulSet.
 Existing prerequisite namespaces must have the label
 `datalabs.versioneer.at/integration=true`; otherwise setup stops before it
 changes them. Use namespaces and cluster-wide resources reserved for tests.
@@ -127,7 +127,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | S3 | `KEEP_S3_RESOURCES` |
 | Registry | `KEEP_REGISTRY_RESOURCES` |
 | PostgreSQL | `KEEP_POSTGRES_RESOURCES` |
-| Redis | `KEEP_STORE_RESOURCES` |
+| Valkey | `KEEP_VALKEY_RESOURCES` |
 | Volumes | `KEEP_VOLUME_RESOURCES` |
 | Virtual clusters | `KEEP_VCLUSTER_RESOURCES` |
 
@@ -140,13 +140,20 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
 | `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
 | `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL over TLS, named-user login, password rotation, logical-name retention, store type admission, PostGIS, cold snapshot recovery, retention, failure handling, and backup disable. `pg1` has no backups. |
-| `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Published key prefixes; CSI capture, failed backup preservation, retention, RDB recovery in a new PVC, AOF restart, and disable without loss of recovery points. |
+| `verify-valkey` | [Valkey](manifests/valkey/datalab.yaml) | Published key prefixes; data PVC expansion when its StorageClass allows it; CSI capture, failed backup preservation, retention, RDB recovery in a new PVC, AOF restart, and disable without loss of recovery points. |
 | `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
 | `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |
 
-Fixtures use profile-named Secrets and enable the services they test. Network
+Fixtures use profile-named Secrets and enable the services they test. Deployed
+providers, functions, and service containers must have readiness and liveness
+probes and become ready before their service checks run. Network
 and Data restore shared environment settings; S3 and vCluster set their own
 Gateway and identity settings.
+
+The probe gate does not cover the external Gateway controller. The pinned
+Contour setup has no probes on its provisioner or Envoy shutdown manager;
+Envoy has readiness only. Its `ContourDeployment` API has no fields to change
+those probes. Contour's own controller has readiness and liveness checks.
 
 ## Network and service checks
 
@@ -166,10 +173,10 @@ workload restart. It restores the Secret, resumes the client, and repeats the S3
 is unchanged.
 
 Database probes run in `workspace`, where connection Secrets are published.
-The test policies allow labeled service probes on PostgreSQL and Redis
+The test policies allow labeled service probes on PostgreSQL and Valkey
 ports and block other outside clients. Operators and CRDs use the documented versions. PostgreSQL uses the
 [cluster prerequisites](../../README.md#cluster-prerequisites), including its
-snapshot controller, CSI driver, matching classes, and access permissions. Redis
+snapshot controller, CSI driver, matching classes, and access permissions. Valkey
 and named volume snapshots need the same infrastructure.
 
 ## Volume checks
@@ -239,9 +246,10 @@ other cluster and PostgreSQL available.
 
 ## Test resource budget
 
-A full run shares one selected cluster. Unused database operators are scaled to zero.
-Each store profile starts its operator and waits for readiness. Cleanup waits for
-resource deletion before stopping the operator; failures leave it running.
+A full run shares one selected cluster. PostgreSQL checks start CloudNativePG
+and wait for its readiness. After successful cleanup, the suite scales it to
+zero if no PostgreSQL clusters remain. Failed profiles keep their resources.
+Valkey needs no operator installation or controller Pod.
 Crossplane, providers, storage, and identity services stay available.
 
 The runner reports durations and CPU requests. Use
@@ -257,7 +265,7 @@ apply. See [build settings](../../templates/README.md).
 
 The [workflow](../../.github/workflows/pr.yaml) uses the
 [shared check selection](../README.md#select-checks). Runtime changes and manual
-runs execute the full unit suite and all nine profiles in one Kind cluster.
+runs execute the full unit suite and all eight profiles in one Kind cluster.
 Draft pull requests run the unit suite but defer Kubernetes integration;
 marking the pull request ready enables it. Documentation-only changes run
 documentation and static checks. The final required check waits for every

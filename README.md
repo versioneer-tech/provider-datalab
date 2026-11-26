@@ -24,7 +24,7 @@ Complete manifests are in [examples/base](examples/base).
 ## Managed stores
 
 Declare managed services in `spec.stores`. Each entry provisions one instance;
-`names` selects its logical databases or Redis key prefixes. It defaults to
+`names` selects its logical databases or Valkey key prefixes. It defaults to
 `[default]`. The entry name and type match `status.connections`.
 
 ```yaml
@@ -37,15 +37,19 @@ spec:
       backups: true
       names: [analytics, catalog]
     cache:
-      type: redis
+      type: valkey
       storage: 1Gi
       backups: true
       names: [sessions, jobs]
 ```
 
-The example creates one PostgreSQL service and one Redis service. Redis clients
-must add `sessions:` or `jobs:` to their keys. Names share instance credentials;
-prefixes do not restrict access. PostgreSQL, Redis, and named volumes use `backups: true` for CSI snapshots.
+The example creates one PostgreSQL instance with two databases and one Valkey
+instance. Valkey runs as a StatefulSet with AOF persistence; no separate store
+operator is needed. Its clients use the `redis://` URL scheme and add `sessions:`
+or `jobs:` to their keys. Names share instance credentials. Prefixes are a
+client convention and do not restrict access.
+
+PostgreSQL, Valkey, and named volumes use `backups: true` for CSI snapshots.
 Backups default to disabled and need no backup-volume size.
 See [usage concepts](docs/how-to-guides/usage_concepts.md) and
 [connections](docs/how-to-guides/connections.md).
@@ -70,7 +74,7 @@ Use Kubernetes `1.36` for the complete Datalab feature set and the supported
 CloudNativePG range. CloudNativePG `1.30` also tests Kubernetes `1.37`, but does
 not list it as supported. See its [support table](https://cloudnative-pg.io/docs/1.30/supported_releases/).
 
-Named Datalab volumes, PostgreSQL, and Redis with `backups: true` require all of these
+Named Datalab volumes, PostgreSQL, and Valkey with `backups: true` require all of these
 cluster capabilities:
 
 - The `snapshot.storage.k8s.io/v1` CRDs: `VolumeSnapshot`,
@@ -90,7 +94,7 @@ For shared-node vCluster, enable `sync.toHost.volumeSnapshots`,
 with the required syncer RBAC. CRDs and classes alone do not forward snapshot
 requests. See [vCluster volume snapshots](https://www.vcluster.com/docs/vcluster/configure/sync/to-host/storage/volume-snapshots).
 
-Set the PostgreSQL storage and backup defaults in the EnvironmentConfig:
+Set store storage and backup defaults in the EnvironmentConfig:
 
 ```yaml
 data:
@@ -107,10 +111,10 @@ data:
 ```
 
 The schedule uses UTC. `maxSnapshots` accepts 1 through 100 completed backups
-per PostgreSQL cluster UID or Redis data PVC UID. Both snapshot classes default
+per PostgreSQL cluster UID or Valkey data PVC UID. Both snapshot classes default
 to `data.volumes.snapshotClassName` when their service setting is absent.
-PostgreSQL pauses the instance during capture. Redis pauses writes for at most
-11 minutes and saves an RDB file before capture. Restore Redis from that RDB
+PostgreSQL pauses the instance during capture. Valkey pauses writes for at most
+11 minutes and saves an RDB file before capture. Restore Valkey from that RDB
 file, then enable AOF persistence. See [backups](docs/how-to-guides/usage_concepts.md#backups).
 
 CloudNativePG coordinates cold snapshots. The single database instance is
@@ -121,6 +125,40 @@ Monitor failed or stalled backups. A stalled CSI snapshot can keep the primary
 paused until the storage fault is resolved.
 Back up Kubernetes metadata and credentials separately, and verify recovery
 with the installed CSI driver. See [backup behavior](docs/how-to-guides/usage_concepts.md#backups).
+
+## Health checks
+
+Kubernetes uses startup probes to allow initialization, readiness probes to
+remove unavailable Pods from Service endpoints, and liveness probes to restart
+an unresponsive process.
+
+| Component | Readiness | Liveness and startup |
+| --- | --- | --- |
+| Data (`package-r`) | HTTP `/health` | HTTP `/health` |
+| Data OAuth proxy | HTTP `/ready` | HTTP `/ping` |
+| S3 gateway | Gateway forwards `/_ready` to its OAuth proxy | Local `/_live` response |
+| S3 OAuth proxy | Gateway forwards `/_auth/ready` to loopback port 4180 | Gateway forwards `/_auth/ping` |
+| S3 rclone | Authenticated S3 listing through its local listener | Local unsigned HTTP request must return `403 Forbidden` |
+| Registry | `/debug/health` on private port 5001, including the storage driver | TCP port 5000 for liveness; `/debug/health` for startup |
+| Valkey | Authenticated local `PING` | Authenticated local `PING`; startup allows ten minutes for data replay |
+| Virtual cluster | HTTPS `/readyz` | HTTPS `/healthz` for liveness; `/readyz` for startup |
+| PostgreSQL | CloudNativePG instance manager `/readyz` | CloudNativePG instance manager `/healthz` and `/startupz` |
+| Crossplane core | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
+| Crossplane RBAC manager | HTTP `/metrics` on port 8080 | Same local HTTP listener; this manager has no health endpoint |
+| Kubernetes provider | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
+| Keycloak provider | HTTP `/metrics` on port 8080 | Same local HTTP listener; this provider has no health endpoint |
+| Composition functions | TCP on TLS port 9443 | Same listener; native Kubernetes gRPC probes do not support TLS |
+
+Registry liveness checks the local listener, so an object-storage outage makes
+the Pod unready without causing repeated restarts. Its health port is absent
+from the Service and public routes. The rclone liveness request uses its
+loopback listener and stops at local authentication, before object-storage access.
+
+CloudNativePG and vCluster supply probes for their managed components. The
+Crossplane Helm post-renderer adds probes to the core and RBAC manager; it needs
+Python with PyYAML. The provider runtime configs set probes for providers and functions. Backup,
+cleanup, and initialization tasks exit when complete; Jobs use deadlines and
+completion status instead of liveness probes.
 
 ## Development
 

@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check Redis snapshot consistency and bounded failure handling."""
+"""Check Valkey snapshot consistency and bounded failure handling."""
 
 from contextlib import redirect_stdout
 from copy import deepcopy
@@ -13,9 +13,9 @@ from unittest.mock import patch
 from helpers import ROOT
 
 
-class RedisSnapshotTests(unittest.TestCase):
+class ValkeySnapshotTests(unittest.TestCase):
     def capture(self, fault=None, abandoned=False):
-        module = runpy.run_path(str(ROOT / "scripts/redis-snapshot.py"))
+        module = runpy.run_path(str(ROOT / "scripts/valkey-snapshot.py"))
         source = module["snapshots"]["SOURCE"]
         clock = [0]
         paused = [False]
@@ -31,7 +31,7 @@ class RedisSnapshotTests(unittest.TestCase):
             points["abandoned"]["metadata"].update(name="abandoned", uid="abandoned")
             del points["abandoned"]["metadata"]["labels"][module["VERIFIED"]]
 
-        class Redis:
+        class Valkey:
             def command(self, *args):
                 commands.append(args)
                 if args == ("INFO", "server"):
@@ -89,10 +89,10 @@ class RedisSnapshotTests(unittest.TestCase):
         failure = None
         with patch("time.monotonic", side_effect=lambda: clock[0]), redirect_stdout(StringIO()):
             try:
-                module["capture"](API(), Redis(), "lab", "cache", "data", "snapshots", 1)
+                module["capture"](API(), Valkey(), "lab", "cache", "data", "snapshots", 1)
             except RuntimeError as error:
                 failure = error
-        self.assertFalse(paused[0], "Every error path must release the Redis write pause")
+        self.assertFalse(paused[0], "Every error path must release the Valkey write pause")
         return points, calls, commands, failure
 
     def test_successful_capture_releases_writes_and_applies_retention(self):
@@ -101,7 +101,7 @@ class RedisSnapshotTests(unittest.TestCase):
         self.assertEqual(set(points), {"new"})
         self.assertIn(("CLIENT", "PAUSE", 660000, "WRITE"), commands)
         self.assertEqual(commands[-1], ("CLIENT", "UNPAUSE"))
-        self.assertEqual(points["new"]["metadata"]["labels"]["datalabs.versioneer.at/redis-snapshot-verified"], "true")
+        self.assertEqual(points["new"]["metadata"]["labels"]["datalabs.versioneer.at/valkey-snapshot-verified"], "true")
 
     def test_save_or_restart_failure_does_not_create_a_snapshot(self):
         for fault in ("save", "disk", "restart"):

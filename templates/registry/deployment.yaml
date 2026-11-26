@@ -93,12 +93,15 @@ spec:
           httpGet: {path: /debug/health, port: health}
           periodSeconds: 5
           failureThreshold: 30
+          timeoutSeconds: 3
         readinessProbe:
           httpGet: {path: /debug/health, port: health}
           periodSeconds: 10
+          timeoutSeconds: 3
         livenessProbe:
           tcpSocket: {port: registry}
           periodSeconds: 20
+          timeoutSeconds: 3
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
