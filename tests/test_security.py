@@ -120,12 +120,17 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         self.finding = {"VulnerabilityID": "CVE-2026-1000", "PkgName": "test-package", "InstalledVersion": "1.0",
                         "PkgIdentifier": {"PURL": "pkg:generic/test-package@1.0"}, "Target": "/usr/bin/test-service",
                         "Severity": "CRITICAL"}
-        self.entry = {"image": self.reference, "owner": "Test maintainer", "reason": "Temporary acceptance",
-                      "mitigation": "Exposure assessment pending", "tracking": "SECURITY.md",
-                      "accepted_on": "2026-11-26", "expires_on": "2026-12-26", "findings": [self.finding]}
+        self.review = {"owner": "Test maintainer", "reason": "Temporary acceptance",
+                       "mitigation": "Use synthetic data in an isolated test environment", "tracking": "SECURITY.md",
+                       "accepted_on": "2026-11-26", "expires_on": "2026-12-26"}
+        self.package = {"name": self.finding["PkgName"], "version": self.finding["InstalledVersion"],
+                        "purl": self.finding["PkgIdentifier"]["PURL"], "target": self.finding["Target"],
+                        "advisories": {"CRITICAL": [self.finding["VulnerabilityID"]]}}
+        self.entry = {"image": self.reference, "packages": [self.package]}
 
-    def load(self, entries=None):
-        self.path.write_text(json.dumps({"schema": 1, "exceptions": entries if entries is not None else [self.entry]}))
+    def load(self, entries=None, **review):
+        self.path.write_text(json.dumps({"schema": 2, **self.review, **review,
+                                        "exceptions": entries if entries is not None else [self.entry]}))
         return SECURITY["load_vulnerability_exceptions"](self.path)
 
     def assess(self, finding=None, reference=None, today=date(2026, 11, 26)):
@@ -139,11 +144,14 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         for severity in ("CRITICAL", "HIGH"):
             with self.subTest(severity=severity):
                 self.finding.update(Severity=severity, FixedVersion="2.0")
+                self.package["advisories"] = {severity: [self.finding["VulnerabilityID"], "CVE-2026-3000"]}
                 result = self.assess()
                 self.assertEqual(result["blocking"], [])
                 self.assertEqual(result["accepted"][0]["VulnerabilityID"], self.finding["VulnerabilityID"])
                 self.assertEqual(result["accepted"][0]["exception"]["owner"], "Test maintainer")
                 self.assertEqual(result["accepted"][0]["exception"]["expires_on"], "2026-12-26")
+                grouped = self.assess({**self.finding, "VulnerabilityID": "CVE-2026-3000"})
+                self.assertEqual(len(grouped["accepted"]), 1)
 
     def test_new_or_changed_finding_and_image_still_block(self):
         changes = {"VulnerabilityID": "CVE-2026-2000", "PkgName": "other-package", "InstalledVersion": "1.1",
@@ -167,14 +175,19 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         self.assertEqual(len(expired["expired_exceptions"]), 1)
 
     def test_invalid_or_duplicate_policy_fails(self):
-        for field, value in (("owner", ""), ("image", "example.com/test/image:1.0"),
-                             ("expires_on", "2026-11-25"), ("findings", []), ("accepted_on", "invalid")):
+        for field, value in (("owner", ""), ("expires_on", "2026-11-25"), ("accepted_on", "invalid")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.load(**{field: value})
+        for field, value in (("image", "example.com/test/image:1.0"), ("packages", [])):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.load([{**self.entry, field: value}])
         missing_identity = deepcopy(self.entry)
-        missing_identity["findings"][0].pop("PkgIdentifier")
+        missing_identity["packages"][0].pop("purl")
         with self.assertRaises(ValueError):
             self.load([missing_identity])
+        for advisories in ({"LOW": ["CVE-2026-1000"]}, {"CRITICAL": []}, {}):
+            with self.subTest(advisories=advisories), self.assertRaises(ValueError):
+                self.load([{**self.entry, "packages": [{**self.package, "advisories": advisories}]}])
         with self.assertRaises(ValueError):
             self.load([self.entry, self.entry])
 

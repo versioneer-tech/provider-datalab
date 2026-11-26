@@ -268,34 +268,40 @@ def exception_key(reference, finding):
 
 def load_vulnerability_exceptions(path=None):
     policy = json.loads((path or VULNERABILITY_EXCEPTIONS).read_text())
-    if not isinstance(policy, dict) or policy.get("schema") != 1 or not isinstance(policy.get("exceptions"), list):
+    if not isinstance(policy, dict) or policy.get("schema") != 2 or not isinstance(policy.get("exceptions"), list):
         raise ValueError("Invalid vulnerability exception policy")
+    fields = ("owner", "reason", "mitigation", "tracking", "accepted_on", "expires_on")
+    if any(not isinstance(policy.get(key), str) or not policy[key].strip() for key in fields):
+        raise ValueError("Incomplete vulnerability exception assessment")
+    start, end = date.fromisoformat(policy["accepted_on"]), date.fromisoformat(policy["expires_on"])
+    if start >= end:
+        raise ValueError("Invalid vulnerability exception review period")
     exceptions = {}
     for entry in policy["exceptions"]:
-        fields = ("image", "owner", "reason", "mitigation", "tracking", "accepted_on", "expires_on")
-        if not isinstance(entry, dict) or any(not isinstance(entry.get(key), str) or not entry[key].strip() for key in fields):
-            raise ValueError("Incomplete vulnerability exception assessment")
-        if not re.fullmatch(r"[^@\s]+@sha256:[0-9a-f]{64}", entry["image"]):
+        if not isinstance(entry, dict) or not isinstance(entry.get("image"), str) or not re.fullmatch(
+                r"[^@\s]+@sha256:[0-9a-f]{64}", entry["image"]):
             raise ValueError("Vulnerability exceptions require an immutable image")
-        start, end = date.fromisoformat(entry["accepted_on"]), date.fromisoformat(entry["expires_on"])
-        if start >= end:
-            raise ValueError("Invalid vulnerability exception review period")
-        findings = entry.get("findings")
-        if not isinstance(findings, list) or not findings:
-            raise ValueError("Missing vulnerability exception findings")
-        assessment = {key: entry[key] for key in fields}
-        for finding in findings:
-            keys = ("VulnerabilityID", "PkgName", "InstalledVersion", "Target", "Severity")
-            if (not isinstance(finding, dict) or
-                    any(not isinstance(finding.get(key), str) or not finding[key].strip() for key in keys) or
-                    not isinstance(finding.get("PkgIdentifier"), dict) or
-                    not isinstance(finding["PkgIdentifier"].get("PURL"), str) or not finding["PkgIdentifier"]["PURL"].strip() or
-                    finding["Severity"] not in {"CRITICAL", "HIGH"}):
+        packages = entry.get("packages")
+        if not isinstance(packages, list) or not packages:
+            raise ValueError("Missing vulnerability exception packages")
+        assessment = {"image": entry["image"], **{key: policy[key] for key in fields}}
+        for package in packages:
+            if not isinstance(package, dict) or any(not isinstance(package.get(key), str) or not package[key].strip()
+                                                    for key in ("name", "version", "purl", "target")):
                 raise ValueError("Incomplete vulnerability exception identity")
-            key = exception_key(entry["image"], finding)
-            if key in exceptions:
-                raise ValueError("Duplicate vulnerability exception")
-            exceptions[key] = assessment
+            advisories = package.get("advisories")
+            if not isinstance(advisories, dict) or not advisories or not advisories.keys() <= {"CRITICAL", "HIGH"}:
+                raise ValueError("Invalid vulnerability exception severity")
+            for severity, identifiers in advisories.items():
+                if not isinstance(identifiers, list) or not identifiers or any(
+                        not isinstance(identifier, str) or not identifier.strip() for identifier in identifiers):
+                    raise ValueError("Missing vulnerability exception advisories")
+                for identifier in identifiers:
+                    key = (entry["image"], identifier, package["name"], package["version"],
+                           package["purl"], package["target"], severity)
+                    if key in exceptions:
+                        raise ValueError("Duplicate vulnerability exception")
+                    exceptions[key] = assessment
     return exceptions
 
 
@@ -356,6 +362,31 @@ def assess(report, image=False):
     return {"packages": len(packages), "blocking": blocking, "unfixed_high": deferred}
 
 
+def write_scan_summary(reports, summary):
+    scopes = summary["scopes"]
+    labels = {f"external-{index:02d}": (item["declared"].split("@")[0], item["usage"])
+              for index, item in enumerate(summary.get("external_components", []))}
+    labels["source"] = ("Source dependencies", "source")
+    lines = ["# Security scan", "", "Result: **" + ("PASS" if summary["passed"] else "FAIL") + "**", "",
+             "Counts are package occurrences, not unique vulnerabilities. Accepted findings still need review.", "",
+             "| Image or source | Use | Blocking | Accepted | Unfixed HIGH |", "| --- | --- | ---: | ---: | ---: |"]
+    for scope, assessment in scopes.items():
+        label, usage = labels.get(scope, (scope, "unknown"))
+        lines.append(f"| `{label}` | {usage} | {len(assessment['blocking'])} | "
+                     f"{len(assessment.get('accepted', []))} | {len(assessment['unfixed_high'])} |")
+    totals = [sum(len(value.get(key, [])) for value in scopes.values())
+              for key in ("blocking", "accepted", "unfixed_high")]
+    lines.append(f"| **Total** | | **{totals[0]}** | **{totals[1]}** | **{totals[2]}** |")
+    expiry = sorted({item["exception"]["expires_on"] for assessment in scopes.values()
+                     for item in assessment.get("accepted", [])})
+    if expiry:
+        lines.extend(["", "Exception expiry (UTC): **" + ", ".join(expiry) + "**."])
+    if summary["errors"]:
+        lines.extend(["", "## Errors", "", *["- " + error for error in summary["errors"]]])
+    lines.extend(["", "See scan-summary.json and the scope reports for immutable digests, findings, checksums, and assessment details."])
+    (reports / "summary.md").write_text("\n".join(lines) + "\n")
+
+
 def scan(candidate, reports, allow_dirty=False):
     reports.mkdir(parents=True, exist_ok=False)
     summary = {"passed": False, "manifest_sha256": "",
@@ -373,6 +404,7 @@ def scan(candidate, reports, allow_dirty=False):
             unpack_source(candidate / "source.tar.gz", source)
             check_package(candidate / "datalab.xpkg", source)
             images = json.loads((candidate / "external-components.json").read_text())
+            summary["external_components"] = images
             shutil.copyfile(candidate / "external-components.json", reports / "external-components.json")
             targets = [("source", ["fs", str(source)], None)] + [
                 (f"external-{index:02d}", ["image", "--image-src", "remote", "--platform", "linux/amd64", item["immutable"]], item["immutable"])
@@ -435,6 +467,7 @@ def scan(candidate, reports, allow_dirty=False):
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         summary["errors"].append(str(error))
     finally:
+        write_scan_summary(reports, summary)
         summary["files"] = {path.name: checksum(path) for path in sorted(reports.iterdir())
                             if path.is_file() and path.name != "scan-summary.json"}
         write_json(reports / "scan-summary.json", summary)

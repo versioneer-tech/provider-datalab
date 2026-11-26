@@ -15,211 +15,166 @@ Crossplane creates them with the platform's identity, network, and storage setti
 
 ## Get started
 
-[Read the documentation](https://provider-datalab.versioneer.at/) or open its
-[local index](docs/index.md). Start with the
-[installation guide](docs/how-to-guides/installation.md) for platform setup and
-[Use a Datalab](docs/how-to-guides/usage_concepts.md) for team workflows.
-Complete manifests are in [examples/base](examples/base).
-
-## Managed stores
-
-Declare managed services in `spec.stores`. Each entry provisions one instance;
-`names` selects its logical databases or Valkey key prefixes. It defaults to
-`[default]`. The entry name and type match `status.connections`.
+A platform operator must complete [installation](docs/how-to-guides/installation.md)
+first. Team members can then create a Datalab in their claim namespace:
 
 ```yaml
+apiVersion: versioneer.at/v1
+kind: Datalab
+metadata:
+  name: team-lab
+  namespace: workspace
 spec:
   users: [joe]
   stores:
     main:
       type: postgres
       storage: 10Gi
-      backups: true
       names: [analytics, catalog]
     cache:
       type: valkey
       storage: 1Gi
-      backups: true
       names: [sessions, jobs]
 ```
 
-The example creates one PostgreSQL instance with two databases and one Valkey
-instance. Valkey runs as a StatefulSet with AOF persistence; no separate store
-operator is needed. Its clients use the `redis://` URL scheme and add `sessions:`
-or `jobs:` to their keys. Names share instance credentials. Prefixes are a
-client convention and do not restrict access.
+Use your team's namespace and existing Keycloak usernames. The operator must
+supply their storage credentials. This example requests one PostgreSQL instance
+with two databases and one Valkey instance. Backups are disabled by default.
+See [Use a Datalab](docs/how-to-guides/usage_concepts.md) for access and backup settings.
 
-PostgreSQL, Valkey, and named volumes use `backups: true` for CSI snapshots.
-Backups default to disabled and need no backup-volume size.
-See [usage concepts](docs/how-to-guides/usage_concepts.md) and
-[connections](docs/how-to-guides/connections.md).
+| Task | Guide |
+| --- | --- |
+| Install and configure the platform | [Installation](docs/how-to-guides/installation.md) |
+| Create a workspace and use its services | [Use a Datalab](docs/how-to-guides/usage_concepts.md) |
+| Connect with kubectl and run workloads | [Virtual clusters](docs/how-to-guides/vcluster.md) |
+| Bind volumes, take backups, and restore data | [Volumes](docs/how-to-guides/volumes.md) |
+| Connect applications to a service | [Connections](docs/how-to-guides/connections.md) |
+| Configure login and delegated access | [Authentication](docs/how-to-guides/authentication.md) |
 
-## Cluster prerequisites
-
-Managed PostgreSQL uses [CloudNativePG](https://cloudnative-pg.io/), with
-operator `1.30.2` from Helm chart `0.29.2`. Install it in `cnpg-system`, or set
-`EnvironmentConfig.data.database.operatorNamespace` to its namespace. The
-supplied provider RBAC must permit the `postgresql.cnpg.io` resources.
-Use the intended platform kubeconfig and context in the install command.
-
-```bash
-helm repo add cnpg https://cloudnative-pg.github.io/charts
-helm upgrade --install cnpg cnpg/cloudnative-pg \
-  --kubeconfig /path/to/platform.kubeconfig --kube-context platform \
-  --namespace cnpg-system --create-namespace --version 0.29.2 \
-  --set fullnameOverride=cnpg --wait
-```
-
-Use Kubernetes `1.36` for the complete Datalab feature set and the supported
-CloudNativePG range. CloudNativePG `1.30` also tests Kubernetes `1.37`, but does
-not list it as supported. See its [support table](https://cloudnative-pg.io/docs/1.30/supported_releases/).
-
-Named Datalab volumes, PostgreSQL, and Valkey with `backups: true` require all of these
-cluster capabilities:
-
-- The `snapshot.storage.k8s.io/v1` CRDs: `VolumeSnapshot`,
-  `VolumeSnapshotContent`, and `VolumeSnapshotClass`.
-- A snapshot controller and a CSI driver with snapshot creation, deletion,
-  and volume restore support. Install the driver's CSI snapshotter sidecar.
-- A `VolumeSnapshotClass` whose driver matches the data StorageClass
-  provisioner. Its `deletionPolicy` must be `Delete` so retention can remove
-  expired snapshots and their stored data.
-- The snapshot permissions described in [Security](SECURITY.md#postgresql-snapshot-access).
-
-For a virtual cluster, the platform must expose these APIs and classes and
-permit snapshot and restore operations through the virtual API. The test
-runner does not add host access or change the virtual cluster configuration.
-For shared-node vCluster, enable `sync.toHost.volumeSnapshots`,
-`sync.toHost.volumeSnapshotContents`, and `sync.fromHost.volumeSnapshotClasses`,
-with the required syncer RBAC. CRDs and classes alone do not forward snapshot
-requests. See [vCluster volume snapshots](https://www.vcluster.com/docs/vcluster/configure/sync/to-host/storage/volume-snapshots).
-
-Set store storage and backup defaults in the EnvironmentConfig:
-
-```yaml
-data:
-  database:
-    storageClassName: standard-rwo
-    snapshotClassName: workspace-snapshots
-    schedule: '0 1 * * *'
-    maxSnapshots: 4
-  cacheStore:
-    storageClassName: standard-rwo
-    snapshotClassName: workspace-snapshots
-    schedule: '0 1 * * *'
-    maxSnapshots: 4
-```
-
-The schedule uses UTC. `maxSnapshots` accepts 1 through 100 completed backups
-per PostgreSQL cluster UID or Valkey data PVC UID. Both snapshot classes default
-to `data.volumes.snapshotClassName` when their service setting is absent.
-PostgreSQL pauses the instance during capture. Valkey pauses writes for at most
-11 minutes and saves an RDB file before capture. Restore Valkey from that RDB
-file, then enable AOF persistence. See [backups](docs/how-to-guides/usage_concepts.md#backups).
-
-CloudNativePG coordinates cold snapshots. The single database instance is
-unavailable for reads and writes during each backup. This configuration has no
-separate WAL archive and does not provide point-in-time recovery. Recovery uses
-a completed snapshot.
-Monitor failed or stalled backups. A stalled CSI snapshot can keep the primary
-paused until the storage fault is resolved.
-Back up Kubernetes metadata and credentials separately, and verify recovery
-with the installed CSI driver. See [backup behavior](docs/how-to-guides/usage_concepts.md#backups).
-
-## Health checks
-
-Kubernetes uses startup probes to allow initialization, readiness probes to
-remove unavailable Pods from Service endpoints, and liveness probes to restart
-an unresponsive process.
-
-| Component | Readiness | Liveness and startup |
-| --- | --- | --- |
-| Data (`package-r`) | HTTP `/health` | HTTP `/health` |
-| Data OAuth proxy | HTTP `/ready` | HTTP `/ping` |
-| S3 gateway | Gateway forwards `/_ready` to its OAuth proxy | Local `/_live` response |
-| S3 OAuth proxy | Gateway forwards `/_auth/ready` to loopback port 4180 | Gateway forwards `/_auth/ping` |
-| S3 rclone | Authenticated S3 listing through its local listener | Local unsigned HTTP request must return `403 Forbidden` |
-| Registry | `/debug/health` on private port 5001, including the storage driver | TCP port 5000 for liveness; `/debug/health` for startup |
-| Valkey | Authenticated local `PING` | Authenticated local `PING`; startup allows ten minutes for data replay |
-| Virtual cluster | HTTPS `/readyz` | HTTPS `/healthz` for liveness; `/readyz` for startup |
-| PostgreSQL | CloudNativePG instance manager `/readyz` | CloudNativePG instance manager `/healthz` and `/startupz` |
-| Crossplane core | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
-| Crossplane RBAC manager | HTTP `/metrics` on port 8080 | Same local HTTP listener; this manager has no health endpoint |
-| Kubernetes provider | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
-| Keycloak provider | HTTP `/metrics` on port 8080 | Same local HTTP listener; this provider has no health endpoint |
-| Composition functions | TCP on TLS port 9443 | Same listener; native Kubernetes gRPC probes do not support TLS |
-
-Registry liveness checks the local listener, so an object-storage outage makes
-the Pod unready without causing repeated restarts. Its health port is absent
-from the Service and public routes. The rclone liveness request uses its
-loopback listener and stops at local authentication, before object-storage access.
-
-CloudNativePG and vCluster supply probes for their managed components. The
-Crossplane Helm post-renderer adds probes to the core and RBAC manager; it needs
-Python with PyYAML. The provider runtime configs set probes for providers and functions. Backup,
-cleanup, and initialization tasks exit when complete; Jobs use deadlines and
-completion status instead of liveness probes.
+The [documentation site](https://provider-datalab.versioneer.at/) includes the
+[API reference](docs/reference-guides/api.md). Complete examples are in
+[examples/base](examples/base).
 
 ## Development
 
-Build from `composition/` and `templates/`; `composition.yaml` is generated.
-See [Manifest templates](templates/README.md) for setup and build commands.
-Run the [required local checks](tests/README.md), then the
-[integration suite](tests/integration/README.md) against a test cluster.
+Edit `composition/`, `templates/`, and the embedded scripts. Rebuild
+`composition.yaml` after a source change; do not edit that generated file.
+The [template guide](templates/README.md) explains the build and resource layout.
 
-Install the locked Python dependencies with Python 3.13:
+### Setup
+
+Use Python from [.python-version](.python-version), Go from
+[.go-version](.go-version), Git, and OpenSSL. The full unit suite also needs
+Docker. The tool installer supports Linux AMD64; its versions and checksums
+are in [scripts/tools.json](scripts/tools.json).
+
+Run these commands from the repository root:
 
 ```bash
+python3.13 -m venv .venv
+. .venv/bin/activate
 python3 -m pip install --only-binary=:all: --require-hashes \
   -r scripts/requirements.txt -r docs/requirements.txt -r tools/requirements.txt
+python3 scripts/install-tools.py actionlint gitleaks crossplane dyff
+export PATH="$PWD/build/tools:$PATH"
 ```
 
-These files contain pinned transitive dependencies and hashes. Their `.in`
-files contain the direct requirements. Regenerate the locks together with
-`uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url`.
-Review changed packages, their install behavior, and hashes before installation.
-Build, documentation, audit, and S3 client installs accept wheels only.
-The STAC test image has one reviewed source build, described in
-[Security](SECURITY.md#dependency-updates-and-tool-installation).
+Add tools when you need the corresponding task:
 
-The shared tool installer supports Linux AMD64. It installs under `build/tools`:
+| Task | Install command |
+| --- | --- |
+| Kubernetes integration | `python3 scripts/install-tools.py kind kubectl helm` |
+| Package security scans | `python3 scripts/install-tools.py crane trivy govulncheck` |
+| Generate the API reference | `python3 scripts/install-tools.py crdoc` |
+
+### Build
 
 ```bash
-python3 scripts/install-tools.py crossplane dyff crane trivy gitleaks govulncheck actionlint
+python3 scripts/build-composition.py
 ```
 
-Use `build/tools` on the command search path for local checks. Build the Go
-tools with Go 1.27.4. For a local candidate from an uncommitted worktree:
+The build combines the pipeline, Python steps, templates, and embedded scripts.
+Checks reject a stale generated composition. For a test-specific TTL, use a
+separate output file:
+
+```bash
+python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
+```
+
+This keeps the source defaults unchanged. An EnvironmentConfig TTL takes precedence.
+
+### Checks
+
+Use the same commands locally and in CI:
+
+| Command | What it checks |
+| --- | --- |
+| `bash tests/checks.bash` | Documentation, workflow syntax, secret detection, generated composition, copyright, and whitespace. No Docker or cluster needed. |
+| `bash tests/unit.bash fast` | Python helper and security-policy tests. No Docker needed. |
+| `bash tests/unit.bash` | All units, render fixtures, admission rules, and real Keycloak login and token exchange. Needs Docker. |
+| `bash tests/integration/run.bash all --kind` | All eight profiles on the dedicated Kind cluster. Run after units pass. |
+
+File checks keep each run's reports under `build/file-security/` and build the
+documentation in `build/docs-check/`. Use `mkdocs serve` to preview documentation.
+For another Kubernetes target, use the explicit connection and storage options
+in the [integration guide](tests/integration/README.md).
+
+To select the required checks for a pull request:
 
 ```bash
 python3 scripts/ci-checks.py --base origin/main
-build/tools/actionlint -shellcheck=
-python3 scripts/security.py files --reports build/file-security
-python3 scripts/security.py prepare --version 0.0.0-rc.1 \
-  --commit "$(git rev-parse HEAD)" --allow-dirty
-python3 scripts/security.py scan --allow-dirty
 ```
 
-Each report/candidate directory must be new. Keep prior results until reviewed;
-use `--candidate` and `--reports` to select other directories for another run.
-Only local checks accept `--allow-dirty`. Publication rejects these candidates.
-Scans use public registries; use an empty task-specific Docker configuration
-when no registry credentials are needed.
+Use the actual PR base when known. `docs_only=true` requires file/documentation
+checks. Otherwise run the full units, applicable integration, and the
+[candidate security checks](SECURITY.md#local-candidate-checks). Markdown,
+documentation images, and `mkdocs.yml` can qualify as docs only. Dependency or
+unknown files, an empty comparison, or a missing base select all checks.
+The comparison includes committed, staged, unstaged, and untracked changes.
+Draft PRs defer cluster tests until marked ready; manual CI runs select everything.
+The final CI status is `required_checks`.
 
-To check runtime and test image updates without changing source, run
-`python3 scripts/check-image-updates.py`. The daily workflow runs the same
-check. Review its report, scan proposed replacements, and run the required
-tests before adopting an update. See the
-[dependency update policy](SECURITY.md#dependency-updates-and-tool-installation)
-for Dependabot coverage and inputs that need manual updates.
+For focused development, use `bash tests/unit.bash 001` to render one example,
+or `python3 -m unittest discover -s tests -p test_credentials.py -v` for one
+helper suite. These do not replace the full checks for a runtime change.
+See [test coverage and fixtures](tests/README.md) for where to add a regression test.
 
-The [security policy](SECURITY.md#build-and-release-checks) describes scan
-coverage, publication, retention, and checks that still need hosted validation.
-See [Contribute](CONTRIBUTING.md) for pull request guidance.
+### Maintain dependencies
 
-## Security
+Direct Python dependencies are in `.in` files; matching `.txt` files include
+locked transitive versions and hashes. For a manual change, regenerate the
+affected lock with an installed `uv`, for example:
 
-See [Security](SECURITY.md) for access controls, network setup, and backup permissions.
+```bash
+uv pip compile --python-version "$(cat .python-version)" --generate-hashes --no-emit-index-url \
+  scripts/requirements.in -o scripts/requirements.txt
+```
+
+Review the resolved packages and install behavior, then repeat the frozen
+install above and run the relevant checks. The STAC image has one reviewed
+source build; see [dependency policy](SECURITY.md#dependency-updates-and-tool-installation).
+
+Dependabot handles the supported manifests. Run
+`python3 scripts/check-image-updates.py` to report image updates in the other
+source formats. Use `--reports <new-directory>` for another run. Scan and test
+replacement images before changing their pins.
+
+## Cluster prerequisites
+
+Use the [installation prerequisites](docs/how-to-guides/installation.md#prerequisites)
+for Crossplane, identity, storage, networking, PostgreSQL, and snapshot setup.
+
+## Health checks
+
+See the [component health checks](SECURITY.md#health-checks) for readiness,
+startup, liveness, and their limits.
+
+## Security and releases
+
+See [SECURITY.md](SECURITY.md) for private vulnerability reports, access
+boundaries, temporary exceptions, scheduled scans, and the
+[release procedure](SECURITY.md#candidate-and-publication).
+Use [CONTRIBUTING.md](CONTRIBUTING.md) for pull request guidance.
 
 ## License
 

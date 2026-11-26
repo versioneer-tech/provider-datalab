@@ -4,6 +4,33 @@ A `Datalab` resource defines the users, persistent volumes, and services for a t
 The operator supplies the shared storage, identity, and network settings.
 Complete [installation](installation.md) before applying these examples.
 
+## Create a workspace
+
+Ask the operator for your claim namespace and confirm that the named users
+and their storage Secrets exist. Save this as `team-lab.yaml`, with your own
+namespace and usernames:
+
+```yaml
+apiVersion: versioneer.at/v1
+kind: Datalab
+metadata:
+  name: team-lab
+  namespace: workspace
+spec:
+  users: [joe]
+```
+
+Apply it and check readiness:
+
+```bash
+kubectl apply -f team-lab.yaml
+kubectl get datalab team-lab -n workspace
+```
+
+`Ready=True` means the requested resources are ready. If it stays false, use
+[Check provisioning](#check-provisioning). Add stores, volumes, or virtual
+clusters using the examples below.
+
 ## Volumes
 
 Use `spec.volumes` for named PVCs with optional CSI snapshots in the Datalab
@@ -101,7 +128,7 @@ credential delivery into virtual namespaces.
 
 Set `backups: true` on a `spec.stores` or `spec.volumes` entry to enable CSI
 snapshots. The default is `false`. No backup PVC or backup size is required.
-The platform must meet the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites).
+The platform must meet the [snapshot prerequisites](installation.md#volume-snapshots).
 
 | Resource | Capture | Default retention |
 | --- | --- | --- |
@@ -113,7 +140,9 @@ The default schedule is daily at 01:00 UTC. EnvironmentConfig sets each
 schedule, snapshot class, and retention count. A failed Job preserves completed
 recovery points. Retention removes older points only after a new capture is
 ready and passes its consistency checks. These backups have no continuous WAL
-archive or point-in-time recovery.
+archive or point-in-time recovery. A stalled CSI request can keep PostgreSQL
+paused until the storage fault is resolved. Back up Kubernetes metadata and
+credentials separately.
 
 Set `backups: false` to remove the schedule and keep completed recovery points.
 Enabling or disabling Valkey backups restarts its Pod to change the backup ACL.
@@ -220,7 +249,7 @@ Check the Datalab conditions after applying a resource:
 
 ```bash
 kubectl get datalabs -n workspace
-kubectl describe datalab s-jeff -n workspace
+kubectl describe datalab team-lab -n workspace
 ```
 
 `Synced=True` means the composition reconciled. `Ready=True` means its

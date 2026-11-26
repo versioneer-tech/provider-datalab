@@ -1,6 +1,6 @@
 # Integration tests
 
-Run the [unit suite](../README.md#unit-suite) first. Then use the dedicated
+Run the [unit suite](../../README.md#checks) first. Then use the dedicated
 `provider-datalab-it` Kind cluster or an existing test cluster. Every Kubernetes
 and Helm call uses an explicit kubeconfig and context.
 
@@ -175,7 +175,7 @@ is unchanged.
 Database probes run in `workspace`, where connection Secrets are published.
 The test policies allow labeled service probes on PostgreSQL and Valkey
 ports and block other outside clients. Operators and CRDs use the documented versions. PostgreSQL uses the
-[cluster prerequisites](../../README.md#cluster-prerequisites), including its
+[snapshot prerequisites](../../docs/how-to-guides/installation.md#volume-snapshots), including its
 snapshot controller, CSI driver, matching classes, and access permissions. Valkey
 and named volume snapshots need the same infrastructure.
 
@@ -260,16 +260,3 @@ Failures report events and the resource budget.
 Integration builds a separate Composition artifact with a `1m` Python TTL default.
 Environment overrides and the separate environment and auto-ready TTLs still
 apply. See [build settings](../../templates/README.md).
-
-## GitHub Actions
-
-The [workflow](../../.github/workflows/pr.yaml) uses the
-[shared check selection](../README.md#select-checks). Runtime changes and manual
-runs execute the full unit suite and all eight profiles in one Kind cluster.
-Draft pull requests run the unit suite but defer Kubernetes integration;
-marking the pull request ready enables it. Documentation-only changes run
-documentation and static checks. The final required check waits for every
-selected job.
-
-Tag publication requires a successful push test run for the tagged commit and
-does not repeat tests. Use tags such as `1.0.0`, without a `v` prefix.

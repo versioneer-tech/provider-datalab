@@ -18,6 +18,7 @@ changing any of them.
 | --- | --- |
 | `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
 | `scripts/volume-snapshot.py` | Host CSI snapshot creation and retention. |
+| `scripts/valkey-snapshot.py` | Valkey write pause, RDB capture, snapshots, and retention. |
 | `scripts/postgres-snapshot.py` | CloudNativePG cold snapshot requests and completed-backup retention. |
 | `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
@@ -44,32 +45,11 @@ Each `${parameter}` replaces a complete YAML value. Values can be strings,
 numbers, booleans, lists, or mappings. The renderer does not evaluate
 expressions or replace text inside strings. Compute those values in Python.
 
-After a source change, build the composition and run the unit tests:
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install --only-binary=:all: --require-hashes -r scripts/requirements.txt
-python3 scripts/build-composition.py
-bash tests/unit.bash
-```
-
-The build embeds the steps and templates in `composition.yaml`. Deploy this
-file. Unit tests, CI, and pre-commit reject a stale build.
-
-Local renders without `spec.crossplane.compositionRef` use the generated
-Composition's name to select its EnvironmentConfig.
-
-For a source installation, apply the XRD and generated Composition to the
-configured test cluster before creating Datalabs:
-
-```bash
-kubectl apply -f xrd.yaml
-kubectl apply -f composition.yaml
-```
-
-Install dependencies and set the shared environment as described in the
-[installation guide](../docs/how-to-guides/installation.md) first.
+The build embeds the steps and templates in `composition.yaml`. Follow the
+[build and check commands](../README.md#development) after a source change.
+Unit tests, CI, and pre-commit reject a stale build. Local renders without
+`spec.crossplane.compositionRef` select the EnvironmentConfig using the
+generated Composition's name.
 
 The Configuration package contains `composition.yaml`, `xrd.yaml`, and
 `crossplane.yaml`. Source templates are not packaged as separate resources.
@@ -77,14 +57,9 @@ The platform must apply `dependencies/rbac.yaml` and EnvironmentConfigs
 separately. Volume bindings need the supplied admission policy permissions
 before the Composition reconciles them.
 
-To use a different Python TTL for tests, build a separate file:
-
-```bash
-python3 scripts/build-composition.py --response-ttl 1m --output /tmp/datalab-it-composition.yaml
-```
-
-A TTL override requires `--output`. It leaves the source settings and other
-function TTLs unchanged. An environment value takes precedence over this default.
+A test TTL override requires a separate output file; see
+[Build](../README.md#build). It changes the Python default only. An environment
+value takes precedence; the other function TTLs stay unchanged.
 
 `volumes/pvc.yaml` defines named host storage. The volume step creates
 snapshot schedules from `volumes/backup.yaml`. `scripts/volume-snapshot.py`

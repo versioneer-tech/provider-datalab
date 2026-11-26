@@ -1,78 +1,33 @@
 # Tests
 
-The unit suite checks rendered resources and helper behavior. It needs Docker
-for the composition functions and a disposable Keycloak server. The
-[integration suite](integration/README.md) checks deployed services in a test cluster.
+Use the [development setup and check commands](../README.md#development).
+The unit suite checks helpers and rendered resources with disposable function
+containers and Keycloak. The [integration guide](integration/README.md) covers
+deployed service checks and target requirements.
 
 ## Select checks
 
-Use the same check selection as [GitHub Actions](../.github/workflows/pr.yaml):
-
-```bash
-python3 scripts/ci-checks.py --base origin/main
-```
-
-Use the pull request base or target branch. Without `--head`, the comparison
-includes committed, staged, unstaged, and untracked changes.
-
-- `docs_only=true`: run the documentation checks below.
-- `docs_only=false`: also run the full unit suite and all integration profiles.
-
-Only Markdown, documentation images under `docs/imgs/`, and `mkdocs.yml`
-changes qualify as documentation only. Dependency files and unknown files
-select the full suite, including files under `docs/`.
-An empty or unavailable comparison selects all checks. Draft pull requests run
-units but defer cluster tests until the pull request is ready for review.
-
-## Documentation checks
-
-Install the locked requirements as described in the root
-[README](../README.md#development), then run:
-
-```bash
-python3 tests/ci-checks.py
-python3 -m unittest discover -s tests -p test_security.py -v
-python3 scripts/install-tools.py actionlint gitleaks
-build/tools/actionlint -shellcheck=
-python3 scripts/security.py files --reports build/file-security
-mkdocs build --strict --site-dir /tmp/provider-datalab-docs
-pre-commit run --all-files
-git diff --check
-```
-
-Check changed commands and links. Documentation-only changes need no Docker
-or Kubernetes cluster.
+Follow [check selection](../README.md#checks). File and docs checks use
+`tests/checks.bash` locally and in CI. Python security-policy tests are part of
+the unit suite.
 
 ## Unit suite
 
-Install Docker, the Crossplane CLI, `dyff`, OpenSSL, Python, Go, and `pre-commit`.
-Start Docker. Follow the [build instructions](../templates/README.md) to install
-Python dependencies and generate `composition.yaml`.
+The full suite renders every base example, compares the output with `dyff`,
+and checks behavior against a shared set of function containers. Two workers
+run the behavior suites and report their durations. The real Keycloak tests
+check login, offline refresh, and token exchange.
 
-```bash
-bash tests/unit.bash
-pre-commit run --all-files
-git diff --check
-```
-
-For a quick check without Docker, run `bash tests/unit.bash fast`. This checks
-the generated composition and discovers `test_*.py` with Python's `unittest`.
-To run one of these files:
-
-```bash
-python3 -m unittest discover -s tests -p test_credentials.py -v
-```
-
-`bash tests/unit.bash 001` selects one example render. Shared behavior checks
-still run. The full suite uses two workers for behavior suites after the shared
-function containers start. It keeps each suite's output together and reports
-its duration. YAML parsing uses LibYAML when available; no checks are skipped. Examples `001`, `002`, and `003` also select the Data exposure,
-backup/store, and environment-setting checks.
+For focused commands, see [Checks](../README.md#checks). Examples `001`, `002`,
+and `003` also select the Data exposure, backup/store, and environment checks.
+A focused run does not replace full runtime validation.
 
 ## Test files
 
 | Files | Checks |
 | --- | --- |
+| `test_security.py` | Release selection, candidate checks, scan failures, exact vulnerability exceptions, expiry, and tool integrity. |
+| `ci-checks.py` | Required check selection, including unknown and untracked files. |
 | `test_build.py`, `test_composition_helpers.py` | Build input, TTL values and stable service credentials. |
 | `test_credentials.py`, `test_cleanup.py`, `test_snapshots.py` | Login and token handling, Pod cleanup, snapshot retention and access. |
 | `test_postgres.py`, `test_valkey.py` | Store snapshot retention, consistency, failure handling, replacement, and PostgreSQL credentials. |

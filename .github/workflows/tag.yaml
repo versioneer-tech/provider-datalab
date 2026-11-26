@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
       - run: python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt
       - name: Require full tests on the protected default branch
         env:
@@ -52,10 +52,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.27.4"
+          go-version-file: .go-version
           cache-dependency-path: tests/admission/go.sum
       - name: Install reviewed tools
         run: |
@@ -74,6 +74,12 @@ jobs:
           if-no-files-found: error
       - name: Scan saved artifacts
         run: python3 scripts/security.py scan
+      - name: Show scan summary
+        if: always()
+        run: |
+          if [[ -f build/security/summary.md ]]; then
+            cat build/security/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Retain reports and CycloneDX SBOMs
         id: reports
         if: always()
@@ -100,7 +106,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.build_candidate.outputs.candidate_id }}
@@ -142,10 +148,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.27.4"
+          go-version-file: .go-version
           cache: false
       - name: Install documentation tools
         run: |

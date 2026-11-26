@@ -1,10 +1,10 @@
 # ADR-001: Use Datalab as the Public Contract
 
-> Written: 02.12.2025. Revised: 21.11.2026.
+> Written: 02.12.2025. Revised: 26.11.2026.
 
 ## Status
 
-Accepted. Live storage validation is pending.
+Accepted.
 
 ## Context
 

@@ -12,17 +12,9 @@ Kubernetes NetworkPolicy.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
-PostgreSQL requires CloudNativePG. Valkey uses standard Kubernetes resources.
-The current baseline is:
-
-| Datalab field | Runtime | Version | Required resource API |
-| --- | --- | --- | --- |
-| `spec.stores` with `type: postgres` | CloudNativePG | See [cluster prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites) | `Cluster` and `Database` in `postgresql.cnpg.io/v1` |
-| `spec.stores` with `type: valkey` | Native StatefulSet | `valkey/valkey:9.2.0-alpine` | Kubernetes `apps/v1`; no store operator or CRDs |
-
-Install CloudNativePG's CRDs and controller before requesting PostgreSQL.
-Validate other versions before use. Enabled backups need the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites);
-see [backup settings](usage_concepts.md#backups).
+PostgreSQL requires CloudNativePG. Valkey uses a native StatefulSet and needs
+no store operator. Install the [PostgreSQL controller](#postgresql-controller) before requesting a store;
+enabled backups also need the [snapshot prerequisites](#volume-snapshots).
 
 Gateway exposure also needs a Gateway API controller. Data uses HTTPRoute
 with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
@@ -30,7 +22,8 @@ with HTTP and TLS-terminating HTTPS listeners. External PostgreSQL access uses
 
 For `spec.vclusters`, apply the supplied provider RBAC and configure an HTTPS
 issuer, allowed StorageClasses, and an HTTPS Gateway listener. The package runs
-vCluster OSS `0.38.0` with Kubernetes `1.36.6`. The host needs
+vCluster OSS with the Kubernetes image pinned in the
+[control-plane template](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/vcluster/statefulset.yaml). The host needs
 ValidatingAdmissionPolicy and BackendTLSPolicy support. Volume bindings require
 host Kubernetes 1.36 or later with `admissionregistration.k8s.io/v1`
 MutatingAdmissionPolicy support. See
@@ -41,16 +34,10 @@ API. Use [Volumes](volumes.md) to check persistent volumes after setup.
 ### Dependency baseline
 
 The package requires Crossplane 2.4.3 or later in the v2 series.
-The supplied dependency manifests use these versions:
-
-| Component | Version |
-| --- | --- |
-| Crossplane core | 2.4.3 |
-| provider-kubernetes | 1.4.1 |
-| provider-keycloak | 3.3.0 |
-| function-python | 0.6.0 |
-| function-auto-ready | 0.7.3 |
-| function-environment-configs | 0.9.2 |
+The [provider manifests](https://github.com/versioneer-tech/provider-datalab/blob/main/dependencies/02-providers.yaml)
+and [function manifests](https://github.com/versioneer-tech/provider-datalab/blob/main/dependencies/functions.yaml)
+contain the package versions and immutable image references. Use those files
+when reviewing or changing a dependency.
 
 Install Crossplane with the supplied Helm values from this checkout:
 
@@ -81,6 +68,27 @@ runs outside `crossplane`, update the ServiceAccounts and binding subjects in
 When Provider Storage shares the cluster, manage shared packages, runtimes,
 and RBAC in one place. Both providers use the same environment function.
 Add both providers' selector labels to shared EnvironmentConfigs.
+
+### PostgreSQL controller
+
+
+PostgreSQL uses [CloudNativePG](https://cloudnative-pg.io/), with
+operator `1.30.2` from Helm chart `0.29.2`. Install it in `cnpg-system`, or set
+`EnvironmentConfig.data.database.operatorNamespace` to its namespace. The
+supplied provider RBAC must permit the `postgresql.cnpg.io` resources.
+Use the intended platform kubeconfig and context in the install command.
+
+```bash
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg cnpg/cloudnative-pg \
+  --kubeconfig /path/to/platform.kubeconfig --kube-context platform \
+  --namespace cnpg-system --create-namespace --version 0.29.2 \
+  --set fullnameOverride=cnpg --wait
+```
+
+Use Kubernetes `1.36` for the complete Datalab feature set and the supported
+CloudNativePG range. CloudNativePG `1.30` also tests Kubernetes `1.37`, but does
+not list it as supported. See its [support table](https://cloudnative-pg.io/docs/1.30/supported_releases/).
 
 ## 1. Choose the claim namespace
 
@@ -456,7 +464,7 @@ to containers without the corresponding resource settings.
 | `vcluster.backendTLS.apiVersion` | `gateway.networking.k8s.io/v1` | BackendTLSPolicy API served by the Gateway. |
 | `ingress.certificateAuthority` | System trust | PEM Gateway CA embedded in profile kubeconfigs. |
 | `database.storageClassName` | Cluster default | PostgreSQL data StorageClass. |
-| `database.snapshotClassName` | `volumes.snapshotClassName` | PostgreSQL snapshot class. Requires the [cluster snapshot prerequisites](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#cluster-prerequisites). |
+| `database.snapshotClassName` | `volumes.snapshotClassName` | PostgreSQL snapshot class. Requires the [snapshot prerequisites](#volume-snapshots). |
 | `database.schedule` | `0 1 * * *` | Cold PostgreSQL backup schedule in UTC. |
 | `database.maxSnapshots` | `4` | Completed PostgreSQL backups retained per cluster UID, from 1 to 100. |
 | `database.operatorNamespace` | `cnpg-system` | CloudNativePG controller namespace for service access. |
@@ -587,8 +595,8 @@ installation, and [volume persistence](volumes.md).
 ## Volume snapshots
 
 Volume backups run on the host and need a snapshot-capable CSI driver, its
-snapshotter sidecar, the common snapshot controller, and the three snapshot
-CRDs. Create a matching `VolumeSnapshotClass` with `deletionPolicy: Delete`
+snapshotter sidecar, the common snapshot controller, and the v1
+`VolumeSnapshot`, `VolumeSnapshotContent`, and `VolumeSnapshotClass` CRDs. Create a matching `VolumeSnapshotClass` with `deletionPolicy: Delete`
 so retention can remove old snapshots. The host must also serve
 `ValidatingAdmissionPolicy` for the source PVC guards.
 
@@ -616,3 +624,9 @@ for the required roles, API network access, and backup identity.
 
 Test restore with the deployed CSI driver before relying on it. See
 [Volumes](volumes.md) for status, recovery, and deletion.
+
+For a virtual cluster, the platform must expose these APIs and classes and
+permit snapshot and restore operations through the virtual API. For shared-node vCluster, enable `sync.toHost.volumeSnapshots`,
+`sync.toHost.volumeSnapshotContents`, and `sync.fromHost.volumeSnapshotClasses`,
+with the required syncer RBAC. CRDs and classes alone do not forward snapshot
+requests. See [vCluster volume snapshots](https://www.vcluster.com/docs/vcluster/configure/sync/to-host/storage/volume-snapshots).
