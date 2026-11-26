@@ -10,6 +10,8 @@ source "${INTEGRATION_DIR}/lib.bash"
 
 # shellcheck source=postgres.bash
 source "${INTEGRATION_DIR}/postgres.bash"
+source "${INTEGRATION_DIR}/snapshots.bash"
+POSTGRES_SNAPSHOTS=false
 : "${POSTGRES_CLIENT_IMAGE:=postgres:17}"
 : "${KEEP_POSTGRES_RESOURCES:=0}"
 
@@ -27,68 +29,28 @@ apply_postgres_datalab() {
   apply_template "${MANIFEST_DIR}/postgres/datalab.yaml" \
     DATALAB_NAME "${DATALAB_NAME}" \
     WORKSPACE_NAMESPACE "${WORKSPACE_NAMESPACE}" \
-    STORAGE_SECRET "${STORAGE_SECRET}"
+    STORAGE_SECRET "${STORAGE_SECRET}" \
+    BACKUPS_ENABLED "${POSTGRES_SNAPSHOTS}"
 }
 
 wait_for_postgres() {
-  local deadline=$((SECONDS + 900))
-  local ready_replicas repo_ready
-
-  log 'Waiting for the Datalab composition to create PostgreSQL'
-  until kube get \
-      "postgrescluster.postgres-operator.crunchydata.com/${POSTGRES_CLUSTER}" \
-      --namespace "${POSTGRES_NAMESPACE}" >/dev/null 2>&1; do
-    if ((SECONDS >= deadline)); then
-      printf 'Datalab %s/%s did not create PostgreSQL within 15 minutes.\n' \
-        "${WORKSPACE_NAMESPACE}" "${DATALAB_NAME}" >&2
-      return 1
-    fi
-    sleep 5
+  local cluster
+  for cluster in pg0 pg1; do
+    kube wait "cluster.postgresql.cnpg.io/${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
+      --for=create --timeout=15m
+    kube wait "cluster.postgresql.cnpg.io/${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
+      --for=condition=Ready --timeout=15m
+    wait_for_connection_secret "${DATALAB_NAME}-postgres-${cluster}" "${DATALAB_NAME}" 900 \
+      host port user password databases verify_url
   done
-
-  while true; do
-    read -r ready_replicas repo_ready < <(kube get \
-      "postgrescluster.postgres-operator.crunchydata.com/${POSTGRES_CLUSTER}" \
-      --namespace "${POSTGRES_NAMESPACE}" -o json | \
-      jq -r '[(.status.instances[]? | select(.name == "primary") | .readyReplicas), .status.pgbackrest.repoHost.ready] | @tsv')
-    if [[ "${ready_replicas}" == 1 && "${repo_ready}" == true ]]; then
-      break
-    fi
-    if ((SECONDS >= deadline)); then
-      printf 'PostgresCluster %s/%s was not ready within 15 minutes.\n' \
-        "${POSTGRES_NAMESPACE}" "${POSTGRES_CLUSTER}" >&2
-      return 1
-    fi
-    sleep 5
-  done
-
-  log 'Checking PostgreSQL with zero backup storage'
-  until kube get postgrescluster/pg1 --namespace "${POSTGRES_NAMESPACE}" -o json | \
-    jq -e '(.spec | has("backups") | not) and any(.status.instances[]?; .name == "primary" and .readyReplicas >= 1)' >/dev/null; do
-    if ((SECONDS >= deadline)); then
-      printf 'PostgreSQL without backups did not become ready.\n' >&2
-      return 1
-    fi
-    sleep 5
-  done
-  kube wait object.kubernetes.m.crossplane.io/db-postgrescluster-verify-postgres-pg1 \
-    --namespace "${WORKSPACE_NAMESPACE}" --for=condition=Ready --timeout=5m
-
-  wait_for_connection_secret "${CONNECTION_SECRET}" "${DATALAB_NAME}" 900 \
-    host port user password databases "${POSTGRES_URL_KEY}"
-  wait_for_connection_secret "${DATALAB_NAME}-postgres-pg1" "${DATALAB_NAME}" 900 verify_url
-
-  log 'Waiting for the Datalab credentials to match the current operator Secret'
-  until {
-    kube get "secret/${POSTGRES_CLUSTER}-pguser-postgres" --namespace "${POSTGRES_NAMESPACE}" -o json
-    kube get "secret/${CONNECTION_SECRET}" --namespace "${WORKSPACE_NAMESPACE}" -o json
-  } | jq -se 'length == 2 and .[0].data.password == .[1].data.password' >/dev/null; do
-    if ((SECONDS >= deadline)); then
-      printf 'Datalab PostgreSQL credentials did not update from the operator Secret.\n' >&2
-      return 1
-    fi
-    sleep 2
-  done
+  kube wait databases.postgresql.cnpg.io --all --namespace "${POSTGRES_NAMESPACE}" \
+    --for=jsonpath='{.status.applied}'=true --timeout=5m
+  kube wait "datalabs.versioneer.at/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
+    --for=condition=Ready --timeout=5m
+  kube get cluster.postgresql.cnpg.io/pg1 --namespace "${POSTGRES_NAMESPACE}" -o json \
+    | jq -e '(.spec | has("backup") | not)' >/dev/null
+  verify_workload_probes "${POSTGRES_NAMESPACE}"
+  printf 'PASS PostgreSQL without backups is ready\n'
 }
 
 run_postgres_probe() {
@@ -126,7 +88,7 @@ cleanup_successful_verification() {
       --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}" --deleted
     kube delete namespace "${POSTGRES_NAMESPACE}" \
       --ignore-not-found --wait=true --timeout=5m
-    stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
+    stop_unused_operator cnpg-system cnpg clusters.postgresql.cnpg.io
   else
     printf 'Datalab cleanup is still running; resources were kept for diagnosis.\n' >&2
     return 1
@@ -139,7 +101,7 @@ show_postgres_diagnostics() {
   kube get objects.kubernetes.m.crossplane.io \
     --namespace "${WORKSPACE_NAMESPACE}" \
     --selector "crossplane.io/composite=${DATALAB_NAME}" || true
-  kube get postgrescluster,pod,pvc,secret \
+  kube get clusters.postgresql.cnpg.io,pod,pvc,secret \
     --namespace "${POSTGRES_NAMESPACE}" || true
   kube get "secret/${CONNECTION_SECRET}" \
     --namespace "${WORKSPACE_NAMESPACE}" || true
@@ -151,17 +113,34 @@ show_postgres_diagnostics() {
 
 main() {
   require_cluster
-  install_pgo
+  install_cnpg
+  kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
+  kube rollout status deployment/keycloak --namespace keycloak --timeout=10m
+  if snapshot_tests_available "${POSTGRES_NAMESPACE}"; then POSTGRES_SNAPSHOTS=true; fi
   apply_postgres_datalab
   if ! wait_for_postgres; then
     show_postgres_diagnostics
     exit 1
   fi
+  local type_check
+  if type_check="$(kube patch datalabs.versioneer.at/verify-postgres --namespace workspace \
+    --dry-run=server --type=merge --patch '{"spec":{"stores":{"pg1":{"type":"valkey"}}}}' 2>&1)"; then
+    printf 'A store type change was accepted.\n' >&2
+    exit 1
+  fi
+  grep -F 'Store type cannot change' <<<"${type_check}" >/dev/null
+  printf 'PASS Kubernetes admission rejects a store type change\n'
   if ! run_postgres_probe || ! run_postgres_probe "${DATALAB_NAME}-postgres-pg1" verify_url; then
     show_postgres_diagnostics
     printf 'PostgreSQL verification resources were kept for diagnosis.\n' >&2
     exit 1
   fi
+  local -a snapshot_options=()
+  [[ "${POSTGRES_SNAPSHOTS}" == true ]] || snapshot_options+=(--skip-snapshots)
+  python3 "${INTEGRATION_DIR}/verify-postgres.py" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" \
+    "${snapshot_options[@]}"
+  run_postgres_probe
   python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}"
   cleanup_successful_verification

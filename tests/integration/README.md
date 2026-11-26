@@ -1,6 +1,6 @@
 # Integration tests
 
-Run the [unit suite](../README.md#unit-suite) first. Then use the dedicated
+Run the [unit suite](../../README.md#checks) first. Then use the dedicated
 `provider-datalab-it` Kind cluster or an existing test cluster. Every Kubernetes
 and Helm call uses an explicit kubeconfig and context.
 
@@ -24,7 +24,8 @@ Snapshot checks require a matching StorageClass and VolumeSnapshotClass with
 `Delete` policy, the snapshot APIs, and snapshot management permissions. The
 probe checks access for the test identity, Crossplane, and the Kubernetes
 provider. Supply `--snapshot-class` to enable it. Without that option, snapshot
-tests are skipped on existing targets.
+checks are skipped on existing targets. With that option, failed snapshot
+prerequisites stop the run.
 After setup, volume tests check the generated backup ServiceAccount's access.
 Other PVCs, Secrets, snapshot contents, class changes, and snapshots in another
 namespace must be denied. A failure after a successful probe fails the test.
@@ -43,7 +44,7 @@ tests/integration/run.bash all \
 
 Add `--check` to check access and settings without installing resources. An
 existing cluster needs permission for CRDs, admission policies, and service
-account impersonation. The suite installs Crossplane and database operators.
+account impersonation. The suite installs Crossplane and CloudNativePG. Valkey uses a native StatefulSet.
 Existing prerequisite namespaces must have the label
 `datalabs.versioneer.at/integration=true`; otherwise setup stops before it
 changes them. Use namespaces and cluster-wide resources reserved for tests.
@@ -53,6 +54,10 @@ the policy blocks it, then checks that traffic returns after policy removal.
 It uses a temporary namespace and removes it after the probe. Traffic checks
 run only when this probe succeeds. Resource-default and quota checks always run.
 A vCluster without policy enforcement skips traffic checks.
+For a virtual target known to lack enforcement, set
+`PROVIDER_DATALAB_SKIP_NETWORK_POLICY=1` to skip the capability traffic probe as
+well. Kind still requires its policy checks. Resource-default and quota checks
+continue on the virtual target.
 
 The registry must accept pushes and be reachable from cluster nodes. The
 runner uses an empty Docker config unless you supply `--docker-config <directory>`
@@ -122,7 +127,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | S3 | `KEEP_S3_RESOURCES` |
 | Registry | `KEEP_REGISTRY_RESOURCES` |
 | PostgreSQL | `KEEP_POSTGRES_RESOURCES` |
-| MongoDB or Redis | `KEEP_STORE_RESOURCES` |
+| Valkey | `KEEP_VALKEY_RESOURCES` |
 | Volumes | `KEEP_VOLUME_RESOURCES` |
 | Virtual clusters | `KEEP_VCLUSTER_RESOURCES` |
 
@@ -134,15 +139,21 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-registry` | [Registry](manifests/registry/datalab.yaml) | Authenticate with the published Secret, then write and read a blob in S3-backed storage. |
 | `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
 | `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
-| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL write/read through connection Secrets; backup configuration enabled on `pg0` and absent on `pg1`. |
-| `verify-mongo` | [MongoDB](manifests/mongo/datalab.yaml) | Document write/read; back up and restore the probe document with oplog replay in a separate MongoDB process. |
-| `verify-redis` | [Redis](manifests/redis/datalab.yaml) | Key write/read; restore a backup in a separate Redis process, then disable backups and retain the backup PVC. |
+| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL over TLS, named-user login, password rotation, logical-name retention, store type admission, PostGIS, cold snapshot recovery, retention, failure handling, and backup disable. `pg1` has no backups. |
+| `verify-valkey` | [Valkey](manifests/valkey/datalab.yaml) | Published key prefixes; data PVC expansion when its StorageClass allows it; CSI capture, failed backup preservation, retention, RDB recovery in a new PVC, AOF restart, and disable without loss of recovery points. |
 | `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
 | `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |
 
-Fixtures use profile-named Secrets and enable the services they test. Network
+Fixtures use profile-named Secrets and enable the services they test. Deployed
+providers, functions, and service containers must have readiness and liveness
+probes and become ready before their service checks run. Network
 and Data restore shared environment settings; S3 and vCluster set their own
 Gateway and identity settings.
+
+The probe gate does not cover the external Gateway controller. The pinned
+Contour setup has no probes on its provisioner or Envoy shutdown manager;
+Envoy has readiness only. Its `ContourDeployment` API has no fields to change
+those probes. Contour's own controller has readiness and liveness checks.
 
 ## Network and service checks
 
@@ -162,15 +173,17 @@ workload restart. It restores the Secret, resumes the client, and repeats the S3
 is unchanged.
 
 Database probes run in `workspace`, where connection Secrets are published.
-The test policies allow labeled service probes on PostgreSQL, MongoDB, and Redis
-ports and block other outside clients. Operators and CRDs use the versions in
-the [installation guide](../../docs/how-to-guides/installation.md#prerequisites).
+The test policies allow labeled service probes on PostgreSQL and Valkey
+ports and block other outside clients. Operators and CRDs use the documented versions. PostgreSQL uses the
+[snapshot prerequisites](../../docs/how-to-guides/installation.md#volume-snapshots), including its
+snapshot controller, CSI driver, matching classes, and access permissions. Valkey
+and named volume snapshots need the same infrastructure.
 
 ## Volume checks
 
 `verify-volumes` prepares the shared Keycloak test realm, then declares a
 Datalab with named host storage and no virtual cluster. The Datalab must become
-ready after the first PVC mount. Each volume gets a backup schedule. The profile
+ready after the first PVC mount. Each volume with `backups: true` gets a backup schedule. The profile
 runs Jobs from the generated CronJob. The default retention must leave exactly
 two ready snapshots.
 
@@ -185,6 +198,7 @@ The profile checks:
   another namespace.
 - The observed PVC reference and phase, ready-snapshot count, and last successful
   time in Datalab status.
+- Disabling backups preserves the data PVC and completed snapshots.
 - Independent backup schedules for source and restored volumes; volume removal
   removes its schedule and preserves the other volume.
 - Recovery from a snapshot after the source volume declaration and PVC are removed.
@@ -195,7 +209,7 @@ physical host API when the selected target is a virtual cluster.
 
 ## Virtual cluster checks
 
-The profile installs PGO, Keycloak, and Contour and creates a fresh certificate
+The profile installs CloudNativePG, Keycloak, and Contour and creates a fresh certificate
 for `*.lab.acme.com`. Its CPU limit quota is `20` so two control planes, their
 controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
 
@@ -232,9 +246,10 @@ other cluster and PostgreSQL available.
 
 ## Test resource budget
 
-A full run shares one selected cluster. Unused database operators are scaled to zero.
-Each store profile starts its operator and waits for readiness. Cleanup waits for
-resource deletion before stopping the operator; failures leave it running.
+A full run shares one selected cluster. PostgreSQL checks start CloudNativePG
+and wait for its readiness. After successful cleanup, the suite scales it to
+zero if no PostgreSQL clusters remain. Failed profiles keep their resources.
+Valkey needs no operator installation or controller Pod.
 Crossplane, providers, storage, and identity services stay available.
 
 The runner reports durations and CPU requests. Use
@@ -245,16 +260,3 @@ Failures report events and the resource budget.
 Integration builds a separate Composition artifact with a `1m` Python TTL default.
 Environment overrides and the separate environment and auto-ready TTLs still
 apply. See [build settings](../../templates/README.md).
-
-## GitHub Actions
-
-The [workflow](../../.github/workflows/pr.yaml) uses the
-[shared check selection](../README.md#select-checks). Runtime changes and manual
-runs execute the full unit suite and all nine profiles in one Kind cluster.
-Draft pull requests run the unit suite but defer Kubernetes integration;
-marking the pull request ready enables it. Documentation-only changes run
-documentation and static checks. The final required check waits for every
-selected job.
-
-Tag publication requires a successful push test run for the tagged commit and
-does not repeat tests. Use tags such as `1.0.0`, without a `v` prefix.

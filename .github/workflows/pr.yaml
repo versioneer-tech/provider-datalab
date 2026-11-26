@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: Tests
+permissions:
+  contents: read
 on:
   workflow_dispatch:
   push:
@@ -28,8 +30,9 @@ jobs:
       docs_only: ${{ steps.checks.outputs.docs_only }}
     steps:
       - name: Checkout comparison history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Select checks
@@ -53,34 +56,39 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: docs/requirements.txt
 
       - name: Install documentation tools
-        run: python3 -m pip install -r docs/requirements.txt pre-commit
+        run: python3 -m pip install --only-binary=':all:' --require-hashes -r docs/requirements.txt
 
-      - name: Check test selection
-        run: python3 tests/ci-checks.py
-
-      - name: Build documentation
-        run: mkdocs build --strict --site-dir /tmp/provider-datalab-docs
-
-      - name: Check repository files
+      - name: Run file and documentation checks
         run: |
-          pre-commit run --all-files
-          git diff --check
+          python3 scripts/install-tools.py actionlint gitleaks
+          bash tests/checks.bash
+
+      - name: Retain file security reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: file-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/file-security/
+          retention-days: 90
+          if-no-files-found: error
 
   runtime_checks:
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 150
     permissions:
       contents: read
     env:
@@ -89,104 +97,36 @@ jobs:
       RUN_INTEGRATION: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: tests/admission/go.sum
+
       - name: Install test CLIs
         run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/crossplane/cli/v2.4.1/install.sh \
-            --output /tmp/crossplane-install.sh
-          XP_VERSION=v2.4.1 sh /tmp/crossplane-install.sh
-          sudo install crossplane /usr/local/bin/crossplane
-          go install github.com/homeport/dyff/cmd/dyff@v1.12.0
-          sudo install "$(go env GOPATH)/bin/dyff" /usr/local/bin/dyff
+          python3 scripts/install-tools.py crossplane dyff kind kubectl helm
+          echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
       - name: Run Composition unit tests
         run: |
-          python3 -m pip install -r scripts/requirements.txt
+          python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt
           tests/unit.bash
 
-      - name: Create Kind cluster
+      - name: Run all Kubernetes integration profiles
         if: env.RUN_INTEGRATION == 'true'
-        uses: helm/kind-action@v1
-        with:
-          version: v0.33.0
-          kubectl_version: v1.37.0
-          cluster_name: provider-datalab-it
-          config: tests/integration/manifests/kind.yaml
-
-      - name: Prepare Kind network enforcement, storage, and snapshots
-        if: env.RUN_INTEGRATION == 'true'
-        run: tests/integration/create-cluster.bash
-
-      - name: Deploy integration platform
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/deploy-platform.bash
-          source tests/integration/lib.bash
-          kube apply -f tests/integration/manifests/s3/keycloak.yaml
-
-      - name: Verify Datalab network policy
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-network.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab registry
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-registry.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab Data service
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-data.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab S3 endpoint
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-s3.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab PostgreSQL
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-postgres.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab MongoDB
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-mongo.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab Redis
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-redis.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab volumes and snapshot recovery
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-volumes.bash
-          tests/integration/resource-budget.bash
-
-      - name: Verify Datalab virtual clusters and STAC catalog
-        if: env.RUN_INTEGRATION == 'true'
-        run: |
-          tests/integration/verify-vcluster.bash
-          tests/integration/resource-budget.bash
+        run: tests/integration/run.bash all --kind
 
       - name: Collect integration diagnostics
         if: failure() && env.RUN_INTEGRATION == 'true'
@@ -196,19 +136,80 @@ jobs:
         if: env.RUN_INTEGRATION != 'true'
         run: echo 'Kubernetes integration checks are deferred for draft pull requests.' >> "$GITHUB_STEP_SUMMARY"
 
-  unit_and_datalab_integration:
-    needs: [changes, documentation, runtime_checks]
+  security_checks:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      DOCKER_CONFIG: ${{ github.workspace }}/build/security-registry
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: tests/admission/go.sum
+      - name: Install scan tools
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt -r tools/requirements.txt
+          python3 scripts/install-tools.py crossplane crane trivy gitleaks govulncheck
+      - name: Build production candidate
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: python3 scripts/security.py prepare --version "0.0.0-rc.${GITHUB_RUN_NUMBER}" --commit "$SOURCE_COMMIT"
+      - name: Save candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/candidate/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Scan saved candidate
+        run: python3 scripts/security.py scan
+      - name: Show scan summary
+        if: always()
+        run: |
+          if [[ -f build/security/summary.md ]]; then
+            cat build/security/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain security reports and SBOMs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/security/
+          retention-days: 90
+          if-no-files-found: error
+
+  required_checks:
+    needs: [changes, documentation, runtime_checks, security_checks]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
       - name: Reject missing or failed checks
-        if: >-
-          needs.changes.result != 'success' ||
-          needs.documentation.result != 'success' ||
-          (needs.changes.outputs.docs_only != 'true' && needs.runtime_checks.result != 'success')
-        run: exit 1
-
-      - name: Required checks passed
-        run: echo 'Required checks passed.'
+        env:
+          CHANGE_RESULT: ${{ needs.changes.result }}
+          DOC_RESULT: ${{ needs.documentation.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          RUNTIME_RESULT: ${{ needs.runtime_checks.result }}
+          SECURITY_RESULT: ${{ needs.security_checks.result }}
+        run: |
+          set -euo pipefail
+          [[ "$CHANGE_RESULT" == success && "$DOC_RESULT" == success ]]
+          if [[ "$DOCS_ONLY" == true ]]; then
+            [[ "$RUNTIME_RESULT" == skipped && "$SECURITY_RESULT" == skipped ]]
+          elif [[ "$DOCS_ONLY" == false ]]; then
+            [[ "$RUNTIME_RESULT" == success && "$SECURITY_RESULT" == success ]]
+          else
+            exit 1
+          fi

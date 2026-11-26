@@ -11,4 +11,5 @@ spec:
   users: []
   volumes:
     analysis:
+      backups: true
       storage: 1Gi

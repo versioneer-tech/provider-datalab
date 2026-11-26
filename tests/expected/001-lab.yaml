@@ -380,11 +380,11 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: s-joe
       policy:
         resolution: Required
         resolve: Always
-      matchLabels:
-        crossplane.io/claim-name: s-joe
     fullPath: false
     name: s-joe
     realmId: acme

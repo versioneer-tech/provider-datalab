@@ -76,7 +76,9 @@ data:
       parentNamespace: projectcontour
       sectionName: postgres-passthrough
     storageClassName: ''
-    backupStorageClassName: ''
+    snapshotClassName: workspace-snapshots
+    schedule: '0 1 * * *'
+    maxSnapshots: 4
   volumes:
     storage: 1Gi
     storageClasses:

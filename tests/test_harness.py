@@ -13,6 +13,44 @@ from helpers import ROOT
 
 
 class HarnessTests(unittest.TestCase):
+    def test_explicit_snapshot_class_makes_failed_prerequisites_fatal(self):
+        script = '''
+set -euo pipefail
+export PROVIDER_DATALAB_CLUSTER=existing PROVIDER_DATALAB_SNAPSHOT_CLASS="$2"
+source "$1"
+check_volume_snapshot_settings() { printf 'API unavailable\\n' >&2; return 2; }
+check_snapshot_observer_access() { printf 'unexpected observer check\\n' >&2; }
+if snapshot_tests_available; then printf 'snapshots enabled\\n'; fi
+printf 'continued after probe\\n'
+'''
+        for snapshot_class in ("", "test-snapshots"):
+            with self.subTest(snapshot_class=snapshot_class):
+                result = subprocess.run(["bash", "-c", script, "test",
+                                         str(ROOT / "tests/integration/snapshots.bash"), snapshot_class],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1 if snapshot_class else 0)
+                self.assertNotIn("unexpected observer check", result.stderr)
+                if snapshot_class:
+                    self.assertIn("Required snapshot setup is incomplete", result.stderr)
+                    self.assertNotIn("SKIPPED", result.stdout)
+                    self.assertNotIn("continued", result.stdout)
+                else:
+                    self.assertIn("SKIPPED", result.stdout)
+                    self.assertIn("continued after probe", result.stdout)
+
+    def test_virtual_target_can_skip_network_traffic_checks_without_a_probe(self):
+        script = '''
+export PROVIDER_DATALAB_CLUSTER=existing PROVIDER_DATALAB_SKIP_NETWORK_POLICY=1
+source "$1"
+probe_network_policy() { printf 'unexpected network probe\n' >&2; return 0; }
+network_policy_tests_available
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "tests/integration/network-policy.bash")],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("SKIPPED: NetworkPolicy traffic tests", result.stdout)
+        self.assertNotIn("unexpected network probe", result.stderr)
+
     def test_existing_cluster_does_not_adopt_other_namespaces(self):
         script = '''
 export PROVIDER_DATALAB_CLUSTER=existing

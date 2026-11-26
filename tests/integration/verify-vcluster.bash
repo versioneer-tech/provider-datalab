@@ -32,10 +32,12 @@ trap report_failure ERR
 
 build_catalog_image() {
   local digest
-  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,initialize.py} | sha256sum | cut -c1-16)"
+  digest="$(cat "${REPO_ROOT}/tests/vcluster/"{catalog.Dockerfile,initialize.py,requirements.txt,tooling/requirements.txt} | sha256sum | cut -c1-16)"
   catalog_image="${VCLUSTER_CATALOG_IMAGE:-}"
   mkdir -p "${work_directory}/docker" "${work_directory}/build/tests/vcluster"
-  cp "${REPO_ROOT}/tests/vcluster/initialize.py" "${work_directory}/build/tests/vcluster/"
+  cp "${REPO_ROOT}/tests/vcluster/"{initialize.py,requirements.txt} "${work_directory}/build/tests/vcluster/"
+  mkdir -p "${work_directory}/build/tests/vcluster/tooling"
+  cp "${REPO_ROOT}/tests/vcluster/tooling/requirements.txt" "${work_directory}/build/tests/vcluster/tooling/"
   if [[ -z "${catalog_image}" ]]; then
     require_command docker
     catalog_image="$(test_image_name "datalab-stac:${digest}")"
@@ -76,49 +78,16 @@ build_client_image() {
 }
 
 install_client_kubectl() {
-  local version script
-  if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
-    cp -L "$(command -v kubectl)" "${work_directory}/kubectl"
-    kube cp "${work_directory}/kubectl" workspace/verify-vcluster-client:/tmp/kubectl
-    return
-  fi
-  version="$(kube version --client -o json | jq -er '.clientVersion.gitVersion')"
-  # Large API copies can time out through nested forwards. Download in the Pod.
-  script="$(cat <<'KUBECTL'
-import hashlib
-from pathlib import Path
-import platform
-import re
-import sys
-from urllib.request import urlopen
-
-version = sys.argv[1]
-assert re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version), "Invalid kubectl version"
-architecture = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
-url = f"https://dl.k8s.io/release/{version}/bin/linux/{architecture}/kubectl"
-with urlopen(url + ".sha256", timeout=60) as response:
-    expected = response.read().decode().strip()
-temporary = Path("/tmp/kubectl.download")
-try:
-    digest = hashlib.sha256()
-    with urlopen(url, timeout=60) as response, temporary.open("wb") as output:
-        while chunk := response.read(1024 * 1024):
-            digest.update(chunk)
-            output.write(chunk)
-    assert digest.hexdigest() == expected, "kubectl checksum mismatch"
-    temporary.chmod(0o755)
-    temporary.replace("/tmp/kubectl")
-finally:
-    temporary.unlink(missing_ok=True)
-print(f"PASS downloaded and verified kubectl {version}", flush=True)
-KUBECTL
-  )"
-  kube --request-timeout=5m exec verify-vcluster-client --namespace workspace -- python3 -c "${script}" "${version}"
+  # Large API copies can time out through nested forwards. Send the small installer.
+  kube cp "${REPO_ROOT}/scripts/install-tools.py" workspace/verify-vcluster-client:/tmp/install-tools.py
+  kube cp "${REPO_ROOT}/scripts/tools.json" workspace/verify-vcluster-client:/tmp/tools.json
+  kube --request-timeout=5m exec verify-vcluster-client --namespace workspace -- \
+    python3 /tmp/install-tools.py kubectl --directory /tmp
 }
 
 install_prerequisites() {
   create_ingress_certificate
-  install_pgo
+  install_cnpg
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
   local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
   if [[ ! -s "${contour_manifest}" ]]; then
@@ -141,22 +110,31 @@ install_prerequisites() {
   if ! kube get deployment/keycloak --namespace keycloak >/dev/null 2>&1; then
     kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
   fi
-  openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=keycloak.keycloak' \
-    -addext 'subjectAltName=DNS:keycloak.keycloak' \
-    -keyout "${work_directory}/issuer.key" -out "${work_directory}/issuer.crt" >/dev/null 2>&1
-  kube create secret tls verify-vcluster-issuer --namespace keycloak \
-    --cert "${work_directory}/issuer.crt" --key "${work_directory}/issuer.key" \
-    --dry-run=client -o yaml | kube apply -f -
+  # Reuse a certificate with two hours left so retries keep the identity service ready.
+  if ! kube get secret/verify-vcluster-issuer --namespace keycloak \
+      -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 --decode >"${work_directory}/issuer.crt" || \
+     ! openssl x509 -in "${work_directory}/issuer.crt" -noout -checkend 7200 >/dev/null 2>&1 || \
+     ! openssl verify -CAfile "${work_directory}/issuer.crt" -verify_hostname keycloak.keycloak \
+       "${work_directory}/issuer.crt" >/dev/null 2>&1; then
+    openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=keycloak.keycloak' \
+      -addext 'subjectAltName=DNS:keycloak.keycloak' \
+      -keyout "${work_directory}/issuer.key" -out "${work_directory}/issuer.crt" >/dev/null 2>&1
+    kube create secret tls verify-vcluster-issuer --namespace keycloak \
+      --cert "${work_directory}/issuer.crt" --key "${work_directory}/issuer.key" \
+      --dry-run=client -o yaml | kube apply -f -
+  fi
+  # TLS bootstrap needs a configuration build and database schema setup.
   kube patch deployment/keycloak --namespace keycloak --type=strategic --patch "$(
-    jq -n --arg checksum "$(sha256sum "${work_directory}/issuer.crt" | cut -d' ' -f1)" '{spec:{template:{
+    jq -n --arg checksum "$(sha256sum "${work_directory}/issuer.crt" | cut -d' ' -f1)" '{spec:{progressDeadlineSeconds:900,template:{
       metadata:{annotations:{"datalabs.versioneer.at/issuer-checksum":$checksum}},
       spec:{containers:[{name:"keycloak",args:["start-dev","--import-realm","--https-certificate-file=/tls/tls.crt","--https-certificate-key-file=/tls/tls.key"],
+        startupProbe:{periodSeconds:5,failureThreshold:120},
         volumeMounts:[{name:"tls",mountPath:"/tls",readOnly:true}]}],
         volumes:[{name:"tls",secret:{secretName:"verify-vcluster-issuer"}}]}}}}'
   )"
   kube patch service/keycloak --namespace keycloak --type=strategic \
     --patch '{"spec":{"ports":[{"name":"https","port":8443,"targetPort":8443}]}}'
-  kube rollout status deployment/keycloak --namespace keycloak --timeout=10m
+  kube rollout status deployment/keycloak --namespace keycloak --timeout=15m
   kube wait gateway/verify-vcluster --namespace projectcontour --for=condition=Programmed --timeout=10m
   kube wait deployment --namespace projectcontour --selector gateway.networking.k8s.io/gateway-name=verify-vcluster \
     --for=condition=Available --timeout=10m
@@ -339,8 +317,8 @@ verify_hibernation() {
   kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
     all(.status.connections[] | select(.type == "vcluster"); .ready == false)
   ' >/dev/null
-  kube get postgrescluster/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
-    | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
+    | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   [[ "$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')" == "${previous_pvcs}" ]]
   kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=5m
   printf 'PASS both instances hibernate without synced Pods and retain their PVCs and PostgreSQL\n'
@@ -362,7 +340,7 @@ verify_hibernation() {
 }
 
 verify_vcluster() {
-  local service gateway_ip deadline administrator_secret editor_secret other_secret
+  local service gateway_ip deadline administrator_secret editor_secret other_secret previous_configuration configuration_path
   if [[ -n "${PROVIDER_DATALAB_IMAGE_PULL_SECRET:-}" ]]; then
     kube patch environmentconfig/datalab-vcluster-it --type=merge --patch "$(
       jq -cn --arg name "${PROVIDER_DATALAB_IMAGE_PULL_SECRET}" \
@@ -392,13 +370,14 @@ DATALAB
     kube wait "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --for=create --timeout=10m
     kube rollout status "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --timeout=15m
   done
-  kube wait postgrescluster/pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
+  kube wait cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
   deadline=$((SECONDS + 900))
-  until kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null; do
+  until kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null; do
     ((SECONDS < deadline)) || return 1
     sleep 5
   done
   wait_for_connection_secret verify-vcluster-postgres-pg0 verify-vcluster 600 password host
+  verify_workload_probes "${runtime_namespace}"
   connection_secret() {
     kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -er --arg instance "$1" --arg group "$2" \
       '.status.connections[] | select(.type == "vcluster" and .instance == $instance and .group == $group) | .secretRef.name'
@@ -480,10 +459,19 @@ PVC
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"replace","path":"/spec/vclusters/vc0/groups/0/role","value":"view"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --read-only
+  configuration_path='{.spec.template.metadata.annotations.datalabs\.versioneer\.at/configuration-checksum}'
+  previous_configuration="$(kube get statefulset/vcluster-vc0 --namespace "${runtime_namespace}" -o "jsonpath=${configuration_path}")"
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json \
     --patch '[{"op":"remove","path":"/spec/vclusters/vc0/groups/0"}]'
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --revoked
   kube wait "secret/${editor_secret}" --namespace workspace --for=delete --timeout=5m
+  # Role removal can revoke access before the changed authentication configuration rolls out.
+  deadline=$((SECONDS + 600))
+  until [[ "$(kube get statefulset/vcluster-vc0 --namespace "${runtime_namespace}" -o "jsonpath=${configuration_path}")" != "${previous_configuration}" ]]; do
+    ((SECONDS < deadline)) || { printf 'The virtual cluster authentication configuration did not change.\n' >&2; return 1; }
+    sleep 3
+  done
+  kube rollout status statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --timeout=10m
   if ((snapshots_enabled)); then
     kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
   fi
@@ -491,7 +479,7 @@ PVC
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1
-  kube get postgrescluster/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.instances[]?; .readyReplicas >= 1)' >/dev/null
+  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   if ((snapshots_enabled)); then
     verify_bound_volume_preserved
     printf 'PASS a running bound workload does not block vc0 removal; host volume, backup schedule, and snapshot remain\n'
@@ -515,10 +503,10 @@ value["spec"]["vclusters"] = {"vc0": {"groups": [{"name": "cluster-admin", "name
 result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
 assert result.returncode != 0 and 'built-in cluster-admin profile cannot be changed' in result.stderr, result.stderr
 print('PASS Kubernetes admission accepts implicit admin profiles and rejects a reserved-name override')
-for field in ('vclusters', 'databases', 'documentStores', 'cacheStores'):
+for field in ('vclusters', 'stores'):
     for key in ('0bad', 'Bad', 'bad_name', 'bad-', 'a' * 64):
         value = deepcopy(source)
-        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'mongo' if field == 'documentStores' else 'redis', 'storage': '1Gi'}
+        config = next(iter(value['spec'][field].values())) if field in value['spec'] else {'type': 'valkey', 'storage': '1Gi'}
         value['spec'][field] = {key: config}
         result = subprocess.run(['kubectl', '--kubeconfig', sys.argv[2], '--context', sys.argv[3], 'apply', '--dry-run=server', '-f', '-'], input=yaml.safe_dump(value), text=True, capture_output=True)
         assert result.returncode != 0 and 'Instance names must' in result.stderr, result.stderr
@@ -541,7 +529,7 @@ main() {
     kube delete datalabs.versioneer.at/verify-vcluster --namespace workspace --wait=false
     kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=delete --timeout=10m
     kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=10m
-    stop_unused_operator postgres-operator pgo postgresclusters.postgres-operator.crunchydata.com
+    stop_unused_operator cnpg-system cnpg clusters.postgresql.cnpg.io
   fi
 }
 main "$@"

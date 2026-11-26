@@ -124,7 +124,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-john-storage
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -255,6 +255,12 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsGroup: 65532
                 runAsUser: 65532
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /ping
+                  port: auth-proxy
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -278,7 +284,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-database
               resources:
@@ -313,7 +319,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-default-user
               resources:
@@ -348,7 +354,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-user-0
               resources:
@@ -387,7 +393,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-public-share
               resources:
@@ -655,7 +661,10 @@ spec:
             }
             server {
               listen 8080;
+              location = /_live { return 200; }
               location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }
+              location = /_auth/ping { proxy_pass http://127.0.0.1:4180/ping; }
+              location = /_auth/ready { proxy_pass http://127.0.0.1:4180/ready; }
               location / {
                 if ($tenant_valid = 0) { return 403; }
                 if ($http_x_amz_security_token = "") { return 403; }
@@ -711,7 +720,7 @@ spec:
         template:
           metadata:
             annotations:
-              datalabs.versioneer.at/gateway-config-checksum: a75307f4da07a36cc804072239acd0153a819bb72e0c6c1064396e25507c1dfe
+              datalabs.versioneer.at/gateway-config-checksum: dd99ffc74b3c0d29df6100579de7911c9537e7fe0f2899d186723a059885df1a
               datalabs.versioneer.at/storage-secret-checksum: e82525376bdef67fe9224fbf1d48e923712012f517d3b372156910fe74d4647e
             labels:
               app.kubernetes.io/instance: s-john
@@ -752,6 +761,16 @@ spec:
                     name: s-john-storage
               image: rclone/rclone:1.76.0
               imagePullPolicy: IfNotPresent
+              livenessProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - |
+                    response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                    case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                periodSeconds: 20
+                timeoutSeconds: 3
               name: s3
               readinessProbe:
                 exec:
@@ -780,6 +799,17 @@ spec:
                   drop:
                   - ALL
                 readOnlyRootFilesystem: true
+              startupProbe:
+                exec:
+                  command:
+                  - sh
+                  - -ec
+                  - |
+                    response=$(wget -S -O /dev/null -T 2 http://127.0.0.1:8081/ 2>&1 || true)
+                    case "$response" in *'403 Forbidden'*) exit 0;; *) exit 1;; esac
+                failureThreshold: 60
+                periodSeconds: 5
+                timeoutSeconds: 3
               volumeMounts:
               - mountPath: /cache
                 name: cache
@@ -836,7 +866,17 @@ spec:
               - --auth-logging=false
               image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
               imagePullPolicy: IfNotPresent
+              livenessProbe:
+                httpGet:
+                  path: /_auth/ping
+                  port: 8080
+                periodSeconds: 20
               name: oauth2-proxy
+              readinessProbe:
+                httpGet:
+                  path: /_auth/ready
+                  port: 8080
+                periodSeconds: 10
               resources:
                 limits:
                   cpu: 250m
@@ -852,6 +892,12 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsGroup: 65532
                 runAsUser: 65532
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /_auth/ping
+                  port: 8080
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -863,7 +909,13 @@ spec:
               - daemon off;
               command:
               - nginx
-              image: nginxinc/nginx-unprivileged:1.28-alpine
+              image: nginx/nginx-unprivileged:1.30.8-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
+              livenessProbe:
+                httpGet:
+                  path: /_live
+                  port: s3-gateway
+                periodSeconds: 20
+                timeoutSeconds: 3
               name: gateway
               ports:
               - containerPort: 8080
@@ -885,6 +937,12 @@ spec:
                   drop:
                   - ALL
                 readOnlyRootFilesystem: true
+              startupProbe:
+                failureThreshold: 30
+                httpGet:
+                  path: /_live
+                  port: s3-gateway
+                periodSeconds: 5
               volumeMounts:
               - mountPath: /tmp
                 name: tmp
@@ -1630,11 +1688,11 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: s-john
       policy:
         resolution: Required
         resolve: Always
-      matchLabels:
-        crossplane.io/claim-name: s-john
     fullPath: false
     name: s-john
     realmId: acme

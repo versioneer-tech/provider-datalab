@@ -1,0 +1,71 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __PROBE_NAME__
+  namespace: __PROBE_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: datalab-service-probe
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: valkey-check
+      image: __CLIENT_IMAGE__
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: VALKEY_PREFIX
+          value: "__KEY_PREFIX__"
+        - name: VALKEY_OTHER_PREFIX
+          value: "__OTHER_KEY_PREFIX__"
+        - name: VALKEY_HOST
+          valueFrom:
+            secretKeyRef:
+              name: __CONNECTION_SECRET__
+              key: host
+        - name: VALKEY_PORT
+          valueFrom:
+            secretKeyRef:
+              name: __CONNECTION_SECRET__
+              key: port
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: __CONNECTION_SECRET__
+              key: password
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          expected=__PROBE_VALUE__
+          # Service routing can lag behind the Pod rollout.
+          remaining=30
+          until test "$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" timeout 2 valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw PING 2>/dev/null)" = PONG; do
+            remaining=$((remaining - 1))
+            if test "${remaining}" -eq 0; then
+              printf 'Valkey service did not become ready.\n' >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          test -z "$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw GET recovered-only)"
+          VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" \
+            SET "${VALKEY_PREFIX}provider-datalab:verify" "${expected}" >/dev/null
+          VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" \
+            SET "${VALKEY_OTHER_PREFIX}provider-datalab:verify" "${expected}-other" >/dev/null
+          actual="$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw \
+            GET "${VALKEY_PREFIX}provider-datalab:verify")"
+          test "${actual}" = "${expected}"
+          actual="$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw \
+            GET "${VALKEY_OTHER_PREFIX}provider-datalab:verify")"
+          test "${actual}" = "${expected}-other"
+          printf 'PASS Datalab Valkey write/read through both published key prefixes\n'

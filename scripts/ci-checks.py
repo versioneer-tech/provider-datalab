@@ -10,7 +10,8 @@ import subprocess
 
 def documentation_only(paths):
     return bool(paths) and all(
-        path.endswith(".md") or path.startswith("docs/") or path == "mkdocs.yml"
+        path.endswith(".md") or path == "mkdocs.yml" or
+        path.startswith("docs/imgs/") and path.rsplit(".", 1)[-1].lower() in {"png", "jpg", "jpeg", "ico", "svg", "webp"}
         for path in paths
     )
 

@@ -58,6 +58,10 @@ POLICY
 
 network_policy_tests_available() {
   local reason
+  if [[ "${PROVIDER_DATALAB_CLUSTER}" == existing && "${PROVIDER_DATALAB_SKIP_NETWORK_POLICY:-0}" == 1 ]]; then
+    printf '\n=== SKIPPED: NetworkPolicy traffic tests: the selected virtual target does not enforce host NetworkPolicies. ===\n\n'
+    return 1
+  fi
   if reason="$(probe_network_policy 2>&1)"; then
     printf 'PASS NetworkPolicy enforcement probe: allowed, blocked, then allowed traffic.\n'
     return 0

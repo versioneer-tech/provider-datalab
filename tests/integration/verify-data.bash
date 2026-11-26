@@ -46,6 +46,7 @@ verify_package_access() {
   log "Checking Data file access with read-only=${read_only}"
   kube rollout status "deployment/${PACKAGE_R_NAME}" \
     --namespace "${namespace}" --timeout=10m || return 1
+  verify_workload_probes "${namespace}" || return 1
   kube wait "endpoints/${PACKAGE_R_NAME}" --namespace "${namespace}" \
     --for=jsonpath='{.subsets[0].addresses[0].ip}' --timeout=2m || return 1
   kube delete "pod/${PROBE_NAME}" --namespace "${namespace}" \

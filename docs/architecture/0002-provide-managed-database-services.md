@@ -1,6 +1,6 @@
 # ADR-002: Provide Managed Database Services
 
-> Written: 10.12.2025. Revised: 21.11.2026.
+> Written: 10.12.2025. Revised: 25.11.2026.
 
 ## Status
 
@@ -20,31 +20,26 @@ to request these managed services:
 
 | Capability | Service | Datalab field |
 | --- | --- | --- |
-| Relational database with SQL and transactions | PostgreSQL | `spec.databases` |
-| Document database | MongoDB | `spec.documentStores` |
-| Key-value store and cache | Redis | `spec.cacheStores` |
+| Relational database with SQL and transactions | PostgreSQL | `spec.stores` with `type: postgres` |
+| Key-value store and cache | Valkey | `spec.stores` with `type: valkey` |
 
-Crossplane creates the service resources. The installed database operators
-manage their workloads. Services belong to the Datalab and continue to run
+Crossplane creates the service resources. CloudNativePG manages PostgreSQL;
+Kubernetes manages the single-instance Valkey StatefulSet. Services belong to the Datalab and continue to run
 when an application stops. `status.connections` reports their endpoints
 and credential Secret references.
 
 ### Keep user configuration small
 
-Users select a service, name it, and set its data storage size. For PostgreSQL,
-MongoDB, and Redis, they can also set `backupStorage` to enable backups and size a
-separate backup volume.
+Users select a service type, name its instance and logical databases or key
+prefixes, and set the data storage size. PostgreSQL, Valkey, and named volumes
+use `backups: true` to enable CSI snapshots. Backups default to disabled and
+need no backup volume size.
 
-A positive `backupStorage` enables PostgreSQL, MongoDB, or Redis backups. Zero or an
-omitted value disables them. PostgreSQL uses pgBackRest; MongoDB uses a
-composition-managed dump job. Redis uses a composition-managed RDB snapshot
-job. A data volume alone is not a backup. The [backup guide](../how-to-guides/usage_concepts.md#backups)
-defines the configuration examples, schedules, and retention.
-
-Named application volumes use `spec.volumes`. Each entry creates a host PVC
-and scheduled CSI `VolumeSnapshot` backups. These snapshots
-have no backup volume size. Database backup tools remain responsible for
-managed database recovery. See [Volumes](../how-to-guides/volumes.md).
+CloudNativePG coordinates cold PostgreSQL snapshots. Valkey pauses writes and
+saves its RDB file before snapshot capture. Named volumes use CSI snapshots;
+applications must arrange any required flush or write pause. The
+[backup guide](../how-to-guides/usage_concepts.md#backups) defines schedules,
+retention, and recovery. A data volume alone is not a backup.
 
 Users configure the Datalab resource. Crossplane owns the generated resources
 and can replace manual changes during reconciliation.
@@ -66,7 +61,7 @@ backup tools or database operator resources.
 The operator must define the supported availability, backup retention,
 acceptable data loss, recovery time, and data deletion rules. These guarantees
 depend on the deployed service, storage, and tested recovery procedure.
-Setting a backup volume size alone does not establish them.
+Enabling snapshots alone does not establish them.
 
 The service API provides consistent provisioning, persistent storage, and
 connection settings. High availability, recovery after loss of the cluster,

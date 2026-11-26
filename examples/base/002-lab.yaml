@@ -14,21 +14,16 @@ spec:
     jim:
       grantedAt: "2025-01-10T19:00:00Z"
       role: admin
-  documentStores:
-    prod:
-      type: mongo
-      storage: 1Gi
-      backupStorage: 3Gi
-  cacheStores:
-    prod:
-      type: redis
-      storage: 1Gi
-      backupStorage: 3Gi
-  databases:
+  stores:
     pg0:
       type: postgres
       names:
       - dev
       - prod
       storage: 1Gi
-      backupStorage: 3Gi
+      backups: true
+    cache:
+      type: valkey
+      names: [prod]
+      storage: 1Gi
+      backups: true

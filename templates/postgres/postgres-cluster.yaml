@@ -1,18 +1,17 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-apiVersion: postgres-operator.crunchydata.com/v1
-kind: PostgresCluster
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
 metadata:
   name: ${cluster_name}
   namespace: ${runtime_namespace}
 spec:
-  postgresVersion: 17
-  postGISVersion: '3.5'
-  databaseInitSQL:
-    name: ${cm_name}
-    key: init.sql
-  instances:
-  - name: primary
-    replicas: 1
-    dataVolumeClaimSpec: ${data_vcs}
+  imageName: ${postgres_image}
+  instances: 1
+  enableSuperuserAccess: true
+  storage: ${storage}
+  bootstrap:
+    initdb:
+      database: ${database_name}
+      owner: datalab

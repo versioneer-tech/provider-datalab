@@ -1,6 +1,6 @@
 # Use volumes
 
-Declare persistent volumes under `spec.volumes`. Each volume has a PVC and
+Declare persistent volumes under `spec.volumes`. Each volume has a PVC and an optional CSI
 backup schedule in the Datalab host namespace. Virtual cluster removal does
 not remove these volumes.
 
@@ -15,6 +15,7 @@ spec:
   volumes:
     demo:
       storage: 2Gi
+      backups: true
 ```
 
 This creates host PVC `s-joe/volume-demo` and its snapshot schedule.
@@ -26,7 +27,7 @@ workloads; without that setting, the first allowed class applies. The allowlist
 must be non-empty when volumes or virtual clusters are declared.
 The request counts toward the Datalab's host storage quota.
 
-The operator must configure [snapshot infrastructure](installation.md#volume-snapshots).
+For backups or recovery, the operator must configure [snapshot infrastructure](installation.md#volume-snapshots).
 To use the volume through a virtual API, add a binding as shown below.
 
 ## Check status
@@ -62,6 +63,7 @@ spec:
   volumes:
     demo:
       storage: 2Gi
+      backups: true
   vclusters:
     vc0:
       volumeBindings:
@@ -128,7 +130,9 @@ data:
 
 The default schedule is daily at 01:00 UTC, with two completed snapshots kept
 for the current PVC UID. `maxSnapshots` accepts an integer from 1 to 100.
-The policy applies to every named volume, including restored volumes.
+The policy applies to volumes with `backups: true`, including restored volumes
+when explicitly enabled. The default is `false`. Disabling backups removes the
+schedule and keeps the PVC and completed snapshots.
 
 The backup CronJob runs on the host. It continues when virtual clusters are
 hibernated or removed. It does not mount the source volume. The source PVC
@@ -145,7 +149,7 @@ does not count toward the PVC request quota; monitor backend capacity separately
 Successful daily backups leave up to 24 hours between recovery points.
 Failures extend that gap. Set a shorter interval when needed. Applications may
 need to flush or pause writes for a consistent recovery point. Managed databases
-use their own [backup tools](usage_concepts.md#backups).
+coordinate their own [snapshot capture](usage_concepts.md#backups).
 
 Check failed Jobs and snapshot readiness in the host service namespace.
 CSI snapshots do not include Kubernetes objects and may share the volume's
@@ -162,6 +166,7 @@ spec:
   volumes:
     recovered-demo:
       storage: 2Gi
+      backups: true
       restoreFrom: volume-demo-example
 ```
 

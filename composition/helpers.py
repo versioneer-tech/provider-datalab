@@ -5,7 +5,6 @@ import base64
 import hashlib
 import json
 import re
-from decimal import Decimal
 
 from crossplane.function import request, response
 from google.protobuf import json_format
@@ -125,16 +124,6 @@ def _string_value(value):
     return str(value).strip()
 
 
-def _backup_enabled(value):
-    quantity = str(value or "0").strip()
-    match = re.fullmatch(
-        r"([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?",
-        quantity,
-    )
-    if not match:
-        raise ValueError("backupStorage must be a non-negative Kubernetes quantity")
-    return Decimal(match[1]) > 0
-
 
 def _extract_manifest(observed_resource):
     if not observed_resource or not getattr(observed_resource, "resource", None):
@@ -181,6 +170,29 @@ def _b64get_any(data, keys):
         except Exception:
             return str(value)
     return None
+
+
+def _stores(spec, kind):
+    return {name: {**config, "names": config.get("names") or ["default"]}
+            for name, config in (spec.get("stores") or {}).items()
+            if isinstance(config, dict) and config.get("type") == kind}
+
+
+def _postgres_connection_data(data, cluster, namespace):
+    from urllib.parse import quote
+
+    username = _b64get_any(data, ["username"])
+    password = _b64get_any(data, ["password"])
+    if not username or not password:
+        return {}
+    host = f"{cluster}-rw.{namespace}.svc"
+    port = _b64get_any(data, ["port"]) or "5432"
+    database = _b64get_any(data, ["dbname"]) or "postgres"
+    uri = f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}/{quote(database, safe='')}"
+    return {key: base64.b64encode(value.encode()).decode() for key, value in {
+        "host": host, "port": port, "user": username, "password": password,
+        "dbname": database, "uri": uri,
+    }.items()}
 
 
 def _strong_token(seed, *, suffix=":provider-datalab", length=32):

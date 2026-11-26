@@ -22,7 +22,7 @@ def main():
     env["data"].update({"packageR": {"enabled": False}, "registry": {"enabled": False}})
     source = {"apiVersion": "versioneer.at/v1", "kind": "Datalab",
               "metadata": {"name": "test-volumes", "namespace": "workspace"},
-              "spec": {"users": [], "volumes": {"analysis": {}}}}
+              "spec": {"users": [], "volumes": {"analysis": {"backups": True}}}}
     resources = render(args, env, source, [], include_composite=True)
     pvc = manifest(resources, key("analysis"))
     assert pvc["metadata"] == {"name": "volume-analysis", "namespace": "test-volumes",
@@ -41,8 +41,8 @@ def main():
     assert manifest(minimal, key("analysis"))["spec"]["resources"]["requests"]["storage"] == "1Gi"
     print("PASS named host PVCs need no virtual cluster and use the platform size and allowed StorageClass")
 
-    source["spec"]["volumes"]["analysis"] = {"storage": "3Gi"}
-    source["spec"]["volumes"]["recovered"] = {"storage": "3Gi", "restoreFrom": "saved-analysis"}
+    source["spec"]["volumes"]["analysis"] = {"storage": "3Gi", "backups": True}
+    source["spec"]["volumes"]["recovered"] = {"storage": "3Gi", "backups": True, "restoreFrom": "saved-analysis"}
     resources = render(args, env, source, [], include_composite=True)
     pvc = manifest(resources, key("analysis"))
     assert pvc["spec"]["storageClassName"] == "workspace-storage"
@@ -67,7 +67,7 @@ def main():
     changed = render(args, override, source, [])
     assert manifest(changed, key("analysis", "backup", "cronjob"))["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["args"][-1] == "5"
     assert manifest(changed, key("analysis", "backup", "cronjob"))["spec"]["schedule"] == "0 */6 * * *"
-    print("PASS every host volume gets scheduled backups with a default limit of two snapshots")
+    print("PASS enabled host volumes get scheduled backups with a default limit of two snapshots")
 
     sleeping = deepcopy(source)
     sleeping["spec"]["vclusters"] = {"vc0": {"hibernated": True}}
@@ -115,6 +115,17 @@ def main():
         invalid = deepcopy(env)
         invalid["data"]["volumes"]["storageClasses"] = classes
         render(args, invalid, source, [], error="data.volumes.storageClasses")
+    disabled = deepcopy(source)
+    disabled["spec"]["volumes"] = {"analysis": {"storage": "3Gi"}}
+    retained = render(args, [env, native_pvc, *snapshots], disabled, [], include_composite=True)
+    assert retained["composite"]["status"]["volumes"][0]["backup"]["readySnapshots"] == 1
+    assert key("analysis", "backup", "cronjob") not in retained
+    plain = deepcopy(env)
+    plain["data"]["volumes"].pop("snapshotClassName")
+    no_schedule = render(args, plain, disabled, [], include_composite=True)
+    assert key("analysis") in no_schedule
+    assert not any("backup" in name or "snapshot-class" in name for name in no_schedule)
+    print("PASS backups default to disabled and do not require a snapshot class")
     removed = deepcopy(source)
     removed["spec"]["volumes"] = {}
     empty = render(args, env, removed, [], include_composite=True)

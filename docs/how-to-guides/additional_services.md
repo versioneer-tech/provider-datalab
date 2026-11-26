@@ -6,7 +6,7 @@ create Pods, Deployments, Services, and PVCs in the target virtual namespace.
 Use port forwarding to open a workload's web interface.
 
 Use the [Datalab service fields](usage_concepts.md#postgresql) for managed
-PostgreSQL, MongoDB, and Redis stores. The environment also supplies
+PostgreSQL and Valkey stores. The environment also supplies
 a [shared OCI registry](usage_concepts.md#oci-registry).
 
 The MLflow and psql examples below use virtual namespace `demo` and these
@@ -76,6 +76,15 @@ spec:
           ports:
             - containerPort: 8786
             - containerPort: 8787
+          startupProbe:
+            httpGet: {path: /health, port: 8787}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8787}
+          livenessProbe:
+            httpGet: {path: /health, port: 8787}
+            periodSeconds: 20
           resources:
             requests: {cpu: "500m", memory: "1Gi"}
             limits:   {cpu: "1",    memory: "2Gi"}
@@ -97,7 +106,18 @@ spec:
       containers:
         - name: worker
           image: daskdev/dask:2025.4.0
-          args: ["dask-worker", "tcp://dask-scheduler:8786", "--nthreads", "2", "--memory-limit", "2GB"]
+          args: ["dask-worker", "tcp://dask-scheduler:8786", "--nthreads", "2", "--memory-limit", "2GB", "--dashboard-address", ":8789"]
+          ports:
+            - containerPort: 8789
+          startupProbe:
+            httpGet: {path: /health, port: 8789}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8789}
+          livenessProbe:
+            httpGet: {path: /health, port: 8789}
+            periodSeconds: 20
           resources:
             requests: {cpu: "500m", memory: "1Gi"}
             limits:   {cpu: "1",    memory: "2Gi"}
@@ -222,6 +242,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /mlflow
+          startupProbe:
+            httpGet: {path: /, port: 5000}
+            periodSeconds: 5
+            failureThreshold: 120
           readinessProbe:
             httpGet: { path: "/", port: 5000 }
             initialDelaySeconds: 5

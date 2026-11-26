@@ -1,7 +1,7 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
-"""Check refresh and exchange against a disposable Keycloak server."""
+"""Check login role scopes, refresh, and exchange in a disposable Keycloak server."""
 
 import base64
 import json
@@ -27,6 +27,10 @@ def verify_keycloak_policy(resources, image=None):
               for item in resources.values() if item.get('kind') == 'ClientScope'}
     role_names = {item['metadata']['name']: item['spec']['forProvider']['name']
                   for item in resources.values() if item.get('kind') == 'Role'}
+    member_grants = next(item for item in params('Roles') if item['groupIdRef']['name'] == client_id)
+    member_roles = [role_names[item['name']] for item in member_grants['roleIdsRefs']]
+    login_client_id = 'test-workspace-api'
+    other_client_id = 'test-other-workspace'
     root_mappers, scope_mappers = [], {name: [] for name in scopes.values()}
     for item in params('ProtocolMapper'):
         mapper = {key: item[key] for key in ['name', 'protocol', 'protocolMapper', 'config']}
@@ -56,10 +60,17 @@ def verify_keycloak_policy(resources, image=None):
                        for item in policy['condition']], 'profiles': [profile['name']]}]}
     realm = {
         'realm': 'test-refresh', 'enabled': True,
-        'roles': {'client': {client_id: [{'name': name} for name in role_names.values()]}},
+        'roles': {'client': {client_id: [{'name': name} for name in role_names.values()],
+                             other_client_id: [{'name': 'ws_access'}]}},
+        'groups': [{'name': client_id, 'clientRoles': {client_id: member_roles}},
+                   {'name': other_client_id, 'clientRoles': {other_client_id: ['ws_access']}}],
         'users': [{'username': 'test-user', 'enabled': True, 'emailVerified': True,
                    'firstName': 'Test', 'lastName': 'User', 'email': 'test@example.test',
                    'realmRoles': ['offline_access'], 'clientRoles': {client_id: list(role_names.values())},
+                   'credentials': [{'type': 'password', 'value': 'test-password', 'temporary': False}]},
+                  {'username': 'test-member', 'enabled': True, 'emailVerified': True,
+                   'firstName': 'Test', 'lastName': 'Member', 'email': 'member@example.test',
+                   'groups': ['/' + client_id, '/' + other_client_id],
                    'credentials': [{'type': 'password', 'value': 'test-password', 'temporary': False}]}],
         'clients': [{'clientId': client_id, 'secret': 'test-secret', 'protocol': 'openid-connect',
                      'publicClient': False, 'directAccessGrantsEnabled': True, 'standardFlowEnabled': True,
@@ -68,7 +79,17 @@ def verify_keycloak_policy(resources, image=None):
                      'attributes': {'standard.token.exchange.enabled': 'true',
                          'client.offline.session.idle.timeout': client['clientOfflineSessionIdleTimeout'],
                          'client.offline.session.max.lifespan': client['clientOfflineSessionMaxLifespan']},
-                     'protocolMappers': root_mappers}],
+                     'protocolMappers': root_mappers},
+                    {'id': login_client_id, 'clientId': login_client_id, 'protocol': 'openid-connect',
+                     'publicClient': True, 'directAccessGrantsEnabled': True,
+                     'fullScopeAllowed': False, 'defaultClientScopes': ['basic'],
+                     'protocolMappers': [{'name': 'client roles', 'protocol': 'openid-connect',
+                         'protocolMapper': 'oidc-usermodel-client-role-mapper',
+                         'config': {'claim.name': 'resource_access.${client_id}.roles',
+                                    'access.token.claim': 'true', 'multivalued': 'true',
+                                    'jsonType.label': 'String'}}]},
+                    {'clientId': other_client_id, 'protocol': 'openid-connect', 'publicClient': True,
+                     'fullScopeAllowed': False}],
         'clientScopes': [{'name': 'basic', 'protocol': 'openid-connect', 'protocolMappers': [
                             {'name': 'sub', 'protocol': 'openid-connect', 'protocolMapper': 'oidc-sub-mapper',
                              'config': {'access.token.claim': 'true', 'introspection.token.claim': 'true'}}]},
@@ -93,12 +114,13 @@ def verify_keycloak_policy(resources, image=None):
             raise RuntimeError('Keycloak test Docker command failed: ' + arguments[0])
         return result.stdout.strip()
 
-    def call(path, values=None, token=None, body=None):
+    def call(path, values=None, token=None, body=None, method=None):
         data = urlencode(values).encode() if values is not None else None
         headers = {'Authorization': 'Bearer ' + token} if token else {}
         if body is not None:
             data = json.dumps(body).encode(); headers['Content-Type'] = 'application/json'
-        method = 'PUT' if body is not None else None
+        if method is None and body is not None:
+            method = 'PUT'
         try:
             with urlopen(Request(origin + path, data=data, headers=headers, method=method), timeout=10) as response:
                 raw = response.read()
@@ -138,6 +160,33 @@ def verify_keycloak_policy(resources, image=None):
             status, admin = call('/realms/master/protocol/openid-connect/token', {
                 'grant_type': 'password', 'client_id': 'admin-cli', 'username': 'test-admin', 'password': 'test-admin-password'})
             assert status == 200, 'Local Keycloak test administration failed'
+            member_login = {'grant_type': 'password', 'client_id': login_client_id,
+                            'username': 'test-member', 'password': 'test-password', 'scope': 'openid'}
+            status, unscoped = call(endpoint, member_login)
+            assert status == 200, 'The separate client login failed'
+            assert not claims(unscoped['access_token']).get('resource_access'), 'Group membership bypassed role scopes'
+            admin_path = '/admin/realms/test-refresh/clients'
+            status, workspace_clients = call(admin_path + '?' + urlencode({'clientId': client_id}),
+                                            token=admin['access_token'])
+            assert status == 200 and len(workspace_clients) == 1, 'The workspace client was not found'
+            workspace_path = admin_path + '/' + workspace_clients[0]['id']
+            permitted_roles = []
+            for role in ('ws_access', 'ws_api', 'ws_admin'):
+                status, representation = call(workspace_path + '/roles/' + role, token=admin['access_token'])
+                assert status == 200, 'The workspace role was not found'
+                permitted_roles.append(representation)
+            mapping_path = admin_path + '/' + login_client_id + '/scope-mappings/clients/' + workspace_clients[0]['id']
+            status, _ = call(mapping_path, token=admin['access_token'], body=permitted_roles, method='POST')
+            assert status == 204, 'The separate client role scope mappings were not added'
+            status, scoped = call(endpoint, member_login)
+            assert status == 200, 'Login after role scope mapping failed'
+            access = claims(scoped['access_token']).get('resource_access', {})
+            assert {name: set(value['roles']) for name, value in access.items()} == {
+                client_id: {'ws_access', 'ws_api'}
+            }, 'Role scopes lost member grants or included administrator, profile, or unrelated workspace roles'
+            status, login_client = call(admin_path + '/' + login_client_id, token=admin['access_token'])
+            assert status == 200 and login_client['fullScopeAllowed'] is False
+            print('PASS separate login needs explicit role scopes and includes only held workspace roles', flush=True)
             credentials = {'client_id': client_id, 'client_secret': 'test-secret'}
             status, human = call(endpoint, {**credentials, 'grant_type': 'password', 'username': 'test-user',
                 'password': 'test-password', 'scope': 'openid offline_access ' + client_id + ':interactive'})

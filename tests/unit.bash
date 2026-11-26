@@ -88,15 +88,43 @@ for file in "${examples[@]}"; do
   fi
 done
 
-for suite in vclusters volumes registry s3-connections service-connections oauth2 token-exchange; do
-  python3 "tests/${suite}.py" --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-done
+suites=(vclusters volumes registry s3-connections service-connections oauth2 token-exchange)
+if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
+  suites+=(backups stores)
+fi
+if [[ -f "${render_dir}/003x-lab.yaml" ]]; then
+  suites+=(settings)
+fi
+if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
+  suites+=(exposure)
+fi
+python3 - "${render_dir}" "${suites[@]}" <<'PYTHON'
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+work = Path(sys.argv[1])
+def run(suite):
+    started = time.monotonic()
+    result = subprocess.run(["python3", "tests/" + suite + ".py", "--functions", str(work / "functions.yaml"),
+                             "--network", work.name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return suite, result, time.monotonic() - started
+
+# Containers are already running; each request has its own render input and output.
+with ThreadPoolExecutor(max_workers=2) as pool:
+    results = []
+    for future in as_completed([pool.submit(run, suite) for suite in sys.argv[2:]]):
+        suite, result, elapsed = future.result()
+        results.append((suite, result, elapsed))
+        print(result.stdout, end="", flush=True)
+        print(f"{suite}: {elapsed:.1f}s, exit {result.returncode}", flush=True)
+if any(result.returncode for _, result, _ in results):
+    raise SystemExit(1)
+PYTHON
 python3 tests/environment-selection.py "${render_dir##*/}-python"
 python3 tests/response-ttl.py "${render_dir##*/}-python"
-if [[ -f "${render_dir}/002x-lab.yaml" ]]; then
-  python3 tests/backups.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-  python3 tests/stores.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-fi
 
 if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
   render examples/base/001-lab.yaml \
@@ -107,9 +135,5 @@ if [[ -f "${render_dir}/001x-lab.yaml" ]]; then
     printf 'The package-r storage Secret checksum did not change after token rotation.\n' >&2
     exit 1
   fi
-  python3 tests/exposure.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
-fi
-if [[ -f "${render_dir}/003x-lab.yaml" ]]; then
-  python3 tests/settings.py --functions "${render_dir}/functions.yaml" --network "${render_dir##*/}"
 fi
 printf 'Unit checks passed in %s seconds.\n' "$((SECONDS - started))"

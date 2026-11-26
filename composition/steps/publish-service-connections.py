@@ -1,11 +1,12 @@
 # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from composition.helpers import _b64get_any, _extract_data, _to_dict
+from composition.helpers import _b64get_any, _extract_data, _postgres_connection_data, _stores, _to_dict
 from composition.render import _render_template
 
 
@@ -51,7 +52,8 @@ def _storage_values(data, config):
 
 
 def _postgres_values(data, name, store, config, env):
-    host = _b64get_any(data, ["host"]) or f"{store}-primary.{name}.svc"
+    data = _postgres_connection_data(data, store, name)
+    host = f"{store}-rw.{name}.svc"
     values = {
         "host": host,
         "port": _b64get_any(data, ["port"]) or "5432",
@@ -66,7 +68,7 @@ def _postgres_values(data, name, store, config, env):
             f"{store}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}"
         )
         values["host_external"] = external
-    uri = _b64get_any(data, ["uri"]) or ""
+    uri = _b64get_any(data, ["fqdn-uri", "uri"]) or ""
     for database in config.get("names") or []:
         if uri:
             parts = urlsplit(uri)
@@ -74,7 +76,7 @@ def _postgres_values(data, name, store, config, env):
                 (
                     parts.scheme,
                     parts.netloc,
-                    f"/{database}",
+                    "/" + quote(database, safe=""),
                     parts.query,
                     parts.fragment,
                 )
@@ -135,7 +137,7 @@ def compose(req, rsp):
         env.get("storage") or {},
     )
     publish("s3", storage, bool(storage))
-    for store, config in sorted((spec.get("databases") or {}).items()):
+    for store, config in sorted(_stores(spec, "postgres").items()):
         values = _postgres_values(
             _extract_data(req, rsp, f"observe-database-secret-{name}-{store}"),
             name,
@@ -143,16 +145,17 @@ def compose(req, rsp):
             config,
             env,
         )
+        values["names"] = json.dumps(config["names"])
         publish(
             f"postgres-{store}",
             values,
             bool(values["password"]),
         )
-    for field, backend, kind in (
-        ("documentStores", "mongodb", "mongo"),
-        ("cacheStores", "redis", "redis"),
+    for backend, kind in (
+        ("valkey", "valkey"),
     ):
-        for store in sorted(spec.get(field) or {}):
+        for store, config in sorted(_stores(spec, kind).items()):
+            names = config["names"]
             password = (
                 _b64get_any(
                     _extract_data(
@@ -162,27 +165,15 @@ def compose(req, rsp):
                 )
                 or ""
             )
-            if kind == "mongo":
-                host = f"mongodb-{store}-svc.{name}.svc"
-                values = {
-                    "host": host,
-                    "port": "27017",
-                    "database": store,
-                    "auth_source": "admin",
-                    "user": f"{store}-app",
-                    "password": password,
-                }
-                values["uri"] = (
-                    f"mongodb://{store}-app:{password}@{host}:27017/{store}?authSource=admin"
-                )
-            else:
-                host = f"{store}.{name}.svc"
-                values = {
-                    "host": host,
-                    "port": "6379",
-                    "database": "0",
-                    "user": "default",
-                    "password": password,
-                    "url": f"redis://default:{password}@{host}:6379/0",
-                }
+            host = f"{store}.{name}.svc"
+            values = {
+                "host": host,
+                "port": "6379",
+                "database": "0",
+                "user": "default",
+                "password": password,
+                "url": f"redis://default:{password}@{host}:6379/0",
+                "prefixes": json.dumps({name: name + ":" for name in names}),
+            }
+            values["names"] = json.dumps(names)
             publish(f"{kind}-{store}", values, bool(password))

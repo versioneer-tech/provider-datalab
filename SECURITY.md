@@ -1,4 +1,219 @@
-# Security
+# Security policy
+
+## Report a vulnerability
+
+Send private reports to `oss@versioneer.at`. Include the affected release or
+commit, reproduction steps, expected and actual behavior, and possible impact.
+Do not open a public issue or send credentials, private data, or complete
+cluster logs. Maintainers coordinate a fix and disclosure with the reporter.
+Response times depend on maintainer availability.
+
+## Supported releases
+
+Security fixes apply to the latest stable release and the latest `0.12.x`
+release while that line is maintained. Release candidates are for testing,
+not supported production use.
+
+## Build and release checks
+
+CI uses the same [local check commands](README.md#checks). Its final
+`required_checks` status rejects failures, cancellations, missing jobs, and
+unexpected skips. Documentation-only runs expect runtime and security jobs to
+be skipped; other runs require all jobs. Branch rules must require this status.
+Check jobs have read-only access. Publication credentials are limited to the
+package/release and documentation jobs.
+
+| Check | Coverage |
+| --- | --- |
+| File and documentation checks | Generated composition, copyright, strict docs, workflow syntax, and redacted secret scans of current files. Full Git history is not scanned. |
+| Units and integration | Full units and all eight integration profiles for code changes. Draft PRs defer cluster tests. |
+| Source dependencies | Trivy inventories the six Python locks and Go admission-test module. pip-audit checks each Python lock; govulncheck checks the Go source independently. |
+| Configuration package | Package contents must match `crossplane.yaml`, `xrd.yaml`, and `composition.yaml`. Checksums and the OCI digest bind the saved package to its source and inventories. |
+| External images | Trivy scans default service images, provider/function packages, test bases, and Kind by saved Linux AMD64 digest. Each scope gets a CycloneDX JSON SBOM. |
+
+### Dependency updates and tool installation
+
+| Input | Update process |
+| --- | --- |
+| Actions, Python, and Go dependencies | Weekly Dependabot PRs, with routine minor/patch updates grouped by ecosystem. |
+| Dockerfiles and supported YAML image fields | Daily Dependabot PRs, including weekends. Current-image digest updates stay grouped. |
+| Python image defaults and Crossplane `spec.package` references | The [daily image report](.github/workflows/image-updates.yaml) lists version and digest changes for manual updates. |
+| Tool versions/checksums and `.go-version` | Manual review. The installer uses [scripts/tools.json](scripts/tools.json). |
+
+Docker majors appear in the daily report for separate manual PRs. Other
+major updates get separate Dependabot PRs. Review, scan, and test updates;
+do not apply audit fixes automatically. After template or composition edits,
+regenerate `composition.yaml` and review affected render fixtures.
+
+Python installs use hash-locked requirements and wheels. The STAC test image
+also builds `version-parser` 1.0.1 from its fixed source archive because it has
+no wheel. Its reviewed setup reads README and calls setuptools; it does not
+run downloads or commands. Its build uses pinned setuptools/wheel without
+build isolation. See [dependency maintenance](README.md#maintain-dependencies).
+
+Actions use full SHAs. The shared tool installer checks fixed archive SHA-256
+values or Go module checksums before installation. It does not execute downloaded
+shell scripts. There are no external reusable workflows or composite Actions.
+The image report makes at most two concurrent registry queries. Lookup errors
+fail; available updates are informational and do not open PRs or scan replacements.
+
+The package-r, NGINX gateway, virtual Kubernetes, and updated helper references
+use versions and digests. Other configurable defaults still have mutable tags.
+Scans save their resolved digests; operators can override deployed images.
+
+### Local candidate checks
+
+After [development setup](README.md#setup), install the scan tools and use a
+new directory for each candidate. These commands preserve earlier reports and
+use an empty registry configuration for public images:
+
+```bash
+python3 scripts/install-tools.py crane trivy govulncheck
+mkdir -p build
+run_dir="$(mktemp -d "$PWD/build/candidate-check.XXXXXX")"
+export DOCKER_CONFIG="$run_dir/registry"
+mkdir -p "$DOCKER_CONFIG"
+python3 scripts/security.py prepare --version 0.0.0-rc.1 \
+  --commit "$(git rev-parse HEAD)" --candidate "$run_dir/candidate" --allow-dirty
+python3 scripts/security.py scan --candidate "$run_dir/candidate" \
+  --reports "$run_dir/reports" --allow-dirty
+python3 scripts/security.py verify --candidate "$run_dir/candidate" \
+  --reports "$run_dir/reports" --allow-dirty
+```
+
+Open `summary.md` for the result, per-image counts, errors, and exception expiry.
+CI shows the same table in its job summary. `scan-summary.json` reports blockers,
+accepted and expired exceptions, unfixed HIGH findings, scanner/database versions, and report checksums. Keep failed
+reports for assessment. `--allow-dirty` is for local checks; publication rejects
+these candidates.
+
+### Candidate and publication
+
+1. Prepare release notes with behavior changes and security fixes. Merge the
+   changes with signed commits.
+2. Wait for a full successful Tests run on the protected default branch for
+   the exact release commit. PR and docs-only runs do not qualify. Use a full
+   manual run for a docs-only release commit.
+3. Create an unsigned annotated tag with Git, then push it. Tags have no `v`
+   prefix: `git -c tag.gpgSign=false tag -a <version> <commit> -m <version>`.
+4. Check the publication workflow, release assets, and versioned documentation.
+   If scanning fails, assess the report before retrying.
+
+For GPG signing, set `git config --local user.signingkey <full-key-fingerprint>`,
+`git config --local commit.gpgsign true`, and
+`git config --local tag.gpgsign false` on the computer that holds your key.
+Register the public key with GitHub. See [commit signing](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
+Verify the effective signed-commit rule separately.
+
+The tag workflow builds and uploads a versioned candidate, then scans it.
+Publication retrieves the candidate and reports by artifact ID, verifies hashes,
+commit, version, current exception policy, and OCI digest, and pushes the saved
+archive without rebuilding. It rejects a changed digest for an existing tag.
+The Configuration package has no executable runtime. Integration checks its
+source manifests; it does not install the saved `.xpkg` in a consumer cluster.
+
+Release assets include the package, source archive, security manifest,
+external-image inventory, CycloneDX SBOMs, scan records, checksums, and upload/run
+IDs. Release notes use GitHub's generated changes. Alpha, beta, and RC releases
+are prereleases. Only stable releases advance `latest`; older stable versions
+cannot move it backward. Publication is serialized and docs follow artifacts.
+
+### Scan policy
+
+| Result | Effect |
+| --- | --- |
+| CRITICAL, with or without a fix | Block unless an active image exception applies |
+| HIGH with a fix | Block unless an active image exception applies |
+| HIGH without a fix | Report separately; acceptance needs an owner, reason, mitigation where possible, and review date |
+| MEDIUM, LOW, UNKNOWN | Retain in reports |
+| Unsupported image OS, scanner failure, or missing inventory/report/SBOM | Block |
+
+Native audit failures and secret findings block independently. Scanner output
+is not filtered. Secret reports redact values. Maintainers own assessment of
+failed daily scans; a source fix does not change an already published package.
+
+### Temporary vulnerability exceptions
+
+The repository owner accepted the recorded image findings, including CRITICAL
+findings, so builds and publication can proceed temporarily under the
+[exception policy](scripts/vulnerability-exceptions.json). This acceptance does
+not fix the packages. We have not verified whether an attacker can reach the
+affected code in deployed services or test jobs. Scans and digest checks detect
+findings and image changes; they do not prevent exploitation.
+
+Versioneer maintainers (`oss@versioneer.at`) must review these findings before
+the policy's `expires_on` date. Exceptions stop applying at the start of that
+date in UTC.
+
+The review fields at the top apply to the whole batch. Each immutable image
+contains package groups with a name, installed version, package URL, exact
+report target, and advisory IDs grouped by severity. Use the immutable image
+from `external-components.json`. The package fields come from `PkgName`,
+`InstalledVersion`, `PkgIdentifier.PURL`, and `Target` in the scan report.
+To change an exception:
+
+1. Read the fresh scan report. Check whether the affected code runs, what
+   untrusted input can reach it, and which deployment controls reduce exposure.
+   Record any verified mitigation. If none is verified, say so.
+2. Remove resolved groups, or list only the advisory IDs that maintainers accept.
+3. Update the assessment if needed, then rescan. Renewal requires a review;
+   scans never extend expiry or add entries automatically.
+
+New findings, changed image digests or identities, and expired matches block.
+The full raw findings remain in reports; accepted findings are listed separately
+with the policy and its checksum. Publication rechecks expiry and current policy.
+A policy change needs a new scan. Scheduled scans use their workflow checkout's
+policy, so acceptance can be withdrawn without changing a published artifact.
+Exceptions cannot waive source findings, native audit failures, secret findings,
+unsupported operating systems, or missing inventories and SBOMs.
+
+The separate [secret fixture list](scripts/secret-fixtures.json) covers only
+reviewed synthetic/template matches by exact file hash and detector rule.
+Changed content or another rule requires review again. Do not accept an
+unexplained secret match.
+
+### Daily scans and retention
+
+The daily workflow rescans the latest stable release, the latest supported
+`0.12.x` release, and the newest RC for a version newer than stable. Without
+stable, it selects the newest RC. Version ordering excludes drafts and older RCs.
+Manual runs accept older published tags; empty input selects the defaults and
+unknown tags fail. The matrix continues after failures with at most two scans
+in parallel.
+
+Scans download published evidence and check its manifest, checksums, source
+commit, and immutable image digests. They do not rebuild or replace releases.
+Missing release assets or manifests fail; old tags need evidence backfill.
+With no release evidence, selection fails.
+
+Candidates are retained for seven days; reports and SBOMs for 90 days, including
+failures. Release assets keep the inventories and scan records. The summary
+records report hashes and the exception-policy checksum. Individual reports
+retain all severities.
+
+### Coverage and verification limits
+
+The package SBOM covers its manifests and package hash. External image
+inventories cover detected OS, native, Go, and Python packages, not the whole
+platform. Coverage excludes operator overrides, host software, nested runtime
+and Helm images, other test/probe images, non-AMD64 images, Go build-tool
+modules, and native libraries bundled in build/test wheels.
+
+Open verification and maintenance work:
+
+- Hosted publication, scheduled runs, Dependabot operation, and effective
+  branch and signed-commit enforcement. Local checks do not verify these.
+- Fixed content verification for Helm charts and bootstrap manifests.
+- Installation of the saved `.xpkg` in a consumer cluster.
+- Partial publication recovery. A failure after registry push can leave the
+  package without a completed GitHub Release or docs deployment.
+
+The release workflow does not create build attestations. Checksums identify
+content; they do not prove build origin. The dedicated Kind CSI driver uses
+external tar for trusted synthetic snapshots to preserve PostgreSQL file
+ownership; this test setting must not process untrusted archives.
+
+## Deployment boundary
 
 A virtual API uses caller token roles and Kubernetes RBAC. A downloaded
 profile selects an endpoint and namespace; it grants no access. Virtual
@@ -11,7 +226,7 @@ and decides who can use these resources. The host cluster must enforce network
 policies, admission rules, Pod security, and RBAC. Virtual clusters share its
 nodes and kernel.
 
-Registry, MongoDB, and Redis passwords are derived from resource names and are
+Registry and Valkey passwords are derived from resource names and are
 predictable. Keep their endpoints within the approved team network boundary.
 
 | Control | Details |
@@ -36,6 +251,11 @@ Crossplane reads source Secrets directly through its required-resource API.
 
 PostgreSQL connections use the administrative `postgres` account. Create
 application accounts and grants for workloads that need less access.
+CloudNativePG generates the administrative password. Datalab user passwords
+use that private entropy when first created and are stored in separate Secrets.
+Reconciliation and administrative password rotation retain existing user
+passwords. Named-user Secrets grant login access; application setup owns
+database grants and schemas.
 A virtual administrator can read all Secrets in that virtual cluster. A user
 who can create Pods in a namespace can usually mount that namespace's Secrets.
 
@@ -43,6 +263,11 @@ The Datalab OAuth client secret permits service-account token requests. Give it
 only to authorized callers. The service account has `ws_api` by default.
 See [credential Secrets](docs/how-to-guides/authentication.md#credential-secrets-and-machine-access)
 for source and runtime copies.
+
+Managed store names share the credentials of their service instance. Valkey key
+prefixes organize data; they do not restrict access. Clients must add the prefix
+to their keys. Use separate service instances when applications need separate
+credentials and data volumes.
 
 ## Identity prerequisites
 
@@ -167,6 +392,25 @@ Stopping a Pod or tightening a network rule does not revoke a leaked
 credential. Rotate or revoke it at its source. Protect the OAuth client Secret
 as described in [Authentication](docs/how-to-guides/authentication.md#credential-secrets-and-machine-access).
 
+## PostgreSQL snapshot access
+
+Install the [snapshot prerequisites](docs/how-to-guides/installation.md#volume-snapshots)
+before enabling PostgreSQL backups. CloudNativePG needs permission to create
+and manage its database snapshots. Crossplane's Kubernetes provider observes
+the selected snapshot class and checks its `Delete` policy.
+
+Each database backup Job has a separate ServiceAccount. It can read its named
+Cluster and snapshot classes, request and remove namespaced CNPG Backups, and
+read the resulting VolumeSnapshots. It cannot read Secrets, delete PVCs, or
+delete snapshots directly. CloudNativePG sets each snapshot's owner to its
+Backup; Kubernetes removes those snapshots when retention removes the Backup.
+
+The Job removes old completed backups only after a new backup and all of its
+snapshots are ready. It limits cleanup to its database name and cluster UID.
+Disabling backups removes the schedule and leaves completed recovery points.
+Namespace deletion removes these resources. Storage retained outside the
+namespace needs a separate platform backup policy.
+
 ## Network policies
 
 Provider Datalab creates ingress and egress policies in the Datalab-named host
@@ -175,6 +419,13 @@ control planes, and synced workload Pods use it regardless of their virtual
 namespace. Virtual clusters in one Datalab share this boundary.
 The cluster CNI must enforce Kubernetes NetworkPolicy for these rules to take
 effect.
+
+PostgreSQL also has a service policy. It permits the CloudNativePG controller
+Pods in `database.operatorNamespace` to reach TCP ports 5432 and 8000. Database
+Pods can reach Kubernetes API ports 443 and 6443 and cluster DNS. The controller
+Pods must have label `app.kubernetes.io/name: cloudnative-pg`.
+The API-port rules have no destination IP selector because API endpoints can
+use host networking. Platform controls can restrict their destination addresses.
 
 NetworkPolicies inside a virtual cluster are not synced to the host. Configure
 team network access through EnvironmentConfig. The generated host policies
@@ -233,7 +484,7 @@ Each virtual API accepts ingress on TCP port 8443 for authenticated Kubernetes
 access through the Gateway. Its workload and DNS policies permit the required
 control-plane traffic. These allowances add to the namespace policies.
 
-Each named volume adds a policy for its host backup Job Pods. It permits DNS
+Each named volume with backups enabled adds a policy for its host backup Job Pods. It permits DNS
 and API traffic on TCP 443 and 6443. No source PVC is mounted in these Pods.
 
 ### Replace or exclude policies
@@ -313,3 +564,46 @@ The host CNI must allow this traffic to the selected API endpoint. The Job uses
 its projected ServiceAccount token, with no external kubeconfig or source-volume
 mount.
 
+Valkey snapshot Jobs use the same class role and namespaced snapshot permissions,
+plus permission to patch the verified label after consistency checks.
+Each Job can read its selected Pod and data PVC. Its mounted backup credential
+permits `PING`, `INFO`, `BGSAVE`, `CLIENT PAUSE`, and `CLIENT UNPAUSE`, with no key
+read or write commands. The Job pauses writes for at most 11 minutes, saves an
+RDB file, and captures the PVC. A server replacement or an expired pause rejects
+the capture. The Job releases writes on exit; the timeout also releases them
+after a killed Job. Valkey network access includes TCP 6379 in the service namespace.
+
+## Health checks
+
+
+Kubernetes uses startup probes to allow initialization, readiness probes to
+remove unavailable Pods from Service endpoints, and liveness probes to restart
+an unresponsive process.
+
+| Component | Readiness | Liveness and startup |
+| --- | --- | --- |
+| Data (`package-r`) | HTTP `/health` | HTTP `/health` |
+| Data OAuth proxy | HTTP `/ready` | HTTP `/ping` |
+| S3 gateway | Gateway forwards `/_ready` to its OAuth proxy | Local `/_live` response |
+| S3 OAuth proxy | Gateway forwards `/_auth/ready` to loopback port 4180 | Gateway forwards `/_auth/ping` |
+| S3 rclone | Authenticated S3 listing through its local listener | Local unsigned HTTP request must return `403 Forbidden` |
+| Registry | `/debug/health` on private port 5001, including the storage driver | TCP port 5000 for liveness; `/debug/health` for startup |
+| Valkey | Authenticated local `PING` | Authenticated local `PING`; startup allows ten minutes for data replay |
+| Virtual cluster | HTTPS `/readyz` | HTTPS `/healthz` for liveness; `/readyz` for startup |
+| PostgreSQL | CloudNativePG instance manager `/readyz` | CloudNativePG instance manager `/healthz` and `/startupz` |
+| Crossplane core | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
+| Crossplane RBAC manager | HTTP `/metrics` on port 8080 | Same local HTTP listener; this manager has no health endpoint |
+| Kubernetes provider | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
+| Keycloak provider | HTTP `/metrics` on port 8080 | Same local HTTP listener; this provider has no health endpoint |
+| Composition functions | TCP on TLS port 9443 | Same listener; native Kubernetes gRPC probes do not support TLS |
+
+Registry liveness checks the local listener, so an object-storage outage makes
+the Pod unready without causing repeated restarts. Its health port is absent
+from the Service and public routes. The rclone liveness request uses its
+loopback listener and stops at local authentication, before object-storage access.
+
+CloudNativePG and vCluster supply probes for their managed components. The
+Crossplane Helm post-renderer adds probes to the core and RBAC manager; it needs
+Python with PyYAML. The provider runtime configs set probes for providers and functions. Backup,
+cleanup, and initialization tasks exit when complete; Jobs use deadlines and
+completion status instead of liveness probes.

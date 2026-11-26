@@ -93,40 +93,20 @@ Desired configuration of the datalab.
         </td>
         <td>true</td>
       </tr><tr>
-        <td><b><a href="#datalabspeccachestoreskey">cacheStores</a></b></td>
-        <td>map[string]object</td>
-        <td>
-          Optional cache stores for this datalab, implemented via Redis and managed through the Redis Kubernetes operator.<br/>
-          <br/>
-            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecdatabaseskey">databases</a></b></td>
-        <td>map[string]object</td>
-        <td>
-          PostgreSQL clusters with data storage, optional backup storage, and named databases. The operator creates the databases for the postgres account and adds logins from spec.users. Application setup manages additional ownership and grants.<br/>
-          <br/>
-            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
-        <td><b><a href="#datalabspecdocumentstoreskey">documentStores</a></b></td>
-        <td>map[string]object</td>
-        <td>
-          Optional document stores for this datalab, implemented via MongoDB and managed through the MongoDB Kubernetes operator.<br/>
-          <br/>
-            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
-            <i>Default</i>: map[]<br/>
-        </td>
-        <td>false</td>
-      </tr><tr>
         <td><b>environmentName</b></td>
         <td>string</td>
         <td>
           Optional EnvironmentConfig name. Use a lowercase DNS name with 1 to 63 characters. See the installation guide for selection rules.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#datalabspecstoreskey">stores</a></b></td>
+        <td>map[string]object</td>
+        <td>
+          Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Valkey key prefixes.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$')): Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 63 characters.</li>
+            <i>Default</i>: map[]<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -153,7 +133,7 @@ Desired configuration of the datalab.
         <td><b><a href="#datalabspecvolumeskey">volumes</a></b></td>
         <td>map[string]object</td>
         <td>
-          Named PVCs with scheduled snapshots in the Datalab host namespace, independent of virtual clusters.<br/>
+          Named PVCs with optional CSI snapshots in the Datalab host namespace, independent of virtual clusters.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$")): Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.</li>
             <i>Default</i>: map[]<br/>
@@ -163,7 +143,7 @@ Desired configuration of the datalab.
 </table>
 
 
-### Datalab.spec.cacheStores[key]
+### Datalab.spec.stores[key]
 <sup><sup>[↩ Parent](#datalabspec)</sup></sup>
 
 
@@ -183,125 +163,35 @@ Desired configuration of the datalab.
         <td><b>storage</b></td>
         <td>string</td>
         <td>
-          Storage size for Redis persistent data volume as a Kubernetes quantity (e.g., "1Gi", "10Gi"). Effective default: "1Gi".<br/>
+          Data PVC size as a Kubernetes quantity, such as 1Gi.<br/>
         </td>
         <td>true</td>
       </tr><tr>
         <td><b>type</b></td>
         <td>enum</td>
         <td>
-          Service type.<br/>
+          Service type, also used in status.connections.<br/>
           <br/>
-            <i>Enum</i>: redis<br/>
-            <i>Default</i>: redis<br/>
+            <i>Validations</i>:<li>self == oldSelf: Store type cannot change. Use a new instance name for another service type.</li>
+            <i>Enum</i>: postgres, valkey<br/>
         </td>
         <td>true</td>
       </tr><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
+        <td><b>backups</b></td>
+        <td>boolean</td>
         <td>
-          Storage size for the Redis backup PVC as a Kubernetes quantity. A positive value enables daily full RDB snapshots. Zero or an omitted value disables backups.<br/>
+          Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Valkey pauses writes and saves an RDB file. There is no point-in-time recovery.<br/>
           <br/>
-            <i>Default</i>: 0<br/>
+            <i>Default</i>: false<br/>
         </td>
         <td>false</td>
-      </tr></tbody>
-</table>
-
-
-### Datalab.spec.databases[key]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
+      </tr><tr>
         <td><b>names</b></td>
         <td>[]string</td>
         <td>
-          Logical PostgreSQL database names to create within this host (e.g., "prod", "dev").<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the PostgreSQL data PVC of this PostgresCluster as a Kubernetes quantity (e.g., "1Gi", "10Gi").<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>type</b></td>
-        <td>enum</td>
-        <td>
-          Service type.<br/>
+          PostgreSQL database names, or Valkey key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Valkey prefixes are not an access boundary.<br/>
           <br/>
-            <i>Enum</i>: postgres<br/>
-            <i>Default</i>: postgres<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a Kubernetes quantity (e.g., "10Gi", "100Gi"). Zero or an omitted value disables backups.<br/>
-          <br/>
-            <i>Default</i>: 0<br/>
-        </td>
-        <td>false</td>
-      </tr></tbody>
-</table>
-
-
-### Datalab.spec.documentStores[key]
-<sup><sup>[↩ Parent](#datalabspec)</sup></sup>
-
-
-
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
-        <td><b>storage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for MongoDB persistent data volume as a Kubernetes quantity (e.g., "5Gi", "20Gi"). Effective default: "10Gi".<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>type</b></td>
-        <td>enum</td>
-        <td>
-          Service type.<br/>
-          <br/>
-            <i>Enum</i>: mongo<br/>
-            <i>Default</i>: mongo<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
-        <td><b>backupStorage</b></td>
-        <td>string</td>
-        <td>
-          Storage size for the MongoDB backup PVC as a Kubernetes quantity. A positive value enables daily full backups with mongodump and the oplog. Zero or an omitted value disables backups.<br/>
-          <br/>
-            <i>Default</i>: 0<br/>
+            <i>Default</i>: [default]<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -489,7 +379,7 @@ Virtual Kubernetes clusters keyed by instance name.
         <td>
           Datalab connection type.<br/>
           <br/>
-            <i>Enum</i>: s3, postgres, mongo, redis, registry, custom<br/>
+            <i>Enum</i>: s3, postgres, valkey, registry, custom<br/>
         </td>
         <td>true</td>
       </tr></tbody>
@@ -617,6 +507,15 @@ Virtual Kubernetes clusters keyed by instance name.
         </tr>
     </thead>
     <tbody><tr>
+        <td><b>backups</b></td>
+        <td>boolean</td>
+        <td>
+          Enable scheduled CSI snapshots. The environment sets the class, schedule, and retention.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>restoreFrom</b></td>
         <td>string</td>
         <td>
@@ -725,7 +624,7 @@ Current observed state of the datalab.
         <td>
           <br/>
           <br/>
-            <i>Enum</i>: s3, postgres, mongo, redis, registry, custom, vcluster<br/>
+            <i>Enum</i>: s3, postgres, valkey, registry, custom, vcluster<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -747,6 +646,13 @@ Current observed state of the datalab.
         <td>string</td>
         <td>
           <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>names</b></td>
+        <td>[]string</td>
+        <td>
+          Logical database names or Valkey key prefixes for a managed store instance.<br/>
         </td>
         <td>false</td>
       </tr><tr>

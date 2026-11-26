@@ -63,6 +63,9 @@ def main():
     assert "test-secret" not in json.dumps(deployment) + json.dumps(config)
     assert not any("persistentVolumeClaim" in volume for volume in pod["spec"]["volumes"])
     assert container["readinessProbe"]["httpGet"] == {"path": "/debug/health", "port": "health"}
+    assert config["health"]["storagedriver"]["enabled"]
+    assert container["startupProbe"]["httpGet"] == container["readinessProbe"]["httpGet"]
+    assert container["livenessProbe"]["tcpSocket"]["port"] == "registry"
     assert manifest(resources, "registry-service-s-joe")["spec"]["ports"][0]["port"] == 5000
     print("PASS shared S3 registry uses storage credentials without Data or a registry PVC")
 

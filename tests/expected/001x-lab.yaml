@@ -115,7 +115,7 @@ spec:
                   secretKeyRef:
                     key: AWS_REGION
                     name: s-joe-storage
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               livenessProbe:
                 httpGet:
@@ -180,7 +180,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-database
               resources:
@@ -215,7 +215,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-default-user
               resources:
@@ -254,7 +254,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-user-0
               resources:
@@ -293,7 +293,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-user-1
               resources:
@@ -332,7 +332,7 @@ spec:
                 value: /tmp
               - name: PACKAGE_R_DATABASE
                 value: /state/package-r.db
-              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+              image: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
               imagePullPolicy: IfNotPresent
               name: prepare-public-share
               resources:
@@ -950,11 +950,11 @@ spec:
     addToUserinfo: false
     claimName: groups
     clientIdSelector:
+      matchLabels:
+        crossplane.io/claim-name: s-joe
       policy:
         resolution: Required
         resolve: Always
-      matchLabels:
-        crossplane.io/claim-name: s-joe
     fullPath: false
     name: s-joe
     realmId: acme

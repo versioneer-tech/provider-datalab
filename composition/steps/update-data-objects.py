@@ -29,7 +29,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     images = environment.get("images") or {}
-    package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.2.0"
+    package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062"
     rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
     oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
     data_config = environment.get("packageR") or {}
@@ -475,8 +475,11 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "--request-logging=false",
             "--auth-logging=false",
         ]
-        for key in ("readinessProbe", "livenessProbe", "ports"):
-            auth_proxy.pop(key, None)
+        for key in ("startupProbe", "readinessProbe", "livenessProbe"):
+            # The proxy binds to loopback; kubelet HTTP probes use the Pod IP.
+            path = auth_proxy[key]["httpGet"]["path"]
+            auth_proxy[key]["httpGet"] = {"path": "/_auth" + path, "port": 8080}
+        auth_proxy.pop("ports", None)
         # Keep both original SigV4 headers and the token unchanged for rclone.
         gateway_config = "\n".join(
             [
@@ -493,7 +496,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 "  }",
                 "  server {",
                 "    listen 8080;",
+                "    location = /_live { return 200; }",
                 "    location = /_ready { proxy_pass http://127.0.0.1:4180/ready; }",
+                "    location = /_auth/ping { proxy_pass http://127.0.0.1:4180/ping; }",
+                "    location = /_auth/ready { proxy_pass http://127.0.0.1:4180/ready; }",
                 "    location / {",
                 "      if ($tenant_valid = 0) { return 403; }",
                 '      if ($http_x_amz_security_token = "") { return 403; }',

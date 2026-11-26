@@ -8,15 +8,18 @@ metadata:
   namespace: __WORKSPACE_NAMESPACE__
 spec:
   environmentName: datalab
-  users: []
-  databases:
+  users: [verify-s3]
+  stores:
     pg0:
+      type: postgres
       names:
         - verify
+        - reporting
       storage: 1Gi
-      backupStorage: 1Gi
+      backups: __BACKUPS_ENABLED__
     pg1:
+      type: postgres
       names:
       - verify
       storage: 1Gi
-      backupStorage: 0Gi
+      backups: false

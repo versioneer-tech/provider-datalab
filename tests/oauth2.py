@@ -62,8 +62,9 @@ def main():
         assert base64.b64encode(b"oauth2-sensitive-value").decode() not in json.dumps(result)
         return result["oauth2"]
 
-    def status(observed):
-        return discovery(render(args, env, source, observed, include_composite=True))
+    def status(observed, required_resources=None):
+        return discovery(render(args, env, source, observed, include_composite=True,
+                                required_resources=required_resources))
 
     initial = render(args, env, source, [client, observer], include_composite=True)
     client_config = initial["keycloak-client-s-joe"]["spec"]["forProvider"]
@@ -88,11 +89,16 @@ def main():
     for values in ({}, {"clientSecret": base64.b64encode(b"value").decode(), "clientID": base64.b64encode(b"another-client").decode()}):
         pending = deepcopy(observer)
         pending["status"]["atProvider"]["manifest"]["data"] = values
-        assert status([client, pending])[0]["ready"] is False
+        secret = pending["status"]["atProvider"]["manifest"]
+        assert status([client, pending], [env, secret])[0]["ready"] is False
     print("PASS OAuth2 readiness requires a ready client and matching observed credentials")
 
     for observed in ([client], [observer]):
         assert status(observed) == []
+    assert status([client, observer], [env]) == []
+    deleting_secret = deepcopy(observer["status"]["atProvider"]["manifest"])
+    deleting_secret["metadata"]["deletionTimestamp"] = "2026-11-26T09:00:00Z"
+    assert status([client, observer], [env, deleting_secret]) == []
     deleting = deepcopy(client)
     deleting["metadata"]["deletionTimestamp"] = "2026-11-04T12:00:00Z"
     assert status([deleting, observer]) == []

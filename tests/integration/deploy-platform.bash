@@ -21,6 +21,7 @@ install_crossplane() {
     --create-namespace \
     --version "${CROSSPLANE_VERSION}" \
     --values "${REPO_ROOT}/deploy/crossplane-values.yaml" \
+    --post-renderer "${REPO_ROOT}/scripts/crossplane-probes.py" \
     --wait \
     --timeout 10m
 }
@@ -111,6 +112,8 @@ main() {
   kube apply -f "${MANIFEST_DIR}/storage-secrets.yaml"
   kube rollout status deployment/default --namespace minio --timeout=5m
   wait_for_packages
+  verify_workload_probes crossplane
+  verify_workload_probes minio
   park_unused_operators
   resource_budget
   kube get providers.pkg.crossplane.io,functions.pkg.crossplane.io

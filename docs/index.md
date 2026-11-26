@@ -1,13 +1,22 @@
 # Provider Datalab
 
-Declare a team's users, virtual Kubernetes clusters, volumes, and data services
-in one `Datalab` resource. The platform supplies identity, storage, and network
-settings through an EnvironmentConfig.
+Provider Datalab creates team workspaces on Kubernetes. A `Datalab` resource
+lists team members and requests virtual clusters, persistent volumes, and
+data services. The
+platform operator supplies identity, storage, and network settings.
 
-Platform operators start with [Installation](how-to-guides/installation.md).
-For team workflows, see [Virtual clusters](how-to-guides/vcluster.md) and
-[Use a Datalab](how-to-guides/usage_concepts.md).
-Use [Volumes](how-to-guides/volumes.md) for persistent volumes and
-[Connections](how-to-guides/connections.md) for service credentials.
-See [Security](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md) for access controls and the
-[API reference](reference-guides/api.md) for resource fields and status.
+| What you want to do | Start here |
+| --- | --- |
+| Set up the platform | [Installation](how-to-guides/installation.md) |
+| Create your first workspace | [Use a Datalab](how-to-guides/usage_concepts.md#create-a-workspace) |
+| Run Kubernetes workloads | [Virtual clusters](how-to-guides/vcluster.md) |
+| Use persistent storage and backups | [Volumes](how-to-guides/volumes.md) |
+| Connect an application to a database or service | [Connections](how-to-guides/connections.md) |
+| Use S3 clients | [S3 access](how-to-guides/s3-access.md) |
+| Set up login or token exchange | [Authentication](how-to-guides/authentication.md) |
+| Find resource fields and status | [API reference](reference-guides/api.md) |
+
+Platform operators should also read the
+[security boundaries](https://github.com/versioneer-tech/provider-datalab/blob/main/SECURITY.md#deployment-boundary).
+For source changes, use the repository's
+[development instructions](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#development).

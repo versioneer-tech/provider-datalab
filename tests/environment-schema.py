@@ -60,18 +60,31 @@ def main():
                           "metadata": {"name": name, "namespace": "workspace"},
                           "spec": {"users": [], "volumes": {"analysis": {}},
                                    "vclusters": {"vc0": {"volumeBindings": [binding]}}}})
-    for field, service in (("databases", "postgres"), ("documentStores", "mongo"), ("cacheStores", "redis")):
-        for index, value in enumerate(("0", "0Gi", ".5G", "1e3", "", "-1Gi", "invalid", "1GB", 1)):
-            name = f"test-{field.lower()}-backup-{index}"
-            expected[name] = index < 4, f"spec.{field}.analysis.backupStorage"
-            store = {"type": service, "storage": "1Gi", "backupStorage": value}
-            if field == "databases":
-                store["names"] = ["app"]
-            resources.append({
-                "apiVersion": "versioneer.at/v1", "kind": "Datalab",
-                "metadata": {"name": name, "namespace": "workspace"},
-                "spec": {"users": [], field: {"analysis": store}},
-            })
+    for service in ("postgres", "valkey", "volume"):
+        for index, value in enumerate((True, False, "true", 1, {})):
+            name = f"test-{service}-backups-{index}"
+            field = "volumes" if service == "volume" else "stores"
+            expected[name] = index < 2, f"spec.{field}.analysis.backups"
+            config = {"storage": "1Gi", "backups": value}
+            if service != "volume":
+                config["type"] = service
+            resources.append({"apiVersion": "versioneer.at/v1", "kind": "Datalab",
+                              "metadata": {"name": name, "namespace": "workspace"},
+                              "spec": {"users": [], field: {"analysis": config}}})
+    store_cases = [
+        (True, {"type": "postgres", "storage": "1Gi"}, None),
+        (True, {"type": "valkey", "storage": "1Gi", "names": ["sessions", "jobs"]}, None),
+        (False, {"storage": "1Gi"}, "spec.stores.main.type"),
+        (False, {"type": "unknown", "storage": "1Gi"}, "spec.stores.main.type"),
+        (False, {"type": "postgres", "storage": "1Gi", "names": []}, "spec.stores.main.names"),
+        (True, {"type": "valkey", "storage": "1Gi", "backups": True}, None),
+    ]
+    for index, (accepted, store, field) in enumerate(store_cases):
+        name = f"test-store-contract-{index}"
+        expected[name] = accepted, field
+        resources.append({"apiVersion": "versioneer.at/v1", "kind": "Datalab",
+                          "metadata": {"name": name, "namespace": "workspace"},
+                          "spec": {"users": [], "stores": {"main": store}}})
     expected.update({item["metadata"]["name"]: (True, None) for item in resources if item["metadata"]["name"] not in expected})
     with tempfile.TemporaryDirectory(prefix="test-datalab-schema-") as directory:
         path = Path(directory) / "resources.yaml"
@@ -92,7 +105,7 @@ def main():
         assert item["status"] == ("valid" if accepted else "invalid"), item
         if not accepted:
             assert any(error["field"] == field for error in item["errors"]), item
-    print("PASS environment names, volume contracts, backup sizes, and all base examples", flush=True)
+    print("PASS environment names, volume contracts, backup switches, and all base examples", flush=True)
 
 
 if __name__ == "__main__":

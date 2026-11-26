@@ -9,14 +9,13 @@ metadata:
     datalabs.pkg.internal/name: datalab
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
-    mongoBackup: mongo:8.0.38
-    redis: quay.io/opstree/redis:v7.2.17
-    redisBackup: redis:7.2.17
+    valkey: valkey/valkey:9.2.0-alpine
     oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
+  cacheStore:
+    maxSnapshots: 2
   iam:
     realm: integration
   ingress:
@@ -80,17 +79,16 @@ metadata:
     datalabs.pkg.internal/name: datalab-custom
 data:
   images:
-    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.0
+    packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
     registry: registry:3.1.2
     rclone: rclone/rclone:1.76.0
-    mongo: quay.io/mongodb/mongodb-community-server:8.0.38-ubi8
-    mongoBackup: mongo:8.0.38
-    redis: quay.io/opstree/redis:v7.2.17
-    redisBackup: redis:7.2.17
+    valkey: valkey/valkey:9.2.0-alpine
     oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
   customSecrets:
   - name: apikey-1
   - name: apikey-2
+  cacheStore:
+    maxSnapshots: 2
   iam:
     realm: integration
   ingress:

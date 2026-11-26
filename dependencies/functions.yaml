@@ -15,7 +15,7 @@ kind: Function
 metadata:
   name: crossplane-contrib-function-auto-ready
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.3
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.4@sha256:e036ffcff76f2603a003bb0e739bb7ea75e945cf7a59f71c66845b0dd7472558
   runtimeConfigRef:
     name: function-auto-ready
 ---
@@ -24,6 +24,6 @@ kind: Function
 metadata:
   name: function-environment-configs
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.9.2
+  package: xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.9.3@sha256:f293b6fd36115c1c5fa372e732998efd7dac8126b8917d4f67c639689770c6c2
   runtimeConfigRef:
     name: function-environment-configs

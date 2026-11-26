@@ -74,9 +74,17 @@ spec:
         env:
         - {name: ENABLE_TRANSACTIONS_EXTENSIONS, value: "true"}
         - {name: STAC_FASTAPI_TITLE, value: Datalab STAC catalog}
+        startupProbe:
+          httpGet: {path: /, port: 8080}
+          periodSeconds: 5
+          failureThreshold: 60
         readinessProbe:
           httpGet: {path: /, port: 8080}
           initialDelaySeconds: 3
+        livenessProbe:
+          tcpSocket: {port: 8080}
+          periodSeconds: 20
+          timeoutSeconds: 3
         resources:
           requests: {cpu: 50m, memory: 128Mi}
           limits: {memory: 512Mi}

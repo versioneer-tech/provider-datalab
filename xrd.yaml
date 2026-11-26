@@ -66,7 +66,7 @@ spec:
                   type: object
                   default: {}
                   maxProperties: 50
-                  description: Named PVCs with scheduled snapshots in the Datalab host namespace, independent of virtual clusters.
+                  description: Named PVCs with optional CSI snapshots in the Datalab host namespace, independent of virtual clusters.
                   x-kubernetes-validations:
                   - rule: 'self.all(k, size(k) <= 40 && k.matches("^[a-z]([a-z0-9-]*[a-z0-9])?$"))'
                     message: Volume names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens, end with a letter or digit, and have at most 40 characters.
@@ -77,6 +77,10 @@ spec:
                         type: string
                         pattern: '^([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[EPTGMK]i|[EPTGMkmun])?$'
                         description: Volume size. Defaults to the platform volume size, or 1Gi.
+                      backups:
+                        type: boolean
+                        default: false
+                        description: Enable scheduled CSI snapshots. The environment sets the class, schedule, and retention.
                       restoreFrom:
                         type: string
                         maxLength: 253
@@ -152,7 +156,7 @@ spec:
                           properties:
                             type:
                               type: string
-                              enum: [s3, postgres, mongo, redis, registry, custom]
+                              enum: [s3, postgres, valkey, registry, custom]
                               description: Datalab connection type.
                             name:
                               type: string
@@ -206,119 +210,44 @@ spec:
                       storage:
                         type: string
                         description: Control-plane PVC size. The environment default is used when omitted.
-                databases:
+                stores:
                   type: object
+                  default: {}
                   maxProperties: 100
+                  description: Managed service instances keyed by name. Names below each instance select PostgreSQL databases, or Valkey key prefixes.
                   x-kubernetes-validations:
                   - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
                     message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
                       end with a letter or digit, and have at most 63 characters.
-                  description: >-
-                    PostgreSQL clusters with data storage, optional backup storage, and named databases.
-                    The operator creates the databases for the postgres account and adds logins from spec.users.
-                    Application setup manages additional ownership and grants.
                   additionalProperties:
                     type: object
+                    required: [type, storage]
                     properties:
+                      type:
+                        type: string
+                        enum: [postgres, valkey]
+                        description: Service type, also used in status.connections.
+                        x-kubernetes-validations:
+                        - rule: self == oldSelf
+                          message: Store type cannot change. Use a new instance name for another service type.
                       names:
                         type: array
-                        description: >-
-                          Logical PostgreSQL database names to create within this host (e.g., "prod", "dev").
+                        default: [default]
+                        minItems: 1
+                        maxItems: 100
+                        x-kubernetes-list-type: atomic
                         items:
                           type: string
-                        minItems: 1
-                      type:
-                        type: string
-                        description: Service type.
-                        enum: [postgres]
-                        default: postgres
+                          minLength: 1
+                        description: PostgreSQL database names, or Valkey key prefixes without the final colon. Defaults to one name, default. Names share the instance credentials; Valkey prefixes are not an access boundary.
                       storage:
                         type: string
-                        description: >-
-                          Storage size for the PostgreSQL data PVC of this PostgresCluster as a Kubernetes quantity
-                          (e.g., "1Gi", "10Gi").
-                      backupStorage:
-                        type: string
-                        default: "0"
                         pattern: '^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?$'
-                        description: >-
-                          Storage size for the pgBackRest repository PVC (backup volume, including WAL archive) as a
-                          Kubernetes quantity (e.g., "10Gi", "100Gi"). Zero or an omitted value disables backups.
-                    required:
-                      - type
-                      - names
-                      - storage
-                  default: {}
-                documentStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  description: >-
-                    Optional document stores for this datalab, implemented via MongoDB
-                    and managed through the MongoDB Kubernetes operator.
-                  default: {}
-                  additionalProperties:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                        description: Service type.
-                        enum: [mongo]
-                        default: mongo
-                      storage:
-                        type: string
-                        description: >-
-                          Storage size for MongoDB persistent data volume as a Kubernetes quantity
-                          (e.g., "5Gi", "20Gi"). Effective default: "10Gi".
-                      backupStorage:
-                        type: string
-                        default: "0"
-                        pattern: '^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?$'
-                        description: >-
-                          Storage size for the MongoDB backup PVC as a Kubernetes quantity.
-                          A positive value enables daily full backups with mongodump and the oplog.
-                          Zero or an omitted value disables backups.
-                    required:
-                      - type
-                      - storage
-                cacheStores:
-                  type: object
-                  maxProperties: 100
-                  x-kubernetes-validations:
-                  - rule: self.all(k, size(k) <= 63 && k.matches('^[a-z]([a-z0-9-]*[a-z0-9])?$'))
-                    message: Instance names must start with a lowercase letter, contain only lowercase letters, digits, or hyphens,
-                      end with a letter or digit, and have at most 63 characters.
-                  description: >-
-                    Optional cache stores for this datalab, implemented via Redis
-                    and managed through the Redis Kubernetes operator.
-                  default: {}
-                  additionalProperties:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                        description: Service type.
-                        enum: [redis]
-                        default: redis
-                      storage:
-                        type: string
-                        description: >-
-                          Storage size for Redis persistent data volume as a Kubernetes quantity
-                          (e.g., "1Gi", "10Gi"). Effective default: "1Gi".
-                      backupStorage:
-                        type: string
-                        default: "0"
-                        pattern: '^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+|[numkMGTPE]|[KMGTPE]i)?$'
-                        description: >-
-                          Storage size for the Redis backup PVC as a Kubernetes quantity.
-                          A positive value enables daily full RDB snapshots.
-                          Zero or an omitted value disables backups.
-                    required:
-                      - type
-                      - storage
+                        description: Data PVC size as a Kubernetes quantity, such as 1Gi.
+                      backups:
+                        type: boolean
+                        default: false
+                        description: Enable CSI snapshots. The environment sets the class, schedule, and retention. PostgreSQL pauses the instance; Valkey pauses writes and saves an RDB file. There is no point-in-time recovery.
             status:
               type: object
               description: Current observed state of the datalab.
@@ -421,7 +350,12 @@ spec:
                         type: string
                       type:
                         type: string
-                        enum: [s3, postgres, mongo, redis, registry, custom, vcluster]
+                        enum: [s3, postgres, valkey, registry, custom, vcluster]
+                      names:
+                        type: array
+                        items:
+                          type: string
+                        description: Logical database names or Valkey key prefixes for a managed store instance.
                       instance:
                         type: string
                       group:

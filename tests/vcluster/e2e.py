@@ -440,8 +440,14 @@ def workspace_account():
 def recreate_workspace_client():
     admin, previous, _ = workspace_account()
     identity(previous, token=admin, method="DELETE")
+    last_report = 0
 
     def recovered():
+        nonlocal last_report
+        # Keep the long exec stream active while provider drift checks run.
+        if time.monotonic() - last_report >= 30:
+            print("Waiting for recreated client scopes, credentials, and roles", flush=True)
+            last_report = time.monotonic()
         admin = admin_token()
         clients = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)
         if len(clients) != 1:

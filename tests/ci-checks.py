@@ -18,12 +18,13 @@ CHECKS = runpy.run_path(str(SCRIPT))
 class CheckSelectionTests(unittest.TestCase):
     def test_documentation_changes(self):
         self.assertTrue(CHECKS["documentation_only"]([
-            "README.md", "docs/requirements.txt", "mkdocs.yml",
+            "README.md", "docs/index.md", "docs/imgs/logo.png", "mkdocs.yml",
         ]))
 
     def test_runtime_and_unknown_paths_require_full_checks(self):
         for path in ["composition.yaml", "xrd.yaml", "templates/keycloak/client.yaml",
-                     "scripts/ci-checks.py", "tests/ci-checks.py", ".github/workflows/pr.yaml", "unknown.txt"]:
+                     "scripts/ci-checks.py", "tests/ci-checks.py", ".github/workflows/pr.yaml", "unknown.txt",
+                     "docs/requirements.txt", "docs/requirements.in", "docs/unknown.py"]:
             with self.subTest(path=path):
                 self.assertFalse(CHECKS["documentation_only"](["README.md", path]))
 

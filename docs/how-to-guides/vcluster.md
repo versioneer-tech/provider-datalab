@@ -42,6 +42,14 @@ The Gateway removes `/.vc0` and forwards to that instance with backend TLS
 validation. Workload Ingress and Gateway synchronization is disabled; use
 Kubernetes port forwarding to reach a workload Service.
 
+Choose the access method that matches your caller:
+
+| Caller | Method |
+| --- | --- |
+| A person using kubectl | [Device login](#human-access); the helper can refresh the login. |
+| A person receiving limited access from another service | [Delegated access](#delegated-access) with a short-lived token file. |
+| An automated workload | [Machine access](#machine-access) with an explicitly assigned instance role. |
+
 ### Roles and profiles
 
 The API validates issuer, Datalab audience, signature, expiry, and configured
@@ -549,7 +557,7 @@ runs `stac-fastapi-pgstac` in virtual namespace `demo`. Its PostgreSQL database
 is a Datalab-managed service on the host. Add this request alongside `vclusters`:
 
 ```yaml
-databases:
+stores:
   pg0:
     type: postgres
     names: [catalog]

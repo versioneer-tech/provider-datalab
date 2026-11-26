@@ -5,6 +5,8 @@
 """Check published service credentials and namespace-limited Secret access."""
 
 import argparse
+import base64
+from urllib.parse import quote
 import json
 import subprocess
 import time
@@ -74,7 +76,7 @@ def main():
         sources = kube("get", "objects.kubernetes.m.crossplane.io", "--namespace", args.namespace,
                        "--selector", "crossplane.io/composite=" + args.datalab, "-o", "json")["items"]
         connections = [c for c in xr["status"].get("connections", [])
-                       if c["type"] in ("postgres", "mongo", "redis", "custom")]
+                       if c["type"] in ("postgres", "valkey", "custom")]
         assert connections and all(c["ready"] for c in connections), "Service publication is not ready"
         for connection in connections:
             kind, name, ref = connection["type"], connection["name"], connection["secretRef"]
@@ -84,10 +86,10 @@ def main():
                 "apiVersion": xr["apiVersion"], "kind": "Datalab", "name": args.datalab,
                 "uid": xr["metadata"]["uid"], "controller": True, "blockOwnerDeletion": True,
             }]
-            source_name = {"postgres": f"{name}-pguser-postgres", "mongo": f"{name}-mongodb-auth",
-                           "redis": f"{name}-redis-auth", "custom": name}[kind]
-            prefix = {"postgres": "observe-database-secret-", "mongo": "observe-mongodb-auth-secret-",
-                      "redis": "observe-redis-auth-secret-", "custom": "observe-custom-secret-"}[kind]
+            source_name = {"postgres": f"{name}-superuser",
+                           "valkey": f"{name}-valkey-auth", "custom": name}[kind]
+            prefix = {"postgres": "observe-database-secret-",
+                      "valkey": "observe-valkey-auth-secret-", "custom": "observe-custom-secret-"}[kind]
             matches = [o["spec"]["forProvider"]["manifest"]["metadata"] for o in sources
                        if o["metadata"].get("labels", {}).get("crossplane.io/composite") == args.datalab
                        and o["metadata"].get("annotations", {}).get("crossplane.io/composition-resource-name", "").startswith(prefix)
@@ -95,9 +97,24 @@ def main():
             assert len(matches) == 1, "Source observer is missing or ambiguous"
             source = get("secret", source_name, matches[0]["namespace"])
             data = source["data"]
+            if kind == "postgres":
+                username = base64.b64decode(data["username"]).decode()
+                password = base64.b64decode(data["password"]).decode()
+                host = f"{name}-rw.{matches[0]['namespace']}.svc"
+                port = base64.b64decode(data.get("port", "NTQzMg==")).decode()
+                dbname = base64.b64decode(data.get("dbname", "cG9zdGdyZXM=")).decode()
+                data = {key: base64.b64encode(value.encode()).decode() for key, value in {
+                    "host": host, "port": port, "user": username, "password": password, "dbname": dbname,
+                    "uri": f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}/{quote(dbname, safe='')}",
+                }.items()}
             if kind != "custom":
                 fields = {"host", "port", "user", "password", "dbname", "uri"} if kind == "postgres" else {"user", "password"}
                 data = {key: value for key, value in data.items() if key in fields}
+                names = xr["spec"]["stores"][name].get("names") or ["default"]
+                assert connection["names"] == names
+                data["names"] = base64.b64encode(json.dumps(names).encode()).decode()
+                if kind == "valkey":
+                    data["prefixes"] = base64.b64encode(json.dumps({name: name + ":" for name in names}).encode()).decode()
             assert secret.get("data") == data, "Published credentials differ from the current source"
             if matches[0]["namespace"] != args.namespace:
                 denied = subprocess.run(command + ["--as", identity, "get", "secret", source_name,
