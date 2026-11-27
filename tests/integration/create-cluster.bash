@@ -56,7 +56,7 @@ until kube --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; do
 done
 kube wait nodes --all --for=condition=Ready --timeout=5m
 log 'Preparing Kind NetworkPolicy enforcement'
-kube apply -f https://raw.githubusercontent.com/kubernetes-sigs/kube-network-policies/v1.1.2/install.yaml
+python3 "${REPO_ROOT}/scripts/components.py" network-policy --manifest | kube apply -f -
 kube rollout status daemonset/kube-network-policies --namespace kube-system --timeout=5m
 "${INTEGRATION_DIR}/kind-storage.bash"
 

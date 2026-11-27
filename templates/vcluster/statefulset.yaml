@@ -68,7 +68,7 @@ spec:
       enableServiceLinks: true
       containers:
       - name: syncer
-        image: ghcr.io/loft-sh/vcluster-oss:0.38.0
+        image: ghcr.io/loft-sh/vcluster-oss:0.38.0@sha256:d8214360f7c1c62eabce0f15ca39d5a701b95bfb82b4a4bc0e9233f591e7f3d4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

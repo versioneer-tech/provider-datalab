@@ -909,7 +909,7 @@ spec:
               - daemon off;
               command:
               - nginx
-              image: nginx/nginx-unprivileged:1.30.8-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
+              image: nginx/nginx-unprivileged:1.30.8-alpine-slim@sha256:04c98c78c1de60ddeada00d7d2207dcd146ecd07b61b9941c9a5799cfb258d28
               livenessProbe:
                 httpGet:
                   path: /_live
@@ -2633,8 +2633,8 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        http-secret: TklSUEoxeXY3bmVTQTNhMW04VmpFTzdwSEdYM1FRcUs=
-        password: M0ZCWkhGZTNCZ1c2RTdjRUlBVTl3VGtFUXRCOA==
+        http-secret: dGVzdC1yZWdpc3RyeS1odHRwLXNlY3JldA==
+        password: dGVzdC1yZWdpc3RyeS1wYXNzd29yZA==
         user: cy1qb2hu
       kind: Secret
       metadata:

@@ -1372,8 +1372,8 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        http-secret: TklSUEoxeXY3bmVTQTNhMW04VmpFTzdwSEdYM1FRcUs=
-        password: M0ZCWkhGZTNCZ1c2RTdjRUlBVTl3VGtFUXRCOA==
+        http-secret: dGVzdC1yZWdpc3RyeS1odHRwLXNlY3JldA==
+        password: dGVzdC1yZWdpc3RyeS1wYXNzd29yZA==
         user: cy1qb2hu
       kind: Secret
       metadata:

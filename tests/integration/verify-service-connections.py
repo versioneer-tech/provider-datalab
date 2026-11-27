@@ -86,21 +86,30 @@ def main():
                 "apiVersion": xr["apiVersion"], "kind": "Datalab", "name": args.datalab,
                 "uid": xr["metadata"]["uid"], "controller": True, "blockOwnerDeletion": True,
             }]
-            source_name = {"postgres": f"{name}-superuser",
-                           "valkey": f"{name}-valkey-auth", "custom": name}[kind]
             prefix = {"postgres": "observe-database-secret-",
                       "valkey": "observe-valkey-auth-secret-", "custom": "observe-custom-secret-"}[kind]
-            matches = [o["spec"]["forProvider"]["manifest"]["metadata"] for o in sources
-                       if o["metadata"].get("labels", {}).get("crossplane.io/composite") == args.datalab
-                       and o["metadata"].get("annotations", {}).get("crossplane.io/composition-resource-name", "").startswith(prefix)
-                       and o["spec"]["forProvider"]["manifest"].get("metadata", {}).get("name") == source_name]
+            matches = []
+            for observer in sources:
+                metadata = observer["metadata"]
+                if metadata.get("labels", {}).get("crossplane.io/composite") != args.datalab:
+                    continue
+                key = metadata.get("annotations", {}).get("crossplane.io/composition-resource-name", "")
+                target = observer["spec"]["forProvider"]["manifest"]["metadata"]
+                if (kind == "custom" and key.startswith(prefix) and target["name"] == name
+                        or kind != "custom" and key == prefix + args.datalab + "-" + name):
+                    matches.append(target)
             assert len(matches) == 1, "Source observer is missing or ambiguous"
+            # Native names can be shortened; the observer retains the logical store key.
+            source_name = matches[0]["name"]
+            if kind != "custom":
+                assert source_name.startswith(kind + "-"), "The source name has no store type prefix"
             source = get("secret", source_name, matches[0]["namespace"])
             data = source["data"]
             if kind == "postgres":
                 username = base64.b64decode(data["username"]).decode()
                 password = base64.b64decode(data["password"]).decode()
-                host = f"{name}-rw.{matches[0]['namespace']}.svc"
+                assert source_name.endswith("-superuser")
+                host = f"{source_name.removesuffix('-superuser')}-rw.{matches[0]['namespace']}.svc"
                 port = base64.b64decode(data.get("port", "NTQzMg==")).decode()
                 dbname = base64.b64decode(data.get("dbname", "cG9zdGdyZXM=")).decode()
                 data = {key: base64.b64encode(value.encode()).decode() for key, value in {

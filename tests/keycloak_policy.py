@@ -145,8 +145,8 @@ def verify_keycloak_policy(resources, image=None):
             port = docker('port', name, '8080/tcp').rsplit(':', 1)[1]
             origin = 'http://127.0.0.1:' + port
             endpoint = '/realms/test-refresh/protocol/openid-connect/token'
-            # A cold dev image builds the server before it imports the test realm.
-            deadline = time.monotonic() + 300
+            # A cold dev image builds the server and database before realm import.
+            deadline = time.monotonic() + 600
             while True:
                 try:
                     status, _ = call('/realms/test-refresh/.well-known/openid-configuration')
@@ -155,7 +155,10 @@ def verify_keycloak_policy(resources, image=None):
                 except OSError:
                     pass
                 if time.monotonic() >= deadline:
-                    raise RuntimeError('The local Keycloak test server did not start')
+                    logs = subprocess.run(['docker', 'logs', '--tail', '40', name],
+                                          capture_output=True, text=True)
+                    raise RuntimeError('The local Keycloak test server did not start:\n'
+                                       + logs.stdout + logs.stderr)
                 time.sleep(1)
             status, admin = call('/realms/master/protocol/openid-connect/token', {
                 'grant_type': 'password', 'client_id': 'admin-cli', 'username': 'test-admin', 'password': 'test-admin-password'})

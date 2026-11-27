@@ -7,6 +7,8 @@ metadata:
   name: verify-s3
   namespace: workspace
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab-custom
   users: [verify-s3]
 ---

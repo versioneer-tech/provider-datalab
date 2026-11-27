@@ -8,7 +8,7 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.bash
 source "${INTEGRATION_DIR}/lib.bash"
 
-: "${DATA_CLIENT_IMAGE:=curlimages/curl:8.10.1}"
+: "${DATA_CLIENT_IMAGE:=$(python3 "${REPO_ROOT}/scripts/components.py" --image curlimages/curl)}"
 : "${KEEP_DATA_RESOURCES:=0}"
 
 readonly ENABLED_DATALAB=verify-data-enabled

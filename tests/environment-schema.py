@@ -5,6 +5,7 @@
 
 import json
 from pathlib import Path
+import runpy
 import subprocess
 import tempfile
 
@@ -12,6 +13,8 @@ import yaml
 
 
 def main():
+    image = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/components.py"))["image_pin"](
+        "xpkg.crossplane.io/crossplane/crossplane")
     xrd = yaml.safe_load(Path("xrd.yaml").read_text())
     valid = ["a", "0", "team-config", "team.config", "a" * 63]
     invalid = ["", "a" * 64, "Uppercase", "under_score", "-leading", "trailing-",
@@ -92,7 +95,7 @@ def main():
         path.write_text("\n---\n".join(json.dumps(resource) for resource in resources))
         result = subprocess.run(
             ["crossplane", "resource", "validate", "xrd.yaml", str(path),
-             "--crossplane-image=xpkg.crossplane.io/crossplane/crossplane:v2.4.3",
+             "--crossplane-image", image,
              "--cache-dir", "/tmp/provider-datalab-crossplane", "--error-on-missing-schemas", "--output", "json"],
             capture_output=True, text=True, timeout=180,
         )

@@ -3,16 +3,37 @@
 
 """Check integration target selection and capability probes."""
 
+import json
 import runpy
 import subprocess
 import unittest
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
+from urllib.error import HTTPError
+
+import yaml
 
 from helpers import ROOT
 
 
 class HarnessTests(unittest.TestCase):
+    def test_admin_requests_continue_after_the_previous_token_expires(self):
+        request = runpy.run_path(str(ROOT / "tests/vcluster/e2e.py"))["admin_identity"]
+        current_token = "first-test-token"
+
+        def respond(value, **_):
+            if value.get_header("Authorization") != "Bearer " + current_token:
+                raise HTTPError(value.full_url, 401, "Expired test token", {}, None)
+            return BytesIO(b'{"realm":"integration"}')
+
+        with patch.dict(request.__globals__, admin_token=lambda: current_token, urlopen=respond):
+            with patch.object(request.__globals__["ssl"], "create_default_context", return_value=None):
+                self.assertEqual(request("/admin/realms/integration")["realm"], "integration")
+                current_token = "renewed-test-token"
+                self.assertEqual(request("/admin/realms/integration")["realm"], "integration")
+
     def test_explicit_snapshot_class_makes_failed_prerequisites_fatal(self):
         script = '''
 set -euo pipefail
@@ -209,6 +230,19 @@ publish_test_image registry.example.org/tests/client:test /test/empty-docker-con
             })
         with self.assertRaises(ValueError):
             configure(documents, "test-storage", "invalid", "10.30.0.0/16")
+        result = configure([{"data": {"volumes": {"maxSnapshots": 3}}}], "test-storage",
+                           "10.20.0.0/16", "10.30.0.0/16", snapshot_class="test-snapshots")[0]["data"]
+        for group in ("volumes", "database", "cacheStore"):
+            self.assertEqual(result[group]["snapshotClassName"], "test-snapshots")
+        self.assertEqual(result["volumes"]["maxSnapshots"], 3)
+
+    def test_volume_environment_uses_the_installed_identity_realm(self):
+        environment = yaml.safe_load((ROOT / "tests/integration/manifests/volumes/environmentconfig.yaml").read_text())
+        identity = list(yaml.safe_load_all((ROOT / "tests/integration/manifests/s3/keycloak.yaml").read_text()))
+        config = next(item for item in identity if item and item.get("kind") == "ConfigMap"
+                      and "integration-realm.json" in item.get("data", {}))
+        realm = json.loads(config["data"]["integration-realm.json"])["realm"]
+        self.assertEqual(environment["data"]["iam"]["realm"], realm)
 
     def test_operator_with_managed_resources_stays_running(self):
         script = '''

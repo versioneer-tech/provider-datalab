@@ -6,6 +6,7 @@
 *.swo
 *~
 site/
+.kube
 
 # Environment files
 .env*

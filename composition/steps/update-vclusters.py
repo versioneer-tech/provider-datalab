@@ -650,6 +650,7 @@ def _compose_instance(
             manifest=manifest,
             **template_values,
         )
+        body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "false"
         if preserve:
             body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
         if readiness:

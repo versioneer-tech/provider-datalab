@@ -21,13 +21,17 @@ if (($#)); then
   examples=("examples/base/$1-lab.yaml")
 fi
 
-for command_name in crossplane dyff docker python3 go; do
+for command_name in crossplane dyff docker python3 go crane; do
   command -v "${command_name}" >/dev/null || { printf 'Missing required command: %s\n' "${command_name}" >&2; exit 1; }
 done
 docker info >/dev/null
 python3 scripts/build-composition.py --check
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 tests/environment-schema.py
+crossplane_image="$(python3 scripts/components.py --image xpkg.crossplane.io/crossplane/crossplane)"
+if (($# == 0)); then
+  bash tests/dependencies.bash
+fi
 
 render_dir="$(mktemp -d /tmp/datalab-render.XXXXXX)"
 cleanup() {
@@ -66,8 +70,9 @@ render() {
   if [[ "${2:-}" == --observed-resources ]]; then
     observed="$3"
   fi
-  python3 tests/render.py requirements tests/environmentconfig.yaml "${observed}" >"${render_dir}/required.yaml"
+  python3 tests/render.py requirements tests/environmentconfig.yaml "${observed}" "$1" >"${render_dir}/required.yaml"
   crossplane render "$1" composition.yaml "${render_dir}/functions.yaml" \
+    --crossplane-image "${crossplane_image}" \
     --crossplane-docker-network "${render_dir##*/}" \
     --required-resources "${render_dir}/required.yaml" -x "${@:2}"
 }

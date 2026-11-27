@@ -83,8 +83,9 @@ Add tools when you need the corresponding task:
 
 | Task | Install command |
 | --- | --- |
-| Kubernetes integration | `python3 scripts/install-tools.py kind kubectl helm` |
-| Package security scans | `python3 scripts/install-tools.py crane trivy govulncheck` |
+| Kubernetes integration | `python3 scripts/install-tools.py kind kubectl helm crane` |
+| Full unit dependency reports | `python3 scripts/install-tools.py crane trivy govulncheck` |
+| Package security scans | `python3 scripts/install-tools.py crane trivy` |
 | Generate the API reference | `python3 scripts/install-tools.py crdoc` |
 
 ### Build
@@ -119,6 +120,12 @@ documentation in `build/docs-check/`. Use `mkdocs serve` to preview documentatio
 For another Kubernetes target, use the explicit connection and storage options
 in the [integration guide](tests/integration/README.md).
 
+The full unit command checks test dependency updates and vulnerabilities before
+running fixtures. Reports stay under `build/test-dependencies/`. Review findings
+and check failures before using the fixtures. Test-only findings are advisory;
+they do not approve a production candidate. Run `bash tests/dependencies.bash`
+for these reports alone. Focused and fast unit commands omit this network check.
+
 To select the required checks for a pull request:
 
 ```bash
@@ -151,13 +158,23 @@ uv pip compile --python-version "$(cat .python-version)" --generate-hashes --no-
 ```
 
 Review the resolved packages and install behavior, then repeat the frozen
-install above and run the relevant checks. The STAC image has one reviewed
-source build; see [dependency policy](SECURITY.md#dependency-updates-and-tool-installation).
+install above and run the relevant checks. See the
+[dependency policy](SECURITY.md#dependency-updates-and-tool-installation).
 
-Dependabot handles the supported manifests. Run
+Dependabot updates production and build manifests on schedule. Test dependencies
+are checked when the full tests run, with no scheduled version updates. Run
 `python3 scripts/check-image-updates.py` to report image updates in the other
 source formats. Use `--reports <new-directory>` for another run. Scan and test
-replacement images before changing their pins.
+replacement images before changing their pins. `scripts/components.json` holds
+shared platform image pins and checked URLs for charts and bootstrap manifests.
+`scripts/components.py` verifies downloaded bytes before installation.
+Update the lock and source image defaults together, then run all checks.
+
+On Kind, the full integration run installs a saved Configuration from the
+Crossplane offline cache before the service tests. Supply an existing candidate
+with `tests/integration/run.bash all --kind --candidate <directory>/datalab.xpkg`.
+The check verifies the package digest, installation status, and installed
+Composition.
 
 ## Cluster prerequisites
 

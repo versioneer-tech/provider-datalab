@@ -27,15 +27,21 @@ def main():
                 config["backups"] = enabled
         resources = render(args, environment, source, "tests/observed/002-lab.yaml")
         active = enabled is True
-        cluster = manifest(resources, "db-cluster-s-jeff-pg0")
+        cluster = manifest(resources, "db-cluster-s-jeff-postgres-pg0")
         assert ("backup" in cluster["spec"]) == active
         if active:
             assert cluster["spec"]["backup"]["volumeSnapshot"]["online"] is False
             assert cluster["spec"]["backup"]["volumeSnapshot"]["snapshotOwnerReference"] == "backup"
         schedules = [body["spec"]["forProvider"]["manifest"] for body in resources.values()
                      if body.get("kind") == "Object"
-                     and body["spec"]["forProvider"]["manifest"].get("kind") == "CronJob"]
+                     and body["spec"]["forProvider"]["manifest"].get("kind") == "ScheduledBackup"]
         assert any(job["metadata"]["name"] == "postgres-snapshot-pg0" for job in schedules) == active
+        if active:
+            schedule, = schedules
+            assert schedule["spec"]["schedule"] == "0 0 1 * * *"
+            assert schedule["spec"]["method"] == "volumeSnapshot"
+            assert schedule["spec"]["online"] is False
+            assert schedule["spec"]["backupOwnerReference"] == "cluster"
         acl = base64.b64decode(manifest(resources, "valkey-acl-secret-s-jeff-cache")["data"]["user.acl"]).decode()
         assert ("user backup " in acl) == active
         assert ("valkey-backup-cronjob-s-jeff-cache" in resources) == active
@@ -55,7 +61,7 @@ def main():
                      "metadata": {"name": "valkey-pod-s-jeff-cache",
                                   "annotations": {"crossplane.io/composition-resource-name": "valkey-pod-s-jeff-cache"}},
                      "status": {"atProvider": {"manifest": {
-                         "apiVersion": "v1", "kind": "Pod", "metadata": {"name": "cache-0", "namespace": "s-jeff"},
+                         "apiVersion": "v1", "kind": "Pod", "metadata": {"name": "valkey-cache-0", "namespace": "s-jeff"},
                          "spec": {"volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "data-cache-0"}}],
                                   "containers": [{"volumeMounts": [{"name": "data", "mountPath": "/data"}]}]},
                      }}}})
@@ -68,7 +74,7 @@ def main():
     rules = manifest(ready, "valkey-backup-role-s-jeff-cache")["rules"]
     assert rules[:2] == [
         {"apiGroups": [""], "resources": ["persistentvolumeclaims"], "resourceNames": ["data-cache-0"], "verbs": ["get"]},
-        {"apiGroups": [""], "resources": ["pods"], "resourceNames": ["cache-0"], "verbs": ["get"]},
+        {"apiGroups": [""], "resources": ["pods"], "resourceNames": ["valkey-cache-0"], "verbs": ["get"]},
     ]
     print("PASS Valkey schedules use the observed data PVC and restrict Pod and PVC reads by name", flush=True)
 

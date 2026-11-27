@@ -520,14 +520,13 @@ then removes that instance's synced host Pods, including Pending and system
 Pods. Other instances and shared services continue to run.
 
 The virtual API is unavailable and its connections report `ready: false`.
-The provider pauses changes that need the virtual API, including removals.
-Controller definitions, PVCs, storage retention policies, and connection names
-remain. Resume an instance before removing it or its Datalab so that virtual
-resource finalizers can run.
+The provider defers changes that need the virtual API, including individual
+virtual resource removals. Controller definitions, PVCs, storage retention
+policies, and connection names remain. You can remove a hibernated instance or
+its Datalab.
 
-Set `hibernated` to `false`, its default, to resume. The provider stops previous
-cleanup Jobs before it starts the control plane with the same PVC. It resumes
-virtual resource reconciliation after the API is ready. Deployments,
+Set `hibernated` to `false`, its default, to resume with the same control-plane
+PVC. After the API is ready, Deployments,
 StatefulSets, and installed application controllers recreate their Pods.
 Standalone Pod recovery is not supported. Resume must be requested through
 the host Datalab; there is no

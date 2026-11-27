@@ -7,6 +7,8 @@ metadata:
   name: __DATALAB_NAME__
   namespace: __WORKSPACE_NAMESPACE__
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab
   users: [verify-s3]
   stores:

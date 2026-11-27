@@ -29,9 +29,13 @@ def compose(req, rsp):
         )
 
     def protect(suffix, used, by, prefix="vcluster"):
-        if used not in resources or by not in resources:
+        if used not in resources:
             return
         key = _resource_name(prefix, "usage", suffix, name, used, by)
+        # Keep deletion order until the dependent record has left the API.
+        if by not in rsp.desired.resources and (
+                by not in req.observed.resources or key not in req.observed.resources):
+            return
         rsp.desired.resources[key].resource.update(
             _render_template(
                 req,

@@ -14,7 +14,7 @@ data:
     issuerURL: http://keycloak.keycloak:8080/realms/integration
     internalURL: http://keycloak.keycloak:8080/realms/integration
   ingress:
-    class: nginx
+    class: ""
     domain: lab.acme.com
     secret: wildcard-tls
     enabled: false

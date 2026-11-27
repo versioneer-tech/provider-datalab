@@ -7,8 +7,13 @@ set -euo pipefail
 profile=""
 check_only=0
 target_option=""
+candidate=""
 while (($#)); do
   case "$1" in
+    --candidate)
+      [[ $# -ge 2 && -f "$2" ]] || { printf 'Supply a saved package file.\n' >&2; exit 2; }
+      candidate="$2"
+      shift 2 ;;
     --kind)
       [[ -z "${target_option}" ]] || { printf 'Select one cluster target.\n' >&2; exit 2; }
       target_option=kind
@@ -50,6 +55,10 @@ if [[ "${profile}" == all ]]; then
 else
   profiles=("$(selected_profile "${profile}" "$0")")
 fi
+if [[ -n "${candidate}" && ( "${profile}" != all || "${PROVIDER_DATALAB_CLUSTER}" != kind ) ]]; then
+  printf '%s\n' '--candidate requires all on Kind.' >&2
+  exit 2
+fi
 check_test_images "${profile}"
 started=${SECONDS}
 if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind && "${check_only}" == 0 ]]; then
@@ -68,6 +77,18 @@ if ((check_only)); then
   exit 0
 fi
 "${INTEGRATION_DIR}/deploy-platform.bash"
+if [[ "${profile}" == all && "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
+  if [[ -z "${candidate}" ]]; then
+    candidate_root="$(mktemp -d /tmp/datalab-it-package.XXXXXX)"
+    cp "${REPO_ROOT}/crossplane.yaml" "${REPO_ROOT}/xrd.yaml" "${REPO_ROOT}/composition.yaml" "${candidate_root}/"
+    crossplane xpkg build --package-root "${candidate_root}" --examples-root "${candidate_root}/examples" \
+      --package-file "${candidate_root}/datalab.xpkg"
+    candidate="${candidate_root}/datalab.xpkg"
+  fi
+  python3 "${INTEGRATION_DIR}/install-candidate.py" --package "${candidate}" \
+    --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}"
+  if [[ -n "${candidate_root:-}" ]]; then rm -rf "${candidate_root}"; fi
+fi
 if [[ "${profile}" == all ]]; then
   kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
 fi

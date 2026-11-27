@@ -155,7 +155,7 @@ spec:
             if data_enabled is None:
                 data_enabled = True
             data_enabled = _boolish(data_enabled)
-            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
             if not (data_enabled or registry_enabled):
                 return
 
@@ -366,6 +366,10 @@ spec:
                 "dbname": database, "uri": uri,
             }.items()}
 
+        def _store_resource_name(kind, name):
+            # Leave room for Pod, Secret, and operator suffixes.
+            return _resource_name(kind, name, limit=40)
+
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -483,7 +487,7 @@ spec:
                 data.update({name: base64.b64encode(value.encode()).decode()
                              for name, value in (source_manifest.get("stringData") or {}).items()})
                 if kind == "postgres":
-                    data = _postgres_connection_data(data, instance, xr_name)
+                    data = _postgres_connection_data(data, _store_resource_name("postgres", instance), xr_name)
                 required = {
                     "postgres": ("host", "port", "user", "password", "dbname", "uri"),
                     "valkey": ("user", "password"),
@@ -615,7 +619,7 @@ spec:
                         cluster_name = name.strip()
                         observe(
                             f"observe-database-secret-{xr_name}-{cluster_name}",
-                            f"{cluster_name}-superuser",
+                            _store_resource_name("postgres", cluster_name) + "-superuser",
                             runtime_namespace,
                             kind="postgres",
                             instance=cluster_name,
@@ -631,13 +635,13 @@ spec:
                             store_name = name.strip()
                             observe(
                                 f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
-                                f"{store_name}-{backend}-auth",
+                                _store_resource_name(backend, store_name) + "-auth",
                                 runtime_namespace,
                                 kind=kind,
                                 instance=store_name,
                             )
 
-            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
             if registry_enabled:
                 observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                         kind="registry", instance="primary")
@@ -723,6 +727,10 @@ spec:
             return fill(template)
 
         import base64
+
+        import hashlib
+
+        import json
 
         import re
 
@@ -817,6 +825,20 @@ spec:
                 "dbname": database, "uri": uri,
             }.items()}
 
+        def _store_resource_name(kind, name):
+            # Leave room for Pod, Secret, and operator suffixes.
+            return _resource_name(kind, name, limit=40)
+
+        def _resource_name(*parts, limit=63):
+            name = "-".join(parts)
+            if len(name) <= limit and (
+                len(parts) == 1 or all("-" not in part for part in parts)
+            ):
+                return name
+            # Keep component boundaries distinct when instance and profile names have hyphens.
+            digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:10]
+            return name[: limit - 11].rstrip("-") + "-" + digest
+
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
         # SPDX-License-Identifier: Apache-2.0
@@ -870,8 +892,9 @@ spec:
 
 
         def _postgres_values(data, name, store, config, env):
-            data = _postgres_connection_data(data, store, name)
-            host = f"{store}-rw.{name}.svc"
+            cluster = _store_resource_name("postgres", store)
+            data = _postgres_connection_data(data, cluster, name)
+            host = f"{cluster}-rw.{name}.svc"
             values = {
                 "host": host,
                 "port": _b64get_any(data, ["port"]) or "5432",
@@ -971,32 +994,29 @@ spec:
                     values,
                     bool(values["password"]),
                 )
-            for backend, kind in (
-                ("valkey", "valkey"),
-            ):
-                for store, config in sorted(_stores(spec, kind).items()):
-                    names = config["names"]
-                    password = (
-                        _b64get_any(
-                            _extract_data(
-                                req, rsp, f"observe-{backend}-auth-secret-{name}-{store}"
-                            ),
-                            ["password"],
-                        )
-                        or ""
+            for store, config in sorted(_stores(spec, "valkey").items()):
+                names = config["names"]
+                password = (
+                    _b64get_any(
+                        _extract_data(
+                            req, rsp, f"observe-valkey-auth-secret-{name}-{store}"
+                        ),
+                        ["password"],
                     )
-                    host = f"{store}.{name}.svc"
-                    values = {
-                        "host": host,
-                        "port": "6379",
-                        "database": "0",
-                        "user": "default",
-                        "password": password,
-                        "url": f"redis://default:{password}@{host}:6379/0",
-                        "prefixes": json.dumps({name: name + ":" for name in names}),
-                    }
-                    values["names"] = json.dumps(names)
-                    publish(f"{kind}-{store}", values, bool(password))
+                    or ""
+                )
+                host = f"{_store_resource_name("valkey", store)}.{name}.svc"
+                values = {
+                    "host": host,
+                    "port": "6379",
+                    "database": "0",
+                    "user": "default",
+                    "password": password,
+                    "url": f"redis://default:{password}@{host}:6379/0",
+                    "prefixes": json.dumps({name: name + ":" for name in names}),
+                }
+                values["names"] = json.dumps(names)
+                publish(f"valkey-{store}", values, bool(password))
       templates:
         publish-connections/secret:
           apiVersion: v1
@@ -2255,7 +2275,7 @@ spec:
             vcluster = bool(spec.get("vclusters"))
             data_enabled = (env.get("packageR") or {}).get("enabled")
             data_enabled = data_enabled is None or _boolish(data_enabled)
-            registry_enabled = _boolish((env.get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((env.get("registry") or {}).get("enabled", False))
             policy = security.get("policy") or "baseline"
             overall_storage = str(
                 (env.get("overallQuota") or {}).get("storage")
@@ -2639,7 +2659,7 @@ spec:
             )
             data = environment.get("packageR") or {}
             enabled = data.get("enabled")
-            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+            registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
             if enabled is not None and not _boolish(enabled) and not registry_enabled:
                 return
             meta = _to_dict(req.observed.composite.resource)["metadata"]
@@ -3461,6 +3481,7 @@ spec:
                     manifest=manifest,
                     **template_values,
                 )
+                body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "false"
                 if preserve:
                     body["spec"]["managementPolicies"] = ["Observe", "Create", "Update"]
                 if readiness:
@@ -3826,7 +3847,7 @@ spec:
               deployment:
                 affinity: {}
                 annotations: {}
-                image: ''
+                image: coredns/coredns:1.15.0@sha256:0a9d8c8ddf34347eb59aad9a8784f0710de88d6d112726d11d271f9bc6daca26
                 labels: {}
                 nodeSelector: {}
                 pods:
@@ -3893,10 +3914,7 @@ spec:
                 securityContext: {}
                 version: ''
             ingress:
-              annotations:
-                nginx.ingress.kubernetes.io/backend-protocol: HTTPS
-                nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
-                nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+              annotations: {}
               enabled: false
               host: my-host.com
               labels: {}
@@ -4884,7 +4902,7 @@ spec:
                 enableServiceLinks: true
                 containers:
                 - name: syncer
-                  image: ghcr.io/loft-sh/vcluster-oss:0.38.0
+                  image: ghcr.io/loft-sh/vcluster-oss:0.38.0@sha256:d8214360f7c1c62eabce0f15ca39d5a701b95bfb82b4a4bc0e9233f591e7f3d4
                   imagePullPolicy: IfNotPresent
                   livenessProbe:
                     httpGet:
@@ -5309,7 +5327,7 @@ spec:
                         backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
                         backup_binding=_resource_name(namespace, backup_name),
                         schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
-                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                     )["resources"]
                     for suffix, manifest in resources.items():
                         emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)
@@ -5715,6 +5733,20 @@ spec:
             meta = xr["metadata"]
             name, claim_namespace = meta["name"], meta.get("namespace", "default")
             states = []
+            active = set((xr.get("spec", {}).get("vclusters") or {}))
+            for key, body in observed.items():
+                instance = body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster")
+                if (instance and instance not in active
+                        and body.get("spec", {}).get("providerConfigRef", {}).get("name") == _resource_name(name, "vcluster", instance)
+                        and body.get("metadata", {}).get("annotations", {}).get("crossplane.io/paused") == "true"):
+                    # Release an old paused record before omission asks Crossplane to delete it.
+                    kept = {field: deepcopy(body[field]) for field in ("apiVersion", "kind", "spec", "metadata")}
+                    kept["metadata"] = {field: kept["metadata"][field]
+                                        for field in ("name", "namespace", "annotations", "labels") if field in kept["metadata"]}
+                    kept["metadata"]["annotations"]["crossplane.io/paused"] = "false"
+                    kept["spec"]["managementPolicies"] = ["Observe"]
+                    rsp.desired.resources[key].resource.update(kept)
+                    rsp.desired.resources[key].ready = fnv1.READY_TRUE
             for instance, config in sorted((xr.get("spec", {}).get("vclusters") or {}).items()):
                 runtime = _resource_name("vcluster", instance, limit=45)
                 virtual_provider = _resource_name(name, "vcluster", instance)
@@ -5813,7 +5845,7 @@ spec:
                                 suspended=not running,
                                 cleanup_generation=str(int(cleanup_generation if running
                                                            else previous.get(instance, {}).get("cleanupGeneration", 0))),
-                                cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine",
+                                cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                             )
                             placement = ((env.get("vcluster") or {}).get("scheduling") or {}).get("controlPlane") or {}
                             manifest["spec"]["template"]["spec"].update(placement)
@@ -5859,8 +5891,10 @@ spec:
                     for desired in rsp.desired.resources.values():
                         body = _to_dict(desired.resource)
                         if body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider:
-                            body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "true"
-                            desired.resource.update({"metadata": body["metadata"]})
+                            # Observe-only keeps offline records deletable without the virtual API.
+                            body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "false"
+                            body["spec"]["managementPolicies"] = ["Observe"]
+                            desired.resource.update({"metadata": body["metadata"], "spec": body["spec"]})
                             desired.ready = fnv1.READY_TRUE
                 states.append(state)
             if states or previous:
@@ -6240,8 +6274,8 @@ spec:
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
             package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062"
-            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
-            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
+            rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466"
+            oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048"
             data_config = environment.get("packageR") or {}
             data_enabled = data_config.get("enabled")
             if data_enabled is None:
@@ -7009,7 +7043,7 @@ spec:
                 port: 53
         data/gateway-container:
           name: gateway
-          image: nginx/nginx-unprivileged:1.30.8-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
+          image: nginx/nginx-unprivileged:1.30.8-alpine-slim@sha256:04c98c78c1de60ddeada00d7d2207dcd146ecd07b61b9941c9a5799cfb258d28
           command:
           - nginx
           args:
@@ -7429,6 +7463,8 @@ spec:
 
         import re
 
+        import secrets
+
         from crossplane.function import request, response
 
         from google.protobuf import json_format
@@ -7531,10 +7567,17 @@ spec:
                     return str(value)
             return None
 
-        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
-            # Keep each service's existing seed and length to prevent credential changes.
+        def _name_hash(seed, *, suffix=":provider-datalab", length=32):
+            # Recognize public name hashes so existing credentials can be replaced.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
+        def _service_token(req, rsp, key, name, namespace, field="password", old=None):
+            stored = require_secret(req, rsp, key, name, namespace)
+            value = _b64get_any(stored.get("data") or {}, [field])
+            if value and value != old:
+                return value
+            return secrets.token_urlsafe(32)
 
 
         # Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
@@ -7552,8 +7595,8 @@ spec:
             meta = xr["metadata"]
             name, namespace = meta["name"], meta.get("namespace") or "default"
             env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-            registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
-            if not _boolish((env.get("registry") or {}).get("enabled", True)):
+            registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"
+            if not _boolish((env.get("registry") or {}).get("enabled", False)):
                 return
             runtime_namespace = name
 
@@ -7564,8 +7607,13 @@ spec:
                     readiness=readiness or {"policy": "SuccessfulCreate"},
                 ))
 
-            auth = {"user": name, "password": _strong_token(f"{name}:registry", length=28),
-                    "http-secret": _strong_token(f"{name}:registry:http")}
+            auth = {"user": name}
+            for field, seed, length in (("password", f"{name}:registry", 28),
+                                        ("http-secret", f"{name}:registry:http", 32)):
+                auth[field] = _service_token(
+                    req, rsp, f"registry-auth-{name}", "registry-auth", runtime_namespace, field,
+                    old=_name_hash(seed, length=length),
+                )
             emit("auth-secret", {
                 "apiVersion": "v1", "kind": "Secret",
                 "metadata": {"name": "registry-auth", "namespace": runtime_namespace},
@@ -7686,7 +7734,7 @@ spec:
                     type: RuntimeDefault
                 initContainers:
                 - name: prepare-auth
-                  image: httpd:2.4.71-alpine
+                  image: httpd:2.4.71-alpine@sha256:32bd0639bcc4917ef1fd9363a1d9dd2dd9c498565118b062a10d51e43a5c3a24
                   command:
                   - /bin/sh
                   - -ec
@@ -7931,6 +7979,10 @@ spec:
                     for name, config in (spec.get("stores") or {}).items()
                     if isinstance(config, dict) and config.get("type") == kind}
 
+        def _store_resource_name(kind, name):
+            # Leave room for Pod, Secret, and operator suffixes.
+            return _resource_name(kind, name, limit=40)
+
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
             if len(name) <= limit and (
@@ -7952,9 +8004,6 @@ spec:
         import re
 
         from crossplane.function import response
-
-        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Request a cold PostgreSQL snapshot and retain completed recovery points."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/postgres-backup"\nSOURCE = "datalabs.versioneer.at/source-cluster-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(), method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, cluster_name, snapshot_class, retention, timeout=600):\n    namespace = quote(namespace, safe="")\n    path = "/apis/postgresql.cnpg.io/v1/namespaces/" + namespace\n    cluster_path = path + "/clusters/" + quote(cluster_name, safe="")\n    path += "/backups"\n    snapshot_path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + namespace + "/volumesnapshots/"\n    selected_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if selected_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("PostgreSQL snapshot retention requires deletion policy Delete.")\n    cluster = api.call("GET", cluster_path)\n    settings = cluster.get("spec", {}).get("backup", {}).get("volumeSnapshot", {})\n    if (cluster["metadata"].get("deletionTimestamp") or settings.get("className") != snapshot_class\n            or settings.get("online") is not False or settings.get("snapshotOwnerReference") != "backup"):\n        raise RuntimeError("The cluster must use cold snapshots owned by their Backup resources.")\n    uid = cluster["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{LABEL}={cluster_name},{SOURCE}={uid}"})\n\n    def owned_backups():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(LABEL) == cluster_name\n                and item["metadata"]["labels"].get(SOURCE) == uid\n                and item.get("spec", {}).get("cluster", {}).get("name") == cluster_name\n                and item["spec"].get("method") == "volumeSnapshot"\n                and item["spec"].get("online") is False\n                and not item["metadata"].get("deletionTimestamp")]\n\n    def ready(item):\n        if item.get("status", {}).get("phase") != "completed":\n            return False\n        elements = item["status"].get("snapshotBackupStatus", {}).get("elements") or []\n        if not elements or not any(element.get("type") == "PG_DATA" for element in elements):\n            return False\n        for element in elements:\n            snapshot = api.call("GET", snapshot_path + quote(element["name"], safe=""))\n            if (snapshot["metadata"].get("deletionTimestamp")\n                    or snapshot.get("status", {}).get("readyToUse") is not True\n                    or snapshot.get("status", {}).get("error")\n                    or not any(owner.get("kind") == "Backup" and owner.get("uid") == item["metadata"]["uid"]\n                               for owner in snapshot["metadata"].get("ownerReferences", []))):\n                return False\n        return True\n\n    pending = [item for item in owned_backups() if item.get("status", {}).get("phase") not in ("completed", "failed")]\n    if len(pending) > 1:\n        raise RuntimeError("Multiple pending PostgreSQL backups need operator review.")\n    current = pending[0] if pending else api.call("POST", path, {\n        "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",\n        "metadata": {"generateName": "snapshot-" + cluster_name[:40] + "-",\n                     "labels": {LABEL: cluster_name, SOURCE: uid}},\n        "spec": {"cluster": {"name": cluster_name}, "method": "volumeSnapshot",\n                 "online": False, "target": "primary"},\n    })\n    backup_name = current["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(backup_name, safe=""))\n        if current.get("status", {}).get("phase") == "failed":\n            raise RuntimeError("CloudNativePG reported a failed snapshot backup.")\n        if ready(current):\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The PostgreSQL snapshot did not complete before the deadline.")\n        time.sleep(3)\n    if api.call("GET", cluster_path)["metadata"]["uid"] != uid:\n        raise RuntimeError("The PostgreSQL cluster changed while the backup was being taken.")\n    backups = owned_backups()\n    completed = sorted((item for item in backups if ready(item)),\n                       key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]), reverse=True)\n    expired = completed[retention:]\n    expired += [item for item in backups if item.get("status", {}).get("phase") == "failed"]\n    # Remove old backups only after a new recovery point and its snapshots are ready.\n    for item in expired:\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n    print("PostgreSQL snapshot backup is ready: " + backup_name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("cluster")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    backup(API(), args.namespace, args.cluster, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
-
 
         def compose(req, rsp):
             if not set_response_ttl(req, rsp, 60):
@@ -7981,7 +8030,8 @@ spec:
                     return value
                 return hashlib.sha256(value.encode()).hexdigest()[:16]
 
-            for cluster, database in sorted(_stores(spec, "postgres").items()):
+            for store_name, database in sorted(_stores(spec, "postgres").items()):
+                cluster = _store_resource_name("postgres", store_name)
                 dbnames = database.get("names") or []
                 if not dbnames or not database.get("storage"):
                     continue
@@ -7993,7 +8043,7 @@ spec:
                     req, "postgres/postgres-cluster", cluster_name=cluster, runtime_namespace=name,
                     storage=storage, database_name=dbnames[0],
                     postgres_image=(env.get("images") or {}).get("postgres")
-                    or "ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie",
+                    or "ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie@sha256:b053a93d0687b4ee85418447ffb0a9436461c72efef2e316012728b34f2e50cf",
                 )
                 source = require_secret(req, rsp, f"postgres-superuser-{name}-{cluster}",
                                         cluster + "-superuser", name)
@@ -8025,12 +8075,8 @@ spec:
 
                 if database.get("backups") is True:
                     snapshot_class = config.get("snapshotClassName") or (env.get("volumes") or {}).get("snapshotClassName")
-                    count = config.get("maxSnapshots", 4)
                     if not isinstance(snapshot_class, str) or not snapshot_class.strip():
                         response.fatal(rsp, "PostgreSQL backups require data.database.snapshotClassName or data.volumes.snapshotClassName.")
-                        return
-                    if isinstance(count, bool) or not isinstance(count, (int, float)) or count != int(count) or not 1 <= count <= 100:
-                        response.fatal(rsp, "data.database.maxSnapshots must be an integer from 1 to 100.")
                         return
                     manifest["spec"]["backup"] = {"target": "primary", "volumeSnapshot": {
                         "className": snapshot_class, "online": False, "snapshotOwnerReference": "backup",
@@ -8039,16 +8085,13 @@ spec:
                     emit(class_key, {"apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
                                      "metadata": {"name": snapshot_class}},
                          {"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}, ["Observe"])
-                    backup_name = _resource_name("postgres", "snapshot", cluster)
-                    resources = _render_template(
-                        req, "postgres/backup", target=name, cluster_name=cluster, backup_name=backup_name,
-                        backup_binding=_resource_name(name, backup_name), snapshot_class=snapshot_class,
-                        max_snapshots=str(int(count)), schedule=config.get("schedule") or "0 1 * * *",
-                        backup_script=BACKUP_SCRIPT,
-                        backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
-                    )["resources"]
-                    for suffix, resource in resources.items():
-                        emit(_resource_name("db-backup", name, cluster, suffix), resource)
+                    # CNPG adds a timestamp suffix of 15 characters and uses the Backup name as a label.
+                    emit(_resource_name("db-backup", name, cluster, "schedule"), _render_template(
+                        req, "postgres/backup", target=name, cluster_name=cluster,
+                        backup_name=_resource_name("postgres", "snapshot", store_name, limit=48),
+                        schedule=config.get("schedule") or "0 0 1 * * *",
+                    ), {"policy": "DeriveFromCelQuery", "celQuery":
+                        "has(object.status) && has(object.status.lastCheckTime) && (!has(object.status.error) || object.status.error == '')"})
 
                 query = "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
                 # CNPG can keep Ready true while a cold backup fences the only instance.
@@ -8074,182 +8117,26 @@ spec:
                         req, "postgres/route", cluster_name=cluster, runtime_namespace=name,
                         gateway_parent_name=route_config["parentName"], gateway_parent_ns=route_config["parentNamespace"],
                         gateway_section=route_config["sectionName"],
-                        hostname=f"{cluster}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}",
+                        hostname=f"{store_name}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}",
                         backend_service_name=cluster + "-rw",
                     )
                     emit(f"db-tlsroute-{name}-{cluster}", route, {"policy": "DeriveFromCelQuery", "celQuery":
                         "has(object.status) && has(object.status.parents) && object.status.parents.exists(p, has(p.conditions) && p.conditions.exists(c, c.type == 'Accepted' && c.status == 'True') && p.conditions.exists(c, c.type == 'ResolvedRefs' && c.status == 'True'))"})
       templates:
         postgres/backup:
-          resources:
-            account:
-              apiVersion: v1
-              kind: ServiceAccount
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              automountServiceAccountToken: false
-            role:
-              apiVersion: rbac.authorization.k8s.io/v1
-              kind: Role
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              rules:
-              - apiGroups:
-                - postgresql.cnpg.io
-                resources:
-                - clusters
-                resourceNames:
-                - ${cluster_name}
-                verbs:
-                - get
-              - apiGroups:
-                - postgresql.cnpg.io
-                resources:
-                - backups
-                verbs:
-                - create
-                - get
-                - list
-                - delete
-              - apiGroups:
-                - snapshot.storage.k8s.io
-                resources:
-                - volumesnapshots
-                verbs:
-                - get
-            binding:
-              apiVersion: rbac.authorization.k8s.io/v1
-              kind: RoleBinding
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              subjects:
-              - kind: ServiceAccount
-                name: ${backup_name}
-                namespace: ${target}
-              roleRef:
-                apiGroup: rbac.authorization.k8s.io
-                kind: Role
-                name: ${backup_name}
-            script:
-              apiVersion: v1
-              kind: ConfigMap
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              data:
-                backup.py: ${backup_script}
-            network:
-              apiVersion: networking.k8s.io/v1
-              kind: NetworkPolicy
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              spec:
-                podSelector:
-                  matchLabels:
-                    datalabs.versioneer.at/postgres-backup: ${cluster_name}
-                policyTypes:
-                - Ingress
-                - Egress
-                ingress: []
-                egress:
-                - ports:
-                  - port: 443
-                    protocol: TCP
-                  - port: 6443
-                    protocol: TCP
-                - to:
-                  - namespaceSelector:
-                      matchLabels:
-                        kubernetes.io/metadata.name: kube-system
-                    podSelector:
-                      matchLabels:
-                        k8s-app: kube-dns
-                  ports:
-                  - port: 53
-                    protocol: TCP
-                  - port: 53
-                    protocol: UDP
-            class-binding:
-              apiVersion: rbac.authorization.k8s.io/v1
-              kind: ClusterRoleBinding
-              metadata:
-                name: ${backup_binding}
-              subjects:
-              - kind: ServiceAccount
-                name: ${backup_name}
-                namespace: ${target}
-              roleRef:
-                apiGroup: rbac.authorization.k8s.io
-                kind: ClusterRole
-                name: datalab-volume-snapshot-classes
-            cronjob:
-              apiVersion: batch/v1
-              kind: CronJob
-              metadata:
-                name: ${backup_name}
-                namespace: ${target}
-              spec:
-                schedule: ${schedule}
-                timeZone: Etc/UTC
-                concurrencyPolicy: Forbid
-                startingDeadlineSeconds: 3600
-                successfulJobsHistoryLimit: 1
-                failedJobsHistoryLimit: 1
-                jobTemplate:
-                  spec:
-                    backoffLimit: 1
-                    activeDeadlineSeconds: 900
-                    template:
-                      metadata:
-                        labels:
-                          datalabs.versioneer.at/postgres-backup: ${cluster_name}
-                      spec:
-                        restartPolicy: Never
-                        serviceAccountName: ${backup_name}
-                        automountServiceAccountToken: true
-                        securityContext:
-                          runAsNonRoot: true
-                          runAsUser: 65532
-                          runAsGroup: 65532
-                          seccompProfile:
-                            type: RuntimeDefault
-                        containers:
-                        - name: backup
-                          image: ${backup_image}
-                          command:
-                          - python
-                          - -B
-                          - /opt/backup/backup.py
-                          args:
-                          - ${target}
-                          - ${cluster_name}
-                          - ${snapshot_class}
-                          - ${max_snapshots}
-                          resources:
-                            requests:
-                              cpu: 20m
-                              memory: 32Mi
-                            limits:
-                              cpu: 100m
-                              memory: 128Mi
-                          securityContext:
-                            allowPrivilegeEscalation: false
-                            readOnlyRootFilesystem: true
-                            capabilities:
-                              drop:
-                              - ALL
-                          volumeMounts:
-                          - name: script
-                            mountPath: /opt/backup
-                            readOnly: true
-                        volumes:
-                        - name: script
-                          configMap:
-                            name: ${backup_name}
+          apiVersion: postgresql.cnpg.io/v1
+          kind: ScheduledBackup
+          metadata:
+            name: ${backup_name}
+            namespace: ${target}
+          spec:
+            schedule: ${schedule}
+            backupOwnerReference: cluster
+            cluster:
+              name: ${cluster_name}
+            method: volumeSnapshot
+            online: false
+            target: primary
         postgres/database:
           apiVersion: postgresql.cnpg.io/v1
           kind: Database
@@ -8391,6 +8278,8 @@ spec:
 
         import re
 
+        import secrets
+
         from crossplane.function import request, response
 
         from google.protobuf import json_format
@@ -8429,10 +8318,6 @@ spec:
         def _safe_str(value):
             return str(value).strip() if value is not None else ""
 
-        def _string_value(value):
-            """Keep the literal string for null values in existing resource settings."""
-            return str(value).strip()
-
         def _extract_manifest(observed_resource):
             if not observed_resource or not getattr(observed_resource, "resource", None):
                 return {}
@@ -8440,15 +8325,47 @@ spec:
             at_provider = (resource.get("status") or {}).get("atProvider") or {}
             return at_provider.get("manifest") or (at_provider.get("raw") or {}).get("manifest") or {}
 
+        def require_secret(req, rsp, key, name, namespace):
+            response.require_resources(
+                rsp, name=key, api_version="v1", kind="Secret",
+                namespace=namespace, match_name=name,
+            )
+            secret = request.get_required_resource(req, key) or {}
+            return {} if (secret.get("metadata") or {}).get("deletionTimestamp") else secret
+
+        def _b64get_any(data, keys):
+            if not data:
+                return None
+            for key in keys:
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    return base64.b64decode(value, validate=True).decode("utf-8")
+                except Exception:
+                    return str(value)
+            return None
+
         def _stores(spec, kind):
             return {name: {**config, "names": config.get("names") or ["default"]}
                     for name, config in (spec.get("stores") or {}).items()
                     if isinstance(config, dict) and config.get("type") == kind}
 
-        def _strong_token(seed, *, suffix=":provider-datalab", length=32):
-            # Keep each service's existing seed and length to prevent credential changes.
+        def _name_hash(seed, *, suffix=":provider-datalab", length=32):
+            # Recognize public name hashes so existing credentials can be replaced.
             digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
+        def _service_token(req, rsp, key, name, namespace, field="password", old=None):
+            stored = require_secret(req, rsp, key, name, namespace)
+            value = _b64get_any(stored.get("data") or {}, [field])
+            if value and value != old:
+                return value
+            return secrets.token_urlsafe(32)
+
+        def _store_resource_name(kind, name):
+            # Leave room for Pod, Secret, and operator suffixes.
+            return _resource_name(kind, name, limit=40)
 
         def _resource_name(*parts, limit=63):
             name = "-".join(parts)
@@ -8472,7 +8389,7 @@ spec:
 
 
 
-        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Save Valkey data and capture its PVC during a bounded write pause."""\n\nimport argparse\nfrom contextlib import closing\nfrom pathlib import Path\nimport runpy\nimport socket\nimport time\nfrom urllib.parse import quote\n\nsnapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))\nLABEL = "datalabs.versioneer.at/valkey"\nVERIFIED = "datalabs.versioneer.at/valkey-snapshot-verified"\n\n\nclass Valkey:\n    def __init__(self, host, password):\n        self.socket = socket.create_connection((host, 6379), timeout=60)\n        self.stream = self.socket.makefile("rb")\n        self.command("AUTH", "backup", password)\n\n    def close(self):\n        self.stream.close()\n        self.socket.close()\n\n    def command(self, *arguments):\n        values = [str(value).encode() for value in arguments]\n        self.socket.sendall(b"*%d\\r\\n" % len(values) + b"".join(\n            b"$%d\\r\\n" % len(value) + value + b"\\r\\n" for value in values))\n        line = self.stream.readline()\n        if not line.endswith(b"\\r\\n"):\n            raise RuntimeError("Valkey closed the backup connection.")\n        kind, value = line[:1], line[1:-2]\n        if kind == b"+":\n            return value.decode()\n        if kind == b"$" and int(value) >= 0:\n            data = self.stream.read(int(value) + 2)\n            if len(data) != int(value) + 2 or not data.endswith(b"\\r\\n"):\n                raise RuntimeError("Valkey returned an incomplete response.")\n            return data[:-2].decode()\n        # Server errors can contain command arguments; do not put them in Job logs.\n        raise RuntimeError("Valkey rejected the backup command.")\n\n\ndef capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):\n    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")\n    pause_until = 0\n    identity = {}\n\n    def check_pod():\n        pod = api.call("GET", pod_path)\n        volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")\n                   for v in pod["spec"].get("volumes", [])}\n        claims = {volumes.get(mount["name"]) for container in pod["spec"]["containers"]\n                  for mount in container.get("volumeMounts", []) if mount["mountPath"] == "/data"}\n        if (claims != {claim} or pod["metadata"].get("deletionTimestamp")\n                or not any(c["type"] == "Ready" and c["status"] == "True"\n                           for c in pod.get("status", {}).get("conditions", []))):\n            raise RuntimeError("The Valkey Pod must be ready and use the selected data PVC.")\n        return pod["metadata"]["uid"]\n\n    def info(section):\n        return dict(line.split(":", 1) for line in valkey.command("INFO", section).splitlines()\n                    if ":" in line and not line.startswith("#"))\n\n    def run_id():\n        fields = info("server")\n        if not fields.get("run_id"):\n            raise RuntimeError("Valkey did not report its server identity.")\n        return fields["run_id"]\n\n    def prepare():\n        nonlocal pause_until\n        identity["pod"] = check_pod()\n        identity["server"] = run_id()\n        # Valkey also stops eviction and expiry during this pause. It expires after a killed Job.\n        pause_until = time.monotonic() + 660\n        if valkey.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":\n            raise RuntimeError("Valkey did not pause writes.")\n        if valkey.command("BGSAVE") != "Background saving started":\n            raise RuntimeError("Valkey did not start its RDB save.")\n        save_deadline = time.monotonic() + 90\n        while True:\n            persistence = info("persistence")\n            if persistence.get("rdb_bgsave_in_progress") == "0":\n                if persistence.get("rdb_last_bgsave_status") != "ok":\n                    raise RuntimeError("Valkey failed to save its RDB file.")\n                break\n            if time.monotonic() >= save_deadline:\n                raise RuntimeError("Valkey did not finish its RDB save before the deadline.")\n            time.sleep(1)\n        validate()\n\n    def validate():\n        if (check_pod() != identity["pod"] or run_id() != identity["server"]\n                or time.monotonic() >= pause_until):\n            raise RuntimeError("The Valkey server changed or its write pause expired during capture.")\n\n    try:\n        snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,\n                            timeout=timeout, label=LABEL, prepare=prepare, validate=validate,\n                            verified_label=VERIFIED)\n    finally:\n        if pause_until:\n            valkey.command("CLIENT", "UNPAUSE")\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    for argument in ("namespace", "store", "claim", "snapshot_class"):\n        parser.add_argument(argument)\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    password = Path("/var/run/valkey-backup/password").read_text()\n    with closing(Valkey(args.store, password)) as valkey:\n        capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,\n                args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
+        BACKUP_SCRIPT = '#!/usr/bin/env python3\n\n"""Save Valkey data and capture its PVC during a bounded write pause."""\n\nimport argparse\nfrom contextlib import closing\nfrom pathlib import Path\nimport runpy\nimport socket\nimport time\nfrom urllib.parse import quote\n\nsnapshots = runpy.run_path(str(Path(__file__).with_name("volume-snapshot.py")))\nLABEL = "datalabs.versioneer.at/valkey"\nVERIFIED = "datalabs.versioneer.at/valkey-snapshot-verified"\n\n\nclass Valkey:\n    def __init__(self, host, password):\n        self.socket = socket.create_connection((host, 6379), timeout=60)\n        self.stream = self.socket.makefile("rb")\n        self.command("AUTH", "backup", password)\n\n    def close(self):\n        self.stream.close()\n        self.socket.close()\n\n    def command(self, *arguments):\n        values = [str(value).encode() for value in arguments]\n        self.socket.sendall(b"*%d\\r\\n" % len(values) + b"".join(\n            b"$%d\\r\\n" % len(value) + value + b"\\r\\n" for value in values))\n        line = self.stream.readline()\n        if not line.endswith(b"\\r\\n"):\n            raise RuntimeError("Valkey closed the backup connection.")\n        kind, value = line[:1], line[1:-2]\n        if kind == b"+":\n            return value.decode()\n        if kind == b"$" and int(value) >= 0:\n            data = self.stream.read(int(value) + 2)\n            if len(data) != int(value) + 2 or not data.endswith(b"\\r\\n"):\n                raise RuntimeError("Valkey returned an incomplete response.")\n            return data[:-2].decode()\n        # Server errors can contain command arguments; do not put them in Job logs.\n        raise RuntimeError("Valkey rejected the backup command.")\n\n\ndef capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540, server=None):\n    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote((server or store) + "-0", safe="")\n    pause_until = 0\n    identity = {}\n\n    def check_pod():\n        pod = api.call("GET", pod_path)\n        volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName")\n                   for v in pod["spec"].get("volumes", [])}\n        claims = {volumes.get(mount["name"]) for container in pod["spec"]["containers"]\n                  for mount in container.get("volumeMounts", []) if mount["mountPath"] == "/data"}\n        if (claims != {claim} or pod["metadata"].get("deletionTimestamp")\n                or not any(c["type"] == "Ready" and c["status"] == "True"\n                           for c in pod.get("status", {}).get("conditions", []))):\n            raise RuntimeError("The Valkey Pod must be ready and use the selected data PVC.")\n        return pod["metadata"]["uid"]\n\n    def info(section):\n        return dict(line.split(":", 1) for line in valkey.command("INFO", section).splitlines()\n                    if ":" in line and not line.startswith("#"))\n\n    def run_id():\n        fields = info("server")\n        if not fields.get("run_id"):\n            raise RuntimeError("Valkey did not report its server identity.")\n        return fields["run_id"]\n\n    def prepare():\n        nonlocal pause_until\n        identity["pod"] = check_pod()\n        identity["server"] = run_id()\n        # Valkey also stops eviction and expiry during this pause. It expires after a killed Job.\n        pause_until = time.monotonic() + 660\n        if valkey.command("CLIENT", "PAUSE", 660000, "WRITE") != "OK":\n            raise RuntimeError("Valkey did not pause writes.")\n        if valkey.command("BGSAVE") != "Background saving started":\n            raise RuntimeError("Valkey did not start its RDB save.")\n        save_deadline = time.monotonic() + 90\n        while True:\n            persistence = info("persistence")\n            if persistence.get("rdb_bgsave_in_progress") == "0":\n                if persistence.get("rdb_last_bgsave_status") != "ok":\n                    raise RuntimeError("Valkey failed to save its RDB file.")\n                break\n            if time.monotonic() >= save_deadline:\n                raise RuntimeError("Valkey did not finish its RDB save before the deadline.")\n            time.sleep(1)\n        validate()\n\n    def validate():\n        if (check_pod() != identity["pod"] or run_id() != identity["server"]\n                or time.monotonic() >= pause_until):\n            raise RuntimeError("The Valkey server changed or its write pause expired during capture.")\n\n    try:\n        snapshots["backup"](api, namespace, store, claim, snapshot_class, retention,\n                            timeout=timeout, label=LABEL, prepare=prepare, validate=validate,\n                            verified_label=VERIFIED)\n    finally:\n        if pause_until:\n            valkey.command("CLIENT", "UNPAUSE")\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    for argument in ("namespace", "store", "claim", "snapshot_class"):\n        parser.add_argument(argument)\n    parser.add_argument("retention", type=int)\n    parser.add_argument("--server")\n    args = parser.parse_args()\n    if not 1 <= args.retention <= 100:\n        parser.error("retention must be from 1 to 100")\n    password = Path("/var/run/valkey-backup/password").read_text()\n    with closing(Valkey(args.server or args.store, password)) as valkey:\n        capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,\n                args.snapshot_class, args.retention, server=args.server)\n\n\nif __name__ == "__main__":\n    main()\n'
         SNAPSHOT_SCRIPT = '#!/usr/bin/env python3\n\n"""Create a volume snapshot and prune older completed snapshots."""\n\nimport argparse\nimport json\nfrom pathlib import Path\nimport ssl\nimport time\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nLABEL = "datalabs.versioneer.at/volume"\nSOURCE = "datalabs.versioneer.at/source-pvc-uid"\n\n\nclass API:\n    def __init__(self):\n        account = Path("/var/run/secrets/kubernetes.io/serviceaccount")\n        self.token = account / "token"\n        self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))\n\n    def call(self, method, path, body=None):\n        request = Request(\n            "https://kubernetes.default.svc" + path,\n            data=None if body is None else json.dumps(body).encode(),\n            method=method,\n            headers={"Authorization": "Bearer " + self.token.read_text().strip(),\n                     "Content-Type": "application/merge-patch+json" if method == "PATCH" else "application/json"},\n        )\n        with urlopen(request, context=self.context, timeout=30) as result:\n            return json.load(result)\n\n\ndef backup(api, namespace, volume, claim, snapshot_class, retention, timeout=600,\n           label=LABEL, prepare=None, validate=None, verified_label=None):\n    core = "/api/v1/namespaces/" + quote(namespace, safe="")\n    path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + quote(namespace, safe="") + "/volumesnapshots"\n    volume_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))\n    if volume_class.get("deletionPolicy") != "Delete":\n        raise RuntimeError("The snapshot class must use deletion policy Delete for retention.")\n    pvc = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if pvc.get("status", {}).get("phase") != "Bound" or pvc["metadata"].get("deletionTimestamp"):\n        raise RuntimeError("The source PVC must be bound and must not be deleting.")\n    uid = pvc["metadata"]["uid"]\n    selector = urlencode({"labelSelector": f"{label}={volume},{SOURCE}={uid}"})\n\n    def owned_snapshots():\n        return [item for item in api.call("GET", path + "?" + selector)["items"]\n                if item["metadata"].get("labels", {}).get(label) == volume\n                and item["metadata"].get("labels", {}).get(SOURCE) == uid\n                and item.get("spec", {}).get("source", {}).get("persistentVolumeClaimName") == claim]\n\n    def remove(item):\n        metadata = item["metadata"]\n        preconditions = {"uid": metadata["uid"]}\n        if metadata.get("resourceVersion"):\n            preconditions["resourceVersion"] = metadata["resourceVersion"]\n        api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),\n                 {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})\n\n    snapshots = owned_snapshots()\n    def verified(item):\n        return not verified_label or item["metadata"].get("labels", {}).get(verified_label) == "true"\n\n    incomplete = [item for item in snapshots\n                  if item.get("status", {}).get("readyToUse") is not True or not verified(item)]\n    for item in incomplete:\n        if not item["metadata"].get("deletionTimestamp"):\n            remove(item)\n    if incomplete:\n        snapshots = owned_snapshots()\n    # A stopped Job can leave a snapshot behind. Finish cleanup before allocating another.\n    if any(item["metadata"].get("deletionTimestamp")\n           or item.get("status", {}).get("readyToUse") is not True or not verified(item) for item in snapshots):\n        raise RuntimeError("Waiting for previous snapshot cleanup before creating another backup.")\n\n    if prepare:\n        prepare()\n    created = api.call("POST", path, {\n        "apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshot",\n        "metadata": {"generateName": ("volume-" if label == LABEL else "valkey-") + volume + "-",\n                     "labels": {label: volume, SOURCE: uid}},\n        "spec": {"volumeSnapshotClassName": snapshot_class,\n                 "source": {"persistentVolumeClaimName": claim}},\n    })\n    name = created["metadata"]["name"]\n    deadline = time.monotonic() + timeout\n    while True:\n        current = api.call("GET", path + "/" + quote(name, safe=""))\n        state = current.get("status", {})\n        if state.get("error"):\n            raise RuntimeError("The CSI driver reported a snapshot error.")\n        if state.get("readyToUse") is True:\n            break\n        if time.monotonic() >= deadline:\n            raise RuntimeError("The volume snapshot did not become ready before the deadline.")\n        time.sleep(3)\n\n    source = api.call("GET", core + "/persistentvolumeclaims/" + quote(claim, safe=""))\n    if source["metadata"]["uid"] != uid:\n        raise RuntimeError("The source PVC changed while the snapshot was being taken.")\n\n    if validate:\n        try:\n            validate()\n        except Exception:\n            # Do not retain a capture made after the write pause expired or the server changed.\n            remove(current)\n            raise\n\n    if verified_label:\n        metadata = current["metadata"]\n        api.call("PATCH", path + "/" + quote(name, safe=""), {"metadata": {\n            "uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],\n            "labels": {verified_label: "true"},\n        }})\n\n    completed = sorted(\n        (item for item in owned_snapshots()\n         if item.get("status", {}).get("readyToUse") is True\n         and verified(item)\n         and not item["metadata"].get("deletionTimestamp")),\n        key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]),\n        reverse=True,\n    )\n    # A failed or incomplete backup must not remove a usable recovery point.\n    for item in completed[retention:]:\n        remove(item)\n    print("Volume snapshot is ready: " + name, flush=True)\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument("namespace")\n    parser.add_argument("volume")\n    parser.add_argument("claim")\n    parser.add_argument("snapshot_class")\n    parser.add_argument("retention", type=int)\n    args = parser.parse_args()\n    if args.retention < 1:\n        parser.error("retention must be at least one")\n    backup(API(), args.namespace, args.volume, args.claim, args.snapshot_class, args.retention)\n\n\nif __name__ == "__main__":\n    main()\n'
 
 
@@ -8493,10 +8410,10 @@ spec:
             context = _to_dict(req.context)
             environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
             images = environment.get("images") or {}
-            valkey_image = _safe_str(images.get("valkey")) or "valkey/valkey:9.2.0-alpine"
-            backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine"
+            valkey_image = _safe_str(images.get("valkey")) or "valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882"
+            backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e"
             valkey_env = environment.get("cacheStore") or {}
-            valkey_storage_class = _string_value(valkey_env.get("storageClassName") or "")
+            valkey_storage_class = _safe_str(valkey_env.get("storageClassName") or "")
 
             runtime_namespace = xr_name
 
@@ -8507,15 +8424,18 @@ spec:
                 if not isinstance(store_cfg, dict):
                     continue
 
-                valkey_storage = _string_value(store_cfg.get("storage") or "1Gi")
+                valkey_storage = _safe_str(store_cfg.get("storage") or "1Gi")
                 if not valkey_storage:
                     continue
                 store_name = store_key.strip()
                 backups_enabled = store_cfg.get("backups") is True
-                valkey_password = _strong_token(
-                    f"{xr_name}:{store_name}:valkey", suffix="", length=28
+                server_name = _store_resource_name("valkey", store_name)
+                valkey_auth_secret_name = server_name + "-auth"
+                valkey_password = _service_token(
+                    req, rsp, f"valkey-auth-{xr_name}-{store_name}",
+                    valkey_auth_secret_name, runtime_namespace,
+                    old=_name_hash(f"{xr_name}:{store_name}:valkey", suffix="", length=28),
                 )
-                valkey_auth_secret_name = f"{store_name}-valkey-auth"
                 valkey_auth_secret = _render_template(
                     req,
                     "valkey/auth-secret",
@@ -8534,10 +8454,14 @@ spec:
                 )
                 rsp.desired.resources[auth_key].resource.update(auth_body)
 
-                valkey_acl_secret_name = f"{store_name}-valkey-acl"
+                valkey_acl_secret_name = server_name + "-acl"
                 acl = f"user default on >{valkey_password} ~* +@all\n"
                 if backups_enabled:
-                    backup_password = _strong_token(f"{xr_name}:{store_name}:valkey:backup")
+                    backup_password = _service_token(
+                        req, rsp, f"valkey-backup-auth-{xr_name}-{store_name}",
+                        server_name + "-backup-auth", runtime_namespace,
+                        old=_name_hash(f"{xr_name}:{store_name}:valkey:backup"),
+                    )
                     acl += f"user backup on >{backup_password} -@all +ping +info +bgsave +client|pause +client|unpause\n"
                 encoded_acl = base64.b64encode(acl.encode()).decode()
                 valkey_acl_secret = _render_template(
@@ -8578,7 +8502,7 @@ spec:
                 rsp.desired.resources[service_key].resource.update(_render_template(
                     req, "common/object", key=service_key, xr_namespace=xr_namespace,
                     manifest={"apiVersion": "v1", "kind": "Service",
-                              "metadata": {"name": store_name, "namespace": runtime_namespace},
+                              "metadata": {"name": server_name, "namespace": runtime_namespace},
                               "spec": {"selector": {"app.kubernetes.io/name": "valkey",
                                                     "app.kubernetes.io/instance": store_name},
                                        "ports": [{"name": "valkey", "port": 6379, "targetPort": "valkey"}]}},
@@ -8588,7 +8512,7 @@ spec:
                     req,
                     "valkey/store",
                     valkey_image=valkey_image,
-                    store_name=store_name,
+                    store_name=store_name, workload_name=server_name,
                     runtime_namespace=runtime_namespace,
                     valkey_auth_secret_name=valkey_auth_secret_name,
                     valkey_acl_secret_name=valkey_acl_secret_name,
@@ -8607,8 +8531,8 @@ spec:
                 rsp.desired.resources[key].resource.update(body)
 
                 if backups_enabled:
-                    backup_name = f"valkey-{store_name}-backup"
-                    backup_secret_name = f"{store_name}-valkey-backup-auth"
+                    backup_name = server_name + "-backup"
+                    backup_secret_name = server_name + "-backup-auth"
                     backup_secret = _render_template(
                         req,
                         "valkey/auth-secret",
@@ -8640,7 +8564,7 @@ spec:
                         schedule=valkey_env.get("schedule") or "0 1 * * *",
                         backup_script=BACKUP_SCRIPT, snapshot_script=SNAPSHOT_SCRIPT,
                         backup_image=backup_image, backup_secret_name=backup_secret_name,
-                        pod_name=store_name + "-0", suspended=claim == "unbound",
+                        pod_name=server_name + "-0", server_name=server_name, suspended=claim == "unbound",
                     )["resources"]
                     resources["auth-secret"] = backup_secret
                     resources["class"] = {
@@ -8665,7 +8589,7 @@ spec:
                     "common/pod-observer",
                     pod_key=pod_key,
                     xr_namespace=xr_namespace,
-                    pod_name=f"{store_name}-0",
+                    pod_name=server_name + "-0",
                     runtime_namespace=runtime_namespace,
                 )
                 rsp.desired.resources[pod_key].resource.update(pod_body)
@@ -8928,6 +8852,8 @@ spec:
                           - ${pvc_name}
                           - ${snapshot_class}
                           - ${max_snapshots}
+                          - --server
+                          - ${server_name}
                           resources:
                             requests:
                               cpu: 20m
@@ -8962,11 +8888,11 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: ${store_name}
+            name: ${workload_name}
             namespace: ${runtime_namespace}
           spec:
             replicas: 1
-            serviceName: ${store_name}
+            serviceName: ${workload_name}
             selector:
               matchLabels:
                 app.kubernetes.io/name: valkey
@@ -8989,6 +8915,42 @@ spec:
                   fsGroupChangePolicy: OnRootMismatch
                   seccompProfile:
                     type: RuntimeDefault
+                initContainers:
+                - name: wait-for-acl
+                  image: ${valkey_image}
+                  command:
+                  - sh
+                  - -ec
+                  - |
+                    attempt=0
+                    while [ "$attempt" -lt 180 ]; do
+                      actual="$(base64 "$2" | tr -d '\n' | sha256sum)"
+                      [ "${actual%% *}" != "$1" ] || exit 0
+                      attempt=$((attempt + 1))
+                      sleep 1
+                    done
+                    printf 'The current Valkey ACL was not mounted before the deadline.\n' >&2
+                    exit 1
+                  - wait-for-acl
+                  - ${valkey_acl_checksum}
+                  - /etc/valkey/user.acl
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                      - ALL
+                  resources:
+                    requests:
+                      cpu: 10m
+                      memory: 16Mi
+                    limits:
+                      cpu: 100m
+                      memory: 32Mi
+                  volumeMounts:
+                  - name: acl
+                    mountPath: /etc/valkey
+                    readOnly: true
                 containers:
                 - name: valkey
                   image: ${valkey_image}
@@ -9000,6 +8962,10 @@ spec:
                   - 'yes'
                   - --dir
                   - /data
+                  - --maxmemory
+                  - 256mb
+                  - --maxmemory-policy
+                  - noeviction
                   - --appendonly
                   - 'yes'
                   - --appendfsync
@@ -9536,9 +9502,13 @@ spec:
                 )
 
             def protect(suffix, used, by, prefix="vcluster"):
-                if used not in resources or by not in resources:
+                if used not in resources:
                     return
                 key = _resource_name(prefix, "usage", suffix, name, used, by)
+                # Keep deletion order until the dependent record has left the API.
+                if by not in rsp.desired.resources and (
+                        by not in req.observed.resources or key not in req.observed.resources):
+                    return
                 rsp.desired.resources[key].resource.update(
                     _render_template(
                         req,

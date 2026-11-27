@@ -23,9 +23,13 @@ probe_network_policy() (
   [[ -n "${server_ip}" ]] || return 1
   probe_connection() {
     kube exec --namespace "${namespace}" client -- curl -fsS --connect-timeout 2 --max-time 3 \
-      "http://${server_ip}/" --output /dev/null >/dev/null 2>&1
+      "http://${server_ip}:8080/" --output /dev/null >/dev/null 2>&1
   }
-  probe_connection || { printf 'NetworkPolicy probe baseline connection failed.\n' >&2; return 1; }
+  probe_connection || {
+    result=$?
+    printf 'NetworkPolicy probe baseline connection failed (exit %s).\n' "${result}" >&2
+    return 1
+  }
   kube apply -f - >/dev/null <<POLICY || return 1
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

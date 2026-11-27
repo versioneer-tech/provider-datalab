@@ -53,7 +53,7 @@ def check_workload_quota(api, bearer):
         api("/api/v1/namespaces/demo/pods", bearer, {
             "apiVersion": "v1", "kind": "Pod", "metadata": {"name": name},
             "spec": {"restartPolicy": "Never", "automountServiceAccountToken": False,
-                     "containers": [{"name": "probe", "image": "busybox:1.36.1",
+                     "containers": [{"name": "probe", "image": "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                                      "command": ["sleep", "3600"],
                                      "resources": {"requests": {"cpu": "10m", "memory": "16Mi"},
                                                    "limits": {"cpu": "1", "memory": "512Mi", resource: limit}}}]},
@@ -238,11 +238,11 @@ def deploy_catalog(api, bearer):
     print("PASS PostgreSQL catalog survives a STAC API restart", flush=True)
 
 
-def identity(path, values=None, token=None, method=None):
+def admin_identity(path, values=None, method=None):
     data = json.dumps(values).encode() if values is not None else None
     headers = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = "Bearer " + token
+    # Master-realm tokens can expire during reconciliation waits.
+    headers["Authorization"] = "Bearer " + admin_token()
     context = ssl.create_default_context(cafile="/test/issuer.crt")
     with urlopen(
         Request(
@@ -307,28 +307,25 @@ def verify_member_roles(removed, instances):
         expected.add("vcluster_vc1_namespace-other")
 
     def assigned():
-        admin = admin_token()
-        clients = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)
-        users = identity("/admin/realms/integration/users?username=verify-s3&exact=true", token=admin)
+        clients = admin_identity("/admin/realms/integration/clients?clientId=" + LAB)
+        users = admin_identity("/admin/realms/integration/users?username=verify-s3&exact=true")
         assert len(clients) == len(users) == 1
         client = "/admin/realms/integration/clients/" + clients[0]["id"]
-        claims = identity(
+        claims = admin_identity(
             client + "/evaluate-scopes/generate-example-access-token?"
             + urlencode({"userId": users[0]["id"], "scope": "openid " + LAB + ":interactive"
                          + (" " + LAB + ":vclusters_vc0_namespace-demo" if "vc0" in instances else "")
                          + (" " + LAB + ":vclusters_vc1_namespace-other" if "vc1" in instances else "")}),
-            token=admin,
         )
         roles = set(claims.get("resource_access", {}).get(LAB, {}).get("roles", []))
         if {role for role in roles if role.startswith("vcluster_")} != expected:
             return False
         if ("ws_access" in roles) != (not removed):
             return False
-        account = identity(client + "/service-account-user", token=admin)
-        mappings = identity(
+        account = admin_identity(client + "/service-account-user")
+        mappings = admin_identity(
             "/admin/realms/integration/users/" + account["id"]
             + "/role-mappings/clients/" + clients[0]["id"] + "/composite",
-            token=admin,
         )
         return {role["name"] for role in mappings} == {"ws_api"}
 
@@ -337,7 +334,6 @@ def verify_member_roles(removed, instances):
 
 
 def verify_user_exchange(api):
-    admin = admin_token()
     context = ssl.create_default_context(cafile="/test/issuer.crt")
     secret = next((Path("/oauth") / key).read_text().strip()
                   for key in ("clientSecret", "client_secret")
@@ -352,19 +348,19 @@ def verify_user_exchange(api):
         with urlopen(Request(endpoint, data=urlencode(values).encode()), context=context, timeout=30) as result:
             return json.load(result)
 
-    client = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)[0]
-    for scope in identity("/admin/realms/integration/clients/" + client["id"] + "/default-client-scopes", token=admin):
+    client = admin_identity("/admin/realms/integration/clients?clientId=" + LAB)[0]
+    for scope in admin_identity("/admin/realms/integration/clients/" + client["id"] + "/default-client-scopes"):
         path = "/admin/realms/integration/client-scopes/" + scope["id"]
-        mappings = identity(path + "/scope-mappings", token=admin)
+        mappings = admin_identity(path + "/scope-mappings")
         assert not mappings.get("realmMappings") and not mappings.get("clientMappings"), (
             "Identity scope contains role grants: " + scope["name"]
         )
-        mappers = identity(path + "/protocol-mappers/models", token=admin)
+        mappers = admin_identity(path + "/protocol-mappers/models")
         assert not any("role" in mapper["protocolMapper"] for mapper in mappers), (
             "Identity scope contains a role mapper: " + scope["name"]
         )
     print("PASS default identity scopes contain no role grants or role mappers", flush=True)
-    wait_until(lambda: identity("/admin/realms/integration/clients/" + client["id"], token=admin)
+    wait_until(lambda: admin_identity("/admin/realms/integration/clients/" + client["id"])
                .get("attributes", {}).get("standard.token.exchange.enabled") == "true",
                "Standard token exchange did not become enabled")
     for username, eligible, is_admin in (
@@ -372,13 +368,13 @@ def verify_user_exchange(api):
         ("verify-vcluster-member", True, False),
         ("verify-vcluster-unassigned", False, False),
     ):
-        user = identity("/admin/realms/integration/users?" + urlencode({"username": username, "exact": "true"}), token=admin)[0]
+        user = admin_identity("/admin/realms/integration/users?" + urlencode({"username": username, "exact": "true"}))[0]
         password = secrets.token_urlsafe(32)
-        identity("/admin/realms/integration/users/" + user["id"],
+        admin_identity("/admin/realms/integration/users/" + user["id"],
                  {"firstName": "Integration", "lastName": "User", "email": username + "@example.invalid",
-                  "emailVerified": True, "requiredActions": []}, method="PUT", token=admin)
-        identity("/admin/realms/integration/users/" + user["id"] + "/reset-password",
-                 {"type": "password", "value": password, "temporary": False}, method="PUT", token=admin)
+                  "emailVerified": True, "requiredActions": []}, method="PUT")
+        admin_identity("/admin/realms/integration/users/" + user["id"] + "/reset-password",
+                 {"type": "password", "value": password, "temporary": False}, method="PUT")
         subject = issue({"grant_type": "password", "client_id": "test-login",
                          "username": username, "password": password, "scope": "openid"})["access_token"]
         original = claims(subject)
@@ -427,19 +423,18 @@ def verify_user_exchange(api):
 
 
 def workspace_account():
-    admin = admin_token()
-    clients = identity("/admin/realms/integration/clients", token=admin)
+    clients = admin_identity("/admin/realms/integration/clients")
     owned = [client for client in clients if client["clientId"] == LAB or client["clientId"].startswith(LAB + "-vcluster-")]
     assert len(owned) == 1 and owned[0]["clientId"] == LAB
     client = "/admin/realms/integration/clients/" + owned[0]["id"]
-    account = identity(client + "/service-account-user", token=admin)
+    account = admin_identity(client + "/service-account-user")
     mapping = "/admin/realms/integration/users/" + account["id"] + "/role-mappings/clients/" + owned[0]["id"]
-    return admin, client, mapping
+    return client, mapping
 
 
 def recreate_workspace_client():
-    admin, previous, _ = workspace_account()
-    identity(previous, token=admin, method="DELETE")
+    previous, _ = workspace_account()
+    admin_identity(previous, method="DELETE")
     last_report = 0
 
     def recovered():
@@ -448,15 +443,14 @@ def recreate_workspace_client():
         if time.monotonic() - last_report >= 30:
             print("Waiting for recreated client scopes, credentials, and roles", flush=True)
             last_report = time.monotonic()
-        admin = admin_token()
-        clients = identity("/admin/realms/integration/clients?clientId=" + LAB, token=admin)
+        clients = admin_identity("/admin/realms/integration/clients?clientId=" + LAB)
         if len(clients) != 1:
             return False
         client = "/admin/realms/integration/clients/" + clients[0]["id"]
         if client == previous:
             return False
         try:
-            scopes = identity(client + "/optional-client-scopes", token=admin)
+            scopes = admin_identity(client + "/optional-client-scopes")
             expected = {
                 LAB + ":interactive", "offline_access",
                 LAB + ":vclusters_vc0_namespace-demo", LAB + ":vclusters_vc1_namespace-other",
@@ -481,32 +475,30 @@ def recreate_workspace_client():
 
 
 def set_workspace_roles(roles):
-    admin, client, mapping = workspace_account()
-    assigned = identity(mapping, token=admin)
+    client, mapping = workspace_account()
+    assigned = admin_identity(mapping)
     old = [role for role in assigned if role["name"].startswith("vcluster_")]
     if old:
-        identity(mapping, old, token=admin, method="DELETE")
+        admin_identity(mapping, old, method="DELETE")
     if roles:
-        available = identity(client + "/roles", token=admin)
+        available = admin_identity(client + "/roles")
         selected = [role for role in available if role["name"] in roles]
         assert {role["name"] for role in selected} == set(roles)
-        identity(mapping, selected, token=admin, method="POST")
+        admin_identity(mapping, selected, method="POST")
 
 
 def negative_token(label, roles, audience=LAB, lifetime=None):
-    admin = admin_token()
     client = "vcluster-test-" + label
-    clients = identity(
-        "/admin/realms/integration/clients?clientId=" + client, token=admin
+    clients = admin_identity(
+        "/admin/realms/integration/clients?clientId=" + client
     )
     for existing in clients:
-        identity(
+        admin_identity(
             "/admin/realms/integration/clients/" + existing["id"],
-            token=admin,
             method="DELETE",
         )
     claims = json.dumps({LAB: {"roles": roles}})
-    identity(
+    admin_identity(
         "/admin/realms/integration/clients",
         {
             "clientId": client,
@@ -540,7 +532,6 @@ def negative_token(label, roles, audience=LAB, lifetime=None):
                 },
             ],
         },
-        token=admin,
     )
     return token(client, "vcluster-test-secret")
 
@@ -661,8 +652,8 @@ def main():
         finally:
             set_workspace_roles([])
 
-    admin, _, mapping = workspace_account()
-    assigned = identity(mapping + "/composite", token=admin)
+    _, mapping = workspace_account()
+    assigned = admin_identity(mapping + "/composite")
     assert {role["name"] for role in assigned} == {"ws_api"}
     print("PASS one workspace OAuth client and no automatic vcluster account grant", flush=True)
 
@@ -758,7 +749,7 @@ def main():
             time.sleep(3)
     print("PASS HTTPS prefix route and downloaded credential helper", flush=True)
 
-    def volume_pod(pod_name, command):
+    def volume_pod(pod_name, command, *, http_port=None):
         path = "/api/v1/namespaces/demo/pods/" + pod_name
         api(path, editor, method="DELETE", expected=(200, 202, 404))
         wait_until(lambda: api(path, editor, expected=(200, 404)).get("kind") != "Pod",
@@ -776,8 +767,12 @@ def main():
                     "containers": [
                         {
                             "name": "worker",
-                            "image": "busybox:1.36.1",
-                            "command": ["sh", "-c", command],
+                            "image": "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
+                            "command": ["sh", "-ec", command],
+                            **({"readinessProbe": {
+                                "httpGet": {"path": "/", "port": http_port},
+                                "periodSeconds": 1, "timeoutSeconds": 3,
+                            }} if http_port is not None else {}),
                             "resources": {
                                 "requests": {
                                     "cpu": "10m",
@@ -803,13 +798,13 @@ def main():
             },
         )
         deadline = time.monotonic() + 300
-        while (
-            api("/api/v1/namespaces/demo/pods/" + pod_name, editor)
-            .get("status", {})
-            .get("phase")
-            != "Running"
+        while not any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in api(
+                "/api/v1/namespaces/demo/pods/" + pod_name, editor
+            ).get("status", {}).get("conditions", [])
         ):
-            assert time.monotonic() < deadline, "PVC workload did not start"
+            assert time.monotonic() < deadline, "PVC workload did not become ready"
             time.sleep(3)
 
     path = "/api/v1/namespaces/default/configmaps/restart-marker"
@@ -927,7 +922,7 @@ def main():
                 "containers": [
                     {
                         "name": "worker",
-                        "image": "busybox:1.36.1",
+                        "image": "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                         "command": ["sleep", "3600"],
                         "resources": {
                             "requests": {
@@ -1020,7 +1015,8 @@ def main():
     Path("/tmp/vcluster-volume-uid").write_text(claim["metadata"]["uid"])
     volume_pod(
         "volume-writer",
-        "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; httpd -p 8080 -h /www; sleep 3600",
+        "printf persistent > /data/marker; echo stream-log; mkdir -p /www; echo stream-forward > /www/index.html; exec python3 -m http.server 8080 --directory /www",
+        http_port=8080,
     )
     assert (
         api("/api/v1/namespaces/demo/persistentvolumeclaims/workload-data", editor)[

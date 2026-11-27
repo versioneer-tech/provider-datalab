@@ -24,27 +24,13 @@ diagnostics() {
 }
 trap diagnostics ERR
 
-require_command curl
 require_command helm
 require_command jq
 require_cluster
 
 readonly driver_version=4.13.6
-mkdir -p "${PROVIDER_DATALAB_HELM_HOME}/snapshots"
-snapshot_crds="${PROVIDER_DATALAB_HELM_HOME}/snapshots/nfs-${driver_version}.yaml"
-snapshot_download=""
-cleanup_download() {
-  if [[ -n "${snapshot_download}" ]]; then rm -f "${snapshot_download}"; fi
-}
-trap cleanup_download EXIT
-if [[ ! -s "${snapshot_crds}" ]]; then
-  snapshot_download="$(mktemp "${snapshot_crds}.XXXXXX")"
-  curl --fail --silent --show-error --location \
-    "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/v${driver_version}/deploy/v${driver_version}/crd-csi-snapshot.yaml" \
-    --output "${snapshot_download}"
-  mv "${snapshot_download}" "${snapshot_crds}"
-fi
-kube apply --server-side --field-manager=datalab-integration -f "${snapshot_crds}"
+python3 "${REPO_ROOT}/scripts/components.py" snapshot-crds --manifest | \
+  kube apply --server-side --field-manager=datalab-integration -f -
 for resource in volumesnapshots volumesnapshotcontents volumesnapshotclasses; do
   wait_for_crd_established "${resource}.snapshot.storage.k8s.io"
 done
@@ -52,12 +38,11 @@ done
 kube apply -f "${MANIFEST_DIR}/volumes/nfs-server.yaml"
 kube rollout status deployment/nfs-server --namespace test-volume-snapshots --timeout=5m
 
-helm_it repo add csi-driver-nfs \
-  https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts --force-update
-helm_it repo update csi-driver-nfs
-helm_it upgrade --install datalab-nfs csi-driver-nfs/csi-driver-nfs \
+chart="$(python3 "${REPO_ROOT}/scripts/components.py" nfs-chart)"
+helm_it upgrade --install datalab-nfs "${chart}" \
   --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --kube-context "${KUBECTL_CONTEXT}" \
   --namespace test-volume-snapshots --version "${driver_version}" \
+  --post-renderer "${REPO_ROOT}/scripts/components.py" \
   --values "${MANIFEST_DIR}/volumes/nfs-values.yaml" --wait --timeout 10m
 for deployment in csi-nfs-controller datalab-snapshot-controller; do
   kube rollout status "deployment/${deployment}" --namespace test-volume-snapshots --timeout=5m

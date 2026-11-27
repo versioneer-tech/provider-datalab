@@ -14,7 +14,7 @@ repos:
         entry: python3 scripts/build-composition.py --check
         language: system
         pass_filenames: false
-        files: ^(composition/|templates/|scripts/vcluster-credentials.py|scripts/vcluster-cleanup.py|scripts/volume-snapshot.py|scripts/postgres-snapshot.py|scripts/valkey-snapshot.py|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
+        files: ^(composition/|templates/|scripts/vcluster-credentials.py|scripts/vcluster-cleanup.py|scripts/volume-snapshot.py|scripts/valkey-snapshot.py|scripts/build-composition.py|scripts/requirements.txt|composition.yaml)
       - id: copyright-header
         name: Copyright header
         entry: ./scripts/copyright.py

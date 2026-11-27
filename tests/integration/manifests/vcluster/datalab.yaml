@@ -7,6 +7,8 @@ metadata:
   name: verify-vcluster
   namespace: workspace
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab-vcluster-it
   users:
   - verify-s3

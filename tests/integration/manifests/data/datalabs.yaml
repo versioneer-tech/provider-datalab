@@ -7,5 +7,7 @@ metadata:
   name: __ENABLED_DATALAB__
   namespace: __WORKSPACE_NAMESPACE__
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab-custom
   users: []

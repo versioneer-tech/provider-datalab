@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import re
+import secrets
 
 from crossplane.function import request, response
 from google.protobuf import json_format
@@ -119,12 +120,6 @@ def _http_route_timeouts(environment):
     return timeouts
 
 
-def _string_value(value):
-    """Keep the literal string for null values in existing resource settings."""
-    return str(value).strip()
-
-
-
 def _extract_manifest(observed_resource):
     if not observed_resource or not getattr(observed_resource, "resource", None):
         return {}
@@ -195,10 +190,23 @@ def _postgres_connection_data(data, cluster, namespace):
     }.items()}
 
 
-def _strong_token(seed, *, suffix=":provider-datalab", length=32):
-    # Keep each service's existing seed and length to prevent credential changes.
+def _name_hash(seed, *, suffix=":provider-datalab", length=32):
+    # Recognize public name hashes so existing credentials can be replaced.
     digest = hashlib.sha256((seed + suffix).encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:length]
+
+
+def _service_token(req, rsp, key, name, namespace, field="password", old=None):
+    stored = require_secret(req, rsp, key, name, namespace)
+    value = _b64get_any(stored.get("data") or {}, [field])
+    if value and value != old:
+        return value
+    return secrets.token_urlsafe(32)
+
+
+def _store_resource_name(kind, name):
+    # Leave room for Pod, Secret, and operator suffixes.
+    return _resource_name(kind, name, limit=40)
 
 
 def _resource_name(*parts, limit=63):

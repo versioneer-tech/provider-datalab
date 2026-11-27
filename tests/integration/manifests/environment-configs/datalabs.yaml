@@ -10,24 +10,19 @@ metadata:
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
-    registry: registry:3.1.2
-    rclone: rclone/rclone:1.76.0
-    valkey: valkey/valkey:9.2.0-alpine
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
+    registry: registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
+    rclone: rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
+    valkey: valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
   cacheStore:
     maxSnapshots: 2
   iam:
     realm: integration
   ingress:
-    class: nginx
+    class: ""
     domain: lab.acme.com
     secret: wildcard-tls
-    annotations:
-      nginx.ingress.kubernetes.io/proxy-body-size: "0"
-      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    annotations: {}
   oauth2Proxy:
     upstreamTimeout: 3600s
   storage:
@@ -80,10 +75,10 @@ metadata:
 data:
   images:
     packageR: ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062
-    registry: registry:3.1.2
-    rclone: rclone/rclone:1.76.0
-    valkey: valkey/valkey:9.2.0-alpine
-    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
+    registry: registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
+    rclone: rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
+    valkey: valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882
+    oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
   customSecrets:
   - name: apikey-1
   - name: apikey-2
@@ -92,15 +87,10 @@ data:
   iam:
     realm: integration
   ingress:
-    class: nginx
+    class: ""
     domain: lab.acme.com
     secret: wildcard-tls
-    annotations:
-      nginx.ingress.kubernetes.io/proxy-body-size: "0"
-      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    annotations: {}
   oauth2Proxy:
     upstreamTimeout: 3600s
   storage:

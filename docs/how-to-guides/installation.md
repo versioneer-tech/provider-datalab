@@ -6,9 +6,9 @@ platform's GitOps and Secret tools.
 
 ## Prerequisites
 
-The cluster needs Crossplane, an ingress or Gateway
-controller, Keycloak, and an S3-compatible object store. The CNI must enforce
-Kubernetes NetworkPolicy.
+The cluster needs Crossplane and Keycloak. The CNI must enforce Kubernetes
+NetworkPolicy. Data and the optional registry need an S3-compatible object
+store. Install an ingress or Gateway controller when public routes are enabled.
 Use Crossplane from the supported range in the package's
 [metadata](https://github.com/versioneer-tech/provider-datalab/blob/main/crossplane.yaml).
 
@@ -42,22 +42,17 @@ when reviewing or changing a dependency.
 Install Crossplane with the supplied Helm values from this checkout:
 
 ```bash
-helm repo add crossplane-stable https://charts.crossplane.io/stable
-helm repo update
-helm install crossplane crossplane-stable/crossplane \
-  --version 2.4.3 \
+chart="$(python3 scripts/components.py crossplane-chart)"
+helm install crossplane "${chart}" \
   --namespace crossplane \
   --create-namespace \
   --values deploy/crossplane-values.yaml \
   --post-renderer scripts/crossplane-probes.py
 ```
 
-The Helm values disable default managed resource activation and run Crossplane
-and its RBAC manager as non-root users with read-only root filesystems.
-The post-renderer needs Python with PyYAML. It adds startup, readiness, and
-liveness probes to both Deployments because the pinned chart has none.
-The dependency manifests supply selective activation, runtime security, and
-provider reconciliation settings. Keep their `runtimeConfigRef` settings.
+The installation commands need Python with PyYAML. Keep the supplied Helm
+values and `runtimeConfigRef` settings for resource activation, Pod security,
+and health checks.
 
 The Kubernetes provider watches resources and redacts Secret data in Object
 status. The composition reads source Secrets directly by namespace and name;
@@ -79,10 +74,11 @@ supplied provider RBAC must permit the `postgresql.cnpg.io` resources.
 Use the intended platform kubeconfig and context in the install command.
 
 ```bash
-helm repo add cnpg https://cloudnative-pg.github.io/charts
-helm upgrade --install cnpg cnpg/cloudnative-pg \
+chart="$(python3 scripts/components.py cnpg-chart)"
+helm upgrade --install cnpg "${chart}" \
   --kubeconfig /path/to/platform.kubeconfig --kube-context platform \
-  --namespace cnpg-system --create-namespace --version 0.29.2 \
+  --namespace cnpg-system --create-namespace \
+  --post-renderer scripts/components.py \
   --set fullnameOverride=cnpg --wait
 ```
 
@@ -175,8 +171,8 @@ providers and functions are managed separately by the platform.
 The package does not contain `dependencies/rbac.yaml` or EnvironmentConfigs.
 Manage them separately and apply the supplied RBAC before the configuration.
 
-For a source build and installation, use the
-[manifest README](https://github.com/versioneer-tech/provider-datalab/blob/main/templates/README.md).
+For source builds, use the
+[development instructions](https://github.com/versioneer-tech/provider-datalab/blob/main/README.md#development).
 Set `datalab.responseTTL` in the environment to change the Python response TTL
 without rebuilding a package.
 
@@ -201,8 +197,8 @@ Keep names and labels unique. Each lookup uses at most one match. If several
 configs match, the function sorts by `metadata.name` and uses the first.
 
 Use `default` for shared cluster values and `datalab` for settings
-specific to this Composition. This example uses NGINX Ingress for Data and
-the registry:
+specific to this Composition. This example defines shared identity, storage,
+and optional public routing:
 
 ```yaml
 apiVersion: apiextensions.crossplane.io/v1beta1
@@ -218,15 +214,8 @@ data:
     internalURL: http://keycloak.keycloak:8080/realms/acme
   ingress:
     enabled: true
-    class: nginx
     domain: lab.acme.com
     secret: wildcard-tls
-    annotations:
-      nginx.ingress.kubernetes.io/proxy-body-size: "0"
-      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-buffering: "off"
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
   oauth2Proxy:
     upstreamTimeout: 3600s
   storage:
@@ -324,12 +313,9 @@ For the optional read-only S3 endpoint, see [S3 client access](s3-access.md).
 
 #### Large file transfers
 
-`ingress.annotations` applies to both Data and registry Ingress objects. The
-example permits any upload size, streams requests and responses, and allows
-one hour between read or write operations. These annotations require the
-community ingress-nginx controller. Use your controller's settings if you
-use another implementation. The composition does not add controller-specific
-annotations.
+`ingress.annotations` applies to both Data and registry Ingress objects. Set
+upload limits and timeouts in the selected controller. The composition does
+not add controller-specific annotations.
 
 `httpRoute.timeouts` applies to Data, read-only S3, and registry backend rules.
 Both timeouts default to one hour. If only `request` is set, `backendRequest`
@@ -364,7 +350,7 @@ not override these settings.
 
 | Setting | Default | Use |
 | --- | --- | --- |
-| `registry.enabled` | `true` | Shared OCI registry backed by the Datalab S3 bucket. |
+| `registry.enabled` | `false` | Shared OCI registry backed by the Datalab S3 bucket. |
 | `packageR.enabled` | `true` | Shared packageR service and its configured endpoint. |
 | `packageR.readOnlyMount` | `false` | Read-only application permissions when enabled; storage IAM still applies. |
 | `overallQuota.storage` | `100Gi` | Aggregate PVC request limit in the Datalab service namespace. |
@@ -377,20 +363,20 @@ not override these settings.
 
 #### Service images
 
-Set these image references under `data.images` in the EnvironmentConfig.
-Use a full image reference with a version tag. Omitted settings use the
-defaults below.
+Set image overrides under `data.images` in the EnvironmentConfig. Use a full
+image reference with a version tag and digest. Omitted settings use the
+[source defaults](https://github.com/versioneer-tech/provider-datalab/blob/main/composition/defaults.py).
 
-| Setting | Default image tag | Use |
-| --- | --- | --- |
-| `images.packageR` | `ghcr.io/versioneer-tech/package-r:vnext.1.2.0` | Data server and its init containers. |
-| `images.registry` | `registry:3.1.2` | CNCF Distribution registry. |
-| `images.rclone` | `rclone/rclone:1.76.0` | Data S3 service. |
-| `images.postgres` | `ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie` | CloudNativePG-compatible PostgreSQL 17 image with PostGIS. |
-| `images.valkey` | `valkey/valkey:9.2.0-alpine` | Valkey server with AOF persistence and authenticated health probes. |
-| `images.oauth2Proxy` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.6` | OAuth2 Proxy for Data and S3. |
-| `images.volumeSnapshot` | `python:3.13-alpine` | Creates CSI snapshots from a backup Job on the host. |
-| `images.vclusterCleanup` | `python:3.13-alpine` | Runtime for host Pod cleanup during hibernation. |
+| Setting | Use |
+| --- | --- |
+| `images.packageR` | Data server and its init containers. |
+| `images.registry` | OCI registry. |
+| `images.rclone` | Data S3 service. |
+| `images.postgres` | CloudNativePG-compatible PostgreSQL image with PostGIS. |
+| `images.valkey` | Valkey server. |
+| `images.oauth2Proxy` | OAuth2 Proxy for Data and S3. |
+| `images.volumeSnapshot` | Host CSI snapshot Job. |
+| `images.vclusterCleanup` | Host Pod cleanup during hibernation. |
 
 #### Resource quotas and container defaults
 
@@ -465,8 +451,7 @@ to containers without the corresponding resource settings.
 | `ingress.certificateAuthority` | System trust | PEM Gateway CA embedded in profile kubeconfigs. |
 | `database.storageClassName` | Cluster default | PostgreSQL data StorageClass. |
 | `database.snapshotClassName` | `volumes.snapshotClassName` | PostgreSQL snapshot class. Requires the [snapshot prerequisites](#volume-snapshots). |
-| `database.schedule` | `0 1 * * *` | Cold PostgreSQL backup schedule in UTC. |
-| `database.maxSnapshots` | `4` | Completed PostgreSQL backups retained per cluster UID, from 1 to 100. |
+| `database.schedule` | `0 0 1 * * *` | Native CNPG cold snapshot schedule. Includes seconds before minutes. |
 | `database.operatorNamespace` | `cnpg-system` | CloudNativePG controller namespace for service access. |
 | `database.tlsRoute.parentName` | Not set | PostgreSQL Gateway name. |
 | `database.tlsRoute.parentNamespace` | Not set | PostgreSQL Gateway namespace. |
@@ -522,8 +507,8 @@ path-style S3 requests.
 The registry needs a bucket with the same name as the Datalab and permission
 to read, write, list, delete, and use multipart uploads. Distribution uses its
 standard object layout without an extra prefix or PVC. Disabling the registry
-retains its S3 objects. Set `registry.enabled: false` when the
-platform does not provide this storage.
+retains its S3 objects. The registry is disabled by default. Set
+`registry.enabled: true` only when the platform provides this storage.
 
 For a manual setup, create the Secret with your credential values:
 

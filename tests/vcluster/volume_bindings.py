@@ -73,7 +73,7 @@ def check_volume_binding(api, bearer, phase):
                  "terminationGracePeriodSeconds": 0,
                  "securityContext": {"runAsNonRoot": True, "runAsUser": 1000, "runAsGroup": 1000,
                                      "fsGroup": 1000, "seccompProfile": {"type": "RuntimeDefault"}},
-                 "containers": [{"name": "probe", "image": "busybox:1.36.1",
+                 "containers": [{"name": "probe", "image": "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                                  "command": ["sh", "-ec", command],
                                  "resources": {"requests": {"cpu": "10m", "memory": "16Mi", "ephemeral-storage": "1Mi"},
                                                "limits": {"cpu": "100m", "memory": "64Mi", "ephemeral-storage": "32Mi"}},

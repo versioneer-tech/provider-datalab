@@ -109,13 +109,7 @@ CRDs and controllers, and an NFS-Ganesha server in `test-volume-snapshots`.
 Kind nodes need NFS client support. The server uses `emptyDir`; replacing its
 Pod discards the test data. This setup is for the dedicated test cluster.
 
-The runner reuses matching dependency releases after readiness checks.
-To apply charts again after changing values, set
-`REUSE_DEPENDENCIES=0`:
-
-```bash
-REUSE_DEPENDENCIES=0 tests/integration/run.bash verify-s3
-```
+The runner reapplies the checked charts and image pins before the tests.
 
 Successful profiles remove their test resources. Failed profiles keep them for
 diagnosis. To keep successful resources, set the matching variable to `1`:
@@ -139,7 +133,7 @@ diagnosis. To keep successful resources, set the matching variable to `1`:
 | `verify-registry` | [Registry](manifests/registry/datalab.yaml) | Authenticate with the published Secret, then write and read a blob in S3-backed storage. |
 | `verify-data` | [Data](manifests/data/datalabs.yaml) | File write/read, credential rotation with restart, and read-only write rejection. |
 | `verify-s3` | [S3](manifests/s3/datalab.yaml) | TLS, list/HEAD/GET/range reads, write/delete rejection, and browser access after S3 is disabled. |
-| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL over TLS, named-user login, password rotation, logical-name retention, store type admission, PostGIS, cold snapshot recovery, retention, failure handling, and backup disable. `pg1` has no backups. |
+| `verify-postgres` | [PostgreSQL](manifests/postgres/datalab.yaml) | SQL over TLS, named-user login, password rotation, logical-name retention, store type admission, PostGIS, native cold snapshot scheduling and recovery, Backup-owned snapshot cleanup, and backup disable. `pg1` has no backups. |
 | `verify-valkey` | [Valkey](manifests/valkey/datalab.yaml) | Published key prefixes; data PVC expansion when its StorageClass allows it; CSI capture, failed backup preservation, retention, RDB recovery in a new PVC, AOF restart, and disable without loss of recovery points. |
 | `verify-volumes` | [Volumes](manifests/volumes/datalab.yaml) | Host PVCs, snapshot Jobs, restore contents, retention, backup status, and storage removal without a virtual cluster. |
 | `verify-vcluster` | [Virtual clusters](manifests/vcluster/datalab.yaml) | Access, routing, workload and STAC behavior, and application PVC persistence. See below. |

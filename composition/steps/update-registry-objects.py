@@ -10,7 +10,8 @@ from composition.helpers import (
     _extract_data,
     _http_route_timeouts,
     _safe_str,
-    _strong_token,
+    _name_hash,
+    _service_token,
     _to_dict,
 )
 from composition.render import _render_template
@@ -21,8 +22,8 @@ def compose(req, rsp):
     meta = xr["metadata"]
     name, namespace = meta["name"], meta.get("namespace") or "default"
     env = _to_dict(req.context).get("apiextensions.crossplane.io/environment") or {}
-    registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2"
-    if not _boolish((env.get("registry") or {}).get("enabled", True)):
+    registry_image = _safe_str((env.get("images") or {}).get("registry")) or "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"
+    if not _boolish((env.get("registry") or {}).get("enabled", False)):
         return
     runtime_namespace = name
 
@@ -33,8 +34,13 @@ def compose(req, rsp):
             readiness=readiness or {"policy": "SuccessfulCreate"},
         ))
 
-    auth = {"user": name, "password": _strong_token(f"{name}:registry", length=28),
-            "http-secret": _strong_token(f"{name}:registry:http")}
+    auth = {"user": name}
+    for field, seed, length in (("password", f"{name}:registry", 28),
+                                ("http-secret", f"{name}:registry:http", 32)):
+        auth[field] = _service_token(
+            req, rsp, f"registry-auth-{name}", "registry-auth", runtime_namespace, field,
+            old=_name_hash(seed, length=length),
+        )
     emit("auth-secret", {
         "apiVersion": "v1", "kind": "Secret",
         "metadata": {"name": "registry-auth", "namespace": runtime_namespace},

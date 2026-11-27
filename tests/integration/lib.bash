@@ -24,8 +24,6 @@ if [[ "${PROVIDER_DATALAB_CLUSTER}" == kind ]]; then
 fi
 KUBECTL_CONTEXT="${PROVIDER_DATALAB_CONTEXT:-}"
 : "${PROVIDER_DATALAB_HELM_HOME:=/tmp/provider-datalab-it-helm}"
-: "${REUSE_DEPENDENCIES:=1}"
-: "${CROSSPLANE_VERSION:=2.4.3}"
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -54,12 +52,6 @@ helm_it() {
     HELM_CONFIG_HOME="${PROVIDER_DATALAB_HELM_HOME}/config" \
     HELM_DATA_HOME="${PROVIDER_DATALAB_HELM_HOME}/data" \
     command helm "$@"
-}
-
-apply_operator_crds() {
-  # Helm does not replace CRDs when it applies a chart again.
-  helm_it show crds "$1" --version "$2" \
-    | kube apply --server-side --force-conflicts -f -
 }
 
 kind_cluster_exists() {
@@ -314,15 +306,6 @@ selected_profile() {
       exit 1
       ;;
   esac
-}
-
-# Test-owned releases are reused only when the pinned chart is deployed.
-helm_release_matches() {
-  [[ "${REUSE_DEPENDENCIES}" == 1 ]] || return 1
-  helm_it list --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
-    --kube-context "${KUBECTL_CONTEXT}" --namespace "$2" --output json | \
-    jq -e --arg release "$1" --arg chart "$3" \
-      'any(.[]; .name == $release and .chart == $chart and .status == "deployed")' >/dev/null
 }
 
 wait_for_connection_secret() {

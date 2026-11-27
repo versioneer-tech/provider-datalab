@@ -32,7 +32,7 @@ jobs:
           mkdir -p "$DOCKER_CONFIG"
           python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt
           python3 scripts/install-tools.py crane
-      - name: Check runtime, test, and Crossplane package images
+      - name: Check production and Crossplane package images
         run: python3 scripts/check-image-updates.py
       - name: Report available updates
         if: always()

@@ -9,12 +9,12 @@ INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${INTEGRATION_DIR}/lib.bash"
 source "${INTEGRATION_DIR}/snapshots.bash"
 
-: "${VALKEY_CLIENT_IMAGE:=valkey/valkey:9.2.0-alpine}"
+: "${VALKEY_CLIENT_IMAGE:=valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882}"
 : "${KEEP_VALKEY_RESOURCES:=0}"
 
 readonly store_type=valkey
-readonly DATALAB_NAME=verify-valkey RESOURCE_TYPE=statefulset RESOURCE_NAME=verify
-readonly POD_NAME=verify-0 SERVICE_NAME=verify CLIENT_IMAGE="${VALKEY_CLIENT_IMAGE}"
+readonly DATALAB_NAME=verify-valkey RESOURCE_TYPE=statefulset RESOURCE_NAME=valkey-verify
+readonly POD_NAME=valkey-verify-0 SERVICE_NAME=valkey-verify CLIENT_IMAGE="${VALKEY_CLIENT_IMAGE}"
 readonly SECRET_KEYS=(host port user password database url)
 readonly STORAGE_SECRET="${DATALAB_NAME}"
 readonly CONNECTION_SECRET="${DATALAB_NAME}-${store_type}-verify"
@@ -115,7 +115,7 @@ verify_valkey_backup() {
   kube wait cronjob/valkey-verify-backup --namespace "${STORE_NAMESPACE}" \
     --for=create --timeout=5m
   local claim
-  claim="$(kube get pod/verify-0 --namespace "${STORE_NAMESPACE}" -o json | python3 -c '
+  claim="$(kube get pod/valkey-verify-0 --namespace "${STORE_NAMESPACE}" -o json | python3 -c '
 import json, sys
 pod = json.load(sys.stdin)
 volumes = {v["name"]: v.get("persistentVolumeClaim", {}).get("claimName") for v in pod["spec"]["volumes"]}

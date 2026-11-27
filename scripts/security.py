@@ -25,8 +25,8 @@ VERSION = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(alpha|beta|r
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 IMAGE = re.compile(r"(?:[a-z0-9.-]+(?::[0-9]+)?/)*[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+(?:@sha256:[0-9a-f]{64})?")
 REPOSITORY = "ghcr.io/versioneer-tech/provider-datalab"
-LOCKFILES = ("scripts/requirements.txt", "docs/requirements.txt", "tools/requirements.txt",
-             "tests/s3/requirements.txt", "tests/vcluster/requirements.txt", "tests/vcluster/tooling/requirements.txt")
+LOCKFILES = ("scripts/requirements.txt", "docs/requirements.txt", "tools/requirements.txt")
+TEST_LOCKFILES = ("tests/s3/requirements.txt", "tests/vcluster/requirements.txt", "tests/vcluster/tooling/requirements.txt")
 VULNERABILITY_EXCEPTIONS = ROOT / "scripts/vulnerability-exceptions.json"
 
 
@@ -129,7 +129,7 @@ def check_package(archive, source):
         raise ValueError("Package does not match its source manifests")
 
 
-def external_images(source):
+def external_images(source, scope="all"):
     references = set()
     for path in (source / "composition").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
@@ -147,16 +147,43 @@ def external_images(source):
         for reference in re.findall(r"(?m)^\s*image:\s*['\"]?([^\s'\"]+)", path.read_text()):
             if IMAGE.fullmatch(reference):
                 references.add(reference)
+    lock = source / "scripts/components.json"
+    pins = json.loads(lock.read_text()) if lock.exists() else {}
+    references.update(pins["images"][name] for name in pins.get("runtimeImages", []))
+    runtime = references.copy()
+    if lock.exists():
+        references.update(pins["images"].values())
     for path in (source / "tests").rglob("*Dockerfile"):
         references.update(re.findall(r"(?m)^FROM\s+(\S+)", path.read_text()))
     kind = yaml.safe_load((source / "tests/integration/manifests/kind.yaml").read_text())
     references.update(node["image"] for node in kind["nodes"])
+    for directory in ("tests/integration", "tests/vcluster", "tests/s3", "examples"):
+        for path in (source / directory).rglob("*"):
+            if not path.is_file() or path.suffix not in (".yaml", ".bash", ".py"):
+                continue
+            text = path.read_text()
+            if path.suffix == ".py":
+                for node in ast.walk(ast.parse(text)):
+                    if isinstance(node, ast.Dict):
+                        references.update(value.value for key, value in zip(node.keys, node.values)
+                                          if isinstance(key, ast.Constant) and key.value == "image"
+                                          and isinstance(value, ast.Constant) and isinstance(value.value, str)
+                                          and IMAGE.fullmatch(value.value))
+            else:
+                references.update(reference for reference in re.findall(
+                    r"(?m)^\s*image:\s*['\"]?([^\s'\"]+)", text) if IMAGE.fullmatch(reference))
+                references.update(reference for reference in re.findall(
+                    r"IMAGE:=([^}]+)", text) if IMAGE.fullmatch(reference))
     if not references:
         raise ValueError("No default runtime dependencies found")
+    if scope == "production":
+        return sorted(runtime)
+    if scope == "test":
+        return sorted(references - runtime)
     return sorted(references)
 
 
-def prepare(source, destination, version, commit, allow_dirty=False):
+def prepare(source, destination, version, commit, allow_dirty=False, scope="production"):
     if not VERSION.fullmatch(version) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("A release version and full source commit are required")
     head = run(["git", "rev-parse", "HEAD"], cwd=source, capture_output=True, text=True).stdout.strip()
@@ -182,16 +209,14 @@ def prepare(source, destination, version, commit, allow_dirty=False):
         for path in source_paths(source):
             bundle.add(source / path, arcname=str(path), recursive=False)
     images = []
-    test_images = set()
-    for path in (source / "tests").rglob("*Dockerfile"):
-        test_images.update(re.findall(r"(?m)^FROM\s+(\S+)", path.read_text()))
-    test_images.update(node["image"] for node in yaml.safe_load(
-        (source / "tests/integration/manifests/kind.yaml").read_text())["nodes"])
-    for reference in external_images(source):
+    runtime_images = set(external_images(source, "production"))
+    for reference in external_images(source, scope):
+        if "@sha256:" not in reference:
+            raise ValueError(f"Unpinned image: {reference}")
         resolved = registry_digest(reference)
         repository = reference.split("@")[0].rsplit(":", 1)[0]
         images.append({"declared": reference, "immutable": repository + "@" + resolved,
-                       "usage": "test" if reference in test_images else "runtime"})
+                       "usage": "runtime" if reference in runtime_images else "test"})
     write_json(destination / "external-components.json", images)
     components = [{"type": "file", "name": name,
                    "hashes": [{"alg": "SHA-256", "content": checksum(source / name)}]}
@@ -206,17 +231,25 @@ def prepare(source, destination, version, commit, allow_dirty=False):
         "components": components,
     })
     write_json(destination / "security-manifest.json", {
-        "schema": 1, "version": version, "commit": commit, "worktree_dirty": dirty,
+        "schema": 1, "scope": scope, "version": version, "commit": commit, "worktree_dirty": dirty,
         "image": REPOSITORY, "image_digest": digest,
         "files": {name: checksum(destination / name) for name in
                   ("datalab.xpkg", "source.tar.gz", "package.cdx.json", "external-components.json")},
         "coverage": {
             "package": "Configuration manifests and embedded Python; no OS or executable runtime",
-            "source": "Python build, documentation, audit, hook, integration client and test build dependencies; Go admission test module",
-            "external": "Default service images, provider/function packages, test image bases and Kind at saved digests; usage distinguishes runtime and test",
-            "limits": "Operator overrides, host software, nested runtime and Helm images, and deployed cluster state are outside this inventory",
+            "source": "Production scans cover Python build, documentation, audit and hook dependencies; test locks and Go admission tests are checked on use",
+            "external": "Pinned production images or test-only images, as selected by scope; shared runtime/test images stay in production",
+            "platform_inputs": json.loads((source / "scripts/components.json").read_text())["artifacts"],
+            "limits": "Operator overrides, disabled optional vCluster components, host software and deployed cluster state are outside this inventory",
         },
     })
+
+
+def image_scopes(images, scope="production"):
+    if any(item.get("usage") not in {"runtime", "test"} for item in images):
+        raise ValueError("Missing external image usage")
+    usage = "runtime" if scope == "production" else "test"
+    return [(f"external-{index:02d}", item) for index, item in enumerate(images) if item["usage"] == usage]
 
 
 def verify(candidate, reports=None, version=None, commit=None, allow_dirty=False):
@@ -241,14 +274,15 @@ def verify(candidate, reports=None, version=None, commit=None, allow_dirty=False
         raise ValueError("Package manifest digest does not match")
     if reports is not None:
         summary = json.loads((reports / "scan-summary.json").read_text())
-        if not summary.get("passed") or summary["manifest_sha256"] != checksum(candidate / "security-manifest.json"):
+        if (manifest.get("scope") != "production" or summary.get("scope") != "production" or not summary.get("passed") or
+                summary["manifest_sha256"] != checksum(candidate / "security-manifest.json")):
             raise ValueError("Scan evidence does not approve this candidate")
         if not summary.get("files"):
             raise ValueError("Missing scan evidence")
         images = json.loads((candidate / "external-components.json").read_text())
-        scopes = {"source", *[f"external-{index:02d}" for index in range(len(images))]}
+        scopes = {"source", *[name for name, _ in image_scopes(images)]}
         required_reports = {f"{scope}{suffix}" for scope in scopes for suffix in (".json", ".cdx.json")}
-        required_reports.update({"go.log", "secrets.json", "secret-assessment.json", VULNERABILITY_EXCEPTIONS.name})
+        required_reports.update({"secrets.json", "secret-assessment.json", VULNERABILITY_EXCEPTIONS.name})
         required_reports.update(name.replace("/", "-") + ".json" for name in LOCKFILES)
         if not required_reports <= summary["files"].keys() or scopes != summary["scopes"].keys():
             raise ValueError("Incomplete scan report or SBOM inventory")
@@ -261,14 +295,9 @@ def verify(candidate, reports=None, version=None, commit=None, allow_dirty=False
     return manifest
 
 
-def exception_key(reference, finding):
-    return (reference, finding.get("VulnerabilityID"), finding.get("PkgName"), finding.get("InstalledVersion"),
-            (finding.get("PkgIdentifier") or {}).get("PURL"), finding.get("Target"), finding.get("Severity"))
-
-
 def load_vulnerability_exceptions(path=None):
     policy = json.loads((path or VULNERABILITY_EXCEPTIONS).read_text())
-    if not isinstance(policy, dict) or policy.get("schema") != 2 or not isinstance(policy.get("exceptions"), list):
+    if not isinstance(policy, dict) or policy.get("schema") != 3 or not isinstance(policy.get("exceptions"), list):
         raise ValueError("Invalid vulnerability exception policy")
     fields = ("owner", "reason", "mitigation", "tracking", "accepted_on", "expires_on")
     if any(not isinstance(policy.get(key), str) or not policy[key].strip() for key in fields):
@@ -278,30 +307,12 @@ def load_vulnerability_exceptions(path=None):
         raise ValueError("Invalid vulnerability exception review period")
     exceptions = {}
     for entry in policy["exceptions"]:
-        if not isinstance(entry, dict) or not isinstance(entry.get("image"), str) or not re.fullmatch(
-                r"[^@\s]+@sha256:[0-9a-f]{64}", entry["image"]):
+        reference = entry.get("image") if isinstance(entry, dict) else None
+        if not isinstance(reference, str) or not re.fullmatch(r"[^@\s]+@sha256:[0-9a-f]{64}", reference):
             raise ValueError("Vulnerability exceptions require an immutable image")
-        packages = entry.get("packages")
-        if not isinstance(packages, list) or not packages:
-            raise ValueError("Missing vulnerability exception packages")
-        assessment = {"image": entry["image"], **{key: policy[key] for key in fields}}
-        for package in packages:
-            if not isinstance(package, dict) or any(not isinstance(package.get(key), str) or not package[key].strip()
-                                                    for key in ("name", "version", "purl", "target")):
-                raise ValueError("Incomplete vulnerability exception identity")
-            advisories = package.get("advisories")
-            if not isinstance(advisories, dict) or not advisories or not advisories.keys() <= {"CRITICAL", "HIGH"}:
-                raise ValueError("Invalid vulnerability exception severity")
-            for severity, identifiers in advisories.items():
-                if not isinstance(identifiers, list) or not identifiers or any(
-                        not isinstance(identifier, str) or not identifier.strip() for identifier in identifiers):
-                    raise ValueError("Missing vulnerability exception advisories")
-                for identifier in identifiers:
-                    key = (entry["image"], identifier, package["name"], package["version"],
-                           package["purl"], package["target"], severity)
-                    if key in exceptions:
-                        raise ValueError("Duplicate vulnerability exception")
-                    exceptions[key] = assessment
+        if reference in exceptions:
+            raise ValueError("Duplicate vulnerability exception")
+        exceptions[reference] = {"image": reference, **{key: policy[key] for key in fields}}
     return exceptions
 
 
@@ -309,7 +320,7 @@ def apply_vulnerability_exceptions(assessment, reference, exceptions, today=None
     today = today or datetime.now(UTC).date()
     result = {**assessment, "blocking": [], "accepted": [], "expired_exceptions": []}
     for finding in assessment["blocking"]:
-        entry = exceptions.get(exception_key(reference, finding))
+        entry = exceptions.get(reference)
         if entry and date.fromisoformat(entry["accepted_on"]) <= today < date.fromisoformat(entry["expires_on"]):
             result["accepted"].append({**finding, "exception": entry})
         else:
@@ -326,7 +337,7 @@ def verify_scan_policy(summary, reports, images, today=None):
             summary["files"].get(VULNERABILITY_EXCEPTIONS.name) != policy_hash):
         raise ValueError("Vulnerability exception policy changed; rescan the candidate")
     exceptions = load_vulnerability_exceptions()
-    targets = [("source", None)] + [(f"external-{index:02d}", image["immutable"]) for index, image in enumerate(images)]
+    targets = [("source", None)] + [(scope, image["immutable"]) for scope, image in image_scopes(images)]
     for scope, reference in targets:
         assessment = assess(json.loads((reports / f"{scope}.json").read_text()), image=reference is not None)
         current = apply_vulnerability_exceptions(assessment, reference, exceptions, today)
@@ -367,9 +378,13 @@ def write_scan_summary(reports, summary):
     labels = {f"external-{index:02d}": (item["declared"].split("@")[0], item["usage"])
               for index, item in enumerate(summary.get("external_components", []))}
     labels["source"] = ("Source dependencies", "source")
-    lines = ["# Security scan", "", "Result: **" + ("PASS" if summary["passed"] else "FAIL") + "**", "",
+    advisory = summary.get("scope") == "test"
+    result = "PASS" if summary["passed"] else "REVIEW" if advisory else "FAIL"
+    column = "Policy findings" if advisory else "Blocking"
+    lines = ["# Security scan", "", "Scope: " + summary.get("scope", "production"), "",
+             "Result: **" + result + "**" + (" (advisory; does not block production)" if advisory else ""), "",
              "Counts are package occurrences, not unique vulnerabilities. Accepted findings still need review.", "",
-             "| Image or source | Use | Blocking | Accepted | Unfixed HIGH |", "| --- | --- | ---: | ---: | ---: |"]
+             f"| Image or source | Use | {column} | Accepted | Unfixed HIGH |", "| --- | --- | ---: | ---: | ---: |"]
     for scope, assessment in scopes.items():
         label, usage = labels.get(scope, (scope, "unknown"))
         lines.append(f"| `{label}` | {usage} | {len(assessment['blocking'])} | "
@@ -387,16 +402,19 @@ def write_scan_summary(reports, summary):
     (reports / "summary.md").write_text("\n".join(lines) + "\n")
 
 
-def scan(candidate, reports, allow_dirty=False):
+def scan(candidate, reports, allow_dirty=False, scope="production"):
     reports.mkdir(parents=True, exist_ok=False)
-    summary = {"passed": False, "manifest_sha256": "",
+    summary = {"passed": False, "manifest_sha256": "", "scope": scope,
                "scopes": {}, "errors": [], "scanned_at": datetime.now(UTC).isoformat()}
     try:
-        exceptions = load_vulnerability_exceptions()
-        shutil.copyfile(VULNERABILITY_EXCEPTIONS, reports / VULNERABILITY_EXCEPTIONS.name)
-        summary["vulnerability_exceptions_sha256"] = checksum(VULNERABILITY_EXCEPTIONS)
+        exceptions = load_vulnerability_exceptions() if scope == "production" else {}
+        if scope == "production":
+            shutil.copyfile(VULNERABILITY_EXCEPTIONS, reports / VULNERABILITY_EXCEPTIONS.name)
+            summary["vulnerability_exceptions_sha256"] = checksum(VULNERABILITY_EXCEPTIONS)
         summary["manifest_sha256"] = checksum(candidate / "security-manifest.json")
         manifest = verify(candidate, allow_dirty=allow_dirty)
+        if manifest.get("scope") != scope:
+            raise ValueError("Candidate and scan scopes do not match")
         summary.update(version=manifest["version"], commit=manifest["commit"], image_digest=manifest["image_digest"])
         shutil.copyfile(candidate / "security-manifest.json", reports / "security-manifest.json")
         with tempfile.TemporaryDirectory(prefix="datalab-scan-") as temporary:
@@ -404,52 +422,63 @@ def scan(candidate, reports, allow_dirty=False):
             unpack_source(candidate / "source.tar.gz", source)
             check_package(candidate / "datalab.xpkg", source)
             images = json.loads((candidate / "external-components.json").read_text())
+            runtime = set(external_images(source, "production"))
+            if ({item["declared"] for item in images} != set(external_images(source, scope)) or
+                    any(item.get("usage") != ("runtime" if item["declared"] in runtime else "test") for item in images)):
+                raise ValueError("External image inventory does not match source usage")
             summary["external_components"] = images
             shutil.copyfile(candidate / "external-components.json", reports / "external-components.json")
-            targets = [("source", ["fs", str(source)], None)] + [
-                (f"external-{index:02d}", ["image", "--image-src", "remote", "--platform", "linux/amd64", item["immutable"]], item["immutable"])
-                for index, item in enumerate(images)]
-            for scope, arguments, reference in targets:
+            locks = LOCKFILES if scope == "production" else TEST_LOCKFILES
+            source_args = (["fs", "--skip-dirs", str(source / "tests"), str(source)] if scope == "production"
+                           else ["fs", str(source / "tests")])
+            targets = [("source", source_args, None)] + [
+                (label, ["image", "--image-src", "remote", "--platform", "linux/amd64", item["immutable"]], item["immutable"])
+                for label, item in image_scopes(images, scope)]
+            for label, arguments, reference in targets:
                 try:
-                    report = reports / f"{scope}.json"
-                    print(f"Scanning {scope}", flush=True)
+                    report = reports / f"{label}.json"
+                    print(f"Scanning {label}", flush=True)
                     scan_command([tool("trivy"), *arguments, "--config", "/dev/null", "--ignorefile", "/dev/null",
                          "--cache-dir", ROOT / "build/trivy-cache", "--no-progress",
                          "--scanners", "vuln", "--list-all-pkgs",
                          "--format", "json", "--output", report, "--exit-code", "0", "--timeout", "15m"],
-                         reports / f"{scope}.log")
+                         reports / f"{label}.log")
                     data = json.loads(report.read_text())
                     run([tool("trivy"), "convert", "--format", "cyclonedx", "--output",
-                         reports / f"{scope}.cdx.json", report])
-                    sbom = json.loads((reports / f"{scope}.cdx.json").read_text())
+                         reports / f"{label}.cdx.json", report])
+                    sbom = json.loads((reports / f"{label}.cdx.json").read_text())
                     if sbom.get("bomFormat") != "CycloneDX" or not sbom.get("components"):
                         raise ValueError("Missing CycloneDX dependency inventory")
                     sbom.setdefault("metadata", {}).setdefault("properties", []).extend([
                         {"name": "versioneer.at/source-commit", "value": manifest["commit"]},
                         {"name": "versioneer.at/manifest-sha256", "value": summary["manifest_sha256"]},
-                        {"name": "versioneer.at/scan-scope", "value": scope},
+                        {"name": "versioneer.at/scan-scope", "value": label},
                     ])
-                    write_json(reports / f"{scope}.cdx.json", sbom)
+                    write_json(reports / f"{label}.cdx.json", sbom)
                     assessment = apply_vulnerability_exceptions(
                         assess(data, image=reference is not None), reference, exceptions)
-                    if scope == "source":
-                        for name in (*LOCKFILES, "tests/admission/go.mod"):
-                            if not any(item.get("Target", "").endswith(name) and item.get("Packages")
+                    if label == "source":
+                        inventories = locks if scope == "production" else (*locks, "tests/admission/go.mod")
+                        for name in inventories:
+                            suffix = name if scope == "production" else name.removeprefix("tests/")
+                            if not any(item.get("Target", "").endswith(suffix) and item.get("Packages")
                                        for item in data.get("Results", [])):
                                 raise ValueError(f"Missing source dependency inventory: {name}")
-                    summary["scopes"][scope] = assessment
+                    summary["scopes"][label] = assessment
                 except (ValueError, OSError, subprocess.CalledProcessError) as error:
-                    summary["errors"].append(f"{scope}: {error}")
-            if check_secrets(source, reports):
+                    summary["errors"].append(f"{label}: {error}")
+            if scope == "production" and check_secrets(source, reports):
                 summary["errors"].append("Unresolved secret findings or scanner error")
-            checks = [("go", [tool("govulncheck"), "-json", "./..."])]
-            for name, arguments in checks:
-                with (reports / f"{name}.log").open("w") as output:
-                    result = subprocess.run([str(a) for a in arguments], cwd=source / "tests/admission" if name == "go" else source,
-                                            stdout=output, stderr=subprocess.STDOUT)
+            if scope == "test":
+                with (reports / "go.log").open("w") as output:
+                    # JSON mode returns zero even when it finds affected code.
+                    result = subprocess.run(
+                        [str(tool("govulncheck")), "-show", "verbose", "./..."],
+                        cwd=source / "tests/admission", stdout=output, stderr=subprocess.STDOUT,
+                    )
                 if result.returncode:
-                    summary["errors"].append(f"{name} check failed; see {name}.log")
-            for name in LOCKFILES:
+                    summary["errors"].append("Go check failed; see go.log")
+            for name in locks:
                 label = name.replace("/", "-")
                 result = subprocess.run([sys.executable, "-m", "pip_audit", "--disable-pip", "--require-hashes",
                                          "--cache-dir", str(ROOT / "build/pip-audit-cache"),
@@ -523,13 +552,12 @@ def select_releases(releases, tags="", published_tags=()):
     else:
         def base(tag):
             return tuple(map(int, VERSION.fullmatch(tag).groups()[:3]))
+        supported = [tag for tag in by_tag if base(tag)[:2] != (0, 12)]
         stable = [tag for tag in by_tag if "-" not in tag and not by_tag[tag].get("prerelease")]
-        selected = [max(stable, key=base)] if stable else []
-        old_line = [tag for tag in stable if base(tag)[:2] == (0, 12)]
-        if old_line and max(old_line, key=base) not in selected:
-            selected.append(max(old_line, key=base))
-        candidates = [tag for tag in by_tag if "-rc." in tag and
-                      (not stable or base(tag) > base(max(stable, key=base)))]
+        latest = max(stable, key=base) if stable else None
+        selected = [latest] if latest in supported else []
+        candidates = [tag for tag in supported if "-rc." in tag and
+                      (not latest or base(tag) > base(latest))]
         if candidates:
             selected.append(max(candidates, key=lambda tag: (*base(tag), int(tag.rsplit(".", 1)[1]))))
     if not selected:
@@ -550,6 +578,8 @@ def main():
         child.add_argument("--allow-dirty", action="store_true")
         if name != "prepare":
             child.add_argument("--reports", type=Path, default=ROOT / "build/security")
+        if name in {"prepare", "scan"}:
+            child.add_argument("--scope", choices=("production", "test"), default="production")
     releases = sub.add_parser("releases")
     releases.add_argument("--tags", default="")
     releases.add_argument("--published-tags-file", type=Path)
@@ -558,9 +588,9 @@ def main():
     files.add_argument("--reports", type=Path, default=ROOT / "build/file-security")
     args = parser.parse_args()
     if args.command == "prepare":
-        prepare(args.source.resolve(), args.candidate.resolve(), args.version, args.commit, args.allow_dirty)
+        prepare(args.source.resolve(), args.candidate.resolve(), args.version, args.commit, args.allow_dirty, args.scope)
     elif args.command == "scan":
-        return scan(args.candidate.resolve(), args.reports.resolve(), args.allow_dirty)
+        return scan(args.candidate.resolve(), args.reports.resolve(), args.allow_dirty, args.scope)
     elif args.command == "verify":
         verify(args.candidate.resolve(), args.reports.resolve(), allow_dirty=args.allow_dirty)
     elif args.command == "files":

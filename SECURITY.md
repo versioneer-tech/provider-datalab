@@ -10,56 +10,46 @@ Response times depend on maintainer availability.
 
 ## Supported releases
 
-Security fixes apply to the latest stable release and the latest `0.12.x`
-release while that line is maintained. Release candidates are for testing,
-not supported production use.
+Security fixes apply to the latest stable release of the `versioneer.at/v1` API.
+Release candidates are for testing, not supported production use.
 
 ## Build and release checks
 
-CI uses the same [local check commands](README.md#checks). Its final
-`required_checks` status rejects failures, cancellations, missing jobs, and
-unexpected skips. Documentation-only runs expect runtime and security jobs to
-be skipped; other runs require all jobs. Branch rules must require this status.
-Check jobs have read-only access. Publication credentials are limited to the
-package/release and documentation jobs.
+CI uses the [local check commands](README.md#checks). Branch rules must require
+`required_checks`. Check jobs have read-only access; publication credentials
+are limited to release and documentation jobs.
 
 | Check | Coverage |
 | --- | --- |
 | File and documentation checks | Generated composition, copyright, strict docs, workflow syntax, and redacted secret scans of current files. Full Git history is not scanned. |
 | Units and integration | Full units and all eight integration profiles for code changes. Draft PRs defer cluster tests. |
-| Source dependencies | Trivy inventories the six Python locks and Go admission-test module. pip-audit checks each Python lock; govulncheck checks the Go source independently. |
-| Configuration package | Package contents must match `crossplane.yaml`, `xrd.yaml`, and `composition.yaml`. Checksums and the OCI digest bind the saved package to its source and inventories. |
-| External images | Trivy scans default service images, provider/function packages, test bases, and Kind by saved Linux AMD64 digest. Each scope gets a CycloneDX JSON SBOM. |
+| Source dependencies | Production scans cover build, documentation, and security-tool Python locks. Full tests audit test dependencies and run source govulncheck on the Go admission module. |
+| Configuration package | Saved package, source, and dependency inventories. |
+| External images | Shipped service, provider/function, nested DNS, Crossplane, and CloudNativePG images on Linux AMD64. Test-only images are scanned when full tests run. |
 
 ### Dependency updates and tool installation
 
 | Input | Update process |
 | --- | --- |
-| Actions, Python, and Go dependencies | Weekly Dependabot PRs, with routine minor/patch updates grouped by ecosystem. |
-| Dockerfiles and supported YAML image fields | Daily Dependabot PRs, including weekends. Current-image digest updates stay grouped. |
+| Actions and production/build Python dependencies | Weekly Dependabot PRs, with routine minor/patch updates grouped by ecosystem. |
+| Production template image fields | Daily Dependabot PRs, including weekends. Current-image digest updates stay grouped. |
 | Python image defaults and Crossplane `spec.package` references | The [daily image report](.github/workflows/image-updates.yaml) lists version and digest changes for manual updates. |
 | Tool versions/checksums and `.go-version` | Manual review. The installer uses [scripts/tools.json](scripts/tools.json). |
+| Test-only Python, Go, and images | Full tests report available updates and vulnerabilities on use. No scheduled version updates or production-release blocking. |
 
 Docker majors appear in the daily report for separate manual PRs. Other
 major updates get separate Dependabot PRs. Review, scan, and test updates;
 do not apply audit fixes automatically. After template or composition edits,
 regenerate `composition.yaml` and review affected render fixtures.
 
-Python installs use hash-locked requirements and wheels. The STAC test image
-also builds `version-parser` 1.0.1 from its fixed source archive because it has
-no wheel. Its reviewed setup reads README and calls setuptools; it does not
-run downloads or commands. Its build uses pinned setuptools/wheel without
-build isolation. See [dependency maintenance](README.md#maintain-dependencies).
+Shared runtime/test images remain in production scope. Secret checks cover
+tests. Test dependency reports are advisory; review them before using fixtures.
+Update versions deliberately and repeat the relevant checks. GitHub security
+alerts are managed separately from scheduled version updates.
 
-Actions use full SHAs. The shared tool installer checks fixed archive SHA-256
-values or Go module checksums before installation. It does not execute downloaded
-shell scripts. There are no external reusable workflows or composite Actions.
-The image report makes at most two concurrent registry queries. Lookup errors
-fail; available updates are informational and do not open PRs or scan replacements.
-
-The package-r, NGINX gateway, virtual Kubernetes, and updated helper references
-use versions and digests. Other configurable defaults still have mutable tags.
-Scans save their resolved digests; operators can override deployed images.
+Actions use full SHAs, images use immutable digests, and Python requirements
+use fixed hashes. See [dependency maintenance](README.md#maintain-dependencies)
+for update commands.
 
 ### Local candidate checks
 
@@ -68,7 +58,7 @@ new directory for each candidate. These commands preserve earlier reports and
 use an empty registry configuration for public images:
 
 ```bash
-python3 scripts/install-tools.py crane trivy govulncheck
+python3 scripts/install-tools.py crane trivy
 mkdir -p build
 run_dir="$(mktemp -d "$PWD/build/candidate-check.XXXXXX")"
 export DOCKER_CONFIG="$run_dir/registry"
@@ -81,11 +71,8 @@ python3 scripts/security.py verify --candidate "$run_dir/candidate" \
   --reports "$run_dir/reports" --allow-dirty
 ```
 
-Open `summary.md` for the result, per-image counts, errors, and exception expiry.
-CI shows the same table in its job summary. `scan-summary.json` reports blockers,
-accepted and expired exceptions, unfixed HIGH findings, scanner/database versions, and report checksums. Keep failed
-reports for assessment. `--allow-dirty` is for local checks; publication rejects
-these candidates.
+Read `summary.md` for findings and errors. `--allow-dirty` is for local checks;
+these candidates cannot be published.
 
 ### Candidate and publication
 
@@ -105,18 +92,9 @@ For GPG signing, set `git config --local user.signingkey <full-key-fingerprint>`
 Register the public key with GitHub. See [commit signing](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 Verify the effective signed-commit rule separately.
 
-The tag workflow builds and uploads a versioned candidate, then scans it.
-Publication retrieves the candidate and reports by artifact ID, verifies hashes,
-commit, version, current exception policy, and OCI digest, and pushes the saved
-archive without rebuilding. It rejects a changed digest for an existing tag.
-The Configuration package has no executable runtime. Integration checks its
-source manifests; it does not install the saved `.xpkg` in a consumer cluster.
-
 Release assets include the package, source archive, security manifest,
-external-image inventory, CycloneDX SBOMs, scan records, checksums, and upload/run
-IDs. Release notes use GitHub's generated changes. Alpha, beta, and RC releases
-are prereleases. Only stable releases advance `latest`; older stable versions
-cannot move it backward. Publication is serialized and docs follow artifacts.
+external-image inventory, CycloneDX SBOMs, scan results, and checksums. Alpha,
+beta, and RC releases are prereleases. Only stable releases advance `latest`.
 
 ### Scan policy
 
@@ -128,90 +106,33 @@ cannot move it backward. Publication is serialized and docs follow artifacts.
 | MEDIUM, LOW, UNKNOWN | Retain in reports |
 | Unsupported image OS, scanner failure, or missing inventory/report/SBOM | Block |
 
-Native audit failures and secret findings block independently. Scanner output
-is not filtered. Secret reports redact values. Maintainers own assessment of
-failed daily scans; a source fix does not change an already published package.
+Production native audit failures and secret findings also block publication.
+Maintainers must assess failed daily scans.
 
 ### Temporary vulnerability exceptions
 
-The repository owner accepted the recorded image findings, including CRITICAL
-findings, so builds and publication can proceed temporarily under the
-[exception policy](scripts/vulnerability-exceptions.json). This acceptance does
-not fix the packages. We have not verified whether an attacker can reach the
-affected code in deployed services or test jobs. Scans and digest checks detect
-findings and image changes; they do not prevent exploitation.
-
-Versioneer maintainers (`oss@versioneer.at`) must review these findings before
-the policy's `expires_on` date. Exceptions stop applying at the start of that
-date in UTC.
-
-The review fields at the top apply to the whole batch. Each immutable image
-contains package groups with a name, installed version, package URL, exact
-report target, and advisory IDs grouped by severity. Use the immutable image
-from `external-components.json`. The package fields come from `PkgName`,
-`InstalledVersion`, `PkgIdentifier.PURL`, and `Target` in the scan report.
-To change an exception:
-
-1. Read the fresh scan report. Check whether the affected code runs, what
-   untrusted input can reach it, and which deployment controls reduce exposure.
-   Record any verified mitigation. If none is verified, say so.
-2. Remove resolved groups, or list only the advisory IDs that maintainers accept.
-3. Update the assessment if needed, then rescan. Renewal requires a review;
-   scans never extend expiry or add entries automatically.
-
-New findings, changed image digests or identities, and expired matches block.
-The full raw findings remain in reports; accepted findings are listed separately
-with the policy and its checksum. Publication rechecks expiry and current policy.
-A policy change needs a new scan. Scheduled scans use their workflow checkout's
-policy, so acceptance can be withdrawn without changing a published artifact.
-Exceptions cannot waive source findings, native audit failures, secret findings,
-unsupported operating systems, or missing inventories and SBOMs.
-
-The separate [secret fixture list](scripts/secret-fixtures.json) covers only
-reviewed synthetic/template matches by exact file hash and detector rule.
-Changed content or another rule requires review again. Do not accept an
-unexplained secret match.
+The [exception policy](scripts/vulnerability-exceptions.json) lists accepted
+image digests, the owner, reason, mitigation, and expiry. Acceptance covers
+findings discovered in those images before expiry. Maintainers must review
+exceptions before renewal. Acceptance does not fix vulnerable packages.
 
 ### Daily scans and retention
 
-The daily workflow rescans the latest stable release, the latest supported
-`0.12.x` release, and the newest RC for a version newer than stable. Without
-stable, it selects the newest RC. Version ordering excludes drafts and older RCs.
-Manual runs accept older published tags; empty input selects the defaults and
-unknown tags fail. The matrix continues after failures with at most two scans
-in parallel.
-
-Scans download published evidence and check its manifest, checksums, source
-commit, and immutable image digests. They do not rebuild or replace releases.
-Missing release assets or manifests fail; old tags need evidence backfill.
-With no release evidence, selection fails.
+Daily scans cover the latest stable release and the newest RC for a newer
+version. Without a stable release, they cover the newest RC. Manual runs can
+select older published tags.
 
 Candidates are retained for seven days; reports and SBOMs for 90 days, including
-failures. Release assets keep the inventories and scan records. The summary
-records report hashes and the exception-policy checksum. Individual reports
-retain all severities.
+failed scans. Release assets keep the inventories and scan results.
 
 ### Coverage and verification limits
 
-The package SBOM covers its manifests and package hash. External image
-inventories cover detected OS, native, Go, and Python packages, not the whole
-platform. Coverage excludes operator overrides, host software, nested runtime
-and Helm images, other test/probe images, non-AMD64 images, Go build-tool
-modules, and native libraries bundled in build/test wheels.
+Inventories cover the package and selected Linux AMD64 images. Coverage excludes
+operator overrides, disabled optional vCluster components, host software, Go
+build-tool modules, and native libraries bundled in build/test wheels.
 
-Open verification and maintenance work:
-
-- Hosted publication, scheduled runs, Dependabot operation, and effective
-  branch and signed-commit enforcement. Local checks do not verify these.
-- Fixed content verification for Helm charts and bootstrap manifests.
-- Installation of the saved `.xpkg` in a consumer cluster.
-- Partial publication recovery. A failure after registry push can leave the
-  package without a completed GitHub Release or docs deployment.
-
-The release workflow does not create build attestations. Checksums identify
-content; they do not prove build origin. The dedicated Kind CSI driver uses
-external tar for trusted synthetic snapshots to preserve PostgreSQL file
-ownership; this test setting must not process untrusted archives.
+Scan the platform's actual identity, Gateway, CNI, CSI, and object-storage images
+separately. Test fixtures do not verify those deployments.
 
 ## Deployment boundary
 
@@ -226,8 +147,9 @@ and decides who can use these resources. The host cluster must enforce network
 policies, admission rules, Pod security, and RBAC. Virtual clusters share its
 nodes and kernel.
 
-Registry and Valkey passwords are derived from resource names and are
-predictable. Keep their endpoints within the approved team network boundary.
+Registry and Valkey passwords are random and stored in native Secrets.
+Reconciliation retains existing values. Keep service endpoints within the
+approved team network boundary.
 
 | Control | Details |
 | --- | --- |
@@ -399,17 +321,95 @@ before enabling PostgreSQL backups. CloudNativePG needs permission to create
 and manage its database snapshots. Crossplane's Kubernetes provider observes
 the selected snapshot class and checks its `Delete` policy.
 
-Each database backup Job has a separate ServiceAccount. It can read its named
-Cluster and snapshot classes, request and remove namespaced CNPG Backups, and
-read the resulting VolumeSnapshots. It cannot read Secrets, delete PVCs, or
-delete snapshots directly. CloudNativePG sets each snapshot's owner to its
-Backup; Kubernetes removes those snapshots when retention removes the Backup.
+PostgreSQL uses a native CloudNativePG `ScheduledBackup`, with no custom backup
+Job or ServiceAccount. The default is a cold snapshot daily at 01:00 UTC.
+`database.schedule` uses CNPG's six-field cron format, including seconds.
+The only database instance stops reads and writes during capture. See the
+[CNPG backup documentation](https://cloudnative-pg.io/docs/1.30/backup/).
 
-The Job removes old completed backups only after a new backup and all of its
-snapshots are ready. It limits cleanup to its database name and cluster UID.
-Disabling backups removes the schedule and leaves completed recovery points.
+CloudNativePG makes the Cluster the owner of each Backup and makes the Backup
+the owner of its VolumeSnapshots. Deleting a Backup removes its snapshots.
+Disabling backups removes the schedule; platform retention still applies to
+completed recovery points.
 Namespace deletion removes these resources. Storage retained outside the
 namespace needs a separate platform backup policy.
+
+### PostgreSQL retention with Kyverno
+
+CloudNativePG does not prune volume snapshots. Configure platform retention
+before use. The example below uses Kyverno's
+[NamespacedDeletingPolicy](https://kyverno.io/docs/policy-types/deleting-policy/)
+to remove completed cold Backups older than seven days. Kubernetes then removes
+their owned snapshots. It checks once an hour and does not target other stores.
+
+Use a Kyverno installation that serves `policies.kyverno.io/v1`
+`NamespacedDeletingPolicy`. Replace `team-demo`, `postgres-main`, and
+`postgres-snapshot-main` with the Datalab namespace, native cluster name, and
+schedule name. Replace the RoleBinding subject with the installed cleanup
+controller's ServiceAccount and namespace. This grants additional Backup access
+only in the selected namespace. Provider Datalab does not install Kyverno or
+this policy.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-backup-retention
+  namespace: team-demo
+rules:
+- apiGroups: [postgresql.cnpg.io]
+  resources: [backups]
+  verbs: [get, list, watch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-backup-retention
+  namespace: team-demo
+subjects:
+- kind: ServiceAccount
+  name: kyverno-cleanup-controller
+  namespace: kyverno
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgres-backup-retention
+---
+apiVersion: policies.kyverno.io/v1
+kind: NamespacedDeletingPolicy
+metadata:
+  name: postgres-backup-retention
+  namespace: team-demo
+spec:
+  schedule: '15 * * * *'
+  deletionPropagationPolicy: Background
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [postgresql.cnpg.io]
+      apiVersions: [v1]
+      resources: [backups]
+    objectSelector:
+      matchLabels:
+        cnpg.io/scheduled-backup: postgres-snapshot-main
+  conditions:
+  - name: selected-namespace
+    expression: object.metadata.namespace == 'team-demo'
+  - name: completed-cold-backup
+    expression: >-
+      object.spec.cluster.name == 'postgres-main' &&
+      object.spec.method == 'volumeSnapshot' &&
+      has(object.spec.online) && object.spec.online == false &&
+      has(object.status) && has(object.status.phase) &&
+      object.status.phase == 'completed'
+  - name: older-than-one-week
+    expression: >-
+      time.now() - timestamp(object.metadata.creationTimestamp) > duration('168h')
+```
+
+This policy uses age, not a count or the time of the last successful backup.
+Long backup failures can leave no recovery point after seven days. Monitor
+failed backups and disable cleanup during recovery. Test the policy with the
+platform's Kyverno version before enabling deletion.
 
 ## Network policies
 
@@ -596,6 +596,8 @@ an unresponsive process.
 | Kubernetes provider | HTTP `/readyz` on port 8081 | HTTP `/healthz` on port 8081 |
 | Keycloak provider | HTTP `/metrics` on port 8080 | Same local HTTP listener; this provider has no health endpoint |
 | Composition functions | TCP on TLS port 9443 | Same listener; native Kubernetes gRPC probes do not support TLS |
+
+Valkey checks that the mounted ACL matches the configured checksum before startup.
 
 Registry liveness checks the local listener, so an object-storage outage makes
 the Pod unready without causing repeated restarts. Its health port is absent

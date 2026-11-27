@@ -88,7 +88,7 @@ def compose(req, rsp):
                 backup_name=backup_name, snapshot_class=snapshot_class, max_snapshots=str(int(max_snapshots)),
                 backup_binding=_resource_name(namespace, backup_name),
                 schedule=config.get("schedule") or "0 1 * * *", backup_script=BACKUP_SCRIPT,
-                backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
+                backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
             )["resources"]
             for suffix, manifest in resources.items():
                 emit(_resource_name("volume", namespace, name, "backup", suffix), manifest)

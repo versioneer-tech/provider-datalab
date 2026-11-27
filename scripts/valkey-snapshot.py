@@ -46,8 +46,8 @@ class Valkey:
         raise RuntimeError("Valkey rejected the backup command.")
 
 
-def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):
-    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")
+def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540, server=None):
+    pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote((server or store) + "-0", safe="")
     pause_until = 0
     identity = {}
 
@@ -114,13 +114,14 @@ def main():
     for argument in ("namespace", "store", "claim", "snapshot_class"):
         parser.add_argument(argument)
     parser.add_argument("retention", type=int)
+    parser.add_argument("--server")
     args = parser.parse_args()
     if not 1 <= args.retention <= 100:
         parser.error("retention must be from 1 to 100")
     password = Path("/var/run/valkey-backup/password").read_text()
-    with closing(Valkey(args.store, password)) as valkey:
+    with closing(Valkey(args.server or args.store, password)) as valkey:
         capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,
-                args.snapshot_class, args.retention)
+                args.snapshot_class, args.retention, server=args.server)
 
 
 if __name__ == "__main__":

@@ -125,7 +125,7 @@ controlPlane:
     deployment:
       affinity: {}
       annotations: {}
-      image: ''
+      image: 'coredns/coredns:1.15.0@sha256:0a9d8c8ddf34347eb59aad9a8784f0710de88d6d112726d11d271f9bc6daca26'
       labels: {}
       nodeSelector: {}
       pods:
@@ -192,10 +192,7 @@ controlPlane:
       securityContext: {}
       version: ''
   ingress:
-    annotations:
-      nginx.ingress.kubernetes.io/backend-protocol: HTTPS
-      nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
-      nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    annotations: {}
     enabled: false
     host: my-host.com
     labels: {}

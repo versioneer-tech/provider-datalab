@@ -4,11 +4,11 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: ${store_name}
+  name: ${workload_name}
   namespace: ${runtime_namespace}
 spec:
   replicas: 1
-  serviceName: ${store_name}
+  serviceName: ${workload_name}
   selector:
     matchLabels:
       app.kubernetes.io/name: valkey
@@ -31,6 +31,38 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      # Secret projection can lag behind the StatefulSet update.
+      initContainers:
+      - name: wait-for-acl
+        image: ${valkey_image}
+        command:
+        - sh
+        - -ec
+        - |
+          attempt=0
+          while [ "$attempt" -lt 180 ]; do
+            actual="$(base64 "$2" | tr -d '\n' | sha256sum)"
+            [ "${actual%% *}" != "$1" ] || exit 0
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+          printf 'The current Valkey ACL was not mounted before the deadline.\n' >&2
+          exit 1
+        - wait-for-acl
+        - ${valkey_acl_checksum}
+        - /etc/valkey/user.acl
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 10m, memory: 16Mi}
+          limits: {cpu: 100m, memory: 32Mi}
+        volumeMounts:
+        - name: acl
+          mountPath: /etc/valkey
+          readOnly: true
       containers:
       - name: valkey
         image: ${valkey_image}
@@ -42,6 +74,10 @@ spec:
         - 'yes'
         - --dir
         - /data
+        - --maxmemory
+        - 256mb
+        - --maxmemory-policy
+        - noeviction
         - --appendonly
         - 'yes'
         - --appendfsync

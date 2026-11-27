@@ -17,6 +17,7 @@ from composition.helpers import (
     _postgres_connection_data,
     _safe_str,
     _stores,
+    _store_resource_name,
     _to_dict,
 )
 from composition.render import _render_template
@@ -115,7 +116,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         data.update({name: base64.b64encode(value.encode()).decode()
                      for name, value in (source_manifest.get("stringData") or {}).items()})
         if kind == "postgres":
-            data = _postgres_connection_data(data, instance, xr_name)
+            data = _postgres_connection_data(data, _store_resource_name("postgres", instance), xr_name)
         required = {
             "postgres": ("host", "port", "user", "password", "dbname", "uri"),
             "valkey": ("user", "password"),
@@ -247,7 +248,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 cluster_name = name.strip()
                 observe(
                     f"observe-database-secret-{xr_name}-{cluster_name}",
-                    f"{cluster_name}-superuser",
+                    _store_resource_name("postgres", cluster_name) + "-superuser",
                     runtime_namespace,
                     kind="postgres",
                     instance=cluster_name,
@@ -263,13 +264,13 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                     store_name = name.strip()
                     observe(
                         f"observe-{backend}-auth-secret-{xr_name}-{store_name}",
-                        f"{store_name}-{backend}-auth",
+                        _store_resource_name(backend, store_name) + "-auth",
                         runtime_namespace,
                         kind=kind,
                         instance=store_name,
                     )
 
-    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
     if registry_enabled:
         observe(f"observe-registry-auth-secret-{xr_name}", "registry-auth", runtime_namespace,
                 kind="registry", instance="primary")

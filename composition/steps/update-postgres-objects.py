@@ -8,11 +8,8 @@ import json
 import re
 
 from crossplane.function import response
-from composition.helpers import _b64get_any, _resource_name, _stores, _to_dict, require_secret
+from composition.helpers import _b64get_any, _resource_name, _store_resource_name, _stores, _to_dict, require_secret
 from composition.render import _render_template
-
-BACKUP_SCRIPT = _embedded_script("scripts/postgres-snapshot.py")
-
 
 def compose(req, rsp):
     xr = _to_dict(req.observed.composite.resource)
@@ -37,7 +34,8 @@ def compose(req, rsp):
             return value
         return hashlib.sha256(value.encode()).hexdigest()[:16]
 
-    for cluster, database in sorted(_stores(spec, "postgres").items()):
+    for store_name, database in sorted(_stores(spec, "postgres").items()):
+        cluster = _store_resource_name("postgres", store_name)
         dbnames = database.get("names") or []
         if not dbnames or not database.get("storage"):
             continue
@@ -49,7 +47,7 @@ def compose(req, rsp):
             req, "postgres/postgres-cluster", cluster_name=cluster, runtime_namespace=name,
             storage=storage, database_name=dbnames[0],
             postgres_image=(env.get("images") or {}).get("postgres")
-            or "ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie",
+            or "ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie@sha256:b053a93d0687b4ee85418447ffb0a9436461c72efef2e316012728b34f2e50cf",
         )
         source = require_secret(req, rsp, f"postgres-superuser-{name}-{cluster}",
                                 cluster + "-superuser", name)
@@ -81,12 +79,8 @@ def compose(req, rsp):
 
         if database.get("backups") is True:
             snapshot_class = config.get("snapshotClassName") or (env.get("volumes") or {}).get("snapshotClassName")
-            count = config.get("maxSnapshots", 4)
             if not isinstance(snapshot_class, str) or not snapshot_class.strip():
                 response.fatal(rsp, "PostgreSQL backups require data.database.snapshotClassName or data.volumes.snapshotClassName.")
-                return
-            if isinstance(count, bool) or not isinstance(count, (int, float)) or count != int(count) or not 1 <= count <= 100:
-                response.fatal(rsp, "data.database.maxSnapshots must be an integer from 1 to 100.")
                 return
             manifest["spec"]["backup"] = {"target": "primary", "volumeSnapshot": {
                 "className": snapshot_class, "online": False, "snapshotOwnerReference": "backup",
@@ -95,16 +89,13 @@ def compose(req, rsp):
             emit(class_key, {"apiVersion": "snapshot.storage.k8s.io/v1", "kind": "VolumeSnapshotClass",
                              "metadata": {"name": snapshot_class}},
                  {"policy": "DeriveFromCelQuery", "celQuery": "object.deletionPolicy == 'Delete'"}, ["Observe"])
-            backup_name = _resource_name("postgres", "snapshot", cluster)
-            resources = _render_template(
-                req, "postgres/backup", target=name, cluster_name=cluster, backup_name=backup_name,
-                backup_binding=_resource_name(name, backup_name), snapshot_class=snapshot_class,
-                max_snapshots=str(int(count)), schedule=config.get("schedule") or "0 1 * * *",
-                backup_script=BACKUP_SCRIPT,
-                backup_image=(env.get("images") or {}).get("volumeSnapshot") or "python:3.13-alpine",
-            )["resources"]
-            for suffix, resource in resources.items():
-                emit(_resource_name("db-backup", name, cluster, suffix), resource)
+            # CNPG adds a timestamp suffix of 15 characters and uses the Backup name as a label.
+            emit(_resource_name("db-backup", name, cluster, "schedule"), _render_template(
+                req, "postgres/backup", target=name, cluster_name=cluster,
+                backup_name=_resource_name("postgres", "snapshot", store_name, limit=48),
+                schedule=config.get("schedule") or "0 0 1 * * *",
+            ), {"policy": "DeriveFromCelQuery", "celQuery":
+                "has(object.status) && has(object.status.lastCheckTime) && (!has(object.status.error) || object.status.error == '')"})
 
         query = "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
         # CNPG can keep Ready true while a cold backup fences the only instance.
@@ -130,7 +121,7 @@ def compose(req, rsp):
                 req, "postgres/route", cluster_name=cluster, runtime_namespace=name,
                 gateway_parent_name=route_config["parentName"], gateway_parent_ns=route_config["parentNamespace"],
                 gateway_section=route_config["sectionName"],
-                hostname=f"{cluster}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}",
+                hostname=f"{store_name}-{name}.{(env.get('ingress') or {}).get('domain', 'default')}",
                 backend_service_name=cluster + "-rw",
             )
             emit(f"db-tlsroute-{name}-{cluster}", route, {"policy": "DeriveFromCelQuery", "celQuery":

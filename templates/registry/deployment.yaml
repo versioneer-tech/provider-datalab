@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       initContainers:
       - name: prepare-auth
-        image: httpd:2.4.71-alpine
+        image: httpd:2.4.71-alpine@sha256:32bd0639bcc4917ef1fd9363a1d9dd2dd9c498565118b062a10d51e43a5c3a24
         command: [/bin/sh, -ec]
         args:
         - |

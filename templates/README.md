@@ -19,7 +19,6 @@ changing any of them.
 | `scripts/vcluster-credentials.py` | Credentials for downloaded kubeconfigs: caller tokens and device login. |
 | `scripts/volume-snapshot.py` | Host CSI snapshot creation and retention. |
 | `scripts/valkey-snapshot.py` | Valkey write pause, RDB capture, snapshots, and retention. |
-| `scripts/postgres-snapshot.py` | CloudNativePG cold snapshot requests and completed-backup retention. |
 | `scripts/vcluster-cleanup.py` | Host Pod cleanup from a Job during hibernation. Uses the Python standard library. |
 
 Crossplane can cache a function response for its TTL. Set the build defaults in

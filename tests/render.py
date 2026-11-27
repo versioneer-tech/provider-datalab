@@ -15,6 +15,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DUMPER = runpy.run_path(str(ROOT / "scripts/build-composition.py"))["Dumper"]
+CROSSPLANE_IMAGE = runpy.run_path(str(ROOT / "scripts/components.py"))["image_pin"](
+    "xpkg.crossplane.io/crossplane/crossplane")
 LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 INPUT_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 
@@ -49,7 +51,7 @@ def environment():
     }
 
 
-def requirements(environment, observed):
+def requirements(environment, observed, source=None):
     def documents(value):
         if isinstance(value, (str, Path)):
             return list(yaml.load_all(Path(value).read_text(), Loader=LOADER))
@@ -68,13 +70,40 @@ def requirements(environment, observed):
                 and all(identity) and identity not in identities):
             required.append(deepcopy(manifest))
             identities.add(identity)
+    if source is not None:
+        # Fixed synthetic native Secrets keep render fixtures repeatable.
+        import base64
+        for lab in documents(source):
+            if not lab or lab.get("kind") != "Datalab":
+                continue
+            namespace = lab["metadata"]["name"]
+            secrets = {"registry-auth": {"user": namespace, "password": "test-registry-password",
+                                          "http-secret": "test-registry-http-secret"}}
+            for store, config in (lab.get("spec", {}).get("stores") or {}).items():
+                if config.get("type") == "valkey" and config.get("storage"):
+                    name = store_resource_name("valkey", store)
+                    secrets[name + "-auth"] = {"user": "default", "password": "test-valkey-password"}
+                    secrets[name + "-backup-auth"] = {"user": "backup", "password": "test-valkey-backup-password"}
+            for name, data in secrets.items():
+                if (namespace, name) not in identities:
+                    required.append({"apiVersion": "v1", "kind": "Secret",
+                                     "metadata": {"name": name, "namespace": namespace},
+                                     "data": {key: base64.b64encode(value.encode()).decode() for key, value in data.items()}})
     return required
+
+
+def store_resource_name(kind, name):
+    script = "from composition.helpers import _store_resource_name\n"
+    namespace = {}
+    exec(runpy.run_path(str(ROOT / "scripts/build-composition.py"))["inline_helpers"](
+        script, (ROOT / "composition/helpers.py").read_text()), namespace)
+    return namespace["_store_resource_name"](kind, name)
 
 
 def render(args, environment, source="examples/base/001-lab.yaml",
            observed="tests/observed/001-lab.yaml", error=None, include_composite=False,
            required_resources=None):
-    environment = requirements(environment, observed) if required_resources is None else required_resources
+    environment = requirements(environment, observed, source) if required_resources is None else required_resources
     with tempfile.TemporaryDirectory(prefix="test-render-") as directory:
         work = Path(directory)
         paths = []
@@ -87,6 +116,7 @@ def render(args, environment, source="examples/base/001-lab.yaml",
                 paths.append(str(path))
         result = subprocess.run(
             ["crossplane", "render", paths[0], "composition.yaml", args.functions,
+             "--crossplane-image", CROSSPLANE_IMAGE,
              "--required-resources", paths[1], "--observed-resources", paths[2], "-x"]
             + (["--crossplane-docker-network", args.network] if args.network else []),
             capture_output=True, text=True, timeout=120,
@@ -140,6 +170,6 @@ def snapshot(path):
 if __name__ == "__main__":
     if sys.argv[1] == "requirements":
         observed = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else []
-        sys.stdout.write(yaml.safe_dump_all(requirements(sys.argv[2], observed)))
+        sys.stdout.write(yaml.safe_dump_all(requirements(sys.argv[2], observed, sys.argv[4] if len(sys.argv) > 4 else None)))
     else:
         sys.stdout.write(snapshot(sys.argv[1]))

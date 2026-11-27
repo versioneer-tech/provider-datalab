@@ -11,7 +11,7 @@ def compose(req, rsp):
     )
     data = environment.get("packageR") or {}
     enabled = data.get("enabled")
-    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
     if enabled is not None and not _boolish(enabled) and not registry_enabled:
         return
     meta = _to_dict(req.observed.composite.resource)["metadata"]

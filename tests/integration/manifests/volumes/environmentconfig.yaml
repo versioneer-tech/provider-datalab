@@ -1,0 +1,18 @@
+# Copyright 2026, EOX (https://eox.at) and Versioneer (https://versioneer.at)
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: datalab-volumes-it
+  labels:
+    datalabs.pkg.internal/name: datalab-volumes-it
+data:
+  iam:
+    realm: integration
+  registry:
+    enabled: false
+  packageR:
+    enabled: false
+  volumes:
+    schedule: '0 0 1 1 *'

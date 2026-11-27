@@ -71,7 +71,7 @@ def check_volume_bindings(args, env, source, baseline):
     owner = {"apiVersion": "admissionregistration.k8s.io/v1", "kind": "ValidatingAdmissionPolicy",
              "name": anchor["metadata"]["name"], "uid": "test-policy-uid", "controller": True, "blockOwnerDeletion": False}
     for ending in ("-pv", "-pvc"):
-        assert rendered[binding_keys[ending]]["spec"]["managementPolicies"] == ["Observe", "Create", "Update"]
+        assert rendered[binding_keys[ending]]["spec"]["managementPolicies"] == ["Observe"]
         assert manifest(rendered, binding_keys[ending])["metadata"]["ownerReferences"] == [owner]
     assert rendered[binding_keys["-claim-policy"]]["spec"]["forProvider"]["deletionPropagationPolicy"] == "Background"
     controller_args = configuration(rendered, "vc0")["controlPlane"]["distro"]["k8s"]["controllerManager"]["extraArgs"]
@@ -542,6 +542,31 @@ def check_instance_removal(args, env, source, resources):
     ) == manifest(resources, resource_name("vcluster", "s-joe", "vc1", "statefulset"))
     key = resource_name("volume", "s-joe", "analysis")
     assert manifest(reduced_resources, key) == manifest(resources, key)
+    provider = resource_name("s-joe", "vcluster", "vc0")
+    virtual = {key for key, body in resources.items()
+               if body.get("spec", {}).get("providerConfigRef", {}).get("name") == provider}
+    paused = []
+    for key, original in resources.items():
+        if key == "composite":
+            continue
+        body = deepcopy(original)
+        if key in virtual:
+            body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "true"
+        paused.append(body)
+    released = render(args, env, reduced, paused)
+    for key in virtual:
+        assert released[key]["metadata"]["annotations"]["crossplane.io/paused"] == "false"
+        assert released[key]["spec"]["managementPolicies"] == ["Observe"]
+    removed = render(args, env, reduced, list(released.values()))
+    assert not virtual & set(removed)
+    virtual_names = {body["metadata"]["name"] for body in paused
+                     if body.get("spec", {}).get("providerConfigRef", {}).get("name") == provider}
+    assert any(body.get("kind") == "Usage" and body["spec"].get("by", {}).get(
+        "resourceRef", {}).get("name") in virtual_names for body in removed.values())
+    cleared = render(args, env, reduced, list(removed.values()))
+    assert not any(body.get("kind") == "Usage" and body["spec"].get("by", {}).get(
+        "resourceRef", {}).get("name") in virtual_names for body in cleared.values())
+    print("PASS removed instances release paused records and do not recreate their Usage objects")
     print("PASS removing one instance preserves the other instance and host volumes")
 
 
@@ -660,8 +685,10 @@ def check_hibernation(args, env, source, baseline):
     assert state(sleeping)["phase"] == "Hibernating"
     for key, body in sleeping.items():
         if body.get("spec", {}).get("providerConfigRef", {}).get("name") == provider:
-            assert body["metadata"]["annotations"]["crossplane.io/paused"] == "true"
-            assert body["spec"] == baseline[key]["spec"]
+            assert body["metadata"]["annotations"]["crossplane.io/paused"] == "false"
+            assert body["spec"]["managementPolicies"] == ["Observe"]
+            assert {k: v for k, v in body["spec"].items() if k != "managementPolicies"} == {
+                k: v for k, v in baseline[key]["spec"].items() if k != "managementPolicies"}
     for key in (resource_name("vcluster", "s-joe", "vc0", "data"), resource_name("volume", "s-joe", "analysis")):
         assert manifest(sleeping, key) == manifest(baseline, key)
     host_volume = sleeping[resource_name("volume", "s-joe", "analysis")]

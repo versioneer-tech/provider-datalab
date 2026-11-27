@@ -23,12 +23,9 @@ EnvironmentConfig, its endpoint is `https://s-jane.lab.acme.com` and its issuer
 is `https://identity.acme.com/realms/acme`. Replace these example DNS names
 with your environment's values.
 
-Keycloak checks `CLIENT_SECRET` and issues a JWT. The AWS CLI sends it as
-`AWS_SESSION_TOKEN` in the `X-Amz-Security-Token` header. NGINX checks the
-tenant ID and passes the token to oauth2-proxy, which checks its signature,
-issuer, audience, expiry, and Datalab role. After authorization, `rclone serve
-s3` checks the original AWS SigV4 request using `s-jane` as both signing
-values. It serves read-only data through separate upstream storage credentials.
+The endpoint uses a Keycloak access token as `AWS_SESSION_TOKEN` and the
+Datalab name for both AWS signing values. It reads data through the configured
+object-storage credentials.
 
 | Credential field | Value |
 | --- | --- |

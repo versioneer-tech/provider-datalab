@@ -26,6 +26,7 @@ def configure(documents, storage_class, service_cidr, pod_cidrs, control_plane_s
         data.setdefault("database", {})["storageClassName"] = storage_class
         data.setdefault("cacheStore", {})["storageClassName"] = storage_class
         if snapshot_class:
+            data["volumes"]["snapshotClassName"] = snapshot_class
             data["database"]["snapshotClassName"] = snapshot_class
             data["cacheStore"]["snapshotClassName"] = snapshot_class
     return documents

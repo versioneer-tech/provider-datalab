@@ -13,6 +13,8 @@ import re
 import runpy
 import subprocess
 import time
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 SECURITY = runpy.run_path(str(ROOT / "scripts/security.py"))
@@ -70,10 +72,11 @@ def check_reference(reference):
     current = crane("digest", tagged)
     if not SECURITY["DIGEST"].fullmatch(current):
         raise ValueError("The registry did not return an image digest")
+    family = version_family(tag)
     return {"reference": reference, "current_digest": current, "pinned": bool(pinned),
             "digest_changed": bool(pinned and pinned != current),
-            "newer_tags": newer_tags(tag, crane("ls", repository).splitlines()),
-            "version_check": "version_family" if version_family(tag) else "same_tag_digest_only"}
+            "newer_tags": newer_tags(tag, crane("ls", repository).splitlines()) if family else {},
+            "version_check": "version_family" if family else "same_tag_digest_only"}
 
 
 def check_all(references, check=check_reference):
@@ -86,17 +89,59 @@ def check_all(references, check=check_reference):
         return list(executor.map(inspect, references))
 
 
+def test_package_updates(source):
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+
+    results = []
+    for lock in SECURITY["TEST_LOCKFILES"]:
+        versions = dict(re.findall(r"(?m)^([\w.-]+)==([^\s;]+)", (source / lock).read_text()))
+        for line in (source / lock).with_suffix(".in").read_text().splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            requirement = Requirement(line)
+            name = requirement.name
+            current = next(value for key, value in versions.items() if key.lower() == name.lower())
+            item = {"manifest": lock, "package": name, "current": current}
+            try:
+                with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=30) as response:
+                    latest = json.load(response)["info"]["version"]
+                version = Version(latest)
+                item.update(latest=latest, update_available=version > Version(current)
+                            and not version.is_prerelease and not version.is_devrelease)
+            except (OSError, ValueError, KeyError) as error:
+                item["error"] = str(error)
+            results.append(item)
+    try:
+        output = subprocess.run(["go", "list", "-m", "-u", "-mod=readonly", "-f",
+            "{{if .Update}}{{.Path}} {{.Version}} {{.Update.Version}}{{end}}", "all"],
+            cwd=source / "tests/admission", check=True, capture_output=True, text=True, timeout=180).stdout
+        for line in output.splitlines():
+            if not line.strip():
+                continue
+            name, current, latest = line.split()
+            results.append({"manifest": "tests/admission/go.mod", "package": name,
+                            "current": current, "latest": latest, "update_available": True})
+    except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
+        results.append({"manifest": "tests/admission/go.mod", "package": "Go modules", "error": detail})
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT)
     parser.add_argument("--reports", type=Path, default=ROOT / "build/image-updates")
+    parser.add_argument("--scope", choices=("production", "test"), default="production")
     args = parser.parse_args()
-    references = SECURITY["external_images"](args.source)
+    references = SECURITY["external_images"](args.source, args.scope)
     results = check_all(references)
-    errors = sum("error" in item for item in results)
+    packages = test_package_updates(args.source) if args.scope == "test" else []
+    errors = sum("error" in item for item in [*results, *packages])
     args.reports.mkdir(parents=True, exist_ok=False)
     (args.reports / "updates.json").write_text(json.dumps(
-        {"checked_at": datetime.now(UTC).isoformat(), "errors": errors, "images": results}, indent=2) + "\n")
+        {"checked_at": datetime.now(UTC).isoformat(), "scope": args.scope,
+         "errors": errors, "images": results, "packages": packages}, indent=2) + "\n")
     lines = ["# Image update check", "", "Registry metadata only; replacement images still need scans and tests.",
              "", "| Image | Result |", "| --- | --- |"]
     for item in results:
@@ -108,8 +153,18 @@ def main():
                 changes.insert(0, "Current tag has a new digest")
             if not item["pinned"]:
                 changes.append("Source reference is not pinned")
+            if item["version_check"] == "same_tag_digest_only":
+                changes.append("Tag digest checked; version comparison unavailable")
             status = "; ".join(changes) or "No update found"
         lines.append(f"| `{item['reference']}` | {status} |")
+    if packages:
+        lines.extend(["", "## Test package updates", "",
+                      "Direct Python dependencies and available Go module updates. Transitive Python dependencies are audited in the scan.",
+                      "Latest versions can be outside current constraints. Review changes before updating locks.", "",
+                      "| Manifest | Package | Locked | Latest |", "| --- | --- | --- | --- |"])
+        for item in packages:
+            latest = "Lookup failed; see updates.json" if "error" in item else item["latest"]
+            lines.append(f"| `{item['manifest']}` | `{item['package']}` | {item.get('current', '')} | {latest} |")
     summary = "\n".join(lines) + "\n"
     (args.reports / "summary.md").write_text(summary)
     print(summary)

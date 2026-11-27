@@ -30,6 +30,20 @@ def compose(req, rsp):
     meta = xr["metadata"]
     name, claim_namespace = meta["name"], meta.get("namespace", "default")
     states = []
+    active = set((xr.get("spec", {}).get("vclusters") or {}))
+    for key, body in observed.items():
+        instance = body.get("metadata", {}).get("labels", {}).get("datalabs.versioneer.at/vcluster")
+        if (instance and instance not in active
+                and body.get("spec", {}).get("providerConfigRef", {}).get("name") == _resource_name(name, "vcluster", instance)
+                and body.get("metadata", {}).get("annotations", {}).get("crossplane.io/paused") == "true"):
+            # Release an old paused record before omission asks Crossplane to delete it.
+            kept = {field: deepcopy(body[field]) for field in ("apiVersion", "kind", "spec", "metadata")}
+            kept["metadata"] = {field: kept["metadata"][field]
+                                for field in ("name", "namespace", "annotations", "labels") if field in kept["metadata"]}
+            kept["metadata"]["annotations"]["crossplane.io/paused"] = "false"
+            kept["spec"]["managementPolicies"] = ["Observe"]
+            rsp.desired.resources[key].resource.update(kept)
+            rsp.desired.resources[key].ready = fnv1.READY_TRUE
     for instance, config in sorted((xr.get("spec", {}).get("vclusters") or {}).items()):
         runtime = _resource_name("vcluster", instance, limit=45)
         virtual_provider = _resource_name(name, "vcluster", instance)
@@ -128,7 +142,7 @@ def compose(req, rsp):
                         suspended=not running,
                         cleanup_generation=str(int(cleanup_generation if running
                                                    else previous.get(instance, {}).get("cleanupGeneration", 0))),
-                        cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine",
+                        cleanup_image=(env.get("images") or {}).get("vclusterCleanup") or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e",
                     )
                     placement = ((env.get("vcluster") or {}).get("scheduling") or {}).get("controlPlane") or {}
                     manifest["spec"]["template"]["spec"].update(placement)
@@ -174,8 +188,10 @@ def compose(req, rsp):
             for desired in rsp.desired.resources.values():
                 body = _to_dict(desired.resource)
                 if body.get("spec", {}).get("providerConfigRef", {}).get("name") == virtual_provider:
-                    body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "true"
-                    desired.resource.update({"metadata": body["metadata"]})
+                    # Observe-only keeps offline records deletable without the virtual API.
+                    body["metadata"].setdefault("annotations", {})["crossplane.io/paused"] = "false"
+                    body["spec"]["managementPolicies"] = ["Observe"]
+                    desired.resource.update({"metadata": body["metadata"], "spec": body["spec"]})
                     desired.ready = fnv1.READY_TRUE
         states.append(state)
     if states or previous:

@@ -132,7 +132,7 @@ resources:
               - name: backup
                 image: ${backup_image}
                 command: [python, -B, /opt/backup/valkey-snapshot.py]
-                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${max_snapshots}']
+                args: ['${target}', '${volume_name}', '${pvc_name}', '${snapshot_class}', '${max_snapshots}', '--server', '${server_name}']
                 resources:
                   requests:
                     cpu: 20m

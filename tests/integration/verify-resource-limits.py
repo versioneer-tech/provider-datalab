@@ -41,7 +41,7 @@ def verify(kubeconfig, namespace, context="kind-provider-datalab-it"):
         pod = {
             "apiVersion": "v1", "kind": "Pod",
             "metadata": {"name": "test-resource-limits"},
-            "spec": {"containers": [{"name": "probe", "image": "nginx:1.27-alpine",
+            "spec": {"containers": [{"name": "probe", "image": "nginx/nginx-unprivileged:1.30.8-alpine-slim@sha256:04c98c78c1de60ddeada00d7d2207dcd146ecd07b61b9941c9a5799cfb258d28",
                                       "resources": resources}]},
         }
         return subprocess.run(

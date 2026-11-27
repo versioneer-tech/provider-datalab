@@ -7,6 +7,8 @@ metadata:
   name: verify-volumes
   namespace: workspace
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab-volumes-it
   users: []
   volumes:

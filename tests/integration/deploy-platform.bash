@@ -11,15 +11,14 @@ source "${INTEGRATION_DIR}/runtime.bash"
 
 install_crossplane() {
   require_command helm
-  log "Installing Crossplane ${CROSSPLANE_VERSION}"
-  helm_it repo add crossplane-stable https://charts.crossplane.io/stable --force-update
-  helm_it repo update crossplane-stable
-  helm_it upgrade --install crossplane crossplane-stable/crossplane \
+  log 'Installing the checked Crossplane chart'
+  local chart
+  chart="$(python3 "${REPO_ROOT}/scripts/components.py" crossplane-chart)"
+  helm_it upgrade --install crossplane "${chart}" \
     --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
     --kube-context "${KUBECTL_CONTEXT}" \
     --namespace "${CROSSPLANE_NAMESPACE}" \
     --create-namespace \
-    --version "${CROSSPLANE_VERSION}" \
     --values "${REPO_ROOT}/deploy/crossplane-values.yaml" \
     --post-renderer "${REPO_ROOT}/scripts/crossplane-probes.py" \
     --wait \
@@ -80,6 +79,15 @@ DEFINITION
   composition_directory="$(mktemp -d /tmp/datalab-it-composition.XXXXXX)"
   python3 "${REPO_ROOT}/scripts/build-composition.py" --response-ttl 1m \
     --output "${composition_directory}/composition.yaml"
+  python3 - "${composition_directory}/composition.yaml" <<'TEST_COMPOSITION'
+from pathlib import Path
+import sys
+import yaml
+path = Path(sys.argv[1])
+composition = yaml.safe_load(path.read_text())
+composition["metadata"]["name"] = "test-datalab"
+path.write_text(yaml.safe_dump(composition, sort_keys=False))
+TEST_COMPOSITION
   # Client-side apply stores this large Composition in an annotation.
   kube apply --server-side --field-manager=provider-datalab-integration \
     -f "${composition_directory}/composition.yaml"

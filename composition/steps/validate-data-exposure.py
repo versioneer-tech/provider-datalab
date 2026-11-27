@@ -21,7 +21,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     if data_enabled is None:
         data_enabled = True
     data_enabled = _boolish(data_enabled)
-    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((environment.get("registry") or {}).get("enabled", False))
     if not (data_enabled or registry_enabled):
         return
 

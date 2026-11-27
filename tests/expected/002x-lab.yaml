@@ -78,14 +78,14 @@ metadata:
   namespace: default
 stringData:
   databases: dev,prod
-  dev_url: postgresql://postgres:pg-secret@pg0-rw.s-jeff.svc:5432/dev
+  dev_url: postgresql://postgres:pg-secret@postgres-pg0-rw.s-jeff.svc:5432/dev
   dev_url_external: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/dev?sslmode=require&sslnegotiation=direct
-  host: pg0-rw.s-jeff.svc
+  host: postgres-pg0-rw.s-jeff.svc
   host_external: pg0-s-jeff.lab.acme.com
   names: '["dev", "prod"]'
   password: pg-secret
   port: '5432'
-  prod_url: postgresql://postgres:pg-secret@pg0-rw.s-jeff.svc:5432/prod
+  prod_url: postgresql://postgres:pg-secret@postgres-pg0-rw.s-jeff.svc:5432/prod
   prod_url_external: postgresql://postgres:pg-secret@pg0-s-jeff.lab.acme.com:443/prod?sslmode=require&sslnegotiation=direct
   user: postgres
 type: Opaque
@@ -126,49 +126,14 @@ metadata:
   namespace: default
 stringData:
   database: '0'
-  host: cache.s-jeff.svc
+  host: valkey-cache.s-jeff.svc
   names: '["prod"]'
   password: MqZoLXDLQrwPOuwgM1dj6LzOTOML
   port: '6379'
   prefixes: '{"prod": "prod:"}'
-  url: redis://default:MqZoLXDLQrwPOuwgM1dj6LzOTOML@cache.s-jeff.svc:6379/0
+  url: redis://default:MqZoLXDLQrwPOuwgM1dj6LzOTOML@valkey-cache.s-jeff.svc:6379/0
   user: default
 type: Opaque
----
-apiVersion: v1
-data:
-  names: WyJwcm9kIl0=
-  password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
-  prefixes: eyJwcm9kIjogInByb2Q6In0=
-  user: ZGVmYXVsdA==
-kind: Secret
-metadata:
-  annotations:
-    crossplane.io/composition-resource-name: connection-s-jeff-valkey-cache-connection-f93fe2a7e0-ee6378fa37
-  labels:
-    datalabs.versioneer.at/connection: valkey-cache
-    datalabs.versioneer.at/name: s-jeff
-  name: s-jeff-valkey-cache-connection-f93fe2a7e0
-  namespace: default
-type: Opaque
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-003c6a792ee7-s-jeff-namespace-s-jeff-d-2ab6848058
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-database-s-jeff-pg0-dev-6729bd8746
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
 ---
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
@@ -199,6 +164,24 @@ spec:
     kind: Object
     resourceRef:
       name: registry-auth-secret-s-jeff
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-0a2ded96499c-s-jeff-namespace-s-jeff-d-9f5e1d6ce8
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-network-s-jeff-postgres-pg0-9b09c2a603
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -281,14 +264,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-19a3b5f8767a-s-jeff-namespace-s-jeff-d-34e24385e1
+  name: datalab-usage-1c51c01f0b54-s-jeff-namespace-s-jeff-d-05b67877ac
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: db-user-secret-s-jeff-pg0-jane-158b041f75
+      name: db-user-secret-s-jeff-postgres-pg0-jim-7f81f20a3d
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -299,32 +282,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-1fbe2cb040f2-s-jeff-namespace-s-jeff-d-a8f5f2d3df
+  name: datalab-usage-214257ca6444-s-jeff-namespace-s-jeff-d-58645018ea
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: db-backup-s-jeff-pg0-binding-506864be23
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-22e484463850-s-jeff-namespace-s-jeff-d-c05782e90b
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-tlsroute-s-jeff-pg0
+      name: db-database-s-jeff-postgres-pg0-prod-b50a8ab7b1
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -361,42 +326,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-jeff-allow-dns-egress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-4fbf2d469c72-s-jeff-namespace-s-jeff-d-e659c01bf3
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-backup-s-jeff-pg0-script-65e0cad28e
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-51a131348f8e-s-jeff-namespace-s-jeff-d-a0e1759088
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-database-s-jeff-pg0-prod-0870205ead
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -461,42 +390,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-642a0a45063d-s-jeff-namespace-s-jeff-d-3102b79fe5
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-backup-s-jeff-pg0-role-76f435c817
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-701d67b4d9e6-s-jeff-namespace-s-jeff-d-96b1cd556a
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-backup-s-jeff-pg0-account-b4bf58b1c1
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-761977181d63-s-jeff-namespace-s-jeff-v-8c13a648a6
   namespace: default
 spec:
@@ -551,6 +444,60 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-77e0f6f8ebd9-s-jeff-namespace-s-jeff-d-880962a7d0
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-cluster-s-jeff-postgres-pg0
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-79fc32cee10a-s-jeff-namespace-s-jeff-d-1f29691de6
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-database-s-jeff-postgres-pg0-dev-783547494d
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-7b0fc5f76708-s-jeff-namespace-s-jeff-d-13fe136a8e
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-user-secret-s-jeff-postgres-pg0-jeff-222693ea88
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-83589f6b6c82-s-jeff-namespace-s-jeff-v-93fe2fe3de
   namespace: default
 spec:
@@ -587,6 +534,24 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
+  name: datalab-usage-86ed5da50cad-s-jeff-namespace-s-jeff-d-a4202888df
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-user-secret-s-jeff-postgres-pg0-jane-8d75afb7d2
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
   name: datalab-usage-8d5c04476a89-s-jeff-namespace-s-jeff-n-2d1325c7ef
   namespace: default
 spec:
@@ -613,24 +578,6 @@ spec:
     kind: Object
     resourceRef:
       name: networkpolicy-s-jeff-allow-namespace-ingress
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-9138ffc1007b-s-jeff-namespace-s-jeff-d-5037ed32eb
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-backup-s-jeff-pg0-network-16b5d07ca7
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -695,60 +642,6 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-bb005c231c20-s-jeff-namespace-s-jeff-d-0cce58cdb9
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-user-secret-s-jeff-pg0-jeff-448993d8a9
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-bc8bbed361eb-s-jeff-namespace-s-jeff-d-e4fc668cbb
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-cluster-s-jeff-pg0
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-c52ebaaf49c9-s-jeff-namespace-s-jeff-d-d0e846a49c
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-network-s-jeff-pg0-67d3b22cd2
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
   name: datalab-usage-cabaf3ce52f5-s-jeff-namespace-s-jeff-v-5fb8035849
   namespace: default
 spec:
@@ -757,6 +650,24 @@ spec:
     kind: Object
     resourceRef:
       name: valkey-pod-s-jeff-cache
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: namespace-s-jeff
+  replayDeletion: true
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: datalab-usage-e03c2539d462-s-jeff-namespace-s-jeff-d-a4d3dc1225
+  namespace: default
+spec:
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: db-backup-s-jeff-postgres-pg0-schedule-dcf6c9c0a4
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -785,32 +696,14 @@ spec:
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
-  name: datalab-usage-e4ab94230dcb-s-jeff-namespace-s-jeff-d-d2c14010b6
+  name: datalab-usage-f3194c6e10bc-s-jeff-namespace-s-jeff-d-244e567b64
   namespace: default
 spec:
   by:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
     resourceRef:
-      name: db-user-secret-s-jeff-pg0-jim-3bce702515
-  of:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: namespace-s-jeff
-  replayDeletion: true
----
-apiVersion: protection.crossplane.io/v1beta1
-kind: Usage
-metadata:
-  name: datalab-usage-ef1aaaf0836c-s-jeff-namespace-s-jeff-d-b41add40d2
-  namespace: default
-spec:
-  by:
-    apiVersion: kubernetes.m.crossplane.io/v1alpha1
-    kind: Object
-    resourceRef:
-      name: db-backup-s-jeff-pg0-cronjob-cffd960282
+      name: db-tlsroute-s-jeff-postgres-pg0
   of:
     apiVersion: kubernetes.m.crossplane.io/v1alpha1
     kind: Object
@@ -839,401 +732,37 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-backup-s-jeff-pg0-account-b4bf58b1c1
+  name: db-backup-s-jeff-postgres-pg0-schedule-dcf6c9c0a4
   namespace: default
 spec:
   forProvider:
     manifest:
-      apiVersion: v1
-      automountServiceAccountToken: false
-      kind: ServiceAccount
-      metadata:
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-backup-s-jeff-pg0-binding-506864be23
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: RoleBinding
-      metadata:
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: Role
-        name: postgres-snapshot-pg0
-      subjects:
-      - kind: ServiceAccount
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-backup-s-jeff-pg0-class-binding-b2fefbbfde
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: s-jeff-postgres-snapshot-pg0-8345cdc207
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-        name: datalab-volume-snapshot-classes
-      subjects:
-      - kind: ServiceAccount
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-backup-s-jeff-pg0-cronjob-cffd960282
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: batch/v1
-      kind: CronJob
+      apiVersion: postgresql.cnpg.io/v1
+      kind: ScheduledBackup
       metadata:
         name: postgres-snapshot-pg0
         namespace: s-jeff
       spec:
-        concurrencyPolicy: Forbid
-        failedJobsHistoryLimit: 1
-        jobTemplate:
-          spec:
-            activeDeadlineSeconds: 900
-            backoffLimit: 1
-            template:
-              metadata:
-                labels:
-                  datalabs.versioneer.at/postgres-backup: pg0
-              spec:
-                automountServiceAccountToken: true
-                containers:
-                - args:
-                  - s-jeff
-                  - pg0
-                  - workspace-snapshots
-                  - '4'
-                  command:
-                  - python
-                  - -B
-                  - /opt/backup/backup.py
-                  image: python:3.13-alpine
-                  name: backup
-                  resources:
-                    limits:
-                      cpu: 100m
-                      memory: 128Mi
-                    requests:
-                      cpu: 20m
-                      memory: 32Mi
-                  securityContext:
-                    allowPrivilegeEscalation: false
-                    capabilities:
-                      drop:
-                      - ALL
-                    readOnlyRootFilesystem: true
-                  volumeMounts:
-                  - mountPath: /opt/backup
-                    name: script
-                    readOnly: true
-                restartPolicy: Never
-                securityContext:
-                  runAsGroup: 65532
-                  runAsNonRoot: true
-                  runAsUser: 65532
-                  seccompProfile:
-                    type: RuntimeDefault
-                serviceAccountName: postgres-snapshot-pg0
-                volumes:
-                - configMap:
-                    name: postgres-snapshot-pg0
-                  name: script
-        schedule: 0 1 * * *
-        startingDeadlineSeconds: 3600
-        successfulJobsHistoryLimit: 1
-        timeZone: Etc/UTC
+        backupOwnerReference: cluster
+        cluster:
+          name: postgres-pg0
+        method: volumeSnapshot
+        online: false
+        schedule: 0 0 1 * * *
+        target: primary
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
   readiness:
-    policy: SuccessfulCreate
+    celQuery: has(object.status) && has(object.status.lastCheckTime) && (!has(object.status.error) || object.status.error
+      == '')
+    policy: DeriveFromCelQuery
   watch: true
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-backup-s-jeff-pg0-network-16b5d07ca7
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: networking.k8s.io/v1
-      kind: NetworkPolicy
-      metadata:
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-      spec:
-        egress:
-        - ports:
-          - port: 443
-            protocol: TCP
-          - port: 6443
-            protocol: TCP
-        - ports:
-          - port: 53
-            protocol: TCP
-          - port: 53
-            protocol: UDP
-          to:
-          - namespaceSelector:
-              matchLabels:
-                kubernetes.io/metadata.name: kube-system
-            podSelector:
-              matchLabels:
-                k8s-app: kube-dns
-        ingress: []
-        podSelector:
-          matchLabels:
-            datalabs.versioneer.at/postgres-backup: pg0
-        policyTypes:
-        - Ingress
-        - Egress
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-backup-s-jeff-pg0-role-76f435c817
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-      rules:
-      - apiGroups:
-        - postgresql.cnpg.io
-        resourceNames:
-        - pg0
-        resources:
-        - clusters
-        verbs:
-        - get
-      - apiGroups:
-        - postgresql.cnpg.io
-        resources:
-        - backups
-        verbs:
-        - create
-        - get
-        - list
-        - delete
-      - apiGroups:
-        - snapshot.storage.k8s.io
-        resources:
-        - volumesnapshots
-        verbs:
-        - get
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-backup-s-jeff-pg0-script-65e0cad28e
-  namespace: default
-spec:
-  forProvider:
-    manifest:
-      apiVersion: v1
-      data:
-        backup.py: |
-          #!/usr/bin/env python3
-
-          """Request a cold PostgreSQL snapshot and retain completed recovery points."""
-
-          import argparse
-          import json
-          from pathlib import Path
-          import ssl
-          import time
-          from urllib.parse import quote, urlencode
-          from urllib.request import Request, urlopen
-
-          LABEL = "datalabs.versioneer.at/postgres-backup"
-          SOURCE = "datalabs.versioneer.at/source-cluster-uid"
-
-
-          class API:
-              def __init__(self):
-                  account = Path("/var/run/secrets/kubernetes.io/serviceaccount")
-                  self.token = account / "token"
-                  self.context = ssl.create_default_context(cafile=str(account / "ca.crt"))
-
-              def call(self, method, path, body=None):
-                  request = Request(
-                      "https://kubernetes.default.svc" + path,
-                      data=None if body is None else json.dumps(body).encode(), method=method,
-                      headers={"Authorization": "Bearer " + self.token.read_text().strip(),
-                               "Content-Type": "application/json"},
-                  )
-                  with urlopen(request, context=self.context, timeout=30) as result:
-                      return json.load(result)
-
-
-          def backup(api, namespace, cluster_name, snapshot_class, retention, timeout=600):
-              namespace = quote(namespace, safe="")
-              path = "/apis/postgresql.cnpg.io/v1/namespaces/" + namespace
-              cluster_path = path + "/clusters/" + quote(cluster_name, safe="")
-              path += "/backups"
-              snapshot_path = "/apis/snapshot.storage.k8s.io/v1/namespaces/" + namespace + "/volumesnapshots/"
-              selected_class = api.call("GET", "/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/" + quote(snapshot_class, safe=""))
-              if selected_class.get("deletionPolicy") != "Delete":
-                  raise RuntimeError("PostgreSQL snapshot retention requires deletion policy Delete.")
-              cluster = api.call("GET", cluster_path)
-              settings = cluster.get("spec", {}).get("backup", {}).get("volumeSnapshot", {})
-              if (cluster["metadata"].get("deletionTimestamp") or settings.get("className") != snapshot_class
-                      or settings.get("online") is not False or settings.get("snapshotOwnerReference") != "backup"):
-                  raise RuntimeError("The cluster must use cold snapshots owned by their Backup resources.")
-              uid = cluster["metadata"]["uid"]
-              selector = urlencode({"labelSelector": f"{LABEL}={cluster_name},{SOURCE}={uid}"})
-
-              def owned_backups():
-                  return [item for item in api.call("GET", path + "?" + selector)["items"]
-                          if item["metadata"].get("labels", {}).get(LABEL) == cluster_name
-                          and item["metadata"]["labels"].get(SOURCE) == uid
-                          and item.get("spec", {}).get("cluster", {}).get("name") == cluster_name
-                          and item["spec"].get("method") == "volumeSnapshot"
-                          and item["spec"].get("online") is False
-                          and not item["metadata"].get("deletionTimestamp")]
-
-              def ready(item):
-                  if item.get("status", {}).get("phase") != "completed":
-                      return False
-                  elements = item["status"].get("snapshotBackupStatus", {}).get("elements") or []
-                  if not elements or not any(element.get("type") == "PG_DATA" for element in elements):
-                      return False
-                  for element in elements:
-                      snapshot = api.call("GET", snapshot_path + quote(element["name"], safe=""))
-                      if (snapshot["metadata"].get("deletionTimestamp")
-                              or snapshot.get("status", {}).get("readyToUse") is not True
-                              or snapshot.get("status", {}).get("error")
-                              or not any(owner.get("kind") == "Backup" and owner.get("uid") == item["metadata"]["uid"]
-                                         for owner in snapshot["metadata"].get("ownerReferences", []))):
-                          return False
-                  return True
-
-              pending = [item for item in owned_backups() if item.get("status", {}).get("phase") not in ("completed", "failed")]
-              if len(pending) > 1:
-                  raise RuntimeError("Multiple pending PostgreSQL backups need operator review.")
-              current = pending[0] if pending else api.call("POST", path, {
-                  "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",
-                  "metadata": {"generateName": "snapshot-" + cluster_name[:40] + "-",
-                               "labels": {LABEL: cluster_name, SOURCE: uid}},
-                  "spec": {"cluster": {"name": cluster_name}, "method": "volumeSnapshot",
-                           "online": False, "target": "primary"},
-              })
-              backup_name = current["metadata"]["name"]
-              deadline = time.monotonic() + timeout
-              while True:
-                  current = api.call("GET", path + "/" + quote(backup_name, safe=""))
-                  if current.get("status", {}).get("phase") == "failed":
-                      raise RuntimeError("CloudNativePG reported a failed snapshot backup.")
-                  if ready(current):
-                      break
-                  if time.monotonic() >= deadline:
-                      raise RuntimeError("The PostgreSQL snapshot did not complete before the deadline.")
-                  time.sleep(3)
-              if api.call("GET", cluster_path)["metadata"]["uid"] != uid:
-                  raise RuntimeError("The PostgreSQL cluster changed while the backup was being taken.")
-              backups = owned_backups()
-              completed = sorted((item for item in backups if ready(item)),
-                                 key=lambda item: (item["metadata"]["creationTimestamp"], item["metadata"]["name"]), reverse=True)
-              expired = completed[retention:]
-              expired += [item for item in backups if item.get("status", {}).get("phase") == "failed"]
-              # Remove old backups only after a new recovery point and its snapshots are ready.
-              for item in expired:
-                  metadata = item["metadata"]
-                  preconditions = {"uid": metadata["uid"]}
-                  if metadata.get("resourceVersion"):
-                      preconditions["resourceVersion"] = metadata["resourceVersion"]
-                  api.call("DELETE", path + "/" + quote(metadata["name"], safe=""),
-                           {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": preconditions})
-              print("PostgreSQL snapshot backup is ready: " + backup_name, flush=True)
-
-
-          def main():
-              parser = argparse.ArgumentParser(description=__doc__)
-              parser.add_argument("namespace")
-              parser.add_argument("cluster")
-              parser.add_argument("snapshot_class")
-              parser.add_argument("retention", type=int)
-              args = parser.parse_args()
-              if not 1 <= args.retention <= 100:
-                  parser.error("retention must be from 1 to 100")
-              backup(API(), args.namespace, args.cluster, args.snapshot_class, args.retention)
-
-
-          if __name__ == "__main__":
-              main()
-      kind: ConfigMap
-      metadata:
-        name: postgres-snapshot-pg0
-        namespace: s-jeff
-  providerConfigRef:
-    kind: ProviderConfig
-    name: provider-kubernetes
-  readiness:
-    policy: SuccessfulCreate
-  watch: true
----
-apiVersion: kubernetes.m.crossplane.io/v1alpha1
-kind: Object
-metadata:
-  name: db-cluster-s-jeff-pg0
+  name: db-cluster-s-jeff-postgres-pg0
   namespace: default
 spec:
   forProvider:
@@ -1241,7 +770,7 @@ spec:
       apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       metadata:
-        name: pg0
+        name: postgres-pg0
         namespace: s-jeff
       spec:
         backup:
@@ -1255,22 +784,22 @@ spec:
             database: dev
             owner: datalab
         enableSuperuserAccess: true
-        imageName: ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie
+        imageName: ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie@sha256:b053a93d0687b4ee85418447ffb0a9436461c72efef2e316012728b34f2e50cf
         instances: 1
         managed:
           roles:
           - login: true
             name: jane
             passwordSecret:
-              name: pg0-user-jane
+              name: postgres-pg0-user-jane-5940293c45
           - login: true
             name: jeff
             passwordSecret:
-              name: pg0-user-jeff
+              name: postgres-pg0-user-jeff-92f22af88b
           - login: true
             name: jim
             passwordSecret:
-              name: pg0-user-jim
+              name: postgres-pg0-user-jim-cdfe13eab7
         storage:
           size: 1Gi
   providerConfigRef:
@@ -1289,7 +818,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-database-s-jeff-pg0-dev-6729bd8746
+  name: db-database-s-jeff-postgres-pg0-dev-783547494d
   namespace: default
 spec:
   forProvider:
@@ -1297,11 +826,11 @@ spec:
       apiVersion: postgresql.cnpg.io/v1
       kind: Database
       metadata:
-        name: pg0-database-dev
+        name: postgres-pg0-database-dev-c6e0ee0e70
         namespace: s-jeff
       spec:
         cluster:
-          name: pg0
+          name: postgres-pg0
         databaseReclaimPolicy: retain
         name: dev
         owner: postgres
@@ -1317,7 +846,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-database-s-jeff-pg0-prod-0870205ead
+  name: db-database-s-jeff-postgres-pg0-prod-b50a8ab7b1
   namespace: default
 spec:
   forProvider:
@@ -1325,11 +854,11 @@ spec:
       apiVersion: postgresql.cnpg.io/v1
       kind: Database
       metadata:
-        name: pg0-database-prod
+        name: postgres-pg0-database-prod-6dddfbad37
         namespace: s-jeff
       spec:
         cluster:
-          name: pg0
+          name: postgres-pg0
         databaseReclaimPolicy: retain
         name: prod
         owner: postgres
@@ -1345,7 +874,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-network-s-jeff-pg0-67d3b22cd2
+  name: db-network-s-jeff-postgres-pg0-9b09c2a603
   namespace: default
 spec:
   forProvider:
@@ -1353,7 +882,7 @@ spec:
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy
       metadata:
-        name: pg0
+        name: postgres-pg0
         namespace: s-jeff
       spec:
         egress:
@@ -1389,7 +918,7 @@ spec:
             protocol: TCP
         podSelector:
           matchLabels:
-            cnpg.io/cluster: pg0
+            cnpg.io/cluster: postgres-pg0
         policyTypes:
         - Ingress
         - Egress
@@ -1403,7 +932,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-snapshot-class-s-jeff-pg0-31458c5018
+  name: db-snapshot-class-s-jeff-postgres-pg0-e7e773f586
   namespace: default
 spec:
   forProvider:
@@ -1425,7 +954,7 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-tlsroute-s-jeff-pg0
+  name: db-tlsroute-s-jeff-postgres-pg0
   namespace: default
 spec:
   forProvider:
@@ -1433,7 +962,7 @@ spec:
       apiVersion: gateway.networking.k8s.io/v1
       kind: TLSRoute
       metadata:
-        name: pg0
+        name: postgres-pg0
         namespace: s-jeff
       spec:
         hostnames:
@@ -1444,7 +973,7 @@ spec:
           sectionName: postgres-passthrough
         rules:
         - backendRefs:
-          - name: pg0-rw
+          - name: postgres-pg0-rw
             port: 5432
   providerConfigRef:
     kind: ProviderConfig
@@ -1459,20 +988,20 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-user-secret-s-jeff-pg0-jane-158b041f75
+  name: db-user-secret-s-jeff-postgres-pg0-jane-8d75afb7d2
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        password: SEhtTk5jdnRkME1HTzdkZm5uLXV2WTl1VU45SzdVWlpIUjRqTVdZYUdvRQ==
+        password: MkQ5cGd2ZjYyRUIxZE5aRmdCd2ltS0x3NWk0Vk55QnlReHlZSlpFVXRwRQ==
         username: amFuZQ==
       kind: Secret
       metadata:
         labels:
           cnpg.io/reload: 'true'
-        name: pg0-user-jane
+        name: postgres-pg0-user-jane-5940293c45
         namespace: s-jeff
       type: kubernetes.io/basic-auth
   providerConfigRef:
@@ -1485,20 +1014,20 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-user-secret-s-jeff-pg0-jeff-448993d8a9
+  name: db-user-secret-s-jeff-postgres-pg0-jeff-222693ea88
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        password: STVkREZKN19RQjhKNU0yclB2c1haU3hXV1ppdHNoR195RmN1b2RGOFBSYw==
+        password: WHJ0U0lsRVI3UnBBR3BzalJlaXlaNGNFU00zeURfVmNsQXVpTVVBbG0xWQ==
         username: amVmZg==
       kind: Secret
       metadata:
         labels:
           cnpg.io/reload: 'true'
-        name: pg0-user-jeff
+        name: postgres-pg0-user-jeff-92f22af88b
         namespace: s-jeff
       type: kubernetes.io/basic-auth
   providerConfigRef:
@@ -1511,20 +1040,20 @@ spec:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: db-user-secret-s-jeff-pg0-jim-3bce702515
+  name: db-user-secret-s-jeff-postgres-pg0-jim-7f81f20a3d
   namespace: default
 spec:
   forProvider:
     manifest:
       apiVersion: v1
       data:
-        password: TU53NUhXRVVhdG1OWmI0RzBNVlZyOVVQU0VXbzd5dXJzT3VmZ0FfNnB3TQ==
+        password: YlY1LWxLZnE3QmxRU0FOWkFzeDdVcGF1cXJMU3ZoMEFrQkxBa3FzVFFpdw==
         username: amlt
       kind: Secret
       metadata:
         labels:
           cnpg.io/reload: 'true'
-        name: pg0-user-jim
+        name: postgres-pg0-user-jim-cdfe13eab7
         namespace: s-jeff
       type: kubernetes.io/basic-auth
   providerConfigRef:
@@ -2505,7 +2034,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: pg0-superuser
+        name: postgres-pg0-superuser
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -2605,7 +2134,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: cache-valkey-auth
+        name: valkey-cache-auth
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -2624,8 +2153,8 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        http-secret: U0xxMVdaLWo2bUpxdkgxVFU5N3RWZWxLUThyQUpaQkc=
-        password: ZUExN3B0MlpGRHJIOTVicnFZa3g5YWRuWDZwXw==
+        http-secret: dGVzdC1yZWdpc3RyeS1odHRwLXNlY3JldA==
+        password: dGVzdC1yZWdpc3RyeS1wYXNzd29yZA==
         user: cy1qZWZm
       kind: Secret
       metadata:
@@ -2705,10 +2234,10 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        user.acl: dXNlciBkZWZhdWx0IG9uID52UGx2YUtvZlJCZGhHbkVqX1ZmLV82NGtfMlUtIH4qICtAYWxsCnVzZXIgYmFja3VwIG9uID5VeU02TjhmNUJVMmk4ZjZ5VGlUT0tLQWJiU3JqWDVobSAtQGFsbCArcGluZyAraW5mbyArYmdzYXZlICtjbGllbnR8cGF1c2UgK2NsaWVudHx1bnBhdXNlCg==
+        user.acl: dXNlciBkZWZhdWx0IG9uID5NcVpvTFhETFFyd1BPdXdnTTFkajZMek9UT01MIH4qICtAYWxsCnVzZXIgYmFja3VwIG9uID50ZXN0LXZhbGtleS1iYWNrdXAtcGFzc3dvcmQgLUBhbGwgK3BpbmcgK2luZm8gK2Jnc2F2ZSArY2xpZW50fHBhdXNlICtjbGllbnR8dW5wYXVzZQo=
       kind: Secret
       metadata:
-        name: cache-valkey-acl
+        name: valkey-cache-acl
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2728,11 +2257,11 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        password: dlBsdmFLb2ZSQmRoR25Fal9WZi1fNjRrXzJVLQ==
+        password: TXFab0xYRExRcndQT3V3Z00xZGo2THpPVE9NTA==
         user: ZGVmYXVsdA==
       kind: Secret
       metadata:
-        name: cache-valkey-auth
+        name: valkey-cache-auth
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2773,11 +2302,11 @@ spec:
     manifest:
       apiVersion: v1
       data:
-        password: VXlNNk44ZjVCVTJpOGY2eVRpVE9LS0FiYlNyalg1aG0=
+        password: dGVzdC12YWxrZXktYmFja3VwLXBhc3N3b3Jk
         user: YmFja3Vw
       kind: Secret
       metadata:
-        name: cache-valkey-backup-auth
+        name: valkey-cache-backup-auth
         namespace: s-jeff
       type: Opaque
   providerConfigRef:
@@ -2897,11 +2426,13 @@ spec:
                   - unbound
                   - workspace-snapshots
                   - '4'
+                  - --server
+                  - valkey-cache
                   command:
                   - python
                   - -B
                   - /opt/backup/valkey-snapshot.py
-                  image: python:3.13-alpine
+                  image: python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
                   name: backup
                   resources:
                     limits:
@@ -2937,7 +2468,7 @@ spec:
                     items:
                     - key: password
                       path: password
-                    secretName: cache-valkey-backup-auth
+                    secretName: valkey-cache-backup-auth
                 - configMap:
                     name: valkey-cache-backup
                   name: script
@@ -3032,7 +2563,7 @@ spec:
       - apiGroups:
         - ''
         resourceNames:
-        - cache-0
+        - valkey-cache-0
         resources:
         - pods
         verbs:
@@ -3111,8 +2642,8 @@ spec:
                   raise RuntimeError("Valkey rejected the backup command.")
 
 
-          def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540):
-              pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote(store + "-0", safe="")
+          def capture(api, valkey, namespace, store, claim, snapshot_class, retention, timeout=540, server=None):
+              pod_path = "/api/v1/namespaces/" + quote(namespace, safe="") + "/pods/" + quote((server or store) + "-0", safe="")
               pause_until = 0
               identity = {}
 
@@ -3179,13 +2710,14 @@ spec:
               for argument in ("namespace", "store", "claim", "snapshot_class"):
                   parser.add_argument(argument)
               parser.add_argument("retention", type=int)
+              parser.add_argument("--server")
               args = parser.parse_args()
               if not 1 <= args.retention <= 100:
                   parser.error("retention must be from 1 to 100")
               password = Path("/var/run/valkey-backup/password").read_text()
-              with closing(Valkey(args.store, password)) as valkey:
+              with closing(Valkey(args.server or args.store, password)) as valkey:
                   capture(snapshots["API"](), valkey, args.namespace, args.store, args.claim,
-                          args.snapshot_class, args.retention)
+                          args.snapshot_class, args.retention, server=args.server)
 
 
           if __name__ == "__main__":
@@ -3360,7 +2892,7 @@ spec:
       apiVersion: apps/v1
       kind: StatefulSet
       metadata:
-        name: cache
+        name: valkey-cache
         namespace: s-jeff
       spec:
         replicas: 1
@@ -3368,11 +2900,11 @@ spec:
           matchLabels:
             app.kubernetes.io/instance: cache
             app.kubernetes.io/name: valkey
-        serviceName: cache
+        serviceName: valkey-cache
         template:
           metadata:
             annotations:
-              datalabs.versioneer.at/valkey-acl-checksum: 29b713768461030e66ba1bb6991fc8174a084fcffb51015839eabe5e9c97698d
+              datalabs.versioneer.at/valkey-acl-checksum: 95e6a457b1a87b860e9d39b10336a5936758584dc889f531e12e86ec0ca180bd
             labels:
               app.kubernetes.io/instance: cache
               app.kubernetes.io/name: valkey
@@ -3387,6 +2919,10 @@ spec:
               - 'yes'
               - --dir
               - /data
+              - --maxmemory
+              - 256mb
+              - --maxmemory-policy
+              - noeviction
               - --appendonly
               - 'yes'
               - --appendfsync
@@ -3400,7 +2936,7 @@ spec:
                 valueFrom:
                   secretKeyRef:
                     key: password
-                    name: cache-valkey-auth
+                    name: valkey-cache-auth
               image: valkey/valkey:9.2.0-alpine
               livenessProbe:
                 exec:
@@ -3451,6 +2987,42 @@ spec:
               - mountPath: /etc/valkey
                 name: acl
                 readOnly: true
+            initContainers:
+            - command:
+              - sh
+              - -ec
+              - |
+                attempt=0
+                while [ "$attempt" -lt 180 ]; do
+                  actual="$(base64 "$2" | tr -d '\n' | sha256sum)"
+                  [ "${actual%% *}" != "$1" ] || exit 0
+                  attempt=$((attempt + 1))
+                  sleep 1
+                done
+                printf 'The current Valkey ACL was not mounted before the deadline.\n' >&2
+                exit 1
+              - wait-for-acl
+              - 95e6a457b1a87b860e9d39b10336a5936758584dc889f531e12e86ec0ca180bd
+              - /etc/valkey/user.acl
+              image: valkey/valkey:9.2.0-alpine
+              name: wait-for-acl
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 32Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+              - mountPath: /etc/valkey
+                name: acl
+                readOnly: true
             securityContext:
               fsGroup: 1000
               fsGroupChangePolicy: OnRootMismatch
@@ -3466,7 +3038,7 @@ spec:
                 claimName: valkey-cache-data
             - name: acl
               secret:
-                secretName: cache-valkey-acl
+                secretName: valkey-cache-acl
   providerConfigRef:
     kind: ProviderConfig
     name: provider-kubernetes
@@ -3516,7 +3088,7 @@ spec:
       apiVersion: v1
       kind: Pod
       metadata:
-        name: cache-0
+        name: valkey-cache-0
         namespace: s-jeff
   managementPolicies:
   - Observe
@@ -3540,7 +3112,7 @@ spec:
       apiVersion: v1
       kind: Service
       metadata:
-        name: cache
+        name: valkey-cache
         namespace: s-jeff
       spec:
         ports:

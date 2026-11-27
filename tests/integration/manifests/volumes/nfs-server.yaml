@@ -75,7 +75,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: nfs-server
-        image: ghcr.io/kubernetes-sigs/nfs-ganesha:V6.5
+        image: ghcr.io/kubernetes-sigs/nfs-ganesha:V6.5@sha256:9ac92d14019a82be4355bf7956fdc557db1219e95976d1174ef23a5f544c11e6
         command: [sh, -ec]
         args:
         - |

@@ -110,8 +110,10 @@ Valkey uses key prefixes with a final colon: `sessions:` and `jobs:` in this
 example. Clients must add the selected prefix to each key. The names share
 instance credentials; prefixes do not restrict access.
 
-Valkey runs as one StatefulSet with persistent storage. Its AOF log is flushed
-every second. A crash can lose recent writes that have not reached durable storage.
+Valkey runs as one StatefulSet with persistent storage. Its `maxmemory` is
+256 MiB within a 512 MiB container limit. The `noeviction` policy rejects new
+writes at that limit. This leaves memory for persistence work. The AOF log is
+flushed every second. A crash can lose recent writes that have not reached durable storage.
 The data PVC is managed separately from the StatefulSet. Increase `storage`
 when its StorageClass supports volume expansion. Shrinking a PVC is not supported.
 Valkey needs no separate database operator. Read `url` from `<datalab>-valkey-cache`;
@@ -119,8 +121,7 @@ its `redis://` scheme works with Redis-compatible clients.
 The connection Secrets contain host and credential fields, a JSON `names`
 array and, for Valkey, a JSON `prefixes` map.
 
-The composition watches the authentication Secrets and updates each
-service connection separately. Clients must reload changed values. See
+Clients must reload connection values after credentials change. See
 [connections and Secret bindings](connections.md) for discovery and selected
 credential delivery into virtual namespaces.
 
@@ -132,22 +133,24 @@ The platform must meet the [snapshot prerequisites](installation.md#volume-snaps
 
 | Resource | Capture | Default retention |
 | --- | --- | --- |
-| PostgreSQL | CloudNativePG cold snapshot. The single instance stops reads and writes during capture. | Four completed backups per cluster UID. |
+| PostgreSQL | Native CloudNativePG cold snapshot. The single instance stops reads and writes during capture. | Platform cleanup policy; seven days is the recommended example. |
 | Valkey | Pause writes, wait for `BGSAVE`, then snapshot the data PVC. Writes pause for at most 11 minutes, including time to save and capture. | Four completed snapshots per data PVC UID. |
 | Named volume | Snapshot the bound PVC. The application must flush or pause writes when needed. | Two completed snapshots per PVC UID. |
 
 The default schedule is daily at 01:00 UTC. EnvironmentConfig sets each
-schedule, snapshot class, and retention count. A failed Job preserves completed
-recovery points. Retention removes older points only after a new capture is
-ready and passes its consistency checks. These backups have no continuous WAL
+schedule and snapshot class. PostgreSQL uses a native `ScheduledBackup`;
+the platform manages retention. Valkey and named volumes use a retention count
+and remove older points only after a new capture is ready and passes its
+consistency checks. These backups have no continuous WAL
 archive or point-in-time recovery. A stalled CSI request can keep PostgreSQL
 paused until the storage fault is resolved. Back up Kubernetes metadata and
 credentials separately.
 
 Set `backups: false` to remove the schedule and keep completed recovery points.
+Platform retention still applies to PostgreSQL backups.
 Enabling or disabling Valkey backups restarts its Pod to change the backup ACL.
 Namespace deletion can remove snapshots and their stored data. The platform
-must monitor failed Jobs and snapshot readiness, test restores, and arrange an
+must monitor failed backups and snapshot readiness, test restores, and arrange an
 independent recovery copy.
 
 ### Store removal

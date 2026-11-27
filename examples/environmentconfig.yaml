@@ -14,7 +14,7 @@ data:
     redirectURIs: []
     webOrigins: []
   ingress:
-    class: nginx
+    class: ""
     domain: lab.acme.com
     secret: wildcard-tls
   storage:
@@ -47,7 +47,7 @@ data:
         port: 9000
     excludePolicies: []
   registry:
-    enabled: true
+    enabled: false
   packageR:
     enabled: true
     readOnlyMount: false
@@ -77,8 +77,7 @@ data:
       sectionName: postgres-passthrough
     storageClassName: ''
     snapshotClassName: workspace-snapshots
-    schedule: '0 1 * * *'
-    maxSnapshots: 4
+    schedule: '0 0 1 * * *'
   volumes:
     storage: 1Gi
     storageClasses:

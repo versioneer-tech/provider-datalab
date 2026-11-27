@@ -6,7 +6,7 @@ import re
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from crossplane.function.proto.v1 import run_function_pb2 as fnv1
-from composition.helpers import _b64get_any, _extract_data, _postgres_connection_data, _stores, _to_dict
+from composition.helpers import _b64get_any, _extract_data, _postgres_connection_data, _store_resource_name, _stores, _to_dict
 from composition.render import _render_template
 
 
@@ -52,8 +52,9 @@ def _storage_values(data, config):
 
 
 def _postgres_values(data, name, store, config, env):
-    data = _postgres_connection_data(data, store, name)
-    host = f"{store}-rw.{name}.svc"
+    cluster = _store_resource_name("postgres", store)
+    data = _postgres_connection_data(data, cluster, name)
+    host = f"{cluster}-rw.{name}.svc"
     values = {
         "host": host,
         "port": _b64get_any(data, ["port"]) or "5432",
@@ -151,29 +152,26 @@ def compose(req, rsp):
             values,
             bool(values["password"]),
         )
-    for backend, kind in (
-        ("valkey", "valkey"),
-    ):
-        for store, config in sorted(_stores(spec, kind).items()):
-            names = config["names"]
-            password = (
-                _b64get_any(
-                    _extract_data(
-                        req, rsp, f"observe-{backend}-auth-secret-{name}-{store}"
-                    ),
-                    ["password"],
-                )
-                or ""
+    for store, config in sorted(_stores(spec, "valkey").items()):
+        names = config["names"]
+        password = (
+            _b64get_any(
+                _extract_data(
+                    req, rsp, f"observe-valkey-auth-secret-{name}-{store}"
+                ),
+                ["password"],
             )
-            host = f"{store}.{name}.svc"
-            values = {
-                "host": host,
-                "port": "6379",
-                "database": "0",
-                "user": "default",
-                "password": password,
-                "url": f"redis://default:{password}@{host}:6379/0",
-                "prefixes": json.dumps({name: name + ":" for name in names}),
-            }
-            values["names"] = json.dumps(names)
-            publish(f"{kind}-{store}", values, bool(password))
+            or ""
+        )
+        host = f"{_store_resource_name("valkey", store)}.{name}.svc"
+        values = {
+            "host": host,
+            "port": "6379",
+            "database": "0",
+            "user": "default",
+            "password": password,
+            "url": f"redis://default:{password}@{host}:6379/0",
+            "prefixes": json.dumps({name: name + ":" for name in names}),
+        }
+        values["names"] = json.dumps(names)
+        publish(f"valkey-{store}", values, bool(password))

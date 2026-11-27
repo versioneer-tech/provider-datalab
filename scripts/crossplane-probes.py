@@ -9,8 +9,10 @@ import sys
 
 import yaml
 
+from components import pin_images
 
-documents = list(yaml.safe_load_all(sys.stdin))
+
+documents = [item for item in yaml.safe_load_all(sys.stdin) if item is not None]
 found = set()
 for document in documents:
     if not document or document.get("kind") != "Deployment":
@@ -37,4 +39,4 @@ for document in documents:
             }))
 if found != {"core", "rbac"}:
     raise SystemExit("Expected the Crossplane core and RBAC manager Deployments in Helm output.")
-yaml.safe_dump_all(documents, sys.stdout, sort_keys=False)
+yaml.safe_dump_all(pin_images(documents), sys.stdout, sort_keys=False)

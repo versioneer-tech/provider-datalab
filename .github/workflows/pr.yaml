@@ -93,7 +93,6 @@ jobs:
       contents: read
     env:
       PROVIDER_DATALAB_KUBECONFIG: /tmp/provider-datalab-it.kubeconfig
-      CROSSPLANE_VERSION: 2.4.3
       RUN_INTEGRATION: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     steps:
       - name: Checkout code
@@ -116,13 +115,24 @@ jobs:
 
       - name: Install test CLIs
         run: |
-          python3 scripts/install-tools.py crossplane dyff kind kubectl helm
+          python3 scripts/install-tools.py crossplane dyff kind kubectl helm crane trivy govulncheck
           echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
       - name: Run Composition unit tests
         run: |
-          python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt
+          python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt -r tools/requirements.txt
           tests/unit.bash
+
+      - name: Retain test dependency reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-dependencies-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/test-dependencies/
+            !build/test-dependencies/**/candidate/**
+          retention-days: 90
+          if-no-files-found: warn
 
       - name: Run all Kubernetes integration profiles
         if: env.RUN_INTEGRATION == 'true'
@@ -152,15 +162,11 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version-file: .python-version
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: .go-version
-          cache-dependency-path: tests/admission/go.sum
       - name: Install scan tools
         run: |
           mkdir -p "$DOCKER_CONFIG"
           python3 -m pip install --only-binary=':all:' --require-hashes -r scripts/requirements.txt -r tools/requirements.txt
-          python3 scripts/install-tools.py crossplane crane trivy gitleaks govulncheck
+          python3 scripts/install-tools.py crossplane crane trivy gitleaks
       - name: Build production candidate
         env:
           SOURCE_COMMIT: ${{ github.sha }}

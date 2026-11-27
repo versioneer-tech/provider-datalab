@@ -9,10 +9,11 @@ from crossplane.function import response
 
 from composition.helpers import (
     _extract_manifest,
+    _name_hash,
     _resource_name,
     _safe_str,
-    _string_value,
-    _strong_token,
+    _service_token,
+    _store_resource_name,
     _stores,
     _to_dict,
 )
@@ -38,10 +39,10 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     context = _to_dict(req.context)
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     images = environment.get("images") or {}
-    valkey_image = _safe_str(images.get("valkey")) or "valkey/valkey:9.2.0-alpine"
-    backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine"
+    valkey_image = _safe_str(images.get("valkey")) or "valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882"
+    backup_image = _safe_str(images.get("volumeSnapshot")) or "python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e"
     valkey_env = environment.get("cacheStore") or {}
-    valkey_storage_class = _string_value(valkey_env.get("storageClassName") or "")
+    valkey_storage_class = _safe_str(valkey_env.get("storageClassName") or "")
 
     runtime_namespace = xr_name
 
@@ -52,15 +53,18 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         if not isinstance(store_cfg, dict):
             continue
 
-        valkey_storage = _string_value(store_cfg.get("storage") or "1Gi")
+        valkey_storage = _safe_str(store_cfg.get("storage") or "1Gi")
         if not valkey_storage:
             continue
         store_name = store_key.strip()
         backups_enabled = store_cfg.get("backups") is True
-        valkey_password = _strong_token(
-            f"{xr_name}:{store_name}:valkey", suffix="", length=28
+        server_name = _store_resource_name("valkey", store_name)
+        valkey_auth_secret_name = server_name + "-auth"
+        valkey_password = _service_token(
+            req, rsp, f"valkey-auth-{xr_name}-{store_name}",
+            valkey_auth_secret_name, runtime_namespace,
+            old=_name_hash(f"{xr_name}:{store_name}:valkey", suffix="", length=28),
         )
-        valkey_auth_secret_name = f"{store_name}-valkey-auth"
         valkey_auth_secret = _render_template(
             req,
             "valkey/auth-secret",
@@ -79,10 +83,14 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         )
         rsp.desired.resources[auth_key].resource.update(auth_body)
 
-        valkey_acl_secret_name = f"{store_name}-valkey-acl"
+        valkey_acl_secret_name = server_name + "-acl"
         acl = f"user default on >{valkey_password} ~* +@all\n"
         if backups_enabled:
-            backup_password = _strong_token(f"{xr_name}:{store_name}:valkey:backup")
+            backup_password = _service_token(
+                req, rsp, f"valkey-backup-auth-{xr_name}-{store_name}",
+                server_name + "-backup-auth", runtime_namespace,
+                old=_name_hash(f"{xr_name}:{store_name}:valkey:backup"),
+            )
             acl += f"user backup on >{backup_password} -@all +ping +info +bgsave +client|pause +client|unpause\n"
         encoded_acl = base64.b64encode(acl.encode()).decode()
         valkey_acl_secret = _render_template(
@@ -123,7 +131,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         rsp.desired.resources[service_key].resource.update(_render_template(
             req, "common/object", key=service_key, xr_namespace=xr_namespace,
             manifest={"apiVersion": "v1", "kind": "Service",
-                      "metadata": {"name": store_name, "namespace": runtime_namespace},
+                      "metadata": {"name": server_name, "namespace": runtime_namespace},
                       "spec": {"selector": {"app.kubernetes.io/name": "valkey",
                                             "app.kubernetes.io/instance": store_name},
                                "ports": [{"name": "valkey", "port": 6379, "targetPort": "valkey"}]}},
@@ -133,7 +141,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             req,
             "valkey/store",
             valkey_image=valkey_image,
-            store_name=store_name,
+            store_name=store_name, workload_name=server_name,
             runtime_namespace=runtime_namespace,
             valkey_auth_secret_name=valkey_auth_secret_name,
             valkey_acl_secret_name=valkey_acl_secret_name,
@@ -152,8 +160,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
         rsp.desired.resources[key].resource.update(body)
 
         if backups_enabled:
-            backup_name = f"valkey-{store_name}-backup"
-            backup_secret_name = f"{store_name}-valkey-backup-auth"
+            backup_name = server_name + "-backup"
+            backup_secret_name = server_name + "-backup-auth"
             backup_secret = _render_template(
                 req,
                 "valkey/auth-secret",
@@ -185,7 +193,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
                 schedule=valkey_env.get("schedule") or "0 1 * * *",
                 backup_script=BACKUP_SCRIPT, snapshot_script=SNAPSHOT_SCRIPT,
                 backup_image=backup_image, backup_secret_name=backup_secret_name,
-                pod_name=store_name + "-0", suspended=claim == "unbound",
+                pod_name=server_name + "-0", server_name=server_name, suspended=claim == "unbound",
             )["resources"]
             resources["auth-secret"] = backup_secret
             resources["class"] = {
@@ -210,7 +218,7 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
             "common/pod-observer",
             pod_key=pod_key,
             xr_namespace=xr_namespace,
-            pod_name=f"{store_name}-0",
+            pod_name=server_name + "-0",
             runtime_namespace=runtime_namespace,
         )
         rsp.desired.resources[pod_key].resource.update(pod_body)

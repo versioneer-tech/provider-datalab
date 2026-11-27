@@ -26,11 +26,11 @@ A focused run does not replace full runtime validation.
 
 | Files | Checks |
 | --- | --- |
-| `test_security.py` | Release selection, candidate checks, scan failures, exact vulnerability exceptions, expiry, and tool integrity. |
+| `test_security.py` | Release selection, candidate checks, scan failures, image digest vulnerability exceptions, expiry, and tool integrity. |
 | `ci-checks.py` | Required check selection, including unknown and untracked files. |
 | `test_build.py`, `test_composition_helpers.py` | Build input, TTL values and stable service credentials. |
 | `test_credentials.py`, `test_cleanup.py`, `test_snapshots.py` | Login and token handling, Pod cleanup, snapshot retention and access. |
-| `test_postgres.py`, `test_valkey.py` | Store snapshot retention, consistency, failure handling, replacement, and PostgreSQL credentials. |
+| `test_postgres.py`, `test_valkey.py` | PostgreSQL credentials and Valkey snapshot retention, consistency, failure handling, and replacement. |
 | `test_harness.py`, `test_probes.py` | Cluster selection, capability probes, workload health checks, and protection of unrelated resources. |
 | `vclusters.py`, `admission/`, `volumes.py` | Virtual cluster access and lifecycle, host volumes, bindings, and admission rules. |
 | `token-exchange.py`, `keycloak_policy.py` | Role restrictions and real Keycloak login, refresh, and exchange. |
@@ -43,7 +43,7 @@ separate assertions for behavior such as credential rotation, data retention,
 or denied access. Avoid repeating snapshot fields or fixing a test to an
 internal hash, message, or call order unless the behavior requires it.
 
-The disposable unit-test Keycloak server has five minutes to import its test realm.
+The disposable unit-test Keycloak server has ten minutes to build and import its test realm.
 It checks issued tokens for login, offline refresh, and restricted exchange.
 A separate login client omits workspace roles despite group membership.
 With Full Scope Allowed off, explicit role scope mappings restore `ws_access`

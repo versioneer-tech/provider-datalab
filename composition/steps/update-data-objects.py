@@ -30,8 +30,8 @@ def compose(req: fnv1.RunFunctionRequest, rsp: fnv1.RunFunctionResponse):
     environment = context.get("apiextensions.crossplane.io/environment", {}) or {}
     images = environment.get("images") or {}
     package_r_image = _safe_str(images.get("packageR")) or "ghcr.io/versioneer-tech/package-r:vnext.1.2.1@sha256:3e551893aad9b531b312308adf861310876ddcc3c1dbf9cfa3556643bd878062"
-    rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0"
-    oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6"
+    rclone_image = _safe_str(images.get("rclone")) or "rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466"
+    oauth2_proxy_image = _safe_str(images.get("oauth2Proxy")) or "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048"
     data_config = environment.get("packageR") or {}
     data_enabled = data_config.get("enabled")
     if data_enabled is None:

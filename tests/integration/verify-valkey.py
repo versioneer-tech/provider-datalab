@@ -64,13 +64,13 @@ def main():
     uid = source["metadata"]["uid"]
     storage_class = get("storageclass/" + source["spec"]["storageClassName"])
     if storage_class.get("allowVolumeExpansion"):
-        workload = get("statefulset/verify")["spec"]
+        workload = get("statefulset/valkey-verify")["spec"]
         kube("patch", "datalab/verify-valkey", "--type=merge", "--patch",
              json.dumps({"spec": {"stores": {"verify": {"storage": "2Gi"}}}}), namespace="workspace")
         source = wait(lambda: (pvc if (pvc := get("pvc/" + claim)).get("status", {}).get("capacity", {}).get("storage") == "2Gi" else None),
                       "Valkey data PVC expansion")
         assert source["metadata"]["uid"] == uid
-        assert get("statefulset/verify")["spec"] == workload
+        assert get("statefulset/valkey-verify")["spec"] == workload
         print("PASS Valkey storage expansion keeps the data PVC and StatefulSet configuration", flush=True)
     else:
         print("SKIPPED Valkey storage expansion: the StorageClass does not allow expansion", flush=True)
@@ -155,17 +155,17 @@ def main():
     delete("pvc/test-valkey-recovery")
 
     points = {item["metadata"]["uid"] for item in snapshots()}
-    previous = get("statefulset/verify")["spec"]["template"]["metadata"]["annotations"]["datalabs.versioneer.at/valkey-acl-checksum"]
+    previous = get("statefulset/valkey-verify")["spec"]["template"]["metadata"]["annotations"]["datalabs.versioneer.at/valkey-acl-checksum"]
     kube("patch", "datalab/verify-valkey", "--type=merge", "--patch",
          json.dumps({"spec": {"stores": {"verify": {"backups": False}}}}), namespace="workspace")
     wait(lambda: get("cronjob/valkey-verify-backup") is None, "Valkey backup schedule removal")
-    wait(lambda: get("statefulset/verify")["spec"]["template"]["metadata"]["annotations"]["datalabs.versioneer.at/valkey-acl-checksum"] != previous,
+    wait(lambda: get("statefulset/valkey-verify")["spec"]["template"]["metadata"]["annotations"]["datalabs.versioneer.at/valkey-acl-checksum"] != previous,
          "Valkey backup ACL removal")
-    kube("rollout", "status", "statefulset/verify", "--timeout=5m", timeout=330)
+    kube("rollout", "status", "statefulset/valkey-verify", "--timeout=5m", timeout=330)
     assert get("pvc/" + claim)["metadata"]["uid"] == uid
     assert {item["metadata"]["uid"] for item in snapshots()} == points
     for prefix, expected in ((args.prefix, args.value), (args.other_prefix, args.value + "-other")):
-        value = kube("exec", "pod/verify-0", "--", "valkey-cli", "--raw", "GET",
+        value = kube("exec", "pod/valkey-verify-0", "--", "valkey-cli", "--raw", "GET",
                      prefix + "provider-datalab:verify").strip()
         assert value == expected, "The Valkey rollout lost stored data"
     print("PASS disabling Valkey backups keeps the data PVC and completed snapshots", flush=True)

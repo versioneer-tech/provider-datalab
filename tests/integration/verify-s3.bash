@@ -12,7 +12,6 @@ source "${INTEGRATION_DIR}/runtime.bash"
 
 : "${KEEP_S3_RESOURCES:=0}"
 readonly S3_DATALAB=verify-s3
-readonly CONTOUR_VERSION=v1.33.7
 runtime_namespace=""
 client_image=""
 work_directory="$(mktemp -d /tmp/datalab-s3.XXXXXX)"
@@ -47,20 +46,13 @@ trap report_s3_failure ERR
 install_s3_prerequisites() {
   create_ingress_certificate
   log 'Checking the Contour Gateway provisioner and Keycloak test realm'
-  local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
-  mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
-  if [[ ! -s "${contour_manifest}" ]]; then
-    curl --fail --silent --show-error --location \
-      "https://raw.githubusercontent.com/projectcontour/contour/${CONTOUR_VERSION}/examples/render/contour-gateway-provisioner.yaml" \
-      --output "${work_directory}/contour.yaml"
-    mv "${work_directory}/contour.yaml" "${contour_manifest}"
-  fi
-  kube apply --server-side -f "${contour_manifest}"
+  python3 "${REPO_ROOT}/scripts/components.py" contour-provisioner --manifest | \
+    kube apply --server-side -f -
   wait_for_crd_established gateways.gateway.networking.k8s.io
   kube rollout status deployment/contour-gateway-provisioner --namespace projectcontour --timeout=10m
   kube apply -f "${MANIFEST_DIR}/s3/gateway.yaml"
   kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
-  kube rollout status deployment/keycloak --namespace keycloak --timeout=10m
+  kube rollout status deployment/keycloak --namespace keycloak --timeout=15m
   kube wait gateway/verify-s3 --namespace projectcontour --for=condition=Programmed --timeout=10m
   kube wait deployment --namespace projectcontour --selector gateway.networking.k8s.io/gateway-name=verify-s3 \
     --for=condition=Available --timeout=10m

@@ -52,6 +52,10 @@ spec:
             fi
             sleep 2
           done
+          test "$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw CONFIG GET maxmemory | tail -n 1)" = 268435456
+          test "$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
+            -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw CONFIG GET maxmemory-policy | tail -n 1)" = noeviction
           test -z "$(VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \
             -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" --raw GET recovered-only)"
           VALKEYCLI_AUTH="${VALKEY_PASSWORD}" valkey-cli \

@@ -33,7 +33,7 @@ def main():
         env = environment()
         if exposure in ("ingress", "internal"):
             env["data"]["httpRoute"].update(enabled=False, enableS3=False)
-            env["data"]["ingress"].update(enabled=exposure == "ingress", **{"class": "nginx", "secret": "wildcard-tls"})
+            env["data"]["ingress"].update(enabled=exposure == "ingress", **{"class": "test-ingress", "secret": "wildcard-tls"})
         if exposure == "gateway":
             env["data"]["httpRoute"].pop("enableS3")
         if exposure == "disabled-data":
@@ -41,9 +41,6 @@ def main():
         env["data"]["registry"] = {"enabled": False}
         if exposure == "ingress":
             env["data"]["ingress"]["annotations"] = {
-                "nginx.ingress.kubernetes.io/proxy-body-size": "0",
-                "nginx.ingress.kubernetes.io/proxy-buffering": "off",
-                "nginx.ingress.kubernetes.io/proxy-request-buffering": "off",
             }
         if exposure == "gateway-s3":
             env["data"]["httpRoute"]["timeouts"] = {"request": "2h", "backendRequest": "1h30m"}
@@ -173,7 +170,7 @@ def main():
             env["data"][path[0]][path[1]] = value
         render(args, env, error=error)
     env = environment()
-    env["data"]["ingress"].update(enabled=True, **{"class": "nginx"})
+    env["data"]["ingress"].update(enabled=True, **{"class": "test-ingress"})
     env["data"]["httpRoute"].update(enabled=False, enableS3=False)
     render(args, env, error="ingress.secret")
     print("PASS invalid exposure settings rejected", flush=True)

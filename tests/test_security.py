@@ -38,12 +38,12 @@ class ReleaseSelectionTests(unittest.TestCase):
     def selected(self, tags, manual=""):
         return [item["tag"] for item in SECURITY["select_releases"]([release(tag) for tag in tags], manual)["include"]]
 
-    def test_versions_supersede_older_rcs_and_keep_supported_line(self):
+    def test_versions_supersede_older_rcs_and_exclude_older_lines(self):
         tags = ["0.12.4", "0.12.5", "1.9.0", "1.10.0", "1.10.0-rc.9", "1.11.0-rc.2", "1.11.0-rc.10"]
-        self.assertEqual(self.selected(tags), ["1.10.0", "0.12.5", "1.11.0-rc.10"])
+        self.assertEqual(self.selected(tags), ["1.10.0", "1.11.0-rc.10"])
 
     def test_without_stable_only_newest_rc_is_selected(self):
-        self.assertEqual(self.selected(["1.0.0-rc.1", "1.0.0-rc.2", "1.0.0-alpha.3"]), ["1.0.0-rc.2"])
+        self.assertEqual(self.selected(["0.11.0", "0.12.5", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0-alpha.3"]), ["1.0.0-rc.2"])
 
     def test_manual_selection_rejects_unknown_and_draft_tags(self):
         self.assertEqual(self.selected(["1.0.0", "1.1.0"], "1.0.0,1.0.0"), ["1.0.0"])
@@ -55,10 +55,12 @@ class ReleaseSelectionTests(unittest.TestCase):
     def test_empty_release_evidence_fails(self):
         with self.assertRaises(ValueError):
             SECURITY["select_releases"]([])
+        with self.assertRaises(ValueError):
+            self.selected(["0.12.5", "0.12.6-rc.1"])
 
     def test_published_package_without_release_assets_is_not_silently_omitted(self):
-        selected = SECURITY["select_releases"]([release("1.0.0-rc.1")], published_tags=["0.12.5", "latest"])
-        self.assertEqual([item["tag"] for item in selected["include"]], ["0.12.5", "1.0.0-rc.1"])
+        selected = SECURITY["select_releases"]([release("1.0.0-rc.1")], published_tags=["0.13.5", "latest"])
+        self.assertEqual([item["tag"] for item in selected["include"]], ["0.13.5", "1.0.0-rc.1"])
 
 
 class ScanPolicyTests(unittest.TestCase):
@@ -123,13 +125,10 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         self.review = {"owner": "Test maintainer", "reason": "Temporary acceptance",
                        "mitigation": "Use synthetic data in an isolated test environment", "tracking": "SECURITY.md",
                        "accepted_on": "2026-11-26", "expires_on": "2026-12-26"}
-        self.package = {"name": self.finding["PkgName"], "version": self.finding["InstalledVersion"],
-                        "purl": self.finding["PkgIdentifier"]["PURL"], "target": self.finding["Target"],
-                        "advisories": {"CRITICAL": [self.finding["VulnerabilityID"]]}}
-        self.entry = {"image": self.reference, "packages": [self.package]}
+        self.entry = {"image": self.reference}
 
     def load(self, entries=None, **review):
-        self.path.write_text(json.dumps({"schema": 2, **self.review, **review,
+        self.path.write_text(json.dumps({"schema": 3, **self.review, **review,
                                         "exceptions": entries if entries is not None else [self.entry]}))
         return SECURITY["load_vulnerability_exceptions"](self.path)
 
@@ -144,7 +143,6 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         for severity in ("CRITICAL", "HIGH"):
             with self.subTest(severity=severity):
                 self.finding.update(Severity=severity, FixedVersion="2.0")
-                self.package["advisories"] = {severity: [self.finding["VulnerabilityID"], "CVE-2026-3000"]}
                 result = self.assess()
                 self.assertEqual(result["blocking"], [])
                 self.assertEqual(result["accepted"][0]["VulnerabilityID"], self.finding["VulnerabilityID"])
@@ -153,7 +151,7 @@ class VulnerabilityExceptionTests(unittest.TestCase):
                 grouped = self.assess({**self.finding, "VulnerabilityID": "CVE-2026-3000"})
                 self.assertEqual(len(grouped["accepted"]), 1)
 
-    def test_new_or_changed_finding_and_image_still_block(self):
+    def test_new_findings_are_accepted_only_for_the_same_image_digest(self):
         changes = {"VulnerabilityID": "CVE-2026-2000", "PkgName": "other-package", "InstalledVersion": "1.1",
                    "PkgIdentifier": {"PURL": "pkg:generic/other-package@1.0"}, "Target": "/usr/bin/other-service",
                    "Severity": "HIGH"}
@@ -161,8 +159,8 @@ class VulnerabilityExceptionTests(unittest.TestCase):
             changed = {**self.finding, field: value, "FixedVersion": "2.0"}
             with self.subTest(field=field):
                 result = self.assess(changed)
-                self.assertEqual(len(result["blocking"]), 1)
-                self.assertEqual(result["accepted"], [])
+                self.assertEqual(result["blocking"], [])
+                self.assertEqual(len(result["accepted"]), 1)
         for reference in ("example.com/other/image@" + DIGEST, "example.com/test/image@sha256:" + "b" * 64):
             with self.subTest(reference=reference):
                 self.assertEqual(len(self.assess(reference=reference)["blocking"]), 1)
@@ -178,16 +176,9 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         for field, value in (("owner", ""), ("expires_on", "2026-11-25"), ("accepted_on", "invalid")):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.load(**{field: value})
-        for field, value in (("image", "example.com/test/image:1.0"), ("packages", [])):
-            with self.subTest(field=field), self.assertRaises(ValueError):
-                self.load([{**self.entry, field: value}])
-        missing_identity = deepcopy(self.entry)
-        missing_identity["packages"][0].pop("purl")
-        with self.assertRaises(ValueError):
-            self.load([missing_identity])
-        for advisories in ({"LOW": ["CVE-2026-1000"]}, {"CRITICAL": []}, {}):
-            with self.subTest(advisories=advisories), self.assertRaises(ValueError):
-                self.load([{**self.entry, "packages": [{**self.package, "advisories": advisories}]}])
+        for reference in ("example.com/test/image:1.0", "", None):
+            with self.subTest(reference=reference), self.assertRaises(ValueError):
+                self.load([{"image": reference}])
         with self.assertRaises(ValueError):
             self.load([self.entry, self.entry])
 
@@ -208,12 +199,12 @@ class VulnerabilityExceptionTests(unittest.TestCase):
         summary = {"vulnerability_exceptions_sha256": policy_hash, "files": {self.path.name: policy_hash}}
         verify = SECURITY["verify_scan_policy"]
         with patch.dict(verify.__globals__, {"VULNERABILITY_EXCEPTIONS": self.path}):
-            verify(summary, self.root, [{"immutable": self.reference}], date(2026, 12, 25))
+            verify(summary, self.root, [{"immutable": self.reference, "usage": "runtime"}], date(2026, 12, 25))
             with self.assertRaises(ValueError):
-                verify(summary, self.root, [{"immutable": self.reference}], date(2026, 12, 26))
+                verify(summary, self.root, [{"immutable": self.reference, "usage": "runtime"}], date(2026, 12, 26))
             self.path.write_text(self.path.read_text() + "\n")
             with self.assertRaises(ValueError):
-                verify(summary, self.root, [{"immutable": self.reference}], date(2026, 12, 25))
+                verify(summary, self.root, [{"immutable": self.reference, "usage": "runtime"}], date(2026, 12, 25))
 
 
 class QualificationTests(unittest.TestCase):
@@ -250,6 +241,17 @@ class QualificationTests(unittest.TestCase):
 
 
 class ImageUpdateTests(unittest.TestCase):
+    def test_test_package_report_uses_locks_and_does_not_update_them(self):
+        before = {name: (ROOT / name).read_bytes() for name in SECURITY["TEST_LOCKFILES"]}
+        output = subprocess.CompletedProcess([], 0, "\nexample.test/module v1.0.0 v1.1.0\n")
+        with patch("urllib.request.urlopen", side_effect=lambda *a, **k: io.BytesIO(b'{"info":{"version":"99.0.0"}}')), \
+                patch.object(UPDATES["subprocess"], "run", return_value=output) as command:
+            results = UPDATES["test_package_updates"](ROOT)
+        self.assertIn("-mod=readonly", command.call_args.args[0])
+        self.assertTrue(any(item["package"] == "boto3" and item["update_available"] for item in results))
+        self.assertTrue(any(item["package"] == "example.test/module" for item in results))
+        self.assertEqual(before, {name: (ROOT / name).read_bytes() for name in before})
+
     def test_versions_keep_variants_and_prereleases_separate(self):
         result = UPDATES["newer_tags"]("v1.36.6-alpine", [
             "v1.36.7-alpine", "v1.36.8-rc.1-alpine", "v1.38.0-alpine",
@@ -282,6 +284,15 @@ class ImageUpdateTests(unittest.TestCase):
         results = UPDATES["check_all"](["unavailable:1.0", "available:1.0"], check)
         self.assertIn("error", results[0])
         self.assertEqual(results[1]["reference"], "available:1.0")
+
+    def test_non_versioned_tags_need_no_tag_listing(self):
+        def registry(*arguments):
+            self.assertEqual(arguments[0], "digest")
+            return DIGEST
+        with patch.dict(UPDATES["check_reference"].__globals__, {"crane": registry}):
+            result = UPDATES["check_reference"]("example.test/image:distroless-v1.38.9@" + DIGEST)
+        self.assertEqual(result["version_check"], "same_tag_digest_only")
+        self.assertFalse(result["digest_changed"])
 
 
 class IntegrityTests(unittest.TestCase):
@@ -339,7 +350,7 @@ class IntegrityTests(unittest.TestCase):
             names = ("datalab.xpkg", "source.tar.gz", "package.cdx.json", "external-components.json")
             for name in names:
                 (candidate / name).write_text("original")
-            manifest = {"schema": 1, "version": "1.0.0", "commit": "a" * 40, "worktree_dirty": False,
+            manifest = {"schema": 1, "scope": "production", "version": "1.0.0", "commit": "a" * 40, "worktree_dirty": False,
                         "image": SECURITY["REPOSITORY"], "image_digest": DIGEST,
                         "files": {name: SECURITY["checksum"](candidate / name) for name in names}}
             (candidate / "security-manifest.json").write_text(json.dumps(manifest))
@@ -355,6 +366,10 @@ class IntegrityTests(unittest.TestCase):
                     SECURITY["verify"](candidate, candidate)
                 with self.assertRaises(ValueError):
                     SECURITY["verify"](candidate, version="2.0.0")
+                (candidate / "scan-summary.json").write_text(json.dumps({"passed": True, "scope": "test",
+                    "manifest_sha256": SECURITY["checksum"](candidate / "security-manifest.json")}))
+                with self.assertRaisesRegex(ValueError, "does not approve"):
+                    SECURITY["verify"](candidate, candidate)
 
     def test_bad_download_does_not_replace_installed_tool(self):
         with tempfile.TemporaryDirectory() as temporary:

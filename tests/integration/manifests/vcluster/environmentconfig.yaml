@@ -16,7 +16,7 @@ data:
     extraAudiences:
     - test-login
   ingress:
-    class: nginx
+    class: ""
     domain: lab.acme.com
     secret: wildcard-tls
   httpRoute:

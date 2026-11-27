@@ -6,7 +6,7 @@ kind: Provider
 metadata:
   name: provider-keycloak
 spec:
-  package: ghcr.io/crossplane-contrib/provider-keycloak:v3.3.0
+  package: ghcr.io/crossplane-contrib/provider-keycloak:v3.3.0@sha256:8e082301155d4e6f28c2745a96670877a642956f44dc6285452c7197a2fc1c21
   runtimeConfigRef:
     name: provider-keycloak
 ---
@@ -15,6 +15,6 @@ kind: Provider
 metadata:
   name: provider-kubernetes
 spec:
-  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v1.4.1
+  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v1.4.1@sha256:19bac959b88d49fee4f1b2cc76a085210a4663aff04a9d1a307ac7339e2ae82a
   runtimeConfigRef:
     name: provider-kubernetes

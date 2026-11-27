@@ -12,12 +12,12 @@ source "${INTEGRATION_DIR}/lib.bash"
 source "${INTEGRATION_DIR}/postgres.bash"
 source "${INTEGRATION_DIR}/snapshots.bash"
 POSTGRES_SNAPSHOTS=false
-: "${POSTGRES_CLIENT_IMAGE:=postgres:17}"
+: "${POSTGRES_CLIENT_IMAGE:=ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-202611231010-standard-trixie@sha256:b053a93d0687b4ee85418447ffb0a9436461c72efef2e316012728b34f2e50cf}"
 : "${KEEP_POSTGRES_RESOURCES:=0}"
 
 readonly DATALAB_NAME=verify-postgres
 readonly POSTGRES_NAMESPACE="${DATALAB_NAME}"
-readonly POSTGRES_CLUSTER=pg0
+readonly POSTGRES_CLUSTER=postgres-pg0
 readonly STORAGE_SECRET=verify-postgres
 readonly CONNECTION_SECRET="${DATALAB_NAME}-postgres-pg0"
 readonly POSTGRES_URL_KEY=verify_url
@@ -36,9 +36,9 @@ apply_postgres_datalab() {
 wait_for_postgres() {
   local cluster
   for cluster in pg0 pg1; do
-    kube wait "cluster.postgresql.cnpg.io/${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
+    kube wait "cluster.postgresql.cnpg.io/postgres-${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
       --for=create --timeout=15m
-    kube wait "cluster.postgresql.cnpg.io/${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
+    kube wait "cluster.postgresql.cnpg.io/postgres-${cluster}" --namespace "${POSTGRES_NAMESPACE}" \
       --for=condition=Ready --timeout=15m
     wait_for_connection_secret "${DATALAB_NAME}-postgres-${cluster}" "${DATALAB_NAME}" 900 \
       host port user password databases verify_url
@@ -47,7 +47,7 @@ wait_for_postgres() {
     --for=jsonpath='{.status.applied}'=true --timeout=5m
   kube wait "datalabs.versioneer.at/${DATALAB_NAME}" --namespace "${WORKSPACE_NAMESPACE}" \
     --for=condition=Ready --timeout=5m
-  kube get cluster.postgresql.cnpg.io/pg1 --namespace "${POSTGRES_NAMESPACE}" -o json \
+  kube get cluster.postgresql.cnpg.io/postgres-pg1 --namespace "${POSTGRES_NAMESPACE}" -o json \
     | jq -e '(.spec | has("backup") | not)' >/dev/null
   verify_workload_probes "${POSTGRES_NAMESPACE}"
   printf 'PASS PostgreSQL without backups is ready\n'
@@ -86,8 +86,11 @@ cleanup_successful_verification() {
     --namespace "${WORKSPACE_NAMESPACE}" --for=delete --timeout=5m; then
     python3 "${INTEGRATION_DIR}/verify-service-connections.py" \
       --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" --context "${KUBECTL_CONTEXT}" --namespace "${WORKSPACE_NAMESPACE}" --datalab "${DATALAB_NAME}" --deleted
+    # Kubernetes can retry namespace cleanup after half the Pod shutdown grace.
+    # CloudNativePG defaults to 1800 seconds, which exceeds a five-minute wait.
+    printf 'Waiting up to 20 minutes for PostgreSQL namespace cleanup.\n'
     kube delete namespace "${POSTGRES_NAMESPACE}" \
-      --ignore-not-found --wait=true --timeout=5m
+      --ignore-not-found --wait=true --timeout=20m
     stop_unused_operator cnpg-system cnpg clusters.postgresql.cnpg.io
   else
     printf 'Datalab cleanup is still running; resources were kept for diagnosis.\n' >&2
@@ -115,7 +118,7 @@ main() {
   require_cluster
   install_cnpg
   kube apply -f "${MANIFEST_DIR}/s3/keycloak.yaml"
-  kube rollout status deployment/keycloak --namespace keycloak --timeout=10m
+  kube rollout status deployment/keycloak --namespace keycloak --timeout=15m
   if snapshot_tests_available "${POSTGRES_NAMESPACE}"; then POSTGRES_SNAPSHOTS=true; fi
   apply_postgres_datalab
   if ! wait_for_postgres; then

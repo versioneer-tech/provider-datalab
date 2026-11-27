@@ -37,7 +37,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: pg0-superuser
+        name: postgres-pg0-superuser
         namespace: s-jeff
       data:
         uri: cG9zdGdyZXNxbDovL3Bvc3RncmVzOnBnLXNlY3JldEBwZzAtcHJpbWFyeS5zLWplZmYuc3ZjOjU0MzIvcG9zdGdyZXM=
@@ -50,10 +50,10 @@ status:
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
-  name: observe-valkey-auth-secret-s-jeff-cache
+  name: valkey-observe-auth-secret-s-jeff-cache
   namespace: default
   annotations:
-    crossplane.io/composition-resource-name: observe-valkey-auth-secret-s-jeff-cache
+    crossplane.io/composition-resource-name: valkey-observe-auth-secret-s-jeff-cache
 status:
   conditions:
     - type: Ready
@@ -63,7 +63,7 @@ status:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: cache-valkey-auth
+        name: valkey-cache-auth
         namespace: s-jeff
       data:
         user: ZGVmYXVsdA==

@@ -36,7 +36,7 @@ def compose(req, rsp):
     vcluster = bool(spec.get("vclusters"))
     data_enabled = (env.get("packageR") or {}).get("enabled")
     data_enabled = data_enabled is None or _boolish(data_enabled)
-    registry_enabled = _boolish((env.get("registry") or {}).get("enabled", True))
+    registry_enabled = _boolish((env.get("registry") or {}).get("enabled", False))
     policy = security.get("policy") or "baseline"
     overall_storage = str(
         (env.get("overallQuota") or {}).get("storage")

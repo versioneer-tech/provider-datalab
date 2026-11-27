@@ -27,11 +27,11 @@ def main():
     }
     instances = {"postgres": "prod", "valkey": "cache"}
     values = {
-        "prod-superuser": {"host": "prod-rw.s-joe.svc", "port": "5432",
+        "postgres-prod-superuser": {"host": "postgres-prod-rw.s-joe.svc", "port": "5432",
                                   "username": "postgres", "password": "test-postgres-password",
-                                  "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@prod-rw.s-joe.svc:5432/app",
+                                  "dbname": "app", "uri": "postgresql://postgres:test-postgres-password@postgres-prod-rw.s-joe.svc:5432/app",
                                   "jdbc-uri": "jdbc:postgresql://prod/app", "verifier": "test-internal"},
-        "cache-valkey-auth": {"user": "default", "password": "test-valkey-password", "internal": "test-internal"},
+        "valkey-cache-auth": {"user": "default", "password": "test-valkey-password", "internal": "test-internal"},
         "apikey": {"token": "test-custom-token", "endpoint": "https://example.invalid"},
     }
 
@@ -77,7 +77,7 @@ def main():
     published = copies(pending)
     assert len(published) == 3 and not any(c["ready"] for c in connections(pending))
     expected = {
-        "postgres": encoded({("user" if key == "username" else key): value for key, value in values["prod-superuser"].items() if key not in ("verifier", "jdbc-uri")}),
+        "postgres": encoded({("user" if key == "username" else key): value for key, value in values["postgres-prod-superuser"].items() if key not in ("verifier", "jdbc-uri")}),
         "valkey": encoded({"user": "default", "password": "test-valkey-password"}),
         "custom": encoded(values["apikey"]),
     }
@@ -170,8 +170,8 @@ def main():
     print("PASS unavailable sources remove stale copies and readiness; recovery republishes current credentials")
 
     for kind, secret_name, field in (
-        ("postgres", "prod-superuser", "password"),
-        ("valkey", "cache-valkey-auth", "user"),
+        ("postgres", "postgres-prod-superuser", "password"),
+        ("valkey", "valkey-cache-auth", "user"),
     ):
         incomplete = deepcopy(observed)
         credential = next(body for body in incomplete

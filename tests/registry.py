@@ -80,17 +80,13 @@ def main():
     ingress_env["data"]["httpRoute"]["enabled"] = False
     ingress_env["data"]["httpRoute"]["enableS3"] = False
     ingress_env["data"]["packageR"]["enabled"] = True
-    ingress_env["data"]["ingress"].update(enabled=True, **{"class": "nginx", "secret": "wildcard"})
+    ingress_env["data"]["ingress"].update(enabled=True, **{"class": "test-ingress", "secret": "wildcard"})
     ingress_env["data"]["ingress"]["annotations"] = {
-        "nginx.ingress.kubernetes.io/proxy-body-size": "2g",
-        "nginx.ingress.kubernetes.io/proxy-read-timeout": "7200",
-        "nginx.ingress.kubernetes.io/proxy-request-buffering": "on",
         "test.example/annotation": "custom",
     }
     ingress_resources = run(ingress_env)
     assert manifest(ingress_resources, "registry-ingress-s-joe")["spec"]["rules"][0]["http"]["paths"][0]["path"] == "/v2"
     assert "registry-prefix-ingress-s-joe" not in ingress_resources
-    assert "nginx.ingress.kubernetes.io/rewrite-target" not in manifest(ingress_resources, "registry-ingress-s-joe")["metadata"]["annotations"]
     assert manifest(ingress_resources, "registry-ingress-s-joe")["metadata"]["annotations"] == ingress_env["data"]["ingress"]["annotations"]
     assert manifest(ingress_resources, "data-ingress-s-joe")["metadata"]["annotations"] == ingress_env["data"]["ingress"]["annotations"]
     print("PASS Gateway and Ingress route the native Docker API without rewriting paths or exposing health")
@@ -140,6 +136,11 @@ def main():
     assert not any(c["type"] == "registry" for c in removed["composite"]["status"]["connections"])
     print("PASS registry connections publish only user/password and wait for current credentials and workload readiness")
     print("PASS disabling the registry removes its resources and connection")
+    disabled["data"].pop("registry")
+    default = run(disabled, observed)
+    assert not any(key.startswith("registry-") for key in default)
+    assert not any(c["type"] == "registry" for c in default["composite"]["status"]["connections"])
+    print("PASS registry is off by default")
 
 
 if __name__ == "__main__":

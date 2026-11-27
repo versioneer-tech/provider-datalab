@@ -15,7 +15,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
   - package-ecosystem: pip
-    directories: [/docs, /scripts, /tools, /tests/s3, /tests/vcluster]
+    directories: [/docs, /scripts, /tools]
     commit-message:
       prefix: chore
     schedule:
@@ -25,19 +25,8 @@ updates:
         applies-to: version-updates
         patterns: ['*']
         update-types: [minor, patch]
-  - package-ecosystem: gomod
-    directory: /tests/admission
-    commit-message:
-      prefix: chore
-    schedule:
-      interval: weekly
-    groups:
-      go:
-        applies-to: version-updates
-        patterns: ['*']
-        update-types: [minor, patch]
   - package-ecosystem: docker
-    directories: [/tests/s3, /tests/vcluster, '/templates/**', '/tests/integration/manifests/**']
+    directories: ['/templates/**']
     commit-message:
       prefix: chore
     schedule:
@@ -48,10 +37,6 @@ updates:
       - dependency-name: '*'
         update-types: [version-update:semver-major]
     groups:
-      python-base:
-        applies-to: version-updates
-        patterns: [python]
       runtime-images:
         applies-to: version-updates
         patterns: ['*']
-        exclude-patterns: [python]

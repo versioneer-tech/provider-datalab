@@ -11,7 +11,6 @@ source "${INTEGRATION_DIR}/snapshots.bash"
 : "${KEEP_VCLUSTER_RESOURCES:=0}"
 snapshots_enabled=0
 readonly VCLUSTER_NAMESPACE=verify-vcluster
-readonly CONTOUR_VERSION=v1.33.7
 work_directory="$(mktemp -d /tmp/datalab-vcluster.XXXXXX)"
 trap 'rm -rf "${work_directory}"' EXIT
 
@@ -89,13 +88,8 @@ install_prerequisites() {
   create_ingress_certificate
   install_cnpg
   mkdir -p "${PROVIDER_DATALAB_HELM_HOME}"
-  local contour_manifest="${PROVIDER_DATALAB_HELM_HOME}/contour-${CONTOUR_VERSION}.yaml"
-  if [[ ! -s "${contour_manifest}" ]]; then
-    curl --fail --silent --show-error --location \
-      "https://raw.githubusercontent.com/projectcontour/contour/${CONTOUR_VERSION}/examples/render/contour-gateway-provisioner.yaml" \
-      --output "${contour_manifest}"
-  fi
-  kube apply --server-side -f "${contour_manifest}"
+  python3 "${REPO_ROOT}/scripts/components.py" contour-provisioner --manifest | \
+    kube apply --server-side -f -
   wait_for_crd_established httproutes.gateway.networking.k8s.io
   wait_for_crd_established backendtlspolicies.gateway.networking.k8s.io
   kube rollout status deployment/contour-gateway-provisioner --namespace projectcontour --timeout=10m
@@ -251,6 +245,8 @@ metadata:
   name: ${team}
   namespace: workspace
 spec:
+  crossplane:
+    compositionRef: {name: test-datalab}
   environmentName: datalab-custom
   users: [verify-s3]
 DATALAB
@@ -317,7 +313,7 @@ verify_hibernation() {
   kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | jq -e '
     all(.status.connections[] | select(.type == "vcluster"); .ready == false)
   ' >/dev/null
-  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
+  kube get cluster.postgresql.cnpg.io/postgres-pg0 --namespace "${VCLUSTER_NAMESPACE}" -o json \
     | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   [[ "$(kube get pvc --namespace "${VCLUSTER_NAMESPACE}" -o json | jq -c '[.items[] | [.metadata.name,.metadata.uid]] | sort')" == "${previous_pvcs}" ]]
   kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=condition=Ready --timeout=5m
@@ -370,9 +366,9 @@ DATALAB
     kube wait "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --for=create --timeout=10m
     kube rollout status "statefulset/vcluster-${instance}" --namespace "${runtime_namespace}" --timeout=15m
   done
-  kube wait cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
+  kube wait cluster.postgresql.cnpg.io/postgres-pg0 --namespace "${runtime_namespace}" --for=create --timeout=10m
   deadline=$((SECONDS + 900))
-  until kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null; do
+  until kube get cluster.postgresql.cnpg.io/postgres-pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null; do
     ((SECONDS < deadline)) || return 1
     sleep 5
   done
@@ -475,11 +471,15 @@ PVC
   if ((snapshots_enabled)); then
     kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --volume-binding check
   fi
+  python3 "${INTEGRATION_DIR}/wait-for-cleanup.py" --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+    --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster --instance vc0 --capture "${work_directory}/vc0-records.json"
   kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=json --patch '[{"op":"remove","path":"/spec/vclusters/vc0"}]'
+  python3 "${INTEGRATION_DIR}/wait-for-cleanup.py" --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+    --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster --records "${work_directory}/vc0-records.json"
   kube wait statefulset/vcluster-vc0 --namespace "${runtime_namespace}" --for=delete --timeout=10m
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --other-only
   kube exec verify-vcluster-client --namespace workspace -- python3 -u /test/e2e.py "${gateway_ip}" --storage-class "${PROVIDER_DATALAB_STORAGE_CLASS}" --member-roles --member-instance vc1
-  kube get cluster.postgresql.cnpg.io/pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
+  kube get cluster.postgresql.cnpg.io/postgres-pg0 --namespace "${runtime_namespace}" -o json | jq -e 'any(.status.conditions[]?; .type == "Ready" and .status == "True")' >/dev/null
   if ((snapshots_enabled)); then
     verify_bound_volume_preserved
     printf 'PASS a running bound workload does not block vc0 removal; host volume, backup schedule, and snapshot remain\n'
@@ -526,9 +526,25 @@ main() {
   verify_vcluster
   if [[ "${KEEP_VCLUSTER_RESOURCES}" != 1 ]]; then
     kube delete pod/verify-vcluster-client configmap/verify-vcluster-client --namespace workspace --ignore-not-found
+    # Delete the remaining instance while its API is stopped.
+    kube patch datalabs.versioneer.at/verify-vcluster --namespace workspace --type=merge \
+      --patch '{"spec":{"vclusters":{"vc1":{"hibernated":true}}}}'
+    deadline=$((SECONDS + 900))
+    until kube get datalabs.versioneer.at/verify-vcluster --namespace workspace -o json | \
+      jq -e 'any(.status.vclusters[]?; .name == "vc1" and .phase == "Hibernated")' >/dev/null; do
+      ((SECONDS < deadline)) || return 1
+      sleep 3
+    done
+    python3 "${INTEGRATION_DIR}/wait-for-cleanup.py" --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+      --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster --capture "${work_directory}/lab-records.json"
     kube delete datalabs.versioneer.at/verify-vcluster --namespace workspace --wait=false
     kube wait datalabs.versioneer.at/verify-vcluster --namespace workspace --for=delete --timeout=10m
-    kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=10m
+    # Namespace cleanup can retry after half of PostgreSQL's 1800-second shutdown grace.
+    kube wait "namespace/${VCLUSTER_NAMESPACE}" --for=delete --timeout=20m
+    python3 "${INTEGRATION_DIR}/wait-for-cleanup.py" --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+      --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster --records "${work_directory}/lab-records.json"
+    python3 "${INTEGRATION_DIR}/wait-for-cleanup.py" --kubeconfig "${PROVIDER_DATALAB_KUBECONFIG}" \
+      --context "${KUBECTL_CONTEXT}" --datalab verify-vcluster
     stop_unused_operator cnpg-system cnpg clusters.postgresql.cnpg.io
   fi
 }
