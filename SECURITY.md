@@ -575,7 +575,6 @@ after a killed Job. Valkey network access includes TCP 6379 in the service names
 
 ## Health checks
 
-
 Kubernetes uses startup probes to allow initialization, readiness probes to
 remove unavailable Pods from Service endpoints, and liveness probes to restart
 an unresponsive process.

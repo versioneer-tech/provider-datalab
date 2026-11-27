@@ -66,9 +66,8 @@ Add both providers' selector labels to shared EnvironmentConfigs.
 
 ### PostgreSQL controller
 
-
-PostgreSQL uses [CloudNativePG](https://cloudnative-pg.io/), with
-operator `1.30.2` from Helm chart `0.29.2`. Install it in `cnpg-system`, or set
+PostgreSQL uses [CloudNativePG](https://cloudnative-pg.io/). Install the pinned
+controller in `cnpg-system`, or set
 `EnvironmentConfig.data.database.operatorNamespace` to its namespace. The
 supplied provider RBAC must permit the `postgresql.cnpg.io` resources.
 Use the intended platform kubeconfig and context in the install command.

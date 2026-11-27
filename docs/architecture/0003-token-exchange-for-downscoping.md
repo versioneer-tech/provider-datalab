@@ -83,7 +83,6 @@ purpose of the exchange.
 
 This behavior comes from Keycloak's
 [role selection](https://github.com/keycloak/keycloak/blob/26.8.1/services/src/main/java/org/keycloak/protocol/oidc/TokenManager.java#L572-L604).
-It is not an extra grant made by the test or the Datalab service account.
 
 ## Decision
 
@@ -127,8 +126,7 @@ scope. Otherwise, a caller could request it and defeat the restriction.
 ### Enable exchange only after its controls are ready
 
 Each Datalab client enables exchange automatically after its scopes, mappers,
-and policy are ready. There is no platform opt-in setting. Crossplane Usage
-resources keep a policy's scope and profile until the policy has been deleted.
+and policy are ready. There is no platform opt-in setting.
 
 Keycloak 26.8.1 or later is required. Default identity scopes must contain no
 role grants or role mappers.

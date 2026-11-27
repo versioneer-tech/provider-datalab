@@ -13,7 +13,7 @@ storage. See the [Helm values](../../deploy/crossplane-values.yaml) and
 
 Kind setup installs NetworkPolicy enforcement, a snapshot-capable CSI driver,
 its snapshotter sidecar, a snapshot controller, and the three snapshot CRDs.
-The shared Kind config selects Kubernetes 1.37.0 for stable admission policies.
+The [Kind config](manifests/kind.yaml) pins the Kubernetes image.
 These capabilities are required in Kind, both locally and in GitHub Actions.
 An unsuccessful Kind capability check fails the run.
 
@@ -104,7 +104,7 @@ Kind control-plane PVCs use the local `standard` class for SQLite.
 Workload PVCs and named volumes use `datalab-nfs` for CSI snapshot checks.
 The generated allowlist includes both classes; `datalab-nfs` remains the default.
 
-[`kind-storage.bash`](kind-storage.bash) installs NFS CSI `4.13.6`, snapshot
+[`kind-storage.bash`](kind-storage.bash) installs NFS CSI, snapshot
 CRDs and controllers, and an NFS-Ganesha server in `test-volume-snapshots`.
 Kind nodes need NFS client support. The server uses `emptyDir`; replacing its
 Pod discards the test data. This setup is for the dedicated test cluster.
@@ -144,10 +144,7 @@ probes and become ready before their service checks run. Network
 and Data restore shared environment settings; S3 and vCluster set their own
 Gateway and identity settings.
 
-The probe gate does not cover the external Gateway controller. The pinned
-Contour setup has no probes on its provisioner or Envoy shutdown manager;
-Envoy has readiness only. Its `ContourDeployment` API has no fields to change
-those probes. Contour's own controller has readiness and liveness checks.
+Probe checks cover Provider Datalab components.
 
 ## Network and service checks
 
@@ -203,9 +200,8 @@ physical host API when the selected target is a virtual cluster.
 
 ## Virtual cluster checks
 
-The profile installs CloudNativePG, Keycloak, and Contour and creates a fresh certificate
-for `*.lab.acme.com`. Its CPU limit quota is `20` so two control planes, their
-controllers, DNS, PostgreSQL, and the catalog can perform rolling updates.
+The profile installs CloudNativePG, Keycloak, and Contour and creates a fresh
+certificate for `*.lab.acme.com`.
 
 The `test-login` client uses generated passwords to obtain user tokens.
 Checks cover members, administrators, unauthorized profiles, exact roles and
