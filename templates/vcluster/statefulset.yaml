@@ -47,7 +47,7 @@ spec:
           claimName: ${data_pvc}
       initContainers:
       - name: kubernetes
-        image: ghcr.io/loft-sh/kubernetes:v1.36.7@sha256:98107d3737958629d2a867f2f98d3e7ed1dd4cb61ffed4d87862c5451024f3e8
+        image: ghcr.io/loft-sh/kubernetes:v1.37.3@sha256:e9e14691761304ae8a65573c1020a8e5d83e2da2030c331915d35fc400d441bf
         volumeMounts:
         - mountPath: /binaries
           name: binaries
